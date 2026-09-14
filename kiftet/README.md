@@ -1,136 +1,39 @@
-# kiftet
+<img src="assets/logo-mark.svg" width="72" height="72" alt="Kiftet logo" />
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, React Router, Express, and more.
+# Kiftet — Close the gap
 
-## Features
+**Turn any textbook chapter into a spoken, adaptive review that closes exactly the gaps you have — not the ones you don't.**
 
-- **TypeScript** - For type safety and improved developer experience
-- **React Router** - Declarative routing for React
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Express** - Fast, unopinionated web framework
-- **Bun** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **PostgreSQL** - Database engine
-- **Authentication** - Better-Auth
-- **Turborepo** - Optimized monorepo build system
-- **Biome** - Linting and formatting
-- **PWA** - Progressive Web App support
+Name confirmed (ክፍተት — "gap") by native-speaker check. Brand: gold `#E8A33D` on indigo `#1B2340`, deliberately clashed together — see `/docs/DESIGN_BRIEF.md` for the full system and reasoning.
 
-## Getting Started
+## The problem
 
-First, install the dependencies:
+Ethiopia's national exam pass rate climbed to 12.8% in 2026 — the best result in years. That also means **87.2% of the roughly 563,500 students who sat the exam were still failed by the system**, and 565 schools had zero students pass. Students aren't failing from zero exposure — they sat through the classes. They fail because there's no efficient way, before the exam, to find out exactly which specific concepts didn't stick.
 
-```bash
-bun install
-```
+## The idea
 
-## Database Setup
+A student picks any chapter from their textbook and speaks a cold explanation of what they remember — no notes. The system identifies exactly which concepts are missing or wrong, delivers a short spoken micro-lesson targeting only those gaps, and retests with differently-phrased questions to confirm real understanding. Before/after coverage is shown directly.
 
-This project uses PostgreSQL with Drizzle ORM.
+Full detail: see `/docs/PRD.md`.
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
+## Why voice, why now
 
-3. Apply the schema to your database:
+Explaining something out loud is how the underlying learning technique is actually supposed to work — this isn't voice added to satisfy a requirement, it's the mechanism itself. Full sponsor integration detail: see `/docs/PRD.md`, section 8.
 
-```bash
-bun run db:push
-```
+## Tech
 
-Then, run the development server:
+Web app (PWA), hosted on EthioDeploy. Voice capture and playback via Voxide throughout. Institutional licensing via Links.et. Ideation and research trail documented via Scholarxiv.
 
-```bash
-bun run dev
-```
+Architecture and data model: see `/docs/SYSTEM_DESIGN.md`.
 
-Open [http://localhost:5173](http://localhost:5173) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
+## Design direction
 
-## UI Customization
+See `/docs/DESIGN_BRIEF.md` for the full visual identity, color/type system, and UI principles.
 
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
+## Team
 
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
+_(add names/roles here)_
 
-### Add more shared components
+## Status
 
-Run this from the project root to add more primitives to the shared UI package:
-
-```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
-```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@kiftet/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
-
-## Environment Configuration
-
-Each app owns its environment schema in `.env.schema`. Varlock generates `src/env.ts` during installation; run `bun run env:generate` after changing a schema. Commit schemas, and keep secrets in ignored env files or your deployment platform.
-
-Import the generated `ENV` accessor in application code. Shared database and auth packages receive configuration or initialized clients from the application. See [Varlock's monorepo guide](https://varlock.dev/guides/monorepos/).
-
-Bun's automatic env loading is disabled in `bunfig.toml`; the framework integration or server bootstrap loads Varlock. Node deployments must include Varlock and its dependencies alongside the app schema.
-
-## PWA Support with React Router
-
-Verify PWA behavior with a production build on HTTPS or localhost. Offline navigation shows a precached fallback page; server-rendered pages require a connection. Authenticated HTML and API responses are not runtime-cached.
-
-## Deployment
-
-### Docker Compose
-
-- Target: server
-- Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: bun run docker:build
-- Start: bun run docker:up
-- Logs: bun run docker:logs
-- Stop: bun run docker:down
-
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
-
-For more details, see the guide on [Deploying with Docker Compose](https://www.better-t-stack.dev/docs/guides/docker).
-
-## Git Hooks and Formatting
-
-- Run checks: `bun run check`
-
-## Project Structure
-
-```
-kiftet/
-├── apps/
-│   ├── web/         # Frontend application (React + React Router)
-│   └── server/      # Backend API (Express)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
-```
-
-## Available Scripts
-
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run dev:server`: Start only the server
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run db:push`: Push schema changes to database
-- `bun run db:generate`: Generate database client/types
-- `bun run db:migrate`: Run database migrations
-- `bun run db:studio`: Open database studio UI
-- `bun run check`: Run Biome formatting and linting
-- `cd apps/web && bun run generate-pwa-assets`: Generate PWA assets
-- `bun run docker:build`: Build the Docker Compose images
-- `bun run docker:up`: Build and start the Docker Compose stack
-- `bun run docker:logs`: Tail logs from the Docker Compose stack
-- `bun run docker:down`: Stop the Docker Compose stack
+Built from scratch starting at the official STARK Hackathon 2026 kickoff. Progress tracked via commit history and STARK Changelogs.
