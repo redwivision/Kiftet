@@ -7,7 +7,7 @@ import { cn } from "@kiftet/ui/lib/utils";
 function LogoMark({ className }: { className?: string }) {
   return (
     <img
-      src="/logo-mark.jpeg"
+      src="/logo-mark.png"
       alt=""
       width={120}
       height={120}
