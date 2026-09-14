@@ -294,6 +294,33 @@ exists.
 5. **Without a key:** the orb simply doesn't appear (Web Speech fallback from
    Phase 1 remains for voice). Nothing crashes.
 
+**Voice ring control (matches the design brief):**
+- `/voice-test` now shows our **golden ring**, driven by Voxide's live session via
+  `useVoxideVoice`. The ring and the corner widget control the SAME session.
+- Tap once → `connect()` (start talking). Tap again while listening/thinking/
+  speaking/executing → `interrupt()` (kills the in-flight command). The status
+  line and ring state always say which behavior will fire next.
+- Transcript appears under "Transcript" in the page.
+
+**Latency tips (Voxide's dashboard, not the SDK):**
+- Model choice is per-project in the Voxide dashboard, NOT settable in code.
+  Pick the lightest agent model available — conversation replies ("hi") skip
+  reasoning, so a Flash-Lite–class model answers much faster than a full model.
+- Keep the agent's system/greeting prompt in the dashboard short; it is re-sent
+  each turn and adds latency.
+- Our side stays lean: `bindState` sends only page + session/chapter IDs, and
+  capability summaries are kept terse.
+
+**Who produces what ("is this our feedback or Voxide's?"):**
+- Plain conversation ("hi", "thanks") = entirely Voxide's agent — no capability
+  runs, so no Kiftet server call happens.
+- Study feedback (score, concepts covered, gaps, misconceptions, lesson text,
+  retest questions) = **our stack**: the transcript is sent to our `/api`
+  endpoints by the capability handler, and the content comes from our Phase-2
+  Gemini pipeline (or fallback heuristics).
+- What's Voxide's: deciding WHICH capability to call, the wording around the
+  result, and the voice that speaks it (TTS).
+
 If the orb reacts to your voice and the agent answers with real data from the
 API, Voxide is fully wired.
 
