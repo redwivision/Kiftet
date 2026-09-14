@@ -367,6 +367,25 @@ flits from Connecting→Listening→closed without input).
    and the ring falls to "Tap to retry" — that is expected until the plan is
    topped up.
 
+### Voxide capability 404 + ring-stop fixes
+
+**Symptom A:** the agent answers conversation but capability calls fail ("I ran
+into an issue…"). **Root cause:** `VITE_SERVER_URL` is the server root
+(`http://localhost:3000`) with no `/api`, so handler paths like
+`api("/chapters")` fetched `http://localhost:3000/chapters` → 404 (the old
+fallback URL happened to include `/api`). Fix: `assistant.tsx` now strips any
+trailing `/api` from the configured URL and always builds
+`${serverRoot}/api${path}`, so both `...:3000` and `...:3000/api` work. Verified
+via the SDK's own `_executeAction("listChapters")` in a headless browser →
+`{status:"success", result:{chapters:[…]}}`.
+
+**Symptom B:** tapping the ring again doesn't stop the voice. **Root cause:** my
+ring called the SDK's `interrupt()`, which is a soft, vendor-acknowledged stop
+that sets status back to "listening" with the mic still open — effectively a
+no-op when tapped again. Fix: active-state taps now call `disconnect()`, the
+same full-stop the vendor's mic button uses (WS + mic close, status → idle).
+Tap once to start, tap again to hang up.
+
 ---
 
 ## Phase 3 — Web flow (recall → gap view → lesson → retest → result)

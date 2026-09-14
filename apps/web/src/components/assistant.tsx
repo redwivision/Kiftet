@@ -3,7 +3,8 @@
 import { VoxideClient } from "@voxide/react";
 
 const API = (import.meta.env.VITE_SERVER_URL as string) || "http://localhost:3000/api";
-const API_BASE = API.replace(/\/$/, "");
+const serverRoot = API.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+const apiUrl = (path: string) => `${serverRoot}/api${path}`;
 
 let activeSessionId: string | null = null;
 let activeChapterId: string | null = null;
@@ -17,7 +18,7 @@ export function setChapter(id: string) {
 }
 
 async function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });

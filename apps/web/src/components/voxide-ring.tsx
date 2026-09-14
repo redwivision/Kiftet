@@ -37,14 +37,14 @@ export function VoxideRing() {
   const isListening = status === "listening";
   const isSpeaking = status === "speaking";
 
-  // Tap once → start talking. Tap again while anything is in flight → kill it.
-  // The SDK gates voice ops behind client.init() — don't tap-connect early.
+  // Tap once → start talking. Tap again while a session is active → hang up.
+  // (connect()/disconnect() mirror the vendor's own mic-toggle semantics.)
   const onClick = () => {
     if (!initReady) return;
     if (status === "idle" || status === "armed" || status === "error") {
       void voice.connect();
     } else {
-      voice.interrupt();
+      void voice.disconnect();
     }
   };
 
