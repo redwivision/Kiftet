@@ -232,5 +232,5 @@ export function Assistant() {
   if (!ready) return null;
   const client = getVoxideClient();
   if (!client) return null;
-  return <VoxideWidget client={client} />;
+  return <VoxideWidget client={client} accentColor="#E8A33D" />;
 }
