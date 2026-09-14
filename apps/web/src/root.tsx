@@ -10,7 +10,6 @@ import {
 
 import "./index.css";
 import type { Route } from "./+types/root";
-import { Assistant } from "./components/assistant";
 import Header from "./components/header";
 import { ThemeProvider } from "./components/theme-provider";
 
@@ -28,7 +27,7 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
         <script src="/registerSW.js" defer></script>
@@ -61,7 +60,6 @@ export default function App() {
         <Outlet />
       </div>
       <Toaster richColors />
-      <Assistant />
     </ThemeProvider>
   );
 }

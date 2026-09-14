@@ -324,6 +324,49 @@ exists.
 If the orb reacts to your voice and the agent answers with real data from the
 API, Voxide is fully wired.
 
+### Voxide glitch fix: "session opens then quickly closes"
+
+**Symptom:** tapping the ring opens a session that immediately closes (or the UI
+flits from Connecting→Listening→closed without input).
+
+**Root cause (two layers, both fixed/understood):**
+1. **Competing controllers (fixed).** `<VoxideWidget>` runs an internal effect
+   that forces `disconnect()` whenever the session is live but the widget's own
+   panel is closed (`launcherMode === "panel"` default). Since our ring started
+   the session while the widget's panel stayed closed, the widget killed every
+   session the ring opened — "opens then quickly closes". Fix: removed the
+   `<VoxideWidget>` from `root.tsx`. The golden ring is now the SAME client and
+   the ONLY control; the widget no longer exists to disconnect what the ring
+   starts. Verified via CDP: tap → Connecting… → Listening… with no instant close.
+2. **Early tap before `client.init()` (fixed).** The SDK gates `connect()` behind
+   `client.isInitialized`; tapping before init finished printed `[Voxide] Client
+   not initialized` and set the session to `error`. The widget masked this by
+   holding its UI until `initState === "ready"`. Now `getVoxideClient()` calls
+   `client.init()` (fire-and-forget) and `VoxideRing` subscribes to the client's
+   `"ready"` event — it shows "Starting…" and ignores taps until ready.
+3. **Vendor quota = the live limit right now (NOT a code bug).** Once connecting
+   genuinely works, the vendor closes every session with `[Voxide WS] Server
+   error: usage_limit`. That means the Voxide project has exhausted its plan
+   quota. This is dashboard-side, not fixable in code. The session attaches, so
+   `usage_limit` will be what most testers hit until the plan/quota is raised.
+   How to test the ring truly works once quota is available: it should sit on
+   "Tap and speak", then on tap go Connecting… → Listening… and STAY there while
+   you speak (a higher limit/plan won't close it).
+
+### How you can test (glitch fix)
+
+1. `bun run --cwd apps/web dev` + `bun run --cwd apps/server dev`, open
+   `http://localhost:5173/voice-test`.
+2. Developer tools console: expect NO `hydrated` mismatch warning (we added
+   `suppressHydrationWarning` to `<html>` for next-themes' dark class race) and
+   no `[Voxide] Client not initialized` — the ring shows "Starting…" during
+   `init()` then "Tap and speak".
+3. Tap the ring. If the Voxide plan has quota: Connecting… → Listening… and it
+   stays up while you talk; tap again mid-turn to interrupt. If the plan is out
+   of quota: you'll see `[Voxide WS] Server error: usage_limit` in the console
+   and the ring falls to "Tap to retry" — that is expected until the plan is
+   topped up.
+
 ---
 
 ## Phase 3 — Web flow (recall → gap view → lesson → retest → result)

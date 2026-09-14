@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-
-import { VoxideClient, VoxideWidget } from "@voxide/react";
+import { VoxideClient } from "@voxide/react";
 
 const API = (import.meta.env.VITE_SERVER_URL as string) || "http://localhost:3000/api";
 const API_BASE = API.replace(/\/$/, "");
@@ -57,6 +54,10 @@ export function getVoxideClient(): VoxideClient | null {
     activeSessionId,
     activeChapterId,
   }));
+  // Fire-and-forget: the SDK gates voice operations behind isInitialized.
+  clientCache.init().catch((err) => {
+    console.error("[Voxide] init failed:", err);
+  });
   return clientCache;
 }
 
@@ -212,25 +213,4 @@ function registerCapabilities(ai: VoxideClient): void {
       },
     },
   });
-}
-
-// ── Component ──────────────────────────────────────────────────
-
-export function Assistant() {
-  const navigate = useNavigate();
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    const client = getVoxideClient();
-    if (client) {
-      client.enableNavigation({ push: (path: string) => navigate(path) });
-    }
-    setReady(true);
-  }, [navigate]);
-
-  // SSR and non-Voxide browsers render nothing; Voxide mounts only on the client.
-  if (!ready) return null;
-  const client = getVoxideClient();
-  if (!client) return null;
-  return <VoxideWidget client={client} accentColor="#E8A33D" />;
 }
