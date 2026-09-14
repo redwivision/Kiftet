@@ -1,5 +1,6 @@
 import type { Route } from "./+types/_index";
 import { Link } from "react-router";
+import { TriangleAlert } from "lucide-react";
 
 import { buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
@@ -32,8 +33,24 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   return (
-    <main className="mx-auto grid min-h-svh w-full max-w-md content-center gap-10 px-6 py-16">
+    <main className="mx-auto grid min-h-svh w-full max-w-md content-center gap-10 px-6 py-10">
       <div className="flex flex-col items-center gap-6 text-center">
+        <div
+          role="status"
+          className="flex w-full items-start gap-3 rounded-lg border border-gold/50 bg-gold/10 px-4 py-3 text-left"
+        >
+          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-gold" aria-hidden="true" />
+          <div className="space-y-0.5">
+            <p className="font-display text-xs font-bold uppercase tracking-widest text-gold">
+              Under development
+            </p>
+            <p className="text-xs leading-relaxed text-manuscript/85">
+              This is an active work in progress — not a finished product or
+              completed demo. Features may change or break at any time.
+            </p>
+          </div>
+        </div>
+
         <LogoMark />
 
         <div className="space-y-3">
