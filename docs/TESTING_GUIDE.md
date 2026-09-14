@@ -100,3 +100,65 @@ Phase-specific instructions begin below.
    bun run --cwd packages/db check-types
    bun run --cwd apps/server check-types
    ```
+
+---
+
+## Phase 1 — Voice spine (Voxide)
+
+### How I tested
+
+**What was verified:**
+- The three new modules typecheck and build: `apps/web/src/lib/voice.ts` (the
+  `VoiceClient` interface + Web Speech adapter), `hooks/use-voice-session.ts`,
+  and `components/voice-ring.tsx`.
+- A dedicated test route `/voice-test` renders identically via server-side
+  rendering and client hydration — verified by producing the production build,
+  starting `react-router-serve`, and curling the page (HTTP 200, correct HTML
+  branch). This guards against hydration mismatch, where the server HTML and the
+  browser's first render disagree (a React error that would make the page
+  flash/break).
+- The server-vs-client branch is explicit: SSR always renders the neutral
+  "Loading voice…" state; the mic UI only mounts after hydration. See the
+  `ready` flag in `voice-test.tsx`.
+- Production build completes with no errors (`turbo run build`).
+
+**Why the Web Speech adapter instead of Voxide SDK yet:** the real Voxide Web
+SDK isn't in the repo yet, but Phase 1's goal is to *prove the voice loop
+end-to-end with a testable seam*, not to block on the vendor. `lib/voice.ts`
+defines the exact `VoiceClient` contract every screen will use; the
+`WebSpeechVoiceClient` is a working implementation behind it (browser speech
+recognition + synthesis). When the Voxide SDK lands, we swap one class —
+nothing else changes. Same "seam" pattern as the Gemini AI layer.
+
+**What could not be tested here (and why):** actual microphone input and audio
+playback require a human in front of a browser with a mic — an automated test
+can't hear. So the mic-specific behavior (transcription accuracy, TTS playback,
+permission prompts) is handed to you in the next section.
+
+### How you can test
+
+1. Start the web app (needs the backend too, for later phases):
+   ```
+   bun run --cwd apps/server dev
+   bun run --cwd apps/web dev
+   ```
+2. Open **http://localhost:5173/voice-test** in **Google Chrome** (the browser
+   speech recognizer is Chrome-only). Grant microphone permission when asked.
+3. **Speech-to-text (the big one):**
+   - Tap the ring. It turns gold and pulses with a stop square — this is the
+     "listening" state.
+   - Explain a concept out loud, e.g. *"Thermal equilibrium is when two objects
+     reach the same temperature."*
+   - Tap the square to stop. The ring briefly shows "Thinking…", then your
+     words appear under "What you said".
+4. **Text-to-speech (talking back):**
+   - Click "Hear a sample lesson". The ring switches to "Speaking…" and the
+     browser reads the lesson aloud.
+5. **Permission denied path:** revoke mic access (site settings → remove), tap
+   the ring — you should get a clear "Microphone permission was denied" message
+   instead of a silent failure.
+6. **Unsupported path:** open the same URL in Safari (macOS) — you should see
+   the "Voice isn't supported" notice.
+
+If words appear in "What you said" and the sample lesson plays aloud, Phase 1 is
+working.
