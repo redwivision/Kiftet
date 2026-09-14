@@ -162,3 +162,86 @@ permission prompts) is handed to you in the next section.
 
 If words appear in "What you said" and the sample lesson plays aloud, Phase 1 is
 working.
+
+---
+
+## Phase 2 — Gemini AI loop
+
+### How I tested
+
+**What was verified:**
+- The AI service in `apps/server/src/ai/gemini.ts` now has real Gemini prompt
+  bodies (extract, grade, lesson, retest) plus a deterministic fallback chain —
+  the app never hard-fails whether a key is present or not.
+- **The missing ingest gap is fixed:** `/chapters/ingest` now calls
+  `ai.extractConcepts` and persists concept rows to `concept_node`. Without this,
+  all downstream endpoints (`/recall`, `/microlesson`, `/retest`) were grading
+  against an empty list — a latent bug that surfaced during Phase 2 planning.
+- Full smoke-test of the entire API flow without a Gemini key (fallback path):
+  ingest → session start → recall → microlesson → retest → retest/answer →
+  result → complete. All returned 200 with correct shapes, no errors, no
+  exceptions in server logs.
+- Server typechecks clean with the new Gemini SDK calls.
+
+**Fallback chain design:** when `GEMINI_API_KEY` equals the placeholder, the
+service skips the Gemini call entirely and falls back to a heuristic:
+- extract: sentence-splitting picks 8 meaningful sentences from the chapter text.
+- grade: word-overlap scoring determines what the student mentioned.
+- lesson/retest: templates produce a reasonable experience even when no key is
+  set. This matches the system design's "product works even when a service is
+  missing" seam rule, and lets you run the whole flow in dev without touching
+  the key.
+
+### How you can test
+
+**Without a key (fallback path):**
+
+1. Boot the server:
+   ```
+   bun run --cwd apps/server dev
+   ```
+2. Open a terminal and run the same curl sequence. The placeholder key in
+   `.env.schema` is enough — no Gemini key needed:
+   ```
+   # ingest (creates concepts from the chapter text)
+   curl -s -X POST http://localhost:3000/api/chapters/ingest \
+     -H 'Content-Type: application/json' \
+     -d '{"textbookTitle":"Physics 12","subject":"Physics","title":"Heat & Temperature","rawText":"Temperature is a measure of the average kinetic energy of particles. Thermal equilibrium is reached when two objects reach the same temperature and heat stops flowing. Specific heat is the energy needed to raise one kilogram by one degree. Conduction transfers heat through direct contact."}'
+
+   # list chapters → grab the id
+   curl -s http://localhost:3000/api/chapters
+
+   # start a session (replace CHAPTER_ID)
+   curl -s -X POST http://localhost:3000/api/sessions/start \
+     -H 'Content-Type: application/json' \
+     -d '{"chapterId":"CHAPTER_ID"}'
+
+   # recall (returns gap analysis with score)
+   curl -s -X POST http://localhost:3000/api/sessions/SESSION_ID/recall \
+     -H 'Content-Type: application/json' \
+     -d '{"transcriptText":"Temperature measures kinetic energy. Heat flows from hot to cold."}'
+   ```
+
+   Every call should return a JSON object with data. The `conceptsExtracted`
+   field on ingest should be ≥1; the `gaps.score` on recall should be 0–1.
+
+**With a real Gemini key (AI path):**
+
+1. Set `GEMINI_API_KEY` in `apps/server/.env` (not in `.env.schema`, which is
+   the template — `.env` is the real local key file, gitignored):
+   ```
+   GEMINI_API_KEY=your_actual_key
+   ```
+2. Restart the server (`Ctrl-C`, then `bun run --cwd apps/server dev`).
+3. Run the same curl sequence above. Now:
+   - `conceptsExtracted` should be 5–10; concepts will be meaningful
+     phrases + at least one misconception (`isMisconception: true`) when one
+     exists in the text.
+   - `gaps.score` after recall should reflect true semantic grading (often
+     lower than 1.0, showing real gaps).
+   - `microlesson` text will be a Gemini-written lesson; `retest` questions
+     will be natural-language spoken prompts rather than templates.
+
+---
+
+## Phase 3 — Web flow (recall → gap view → lesson → retest → result)

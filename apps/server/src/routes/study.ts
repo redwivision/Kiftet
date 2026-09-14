@@ -74,7 +74,21 @@ router.post("/chapters/ingest", async (req, res) => {
     rawText,
   });
 
-  ok(res, { textbookId, chapterId }, 201);
+  const extracted = await ai.extractConcepts(rawText);
+  if (extracted.length) {
+    await db().insert(conceptNode).values(
+      extracted.map((c, i) => ({
+        id: crypto.randomUUID(),
+        chapterId,
+        conceptText: c.conceptText,
+        isMisconception: c.isMisconception,
+        weight: c.weight,
+        sortOrder: i,
+      })),
+    );
+  }
+
+  ok(res, { textbookId, chapterId, conceptsExtracted: extracted.length }, 201);
 });
 
 router.get("/chapters", async (_req, res) => {
