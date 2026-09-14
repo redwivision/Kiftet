@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
-import { Volume2 } from "lucide-react";
 
-import { buttonVariants } from "@kiftet/ui/components/button";
-import { cn } from "@kiftet/ui/lib/utils";
-import { VoiceRing } from "@/components/voice-ring";
-import { useVoiceSession } from "@/hooks/use-voice-session";
+import { hasVoxideKey } from "@/components/assistant";
 
-const SAMPLE_LESSON =
-  "Thermal equilibrium is the state when two objects have reached the same temperature and heat stops flowing between them. Karana? When you hold a warm bottle, energy moves into your hand until both reach the same temperature — that is equilibrium.";
+const CAPABILITIES = [
+  "listChapters",
+  "startStudy",
+  "recall",
+  "getMicrolesson",
+  "startRetest",
+  "answerRetest",
+  "getSessionResult",
+  "completeSession",
+] as const;
 
 export default function VoiceTest() {
-  const { state, transcript, interim, error, isSupported, start, stop, speak } = useVoiceSession();
   const [ready, setReady] = useState(false);
+  const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
     setReady(true);
+    setHasKey(hasVoxideKey());
   }, []);
 
   return (
@@ -24,61 +29,53 @@ export default function VoiceTest() {
           Voice test
         </h1>
         <p className="text-sm text-muted-foreground">
-          Phase 1 · prove the app can hear you and talk back.
+          Phase 1+2 · Voxide voice agent + study capabilities.
         </p>
       </div>
 
       {!ready ? (
         <div className="grid min-h-40 place-items-center text-sm text-muted-foreground">
-          Loading voice…
+          Loading…
         </div>
-      ) : !isSupported ? (
+      ) : !hasKey ? (
         <div className="rounded-lg border border-rust/50 bg-rust/10 px-4 py-3 text-sm text-manuscript/85">
-          Voice isn&apos;t supported in this browser. Use a recent version of
-          Google Chrome (desktop or Android) where the mic permission is granted.
+          <p className="font-medium mb-1">Voxide key missing</p>
+          <p className="text-manuscript/60">
+            Set <code className="bg-night-deep px-1 rounded">VITE_VOXIDE_KEY</code> in
+            your <code className="bg-night-deep px-1 rounded">apps/web/.env</code> with
+            the publishable key from{" "}
+            <a href="https://voxide.app/dashboard" className="underline" target="_blank" rel="noreferrer">
+              voxide.app/dashboard
+            </a>.
+          </p>
         </div>
       ) : (
         <>
-          <div className="flex flex-col items-center gap-4">
-            <VoiceRing state={state} onStart={start} onStop={stop} />
-            <p className="h-5 text-sm font-medium text-manuscript/70">
-              {state === "idle" ? "Tap the ring and explain a concept out loud." : null}
+          <div className="rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-manuscript/85">
+            <p className="font-medium mb-1">Voxide connected</p>
+            <p className="text-manuscript/60">
+              Tap the orb below and speak naturally. Try: &quot;List my chapters&quot; or &quot;Start studying&quot;.
             </p>
           </div>
-
-          {error && (
-            <div className="rounded-lg border border-rust/50 bg-rust/10 px-4 py-3 text-sm text-manuscript/85">
-              {error}
-            </div>
-          )}
 
           <div className="min-h-28 rounded-lg border border-manuscript/15 bg-night-raised px-4 py-3">
-            <p className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
-              What you said
+            <p className="mb-2 text-xs uppercase tracking-widest text-muted-foreground">
+              Registered capabilities
             </p>
-            {transcript || interim ? (
-              <p className="text-sm leading-relaxed text-manuscript/90">
-                {transcript}
-                {interim && <span className="text-manuscript/40">{interim}</span>}
-              </p>
-            ) : (
-              <p className="text-sm text-manuscript/40">…</p>
-            )}
+            <ul className="space-y-1">
+              {CAPABILITIES.map((name) => (
+                <li key={name} className="flex items-center gap-2 text-sm text-manuscript/80">
+                  <span className="size-1.5 rounded-full bg-sage" />
+                  {name}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void speak(SAMPLE_LESSON)}
-              className={cn(buttonVariants({ variant: "outline" }), "w-full max-w-72 gap-2")}
-            >
-              <Volume2 className="size-4" />
-              Hear a sample lesson
-            </button>
-            <p className="text-xs text-muted-foreground">
-              Tests text-to-speech — the &quot;speak the gap lesson&quot; side of the product.
-            </p>
-          </div>
+          <p className="text-xs text-center text-muted-foreground">
+            The Voxide widget (orb) appears at the bottom-right of every page.
+            It is always mounted — calls survive navigation.
+          </p>
         </>
       )}
     </main>

@@ -10,6 +10,7 @@ import {
 
 import "./index.css";
 import type { Route } from "./+types/root";
+import { Assistant } from "./components/assistant";
 import Header from "./components/header";
 import { ThemeProvider } from "./components/theme-provider";
 
@@ -60,6 +61,7 @@ export default function App() {
         <Outlet />
       </div>
       <Toaster richColors />
+      <Assistant />
     </ThemeProvider>
   );
 }

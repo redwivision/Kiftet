@@ -17,6 +17,7 @@
     "@react-router/serve": "^8.3.1",
     "@tanstack/react-form": "^1.33.5",
     "@varlock/vite-integration": "1.5.1",
+    "@voxide/react": "^0.8.0",
     "better-auth": "catalog:",
     "isbot": "^5.2.2",
     "lucide-react": "catalog:",

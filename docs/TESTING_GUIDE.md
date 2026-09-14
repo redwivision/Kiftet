@@ -244,4 +244,59 @@ service skips the Gemini call entirely and falls back to a heuristic:
 
 ---
 
+## Voxide integration (voice agent)
+
+### How I tested
+
+**What was verified:**
+- `@voxide/react@0.8.0` installed in `apps/web`.
+- `apps/web/src/components/assistant.tsx` creates a `VoxideClient`, registers
+  eight study capabilities (listChapters, startStudy, recall, getMicrolesson,
+  startRetest, answerRetest, getSessionResult, completeSession), and binds live
+  state (current page, active session/chapter IDs) so the agent always knows the
+  study context.
+- `<Assistant />` is mounted in `root.tsx`'s `App` — the single component that
+  wraps every route via `<Outlet />`. It never unmounts on navigation, so an
+  in-progress call survives page changes (the vendor's #1 integration rule).
+- **SSR safety:** the client is constructed lazily (`getVoxideClient()`) and only
+  on the browser, and `<Assistant />` renders nothing on the server. Verified by
+  curling every route with no key — all return HTTP 200 with no crash.
+- Production build and typecheck pass with the SDK wired in.
+
+**Why lazy init:** the SDK throws `publicKey is required` at `new VoxideClient()`
+with an empty key. Because the web app is server-rendered, creating the client at
+module load would crash SSR at the exact moment the key is absent (e.g. here, in
+CI, or before the user pastes their key). Lazy init keeps Voxide off until a key
+exists.
+
+### How you can test
+
+1. **Set your key** in `apps/web/.env` (create it from `.env.schema`
+   if missing) — the publishable key from voxide.app/dashboard → Integration:
+   ```
+   VITE_SERVER_URL=http://localhost:3000
+   VITE_VOXIDE_KEY=vox_pub_YOUR_KEY
+   ```
+   Restart `bun run --cwd apps/web dev` after adding it.
+2. **Whitelist the domain** — voxide.app/dashboard → project → Settings must
+   allow `localhost` (dev always works) and your production domain later.
+3. Boot both servers and open `http://localhost:5173/voice-test`: it should say
+   "Voxide connected" and list the eight capabilities.
+4. **Speak to it.** The orb sits at the bottom-right of every page. Try:
+   - *"List my chapters"* — the agent returns the ingested chapters from the API.
+   - *"Start studying heat and temperature"* — starts a session.
+   - *"I'm done explaining: temperature measures kinetic energy, and heat flows
+     from hot to cold until equilibrium."* — the recall capability grades it and
+     the agent speaks back covered/missing + score.
+   - *"Teach me what I missed"* — generates and speaks the micro-lesson.
+   - *"Quiz me"* then speak an answer — the retest loop grades the answer.
+   - *"How did I do?"* — reads the before/after delta.
+5. **Without a key:** the orb simply doesn't appear (Web Speech fallback from
+   Phase 1 remains for voice). Nothing crashes.
+
+If the orb reacts to your voice and the agent answers with real data from the
+API, Voxide is fully wired.
+
+---
+
 ## Phase 3 — Web flow (recall → gap view → lesson → retest → result)
