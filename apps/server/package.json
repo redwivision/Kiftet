@@ -11,10 +11,12 @@
     "env:generate": "varlock codegen"
   },
   "dependencies": {
+    "@google/genai": "^2.22.0",
     "@kiftet/auth": "workspace:*",
     "@kiftet/db": "workspace:*",
     "better-auth": "catalog:",
     "cors": "^2.8.6",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "varlock": "catalog:",
     "zod": "catalog:"

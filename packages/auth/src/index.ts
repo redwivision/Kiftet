@@ -16,7 +16,7 @@ export function createAuth(
 ) {
   return betterAuth({
     database: drizzleAdapter(database, {
-      provider: "pg",
+      provider: "sqlite",
       schema,
     }),
     trustedOrigins: [env.CORS_ORIGIN, ...desktopOrigins],

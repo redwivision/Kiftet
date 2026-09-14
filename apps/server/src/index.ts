@@ -4,6 +4,7 @@ import express from "express";
 
 import { env } from "./env.server";
 import { auth } from "./services";
+import studyRouter from "./routes/study";
 
 const app = express();
 
@@ -19,6 +20,8 @@ app.use(
 app.all("/api/auth{/*path}", toNodeHandler(auth));
 
 app.use(express.json());
+
+app.use("/api", studyRouter);
 
 app.get("/", (_req, res) => {
   res.status(200).send("OK");
