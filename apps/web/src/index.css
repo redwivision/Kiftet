@@ -1,1 +1,63 @@
 @import "@kiftet/ui/globals.css";
+
+:root {
+  --background: #f2ead8;
+  --foreground: #201c16;
+  --card: #f2ead8;
+  --card-foreground: #201c16;
+  --popover: #f2ead8;
+  --popover-foreground: #201c16;
+  --primary: #b3791e;
+  --primary-foreground: #f2ead8;
+  --secondary: #e5dbc2;
+  --secondary-foreground: #201c16;
+  --muted: #e5dbc2;
+  --muted-foreground: #6b6250;
+  --accent: #1b2340;
+  --accent-foreground: #f2ead8;
+  --destructive: #b54a2c;
+  --border: oklch(0.18 0.02 60 / 0.16);
+  --input: oklch(0.18 0.02 60 / 0.22);
+  --ring: #b3791e;
+}
+
+.dark {
+  --background: #1b2340;
+  --foreground: #f2ead8;
+  --card: #232d52;
+  --card-foreground: #f2ead8;
+  --popover: #232d52;
+  --popover-foreground: #f2ead8;
+  --primary: #e8a33d;
+  --primary-foreground: #1b2340;
+  --secondary: #262f57;
+  --secondary-foreground: #f2ead8;
+  --muted: #262f57;
+  --muted-foreground: #b7ae9b;
+  --accent: #e8a33d;
+  --accent-foreground: #1b2340;
+  --destructive: #b54a2c;
+  --border: rgb(242 234 216 / 0.14);
+  --input: rgb(242 234 216 / 0.2);
+  --ring: #e8a33d;
+  --sidebar: #1b2340;
+  --sidebar-foreground: #f2ead8;
+  --sidebar-primary: #e8a33d;
+  --sidebar-primary-foreground: #1b2340;
+  --sidebar-accent: #262f57;
+  --sidebar-accent-foreground: #f2ead8;
+  --sidebar-border: rgb(242 234 216 / 0.1);
+  --sidebar-ring: #e8a33d;
+}
+
+@theme {
+  --color-night: #1b2340;
+  --color-night-raised: #232d52;
+  --color-night-deep: #141a30;
+  --color-gold: #e8a33d;
+  --color-manuscript: #f2ead8;
+  --color-ink: #201c16;
+  --color-rust: #b54a2c;
+  --color-sage: #5c7a5e;
+  --font-display: "Space Grotesk", "Inter Variable", sans-serif;
+}

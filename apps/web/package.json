@@ -40,5 +40,10 @@
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "^8.2.2"
+  },
+  "turbo": {
+    "build": {
+      "outputs": ["build/**"]
+    }
   }
 }

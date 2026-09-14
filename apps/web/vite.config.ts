@@ -9,7 +9,10 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
-    varlockVitePlugin({ ssrInjectMode: "auto-load" }),
+    varlockVitePlugin({
+      ssrInjectMode: "auto-load",
+      ssrEntryModuleIds: ["\0virtual:react-router/server-build"],
+    }),
     tailwindcss(),
     reactRouter(),
     VitePWA({
@@ -38,7 +41,7 @@ export default defineConfig({
         name: "kiftet",
         short_name: "kiftet",
         description: "kiftet - PWA Application",
-        theme_color: "#0c0c0c",
+        theme_color: "#1B2340",
       },
       pwaAssets: { disabled: false, config: true },
       devOptions: { enabled: true },
