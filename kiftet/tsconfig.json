@@ -1,0 +1,3 @@
+{
+  "extends": "@kiftet/config/tsconfig.base.json"
+}
