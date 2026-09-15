@@ -291,7 +291,9 @@ router.get("/sessions/:id/result", async (req, res) => {
     .orderBy(attempt.createdAt);
 
   const recallAttempt = attemptsRows.find((a) => a.stage === "recall" && a.score !== null);
-  const retestAttempt = attemptsRows.find((a) => a.stage === "retest" && a.score !== null);
+  const retestAttempt = [...attemptsRows]
+    .reverse()
+    .find((a) => a.stage === "retest" && a.score !== null);
 
   ok(res, {
     before: recallAttempt?.score ?? null,

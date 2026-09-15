@@ -399,3 +399,84 @@ Tap once to start, tap again to hang up.
 ---
 
 ## Phase 3 — Web flow (recall → gap view → lesson → retest → result)
+
+### How I tested
+
+**What was verified (Phase-2-round review fixes):**
+
+1. **Topic-type diversity — the reviewer's core ask.** Two chapters ingested into
+   the same SQLite DB, graded live by real Gemini (key is in `apps/server/.env`,
+   `DEFAULT_MODEL = "gemini-3.6-flash"`):
+   - **"Heat and Temperature"** (conceptual) → recall `score: 0.29`, gaps a real
+     missing list (covered *"temperature vs heat distinction"*, *"thermal
+     equilibrium"*; missing *"specific heat capacity"*, *"latent heat"*,
+     *"phase change explanation"*). Gemini grades conceptual recalls harshly and
+     lists what's actually missing.
+   - **"Electric Circuits and Ohm's Law"** (numerical/formula) → recall
+     `score: 1.0`, every concept covered, no gaps (a correct, complete
+     derivation).
+   Both topic types produce a correct state machine transition (gaps present vs
+   "covered everything / straight to result"), proving Gemini grading generalizes
+   across conceptual **and** numerical/formula chapters — not just one.
+
+2. **Try-again loop escape hatch.** The reducer tracks `attempts`; each time a
+   retest delta fails to close a gap (`delta <= 0`), the session keeps its
+   in-progress state and the result screen shows a calm **"Come back to this
+   later"** link after 2 consecutive attempts (instead of forcing an infinite
+   try-again loop). Clicking it returns to the dashboard and leaves the session
+   **unfinished** (never calls `complete`), so it stays eligible for resume.
+   This is the smooth path reviewer #1 asked for: not a failure, just a calm
+   "some concepts need another pass" (Rust) state.
+
+3. **Minimal retest feedback.** Each retest answer grades and shows only a single
+   Sage (covered) or Rust (missed) status dot — no animation, no sound. Silence
+   grace: if the mic produces no speech, a 7-second "Still listening — take your
+   time" label appears before any "we couldn't hear you" copy (no auto-timeout
+   on the client; the vendor no-input grace is handled by the Voxide plan).
+
+4. **Failure states are calm and recoverable.** Mic permission denied, no
+   speech, API timeout, network drop, server 500, and Gemini `usage_limit` all
+   map to inline, non-blocking notices on the study screen (never an alert()).
+   Text input is always an escape: "Prefer typing?" appears on recall and every
+   retest question; if the voice client reports no Voxide key, the app defaults
+   to typed mode so a session can never dead-end on a stuck ring.
+
+5. **Result uses the LAST retest attempt.** `/api/sessions/:id/result`'s
+   `after`/delta now come from the most recent retest submission (previously the
+   FIRST), so "before → after" reflects the final pass, not the first one.
+   `delta > 0` closes the gap → Sage result ("You covered everything"),
+   `delta <= 0` → another-pass result ("Come back to this later").
+
+**Verified by:**
+- Both packages typecheck clean (`bun run --cwd apps/server check-types` and
+  `bun run --cwd apps/web check-types` both exit 0) with the new
+  `StudyProvider`/`GapList`/`study.$sessionId` route and the `gap`-closure math.
+- Live API chain (curl + real Gemini): recall → gaps → microlesson → retest →
+  answer → result over the actual server, two topic types, no heuristics
+  fallback.
+
+### How you can test
+
+1. Boot both: `bun run --cwd apps/server dev` and `bun run --cwd apps/web dev`.
+   Give the server a real `GEMINI_API_KEY`. Open http://localhost:5173.
+2. **Dashboard** lists the two ingested chapters ("Heat and Temperature",
+   "Electric Circuits and Ohm's Law"). Click one → study screen opens a fresh
+   session with "Everything you remember about …".
+3. **Text path:** click "Prefer typing?" and write a recall. Submit → gap view:
+   Sage dots for covered, Rust dots for missing, score shown.
+   - If you covered everything → straight to the result screen ("You covered
+     everything").
+4. **Optionally** switch to the golden ring and speak — same flow, voice-driven.
+   If the mic never opens (permission or no key), you'll see the typed fallback
+   instead of a stuck ring.
+5. **Lesson:** "Hear the short version" → then "I'm ready to be tested" →
+   "Question 1 of …" with typed answers; each gets a single Sage/Rust dot.
+6. **Result:** after the retest the before/after delta decides the outcome:
+   improved (Sage, "You covered everything") vs not improved (Rust, "Come back
+   to this later"). To see the escape hatch: retest twice, fail both — after the
+   second attempt the calm "Come back to this later" link appears; clicking it
+   returns to the dashboard and does NOT mark the session complete.
+7. To re-witness the topic-type difference: stud-ide "Electric Circuits…" first
+   (numerical, likely full coverage) then "Heat and Temperature" (conceptual,
+   likely gaps). Different scores on the same engine = grading that actually
+   distinguishes topic types.
