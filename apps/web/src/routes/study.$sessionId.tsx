@@ -261,11 +261,46 @@ function VoiceCapture({
           </p>
         )}
 
-        {state.notice && (
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {state.notice}
-          </p>
-        )}
+        <div className="mt-4 flex w-full max-w-sm flex-col gap-2 text-left text-sm" aria-live="polite">
+          {voice.messages
+            .slice(baseRef.current ?? 0)
+            .filter((m) => m.role === "user" && m.partial !== true && Boolean(m.text.trim()))
+            .map((m, i) => (
+              <div key={i} className="rounded-lg border border-sage/20 bg-sage/5 px-3 py-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-sage">You said</span>
+                <p className="mt-0.5 text-manuscript">{m.text.trim()}</p>
+              </div>
+            ))}
+          {state.notice && (
+            <div className="rounded-lg border border-sky/20 bg-sky/5 px-3 py-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-sky">I'll read back</span>
+              <p className="mt-0.5 text-manuscript">{state.notice}</p>
+            </div>
+          )}
+        </div>
+
+        {(() => {
+          const base = baseRef.current ?? 0;
+          return (
+            <div className="mt-4 flex w-full max-w-sm flex-col gap-2 text-left text-sm" aria-live="polite">
+              {voice.messages
+                .slice(base)
+                .filter((m) => m.role === "user" && m.partial !== true && Boolean(m.text.trim()))
+                .map((m, i) => (
+                  <div key={`${base}-${i}`} className="rounded-lg border border-sage/20 bg-sage/5 px-3 py-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wide text-sage">You said</span>
+                    <p className="mt-0.5 text-manuscript">{m.text.trim()}</p>
+                  </div>
+                ))}
+              {state.notice && (
+                <div className="rounded-lg border border-rust/25 bg-rust/5 px-3 py-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-rust">I'll read back</span>
+                  <p className="mt-0.5 text-manuscript">{state.notice}</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {voice.errorCode === "usage_limit" && (
           <p className="rounded-sm border border-rust/40 bg-rust/10 px-3 py-2 text-xs text-manuscript/70">
