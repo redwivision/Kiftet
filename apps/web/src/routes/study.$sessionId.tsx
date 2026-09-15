@@ -186,7 +186,7 @@ function VoiceCapture({
     const finalize = () => {
       const spoken = voice.messages
         .slice(start)
-        .filter((m) => m.role === "user" && Boolean(m.text.trim()));
+        .filter((m) => m.role === "user" && m.partial !== true && Boolean(m.text.trim()));
       const last = spoken[spoken.length - 1];
       if (last && last.text.trim()) {
         void submit(last.text.trim());
@@ -197,7 +197,7 @@ function VoiceCapture({
 
     const spokenNow = voice.messages
       .slice(baseRef.current)
-      .filter((m) => m.role === "user" && Boolean(m.text.trim()));
+      .filter((m) => m.role === "user" && m.partial !== true && Boolean(m.text.trim()));
     if (spokenNow[spokenNow.length - 1]?.text.trim()) {
       void submit(spokenNow[spokenNow.length - 1].text.trim());
       return;
@@ -210,7 +210,7 @@ function VoiceCapture({
     // ENTIRE phase has no user text do we follow the calm wait-for-them path.
     const wholePhase = voice.messages
       .slice(baseRef.current)
-      .filter((m) => m.role === "user" && Boolean(m.text.trim()));
+      .filter((m) => m.role === "user" && m.partial !== true && Boolean(m.text.trim()));
     const phaseFallback = wholePhase[wholePhase.length - 1];
     if (phaseFallback && phaseFallback.text.trim() && voice.status !== "error") {
       void submit(phaseFallback.text.trim());
