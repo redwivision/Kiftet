@@ -275,6 +275,20 @@ function VoiceCapture({
             <div className="rounded-lg border border-sky/20 bg-sky/5 px-3 py-1.5">
               <span className="text-xs font-medium uppercase tracking-wide text-sky">I'll read back</span>
               <p className="mt-0.5 text-manuscript">{state.notice}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const t = state.notice === null ? "" : state.notice;
+                  if (!t) return;
+                  const u = new SpeechSynthesisUtterance(t);
+                  u.lang = "en-US";
+                  window.speechSynthesis.cancel();
+                  window.speechSynthesis.speak(u);
+                }}
+                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-sky underline underline-offset-2 hover:text-sky/80"
+              >
+                Read it to me
+              </button>
             </div>
           )}
         </div>

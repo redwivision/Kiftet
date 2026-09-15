@@ -6,6 +6,8 @@
 
 Name confirmed (ክፍተት — "gap") by native-speaker check. Brand: gold `#E8A33D` on indigo `#1B2340`, deliberately clashed together — see `/docs/DESIGN_BRIEF.md` for the full system and reasoning.
 
+**➡️ End-to-end testing:** [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md)
+
 ## The problem
 
 Ethiopia's national exam pass rate climbed to 12.8% in 2026 — the best result in years. That also means **87.2% of the roughly 563,500 students who sat the exam were still failed by the system**, and 565 schools had zero students pass. Students aren't failing from zero exposure — they sat through the classes. They fail because there's no efficient way, before the exam, to find out exactly which specific concepts didn't stick.

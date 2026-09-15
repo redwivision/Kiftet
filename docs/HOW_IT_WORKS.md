@@ -303,9 +303,16 @@ Phase 2.
 | 0 | Skeleton — SQLite domain, API shell, AI seam | ✅ Done |
 | 1 | Voice spine — Voxide capture/playback + voice-state UI | ⏭️ Next |
 | 2 | AI loop — real Gemini: extraction, grading, micro-lessons, retest | ⛔ |
-| 3 | Web flow — recall → gap viz → lesson → retest screens | ⛔ |
+| 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ |
 | 4 | Demo dataset + polish | ⛔ |
 | 5 | Deploy (EthioDeploy) + Postgres switch | ⛔ |
+
+> **The voice seam, honestly.** The SDK owns the orb + its word-by-word
+> caption (no hide flag in `VoxideAppearance`). We never bet the platform on
+> that: real grading reads only **finalized** turns (the same `!m.partial`
+> gate as the captions' own bubbles), and the calm replies + read-back come
+> from the browser natively — `speechSynthesis` for reading our reply aloud,
+> no vendor TTS-commit. Voice = the seam; Gemini + text = load-bearing.
 
 The rule that runs this branch: **build one phase, test it, fix it, write the
 testing guide, only then start the next.** Nobody ever fires all phases at once —

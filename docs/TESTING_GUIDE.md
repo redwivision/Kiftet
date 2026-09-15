@@ -480,3 +480,16 @@ Tap once to start, tap again to hang up.
    (numerical, likely full coverage) then "Heat and Temperature" (conceptual,
    likely gaps). Different scores on the same engine = grading that actually
    distinguishes topic types.
+8. **Read-back, out loud, vendor-free.** On any "I'll read back" bubble, tap
+   **Read it to me** → the browser's native `speechSynthesis` reads that calm
+   reply aloud. This is OUR seam — no Voxide key, no vendor TTS, works even
+   with the ring off. It never reads a partial word: the bubble and the speech
+   both use the same finalized `!m.partial` copy as grading.
+
+**What "finalized-only" means for the tester:** while the orb streams a sentence
+it is *recognizing* word-by-word, `m.partial === true`. Grading, the "You
+said" captions, and Read-it-to-me all ignore those partials and only act on the
+finalized turn (`partial !== true`) — so a mid-word whisper can never be taken
+as the answer. The ring's own live caption is SDK-owned UI and is the one place
+that shows words landing one-by-one *visually*; the app itself never lets that
+half-finished stream drive what we grade or read back.
