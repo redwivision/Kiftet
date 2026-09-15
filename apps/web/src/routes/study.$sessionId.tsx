@@ -16,7 +16,7 @@ import { VoxideRing } from "@/components/voxide-ring";
 const ACTIVE: VoxideStatus[] = ["connecting", "listening", "speaking", "thinking", "executing"];
 
 const RECALL_CAPTION: Record<string, string> = {
-  idle: "Tap the ring and tell me everything you remember.",
+  idle: "Say everything you remember out loud, then tap the ring again when you're done — I'll grade it right away.",
   armed: "Wake word armed — tap to start.",
   connecting: "Connecting…",
   listening: "Listening… tap the ring when you're done.",
@@ -27,7 +27,7 @@ const RECALL_CAPTION: Record<string, string> = {
 };
 
 const ANSWER_CAPTION: Record<string, string> = {
-  idle: "Tap the ring and answer out loud.",
+  idle: "Tap the ring locked you in: say your full answer out loud, then tap the ring again when you're done — I'll grade you right away.",
   armed: "Wake word armed — tap to start.",
   connecting: "Connecting…",
   listening: "Listening… tap the ring when you're done.",
