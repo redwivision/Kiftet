@@ -380,7 +380,7 @@ function TextRecorder({
       <Textarea
         name="recall"
         aria-label="Type how much of the chapter you remember — this gets graded exactly like a spoken recall"
-        autocomplete="off"
+        autoComplete="off"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={placeholder ?? "Type your answer…"}
