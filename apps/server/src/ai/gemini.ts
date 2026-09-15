@@ -4,7 +4,7 @@ import { env } from "../env.server";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-export const DEFAULT_MODEL = "gemini-2.0-flash";
+export const DEFAULT_MODEL = "gemini-3.6-flash";
 
 const PLACEHOLDER_KEY = "placeholder-gemini-api-key";
 
@@ -237,7 +237,8 @@ const GRADE_SYSTEM =
   "You judge how well a student's spoken recall covers the concept checklist. " +
   "Return STRICT JSON, no prose: " +
   '{"covered":["conceptText that the student correctly explained"],"missing":["checklist concepts not really addressed"],"misconceptions":["checklist items the student got WRONG or stated as a misconception"],"score":0.0-1.0}. ' +
-  "Only reference concepts that exist in the checklist verbatim. score = fraction of non-misconception concepts covered. " +
+  "Only reference concepts that exist in the checklist verbatim (bare conceptText, never the [MISCONCEPTION] marker). " +
+  "score = fraction of non-misconception concepts covered. " +
   "A misconception item listed in 'covered' is an error — it goes to 'misconceptions' instead.";
 
 const LESSON_SYSTEM =

@@ -167,6 +167,16 @@ working.
 
 ## Phase 2 — Gemini AI loop
 
+**LIVE as of the Voxide round:** a real `GEMINI_API_KEY` is in
+`apps/server/.env` (gitignored). **Important:** the old default model
+`gemini-2.0-flash` was retired by Google (404 "no longer available"), which made
+every AI call silently fall back to heuristics even with a valid key. Fixed by
+using `gemini-3.6-flash` (`apps/server/src/ai/gemini.ts`). Verified end-to-end
+over HTTP: recall grades semantically (covered/missing/misconceptions/score),
+micro-lessons are genuine spoken lessons with analogies, retest questions are
+targeted spoken prompts, and `extractConcepts` returns weighted concepts +
+misconceptions.
+
 ### How I tested
 
 **What was verified:**
