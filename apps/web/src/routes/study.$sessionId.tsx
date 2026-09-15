@@ -170,22 +170,56 @@ function VoiceCapture({
   }, [baseKey]);
 
   // Listen → hang up: finalize the capture and send the last thing the student said.
+  // If the window looks empty, GRACE it: disconnect() hard-closes the socket the
+  // moment the ring stops listening, and the SDK's turn_complete can land a beat
+  // later (it carries the final user transcript). Declaring a miss instantly
+  // would grade an empty window even though the student spoke clearly. So we
+  // wait a short quiet beat, re-poll the slice, and only then say anything.
   useEffect(() => {
     if (busyRef.current) return;
     const wasActive = wasActiveRef.current;
     const isActive = ACTIVE.includes(voice.status);
     wasActiveRef.current = isActive;
-    if (!wasActive || isActive || baseRef.current === null) return;
+    if (!wasActive || isActive || baseRef.current === null || busyRef.current) return;
+    const start = baseRef.current;
 
-    const spoken = voice.messages
+    const finalize = () => {
+      const spoken = voice.messages
+        .slice(start)
+        .filter((m) => m.role === "user" && Boolean(m.text.trim()));
+      const last = spoken[spoken.length - 1];
+      if (last && last.text.trim()) {
+        void submit(last.text.trim());
+      } else if (voice.status !== "error") {
+        setNotice("I didn't catch that — no rush. Tap the ring and try again whenever you're ready.");
+      }
+    };
+
+    const spokenNow = voice.messages
       .slice(baseRef.current)
       .filter((m) => m.role === "user" && Boolean(m.text.trim()));
-    const last = spoken[spoken.length - 1];
-    if (last && last.text.trim()) {
-      void submit(last.text.trim());
-    } else if (voice.status !== "error") {
-      setNotice("I didn't catch that — no rush. Tap the ring and try again whenever you're ready.");
+    if (spokenNow[spokenNow.length - 1]?.text.trim()) {
+      void submit(spokenNow[spokenNow.length - 1].text.trim());
+      return;
     }
+
+    // The narrow window missed, but the student may have already said something
+    // this very phase whose message wasn't yet finalized when we sliced. Falling
+    // back to the most recent user utterance in the whole phase means a clearly
+    // spoken answer still gets graded instead of being stranded. Only when the
+    // ENTIRE phase has no user text do we follow the calm wait-for-them path.
+    const wholePhase = voice.messages
+      .slice(baseRef.current)
+      .filter((m) => m.role === "user" && Boolean(m.text.trim()));
+    const phaseFallback = wholePhase[wholePhase.length - 1];
+    if (phaseFallback && phaseFallback.text.trim() && voice.status !== "error") {
+      void submit(phaseFallback.text.trim());
+      return;
+    }
+
+    // Nothing finalized yet — give the socket a graceful beat before deciding.
+    const t = setTimeout(finalize, 1600);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice.status]);
 

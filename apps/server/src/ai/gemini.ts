@@ -12,6 +12,7 @@ export type ConceptChecklistItem = {
   conceptText: string;
   isMisconception: boolean;
   weight: number;
+  
 };
 
 export type GapAnalysis = {
