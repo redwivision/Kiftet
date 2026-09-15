@@ -378,10 +378,12 @@ function TextRecorder({
   return (
     <div className="space-y-2">
       <Textarea
+        name="recall"
+        aria-label="Type how much of the chapter you remember — this gets graded exactly like a spoken recall"
+        autocomplete="off"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={placeholder ?? "Type your answer…"}
-        rows={4}
         className="border-manuscript/15 bg-night-raised text-manuscript placeholder:text-muted-foreground/60"
       />
       <Button onClick={() => void doSubmit()} disabled={!text.trim() || busy}>
