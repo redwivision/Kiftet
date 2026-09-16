@@ -1,92 +1,96 @@
 import type { Route } from "./+types/_index";
 import { Link } from "react-router";
-import { TriangleAlert } from "lucide-react";
+import { ArrowRight, BookOpenText, BrainCircuit, Mic, Sparkles } from "lucide-react";
 
 import { buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
-
-function LogoMark({ className }: { className?: string }) {
-  return (
-    <img
-      src="/logo-mark.png"
-      alt=""
-      width={120}
-      height={120}
-      className={cn("size-24 rounded-full object-cover", className)}
-    />
-  );
-}
+import { VoiceRing } from "@/components/voice-ring";
 
 const LOOP = [
-  "Speak a concept, free-form.",
-  "Kiftet finds what's missing.",
-  "Relearn only the gaps.",
-  "Retest until they close.",
+  {
+    title: "Speak freely",
+    text: "Tell Kiftet what you remember with no notes and no scripts.",
+    icon: Mic,
+  },
+  {
+    title: "Find the gap",
+    text: "The system identifies the concepts and misconceptions you missed.",
+    icon: BrainCircuit,
+  },
+  {
+    title: "Learn only what matters",
+    text: "A short lesson resets the exact misunderstood ideas, not the whole chapter.",
+    icon: BookOpenText,
+  },
+  {
+    title: "Retest and improve",
+    text: "Close the loop with fresh questions on the same gaps until they’re gone.",
+    icon: Sparkles,
+  },
 ] as const;
 
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Kiftet — Close the gap" },
-    { name: "description", content: "Find what's missing in your Grade 11–12 STEM studies and close the gap." },
+    { name: "description", content: "A calm, voice-first study coach for Ethiopian STEM students." },
   ];
 }
 
 export default function Home() {
   return (
-    <main className="mx-auto grid min-h-svh w-full max-w-md content-center gap-10 px-6 py-10">
-      <div className="flex flex-col items-center gap-6 text-center">
-        <div
-          role="status"
-          className="flex w-full items-start gap-3 rounded-lg border border-gold/50 bg-gold/10 px-4 py-3 text-left"
-        >
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-gold" aria-hidden="true" />
-          <div className="space-y-0.5">
-            <p className="font-display text-xs font-bold uppercase tracking-widest text-gold">
-              Under development
-            </p>
-            <p className="text-xs leading-relaxed text-manuscript/85">
-              This is an active work in progress — not a finished product or
-              completed demo. Features may change or break at any time.
-            </p>
+    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <section className="panel-surface mx-auto overflow-hidden rounded-[2rem] border border-gold/20 bg-[#171f35]/90 p-6 sm:p-8 lg:p-10">
+        <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div className="space-y-7">
+            <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/8 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.26em] text-gold">
+              Ethiopia STEM review
+            </div>
+
+            <div className="space-y-5">
+              <h1 className="font-display text-4xl font-semibold tracking-[-0.05em] text-manuscript sm:text-5xl lg:text-6xl">
+                Close the gap.
+                <span className="mt-2 block text-gold">Study smarter, not wider.</span>
+              </h1>
+
+              <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
+                Kiftet listens to what you remember, finds the exact concepts you missed, and gives a short, targeted lesson before testing you again.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                to="/dashboard"
+                className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto")}
+              >
+                Start studying
+                <ArrowRight className="ml-2 size-4" />
+              </Link>
+              <Link
+                to="/dashboard"
+                className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full sm:w-auto")}
+              >
+                Choose a chapter
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Voice first</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Gap-based review</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">STEM revision</span>
+            </div>
           </div>
         </div>
+      </section>
 
-        <LogoMark />
-
-        <div className="space-y-3">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-manuscript">
-            Welcome to&nbsp;
-            <span className="text-gold">Kiftet</span>
-          </h1>
-          <p className="font-display text-lg text-manuscript/90">Close the gap.</p>
-        </div>
-
-        <p className="text-base leading-relaxed text-muted-foreground">
-          Find what’s missing in your Grade&nbsp;11–12 STEM studies and close it —
-          lesson by lesson, gap by gap. So when the national exam comes, nothing
-          is left to chance.
+      <div className="mt-12 flex flex-col items-center gap-6 text-center">
+        <VoiceRing state="idle" onStart={() => {}} onStop={() => {}} />
+        <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+          Tap the ring and speak what you remember — Kiftet finds the exact concepts you missed, then teaches only those before testing again.
         </p>
-      </div>
-
-      <ol className="space-y-3">
-        {LOOP.map((step, i) => (
-          <li key={step} className="flex items-start gap-3">
-            <span className="grid size-6 shrink-0 place-items-center rounded-full border border-gold/40 text-xs text-gold">
-              {i + 1}
-            </span>
-            <span className="text-sm text-manuscript/85">{step}</span>
-          </li>
-        ))}
-      </ol>
-
-      <div className="flex flex-col items-center gap-3">
-        <Link
-          to="/dashboard"
-          className={cn(buttonVariants({ size: "lg" }), "w-full max-w-56")}
-        >
-          Start studying
+        <Link to="/dashboard" className={cn(buttonVariants({ size: "lg" }))}>
+          Open the study room
+          <ArrowRight className="ml-2 size-4" />
         </Link>
-        <p className="text-xs text-muted-foreground">Free for Ethiopian grade 11–12 students.</p>
       </div>
     </main>
   );
