@@ -10,10 +10,10 @@ interface CoverageViewProps {
 /**
  * The one place the design spends its boldness.
  *
- * Before/after coverage is shown as a segmented strip: every idea in the
- * chapter is one segment. Solid ideas sit tall and filled (sage). Missing
- * ideas sit low and open (rust) — the gap is legible at a glance, not just
- * scored.
+ * Before/after coverage is shown as a segmented strip: each concept the
+ * chapter is checked against is one segment. Solid concepts sit tall and
+ * filled (sage). Missing concepts sit low and open (rust) — the gap is
+ * legible at a glance, not just scored.
  */
 export function CoverageView({
 	covered,
@@ -33,7 +33,7 @@ export function CoverageView({
 						<span className="text-2xl text-muted-foreground">%</span>
 					</p>
 					<p className="text-muted-foreground text-sm">
-						of the chapter&apos;s ideas came out solid
+						of the concepts we checked came out solid
 					</p>
 				</div>
 				<div className="pb-1.5 text-right text-[0.72rem] text-muted-foreground leading-4">
@@ -52,7 +52,7 @@ export function CoverageView({
 			<div
 				className="flex h-9 items-end gap-1.5"
 				role="img"
-				aria-label={`${covered.length} of ${total} ideas covered, ${missing.length} still gaps`}
+				aria-label={`${covered.length} of ${total} concepts covered, ${missing.length} still gaps`}
 			>
 				{covered.map((concept, i) => (
 					<span
@@ -125,7 +125,9 @@ export function CoverageView({
 							))}
 						</ul>
 					) : (
-						<p className="text-sage text-sm">Nothing. Every idea held.</p>
+						<p className="text-sage text-sm">
+							Nothing. Every concept we checked is solid.
+						</p>
 					)}
 				</div>
 			</div>

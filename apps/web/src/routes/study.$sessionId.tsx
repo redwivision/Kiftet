@@ -6,7 +6,7 @@ import { Check, Loader2, MicOff, Volume2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { getVoxideClient, hasVoxideKey } from "@/components/assistant";
-import { BrandMark } from "@/components/brand-mark";
+import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { StudyProvider, useStudy } from "@/components/study-provider";
 import { VoxideRing } from "@/components/voxide-ring";
@@ -21,8 +21,8 @@ const ACTIVE: VoxideStatus[] = [
 ];
 
 const RECALL_CAPTION: Record<string, string> = {
-	idle: "Tap the ring, then say everything you remember about this chapter out loud. No notes — rough and honest is perfect. Tap again when you're done.",
-	armed: "Wake word armed — tap to start.",
+	idle: "Tap the ring, then say what you remember about this chapter out loud. No notes — rough and honest is perfect. Tap again when you're done.",
+	armed: "Ready — tap to start.",
 	connecting: "Connecting…",
 	listening: "Listening… tap the ring when you're done.",
 	thinking: "Thinking…",
@@ -33,7 +33,7 @@ const RECALL_CAPTION: Record<string, string> = {
 
 const ANSWER_CAPTION: Record<string, string> = {
 	idle: "Say your answer out loud in your own words — teaching it back is what proves it. Tap the ring when you're done.",
-	armed: "Wake word armed — tap to start.",
+	armed: "Ready — tap to start.",
 	connecting: "Connecting…",
 	listening: "Listening… tap the ring when you're done.",
 	thinking: "Thinking…",
@@ -522,7 +522,7 @@ function RecallPhase() {
 		<div className="space-y-6">
 			<PhaseHeading
 				title="Remember it out loud"
-				text="This is the diagnosis. Say everything you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
+				text="This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
 			/>
 			<VoiceCapture
 				submit={(text) => submitRecall(text)}
@@ -543,7 +543,7 @@ function GapsPhase() {
 		<div className="space-y-6">
 			<PhaseHeading
 				title="Your starting picture"
-				text="The solid ideas stay. The open ones are exactly what the short version will fix."
+				text="The solid ideas stay. The open ones are what the short version will fix."
 			/>
 			<CoverageView covered={gaps.covered} missing={gaps.missing} />
 			<div className="space-y-2 pt-2">
@@ -629,7 +629,7 @@ function RetestPhase() {
 				text={
 					done
 						? "You made it through the set. See whether the short version closed the gaps."
-						: "Questions are phrased differently from the lesson, so they test understanding — not your memory of wording."
+						: "These questions come after the lesson, so they test what stuck — not what you just heard."
 				}
 			/>
 
@@ -752,8 +752,8 @@ function ResultPhase({
 		return (
 			<ResultPanel
 				tone="sage"
-				headline="You covered everything."
-				body="Every idea in this chapter came out solid, cold, no notes. That is exactly what this loop is for."
+				headline="Nothing came up missing."
+				body="Every concept this chapter is checked against came out solid — cold, no notes. That's exactly the outcome this loop is built for."
 				actions={
 					<Button
 						className="w-full justify-center"
@@ -773,7 +773,7 @@ function ResultPhase({
 			<ResultPanel
 				tone="gold"
 				headline="Gap closed."
-				body="The short version fixed what was missing, and the retest confirmed it with fresh wording — not echo. That's the whole point of Kiftet."
+				body="The short version filled what was missing, and the retest shows it — the score climbed. That's the whole point of Kiftet."
 				actions={
 					<Button
 						className="w-full justify-center"
@@ -794,7 +794,7 @@ function ResultPhase({
 		<ResultPanel
 			tone="rust"
 			headline="A gap is still open."
-			body="Not everything sticks on the first pass — now you know exactly which ideas, so the next pass is faster than the first."
+			body="Not everything sticks on the first pass — now you know which ideas are still open, so the next pass is faster than the first."
 			actions={
 				<div className="space-y-3">
 					<Button
@@ -863,6 +863,11 @@ function ResultPanel({
 								"radial-gradient(480px 240px at 85% -20%, rgba(232,163,61,0.18), transparent 60%)",
 						}}
 					/>
+				)}
+				{isGold && (
+					<div className="mb-5 flex justify-center">
+						<GapClosingMark size={64} className="text-foreground" />
+					</div>
 				)}
 				<p
 					className={cn(

@@ -7,7 +7,7 @@ import { VoxideRing } from "@/components/voxide-ring";
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "Tap the ring and talk — anything.",
-  armed: "Wake word loaded.",
+  armed: "Ready.",
   connecting: "Connecting to the voice agent…",
   listening: "Listening… tap the ring again to stop me.",
   thinking: "Thinking… tap the ring again to cancel.",

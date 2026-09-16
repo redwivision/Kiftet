@@ -1,11 +1,28 @@
 /**
- * The Kiftet brand mark — gold brackets `[ ]` with a `?` between them,
- * on a Night Indigo field. The unanswered question sitting inside the
- * gap that's about to close.
+ * The Kiftet brand mark — an open ring.
  *
- * Rendered as inline SVG so the `?` resolves Fraunces from the page's
- * CSS @font-face — no external font lookup inside `<img>` tags.
+ * A circle with a segment missing: the gap (ክፍተት). It is the one
+ * idea the whole product is about, drawn once so it can be read in a
+ * frame: a whole that isn't whole — with a piece missing that gold
+ * (the brand's "gap closed" colour) is the only thing that can fill.
+ *
+ * Rendered as inline SVG, stroke follows `currentColor` so the same
+ * mark works on light and dark surfaces.
  */
+
+const R = 44;
+
+/* The 288° arc — the ring with a 72° segment missing at the top-right. */
+const OPEN_ARC = "M 93.46 43.12 A 44 44 0 1 1 56.88 6.54";
+
+/* The missing 72° segment — the gold piece that closes the gap. */
+const GAP_ARC = "M 56.88 6.54 A 44 44 0 0 1 93.46 43.12";
+
+/* Arc length of a 72° arc on the ring circle (2π·44 · 72/360). */
+const GAP_LENGTH = (2 * Math.PI * R * 72) / 360;
+
+const STROKE = 8;
+
 export function BrandMark({
 	size = 36,
 	className,
@@ -17,39 +34,69 @@ export function BrandMark({
 		<svg
 			width={size}
 			height={size}
-			viewBox="0 0 120 120"
+			viewBox="0 0 100 100"
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
 			className={className}
 			aria-hidden="true"
 		>
-			<circle cx="60" cy="60" r="58" fill="#1B2340" />
-			{/* Left bracket [ */}
 			<path
-				d="M42 32 L34 32 L34 88 L42 88"
-				stroke="#E8A33D"
-				strokeWidth="6"
+				d={OPEN_ARC}
+				stroke="currentColor"
+				strokeWidth={STROKE}
 				strokeLinecap="round"
 			/>
-			{/* Right bracket ] */}
+		</svg>
+	);
+}
+
+/**
+ * The gap closing, live. The open ring plus the missing segment drawn in
+ * gold as a growing arc — used where the product shows a gap being
+ * closed (result crescents, "gap closed" moments).
+ */
+export function GapClosingMark({
+	size = 56,
+	className,
+}: {
+	size?: number;
+	className?: string;
+}) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 100 100"
+			fill="none"
+			xmlns="http://www.w3.org/2000/svg"
+			className={className}
+			aria-hidden="true"
+		>
 			<path
-				d="M78 32 L86 32 L86 88 L78 88"
-				stroke="#E8A33D"
-				strokeWidth="6"
+				d={OPEN_ARC}
+				stroke="currentColor"
+				strokeWidth={STROKE}
 				strokeLinecap="round"
 			/>
-			{/* ? — Fraunces resolves from the page's loaded Google Fonts */}
-			<text
-				x="60"
-				y="73"
-				fontSize="42"
-				fontWeight="500"
-				fill="#E8A33D"
-				textAnchor="middle"
-				fontFamily="Fraunces, Georgia, serif"
+			<path
+				d={GAP_ARC}
+				stroke="#E8A33D"
+				strokeWidth={STROKE}
+				strokeLinecap="round"
+				strokeDasharray={`${GAP_LENGTH} 70`}
+				strokeDashoffset={GAP_LENGTH}
 			>
-				?
-			</text>
+				<animate
+					attributeName="stroke-dashoffset"
+					from={GAP_LENGTH}
+					to="0"
+					dur="1.4s"
+					begin="0.15s"
+					fill="freeze"
+					calcMode="spline"
+					keySplines="0.22 1 0.36 1"
+				/>
+			</path>
 		</svg>
 	);
 }

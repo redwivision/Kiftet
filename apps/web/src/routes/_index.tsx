@@ -12,7 +12,7 @@ export function meta(_args: Route.MetaArgs) {
 		{
 			name: "description",
 			content:
-				"Kiftet listens to what you remember, finds the exact concepts you missed, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+				"Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
 		},
 	];
 }
@@ -21,25 +21,25 @@ const LOOP = [
 	{
 		step: "Speak",
 		title: "Say what you remember",
-		text: "Pick a chapter and explain it out loud, no notes, no prompts. Talking is the test — you can't fake knowing something out loud.",
+		text: "Pick a chapter and explain it out loud, no notes, no prompts. Speaking forces clarity — you know what you know, and what you don't.",
 		icon: Mic,
 	},
 	{
 		step: "Diagnose",
-		title: "See exactly what's missing",
-		text: "Every idea in the chapter is checked. Solid ideas stay, gaps surface — shown as a picture you can read in one glance.",
+		title: "See what's missing",
+		text: "The concepts we check are compared against what you said. Solid ideas stay, gaps surface — shown as a picture you can read in one glance.",
 		icon: ScanSearch,
 	},
 	{
 		step: "Relearn",
 		title: "Hear only what you missed",
-		text: "A short, spoken lesson covers just the gaps — not the whole chapter. Common misconceptions get corrected, not just topics re-listed.",
+		text: "A short, spoken lesson covers just the gaps — not the whole chapter. Each pass targets only what didn't land the first time.",
 		icon: Volume2,
 	},
 	{
 		step: "Retest",
 		title: "Prove it stuck",
-		text: "Freshly worded questions on those same gaps, then a before/after score. You leave knowing — not hoping — that it closed.",
+		text: "Freshly worded questions on those same gaps, then a before/after score. You leave with a clear picture of what closed and what's still open.",
 		icon: RefreshCcw,
 	},
 ] as const;
@@ -65,14 +65,14 @@ export default function Home() {
 						<span className="block text-gold">Close the gap.</span>
 						<span className="block">
 							87 in every 100 students fails the national exam. Trying harder
-							isn&apos;t the answer — finding the exact gaps is.
+							isn&apos;t the answer — knowing which gaps are yours is.
 						</span>
 					</h1>
 
 					<p className="max-w-xl text-base text-muted-foreground leading-7 sm:text-lg">
 						Kiftet listens to what you remember out loud, finds the specific
 						ideas that didn&apos;t stick, teaches only those in a short spoken
-						lesson — then retests until they do. Not another question bank. A
+						lesson — then retests what stayed. Not another question bank. A
 						diagnosis.
 					</p>
 
@@ -178,14 +178,14 @@ export default function Home() {
 					</h2>
 					<p className="text-base text-muted-foreground leading-7">
 						Explaining something out loud is how the underlying learning
-						technique actually works. You can&apos;t bluff your way through
-						speaking an idea — the words either come or they don&apos;t, and
-						that honesty is the diagnosis.
+						technique actually works. There&apos;s nowhere to hide off-screen —
+						there&apos;s no option, no answer key, just what you can produce.
+						That honesty is the diagnosis.
 					</p>
 					<p className="text-base text-muted-foreground leading-7">
-						So you speak. Kiftet transcribes, checks every concept in the
-						chapter, and reads the short lesson back in a calm voice. Talk in,
-						talk out.
+						So you speak. Kiftet transcribes, compares what you said against the
+						chapter&apos;s concepts, and reads the short lesson back in a calm
+						voice. Talk in, talk out.
 					</p>
 				</div>
 
@@ -201,8 +201,8 @@ export default function Home() {
 						Tap and speak
 					</p>
 					<p className="max-w-xs text-center text-muted-foreground text-sm leading-6">
-						Says the student. The ring is listening, not judging. Every word is
-						a data point about exactly what to review.
+						Says the student. The ring is listening, not judging. What you say
+						out loud is the whole record of what stuck.
 					</p>
 				</div>
 			</section>
@@ -259,9 +259,8 @@ export default function Home() {
 						A school phone is enough
 					</h3>
 					<p className="mt-2 text-muted-foreground text-sm leading-6">
-						A web app, not an app-store install. Owns the network when it&apos;s
-						slow and works both by voice and by typing, whichever the moment
-						allows.
+						A web app, not an app-store install. Made to run on low bandwidth —
+						and if the voice service drops, you keep going by typing.
 					</p>
 				</div>
 				<div className="inner-surface p-5">
@@ -278,8 +277,9 @@ export default function Home() {
 						Honest before/after
 					</h3>
 					<p className="mt-2 text-muted-foreground text-sm leading-6">
-						You see coverage before you start and after the lesson closes. If
-						part of it is still open, that answer is as useful as the progress.
+						You see your coverage right after you recall, and again after the
+						lesson closes. If part of it is still open, that answer is as useful
+						as the progress.
 					</p>
 				</div>
 			</section>
@@ -291,7 +291,8 @@ export default function Home() {
 					Pick a chapter. Speak. Close the gap.
 				</h2>
 				<p className="mx-auto mt-3 max-w-md text-base text-muted-foreground leading-7">
-					It starts in about ten seconds, with a blank notebook and out loud.
+					Pick a chapter, press the ring, and start speaking. The diagnosis
+					comes from your own words.
 				</p>
 				<Link
 					to="/dashboard"
@@ -306,8 +307,8 @@ export default function Home() {
 					<BrandMark size={40} className="opacity-60" />
 					<p className="max-w-sm text-muted-foreground text-xs leading-6">
 						Closing the gap between what a class covers and what a student
-						keeps. Built for the national exam, tested by 1,000 words of honest
-						recall at a time.
+						keeps. Built for the national exam — one chapter, one voice, one gap
+						at a time.
 					</p>
 					<p className="text-[0.68rem] text-muted-foreground/60">
 						Kiftet · ክፍተት
@@ -335,7 +336,7 @@ function DemoCard() {
 					</p>
 				</div>
 				<div className="mb-1 flex items-center justify-between gap-3">
-					<p className="k-label">Physics · past paper prep</p>
+					<p className="k-label">Physics · wave mechanics · Grade 11</p>
 					<span className="inline-flex items-center gap-1.5 font-medium text-[0.72rem] text-sage">
 						<span
 							className="size-1.5 rounded-full bg-sage"

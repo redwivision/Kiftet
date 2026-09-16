@@ -55,8 +55,8 @@ export default function Dashboard() {
 					Pick a chapter, then speak.
 				</h1>
 				<p className="text-muted-foreground text-sm leading-6">
-					Every chapter runs the same loop — recall, diagnose, relearn, retest.
-					You&apos;ll see your coverage before you start and after you finish.
+					Each chapter runs the same loop — recall, diagnose, relearn, retest.
+					You&apos;ll see your coverage after each recall, and again at the end.
 				</p>
 			</header>
 
@@ -173,7 +173,7 @@ function ChapterCard({
 			</p>
 
 			<p className="mt-5 font-medium text-foreground/90 text-xs">
-				Speak what you remember, see what&apos;s missing, close exactly that.
+				Speak what you remember, see what&apos;s missing, close it.
 			</p>
 		</button>
 	);
