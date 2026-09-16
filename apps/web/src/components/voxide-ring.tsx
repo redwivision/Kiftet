@@ -2,7 +2,7 @@ import { cn } from "@kiftet/ui/lib/utils";
 
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
 import { Loader2, Mic, Square, Volume2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getVoxideClient } from "@/components/assistant";
 
 const LABEL: Record<VoxideStatus, string> = {
@@ -25,7 +25,15 @@ const ACTIVE: VoxideStatus[] = [
 	"executing",
 ];
 
-export function VoxideRing() {
+export function VoxideRing({
+	autoArm = false,
+}: {
+	/** Voice-first: when true the ring arms/opens the mic on its own as soon as
+	 *  the phase opens, so speaking is the default interaction — no tap needed.
+	 *  Keyboard stays available underneath; autoArm is only a default, never a
+	 *  dead end. See docs/HOW_IT_WORKS.md §5 "step of concerns". */
+	autoArm?: boolean;
+}) {
 	const client = getVoxideClient();
 	const voice = useVoxideVoice(client);
 	const { status } = voice;
@@ -33,6 +41,31 @@ export function VoxideRing() {
 	const [initReady, setInitReady] = useState(() =>
 		client ? client.isInitialized : false,
 	);
+
+	// Voice-first: open the mic automatically when autoArm flips on and the
+	// ring is ready & not already partway through a turn. Leaving autoArm on
+	// through a whole phase leaves the mic armed continuously; flipping it off
+	// (hanging up) drops the session instantly — mirroring a tap-to-hang-up.
+	// Voice-first: autoArms connect()/disconnect() mirror connect()/disconnect()
+	// on the ring's own toggle, so flipping autoArm on is identical to the
+	// student tapping the ring — except nothing needed a tap. Leave it on for
+	// a whole speaking phase (ring stays live), flip it off = hang up.
+	const prevAutoArm = useRef(autoArm);
+	useEffect(() => {
+		const connectWhenQuiet =
+			initReady &&
+			autoArm &&
+			!prevAutoArm.current &&
+			(voice.status === "idle" ||
+				voice.status === "armed" ||
+				voice.status === "error");
+		if (connectWhenQuiet) {
+			void voice.connect();
+		} else if (!autoArm && prevAutoArm.current) {
+			void voice.disconnect();
+		}
+		prevAutoArm.current = autoArm;
+	}, [autoArm, initReady, voice.status, voice.connect, voice.disconnect]);
 	useEffect(() => {
 		if (!client || client.isInitialized) return;
 		const unsubscribe = client.on("ready", () => setInitReady(true));
