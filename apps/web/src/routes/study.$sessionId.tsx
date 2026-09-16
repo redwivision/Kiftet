@@ -378,7 +378,11 @@ function VoiceCapture({
 						<MicOff className="size-10" aria-hidden="true" />
 					</div>
 				) : (
-					<VoxideRing />
+					<VoxideRing
+						autoArm={
+							state.phase === "recall" || state.phase === "retest"
+						}
+					/>
 				)}
 
 				{!effectiveText && (
@@ -501,6 +505,16 @@ function PhaseHeading({ title, text }: { title: string; text: string }) {
 function RecallPhase() {
 	const { submitRecall } = useStudy();
 
+	// Recall → gaps: once the short analysis lands, acknowledge out loud and let
+	// the ring turn itself off (autoArm flips off when phase becomes "gaps") —
+	// the loop goes straight to the short version, no dead silence in between.
+	const onRecall = async (text: string) => {
+		await submitRecall(text);
+		speak(
+			"Your analysis is underway — the short version will tell you which ideas came free.",
+		);
+	};
+
 	return (
 		<div className="space-y-6">
 			<PhaseHeading
@@ -508,7 +522,7 @@ function RecallPhase() {
 				text="This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
 			/>
 			<VoiceCapture
-				submit={(text) => submitRecall(text)}
+				submit={(text) => onRecall(text)}
 				textDefault={!hasVoxideKey()}
 				busy={false}
 			/>

@@ -126,7 +126,7 @@ class WebSpeechVoiceClient implements VoiceClient {
 				const result = event.results[i];
 				const text = result[0]?.transcript ?? "";
 				if (result.isFinal) {
-					this.spokenTranscript = (this.spokenTranscript + " " + text).trim();
+					this.spokenTranscript = `${this.spokenTranscript} ${text}`.trim();
 					this.callbacks.onTranscript?.(text, true);
 				} else {
 					interimText += text;

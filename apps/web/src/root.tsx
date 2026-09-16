@@ -39,6 +39,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
 				<meta name="theme-color" content="#1B2340" />
+				<script
+					dangerouslySetInnerHTML={{
+						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["light","forest","dark","gold"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,
+					}}
+				/>
 				<Meta />
 				<Links />
 			</head>
@@ -58,6 +63,7 @@ export default function App() {
 			defaultTheme="dark"
 			disableTransitionOnChange
 			storageKey="kiftet-theme"
+			themes={["light", "forest", "dark", "gold"]}
 		>
 			<div className="flex min-h-dvh flex-col">
 				<Header />
