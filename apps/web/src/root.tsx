@@ -57,7 +57,7 @@ export default function App() {
 			attribute="class"
 			defaultTheme="dark"
 			disableTransitionOnChange
-			storageKey="vite-ui-theme"
+			storageKey="kiftet-theme"
 		>
 			<div className="flex min-h-dvh flex-col">
 				<Header />

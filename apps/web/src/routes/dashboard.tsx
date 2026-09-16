@@ -93,21 +93,14 @@ export default function Dashboard() {
 					<BrandSignature size={72} />
 					<div className="space-y-1">
 						<h2 className="font-display font-semibold text-xl tracking-tight">
-							No chapters yet — nothing to diagnose.
+							Nothing to diagnose yet.
 						</h2>
 						<p className="mx-auto max-w-sm text-muted-foreground text-sm leading-6">
-							Ingest a textbook chapter before you can study it. From the repo
-							root:
+							The study room is empty. Chapters appear here the moment
+							they&apos;re loaded in — then this room runs the recall loop on
+							them.
 						</p>
 					</div>
-					<code className="block w-full max-w-xl rounded-xl bg-black/40 px-4 py-3 text-left text-manuscript/80 text-xs leading-5 dark:bg-black/40">
-						curl -X POST localhost:3000/api/chapters/ingest -H
-						&quot;Content-Type: application/json&quot; -d &apos;
-						{
-							'{ "textbookTitle": "…", "subject": "…", "title": "…", "rawText": "…" }'
-						}
-						&apos;
-					</code>
 					<Link
 						to="/"
 						className="font-medium text-gold text-xs underline underline-offset-4 hover:text-gold-soft"

@@ -49,6 +49,52 @@
 	--ring: #f2bf5d;
 }
 
+/* Forest — deep sage as the field. Calm, grounding, made for a long night
+   of study without the screen leaning cold. */
+.forest {
+	--background: #23302b;
+	--foreground: #ecf3e7;
+	--card: rgba(255, 255, 255, 0.05);
+	--card-foreground: #ecf3e7;
+	--popover: rgba(27, 41, 33, 0.97);
+	--popover-foreground: #ecf3e7;
+	--primary: #9cc3a0;
+	--primary-foreground: #16231d;
+	--secondary: #2c3d35;
+	--secondary-foreground: #ecf3e7;
+	--muted: #2c3d35;
+	--muted-foreground: #a8c0ad;
+	--accent: #9cc3a0;
+	--accent-foreground: #16231d;
+	--destructive: #c0603a;
+	--border: rgba(236, 243, 231, 0.14);
+	--input: rgba(236, 243, 231, 0.12);
+	--ring: #9cc3a0;
+}
+
+/* Gold — Meskel Gold as the field. The warmest room in the house: amber
+   dusk, not a bright quiz app. */
+.gold {
+	--background: #29200f;
+	--foreground: #f7f0df;
+	--card: rgba(255, 255, 255, 0.05);
+	--card-foreground: #f7f0df;
+	--popover: rgba(39, 30, 15, 0.97);
+	--popover-foreground: #f7f0df;
+	--primary: #e8a33d;
+	--primary-foreground: #241a08;
+	--secondary: #3a2d17;
+	--secondary-foreground: #f7f0df;
+	--muted: #3a2d17;
+	--muted-foreground: #cfb68a;
+	--accent: #e8a33d;
+	--accent-foreground: #241a08;
+	--destructive: #d75f35;
+	--border: rgba(247, 240, 223, 0.16);
+	--input: rgba(247, 240, 223, 0.12);
+	--ring: #e8a33d;
+}
+
 @theme {
 	/* Brand surfaces */
 	--color-night: #1b2340;
@@ -180,13 +226,55 @@
 		background-attachment: fixed;
 	}
 
+	/* Forest stage: deep sage field, a soft green wash from the top. */
+	.forest body {
+		background-color: #1d2b25;
+		background-image:
+			radial-gradient(
+				1100px 560px at 50% -130px,
+				rgba(156, 195, 160, 0.14),
+				transparent 60%
+			),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				rgba(95, 125, 98, 0.16),
+				transparent 55%
+			),
+			linear-gradient(180deg, #22322b 0%, #1b2a23 55%, #17261f 100%);
+		background-attachment: fixed;
+	}
+
+	/* Gold stage: deep amber field, the gold wash rising from the top. */
+	.gold body {
+		background-color: #211809;
+		background-image:
+			radial-gradient(
+				1100px 560px at 50% -130px,
+				rgba(232, 163, 61, 0.18),
+				transparent 60%
+			),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				rgba(160, 112, 48, 0.16),
+				transparent 55%
+			),
+			linear-gradient(180deg, #2c2110 0%, #211809 55%, #1c1507 100%);
+		background-attachment: fixed;
+	}
+
 	::selection {
 		background: rgba(232, 163, 61, 0.32);
 		color: #1b2340;
 	}
-	.dark ::selection {
+	.dark ::selection,
+	.forest ::selection,
+	.gold ::selection {
 		background: rgba(232, 163, 61, 0.34);
 		color: #f3eee2;
+	}
+	.forest ::selection {
+		background: rgba(156, 195, 160, 0.32);
+		color: #16231d;
 	}
 
 	h1,
@@ -205,6 +293,12 @@
 	.dark .surface {
 		@apply border-white/10 bg-[#1a2340]/80;
 	}
+	.forest .surface {
+		@apply border-white/[0.09] bg-[#2c3d35]/80;
+	}
+	.gold .surface {
+		@apply border-white/[0.09] bg-[#332a16]/80;
+	}
 
 	/* Nested quiet surface inside a panel. */
 	.inner-surface {
@@ -212,6 +306,10 @@
 	}
 	.dark .inner-surface {
 		@apply border-white/[0.07] bg-white/[0.04];
+	}
+	.forest .inner-surface,
+	.gold .inner-surface {
+		@apply border-white/[0.08] bg-white/[0.05];
 	}
 
 	/* A raised, tactile surface for primary actions / the ring. */
