@@ -1,37 +1,66 @@
 import { NavLink } from "react-router";
 
+import { BrandMark } from "./brand-mark";
 import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 
-export default function Header() {
-  const links = [
-    { to: "/", label: "Home" },
-    { to: "/dashboard", label: "Dashboard" },
-  ] as const;
+function Brand() {
+	return (
+		<div className="flex items-center gap-3">
+			<BrandMark size={36} className="rounded-full ring-1 ring-gold/40" />
+			<div className="leading-tight">
+				<div className="font-display font-semibold text-[1.06rem] text-foreground tracking-tight">
+					Kiftet
+				</div>
+				<div className="font-medium text-[0.72rem] text-muted-foreground">
+					Close the gap
+				</div>
+			</div>
+		</div>
+	);
+}
 
-  return (
-    <div>
-      <div className="flex flex-row items-center justify-between px-2 py-1">
-        <nav className="flex gap-4 text-lg">
-          {links.map(({ to, label }) => {
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) => (isActive ? "font-bold" : "")}
-                end
-              >
-                {label}
-              </NavLink>
-            );
-          })}
-        </nav>
-        <div className="flex items-center gap-2">
-          <ModeToggle />
-          <UserMenu />
-        </div>
-      </div>
-      <hr />
-    </div>
-  );
+export default function Header() {
+	const links = [
+		{ to: "/", label: "Home" },
+		{ to: "/dashboard", label: "Study" },
+	] as const;
+
+	return (
+		<header className="sticky top-0 z-30 border-border/70 border-b bg-background/70 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f1523]/70">
+			<div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+				<div className="flex items-center gap-5">
+					<NavLink
+						to="/"
+						className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/80"
+					>
+						<Brand />
+					</NavLink>
+					<nav className="hidden items-center gap-1 sm:flex">
+						{links.map(({ to, label }) => (
+							<NavLink
+								key={to}
+								to={to}
+								end={to === "/"}
+								className={({ isActive }) =>
+									`rounded-full px-3 py-1.5 text-sm transition-colors ${
+										isActive
+											? "bg-gold/12 font-medium text-gold"
+											: "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+									}`
+								}
+							>
+								{label}
+							</NavLink>
+						))}
+					</nav>
+				</div>
+
+				<div className="flex items-center gap-2">
+					<ModeToggle />
+					<UserMenu />
+				</div>
+			</div>
+		</header>
+	);
 }

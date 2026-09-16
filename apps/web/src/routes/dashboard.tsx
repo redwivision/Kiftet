@@ -1,125 +1,180 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-
 import { Button } from "@kiftet/ui/components/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@kiftet/ui/components/empty";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
-
-import { api, apiError } from "@/lib/api";
-import type { ChapterInfo } from "@/components/study-provider";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
+import { BrandSignature } from "@/components/brand-mark";
+import type { ChapterInfo } from "@/components/study-provider";
+import { api, apiError } from "@/lib/api";
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
-  const [starting, setStarting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+	const navigate = useNavigate();
+	const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
+	const [starting, setStarting] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    api<ChapterInfo[]>("/chapters")
-      .then((rows) => {
-        if (!cancelled) setChapters(rows);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(apiError(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+	useEffect(() => {
+		let cancelled = false;
+		api<ChapterInfo[]>("/chapters")
+			.then((rows) => {
+				if (!cancelled) setChapters(rows);
+			})
+			.catch((err) => {
+				if (!cancelled) setError(apiError(err));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
-  const start = async (chapter: ChapterInfo) => {
-    setStarting(chapter.id);
-    setError(null);
-    try {
-      const { sessionId } = await api<{ sessionId: string }>("/sessions/start", {
-        method: "POST",
-        body: JSON.stringify({ chapterId: chapter.id }),
-      });
-      setSession(sessionId);
-      setChapter(chapter.id);
-      navigate(`/study/${sessionId}`, { replace: true });
-    } catch (err) {
-      setError(apiError(err));
-      setStarting(null);
-    }
-  };
+	const start = async (chapter: ChapterInfo) => {
+		setStarting(chapter.id);
+		setError(null);
+		try {
+			const { sessionId } = await api<{ sessionId: string }>(
+				"/sessions/start",
+				{
+					method: "POST",
+					body: JSON.stringify({ chapterId: chapter.id }),
+				},
+			);
+			setSession(sessionId);
+			setChapter(chapter.id);
+			navigate(`/study/${sessionId}`, { replace: true });
+		} catch (err) {
+			setError(apiError(err));
+			setStarting(null);
+		}
+	};
 
-  return (
-    <main className="mx-auto grid w-full max-w-md content-start gap-8 px-6 py-10">
-      <div className="space-y-2">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-manuscript">
-          Choose a chapter
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Pick one and tell the ring everything you remember. No preparation — that&apos;s the point.
-        </p>
-      </div>
+	return (
+		<main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+			<header className="mb-8 max-w-2xl space-y-2">
+				<p className="k-label">The study room</p>
+				<h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+					Pick a chapter, then speak.
+				</h1>
+				<p className="text-muted-foreground text-sm leading-6">
+					Every chapter runs the same loop — recall, diagnose, relearn, retest.
+					You&apos;ll see your coverage before you start and after you finish.
+				</p>
+			</header>
 
-      {error && (
-        <div className="rounded-lg border border-rust/50 bg-rust/10 px-4 py-3 text-sm text-manuscript/85">
-          <p className="font-medium mb-1">Something went wrong</p>
-          <p className="text-manuscript/60">{error}</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
-            Retry
-          </Button>
-        </div>
-      )}
+			{error && (
+				<div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
+					<p className="font-medium text-rust">
+						Couldn&apos;t reach the study room
+					</p>
+					<p className="mt-1 text-muted-foreground">{error}</p>
+					<Button
+						variant="outline"
+						size="sm"
+						className="mt-3"
+						onClick={() => window.location.reload()}
+					>
+						Retry
+					</Button>
+				</div>
+			)}
 
-      {chapters === null && !error && (
-        <div className="space-y-3">
-          {[0, 1].map((i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-lg bg-night-raised" />
-          ))}
-        </div>
-      )}
+			{chapters === null && !error && (
+				<div className="grid gap-4 md:grid-cols-2">
+					{[0, 1, 2, 3].map((i) => (
+						<Skeleton
+							key={i}
+							className="h-44 w-full rounded-3xl bg-muted/60 dark:bg-white/[0.05]"
+						/>
+					))}
+				</div>
+			)}
 
-      {chapters && chapters.length === 0 && (
-        <Empty className="border-manuscript/15 bg-night-raised">
-          <EmptyContent>
-            <p className="font-display text-5xl" aria-hidden="true">
-              📖
-            </p>
-            <EmptyHeader>
-              <EmptyTitle>No chapters yet</EmptyTitle>
-              <EmptyDescription>
-                Ingest a chapter before you can study it. From the repo root:
-              </EmptyDescription>
-            </EmptyHeader>
-            <code className="block w-full rounded bg-night-deep px-2 py-1 text-left text-xs text-manuscript/70">
-              curl -X POST localhost:3000/api/chapters/ingest -H
-              &quot;Content-Type: application/json&quot; -d
-              &apos;{"{ \"textbookTitle\": \"…\", \"subject\": \"…\", \"title\": \"…\", \"rawText\": \"…\" }"}&apos;
-            </code>
-          </EmptyContent>
-        </Empty>
-      )}
+			{chapters && chapters.length === 0 && (
+				<div className="surface flex flex-col items-center gap-5 p-10 text-center">
+					<BrandSignature size={72} />
+					<div className="space-y-1">
+						<h2 className="font-display font-semibold text-xl tracking-tight">
+							No chapters yet — nothing to diagnose.
+						</h2>
+						<p className="mx-auto max-w-sm text-muted-foreground text-sm leading-6">
+							Ingest a textbook chapter before you can study it. From the repo
+							root:
+						</p>
+					</div>
+					<code className="block w-full max-w-xl rounded-xl bg-black/40 px-4 py-3 text-left text-manuscript/80 text-xs leading-5 dark:bg-black/40">
+						curl -X POST localhost:3000/api/chapters/ingest -H
+						&quot;Content-Type: application/json&quot; -d &apos;
+						{
+							'{ "textbookTitle": "…", "subject": "…", "title": "…", "rawText": "…" }'
+						}
+						&apos;
+					</code>
+					<Link
+						to="/"
+						className="font-medium text-gold text-xs underline underline-offset-4 hover:text-gold-soft"
+					>
+						Back to the intro
+					</Link>
+				</div>
+			)}
 
-      {chapters && chapters.length > 0 && (
-        <ul className="space-y-3">
-          {chapters.map((chapter) => (
-            <li key={chapter.id}>
-              <button
-                type="button"
-                onClick={() => start(chapter)}
-                disabled={starting === chapter.id}
-                className="w-full rounded-lg border border-manuscript/15 bg-night-raised p-4 text-left transition-colors hover:border-gold/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-              >
-                <span className="mb-1 inline-block rounded-sm bg-night-deep px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-widest text-gold/90">
-                  {chapter.subject}
-                </span>
-                <span className="block font-display text-lg font-medium tracking-tight text-manuscript">
-                  {chapter.title}
-                </span>
-                <span className="block text-sm text-muted-foreground">
-                  {chapter.textbookTitle} · {starting === chapter.id ? "Starting…" : "Start studying"}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
-  );
+			{chapters && chapters.length > 0 && (
+				<ul className="grid gap-4 md:grid-cols-2">
+					{chapters.map((chapter, i) => (
+						<li
+							key={chapter.id}
+							className="animate-fade-up"
+							style={{ animationDelay: `${i * 0.06}s` }}
+						>
+							<ChapterCard
+								chapter={chapter}
+								starting={starting === chapter.id}
+								onStart={() => start(chapter)}
+							/>
+						</li>
+					))}
+				</ul>
+			)}
+		</main>
+	);
+}
+
+function ChapterCard({
+	chapter,
+	starting,
+	onStart,
+}: {
+	chapter: ChapterInfo;
+	starting: boolean;
+	onStart: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onStart}
+			disabled={starting}
+			className="group w-full rounded-3xl border border-border/70 bg-card/70 p-6 text-left backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(232,163,61,0.25)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 dark:bg-[#1a2340]/80"
+		>
+			<div className="flex items-start justify-between gap-3">
+				<div className="space-y-1.5">
+					<p className="font-medium text-[0.72rem] text-gold">
+						{chapter.subject}
+					</p>
+					<h2 className="font-display font-semibold text-foreground text-xl tracking-tight sm:text-2xl">
+						{chapter.title}
+					</h2>
+				</div>
+				<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
+					{starting ? "Opening…" : "Start review"}
+				</span>
+			</div>
+
+			<p className="mt-3 text-muted-foreground text-sm">
+				{chapter.textbookTitle}
+			</p>
+
+			<p className="mt-5 font-medium text-foreground/90 text-xs">
+				Speak what you remember, see what&apos;s missing, close exactly that.
+			</p>
+		</button>
+	);
 }

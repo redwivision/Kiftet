@@ -1,63 +1,238 @@
 @import "@kiftet/ui/globals.css";
 
+/* ────────────────────────────────────────────────────────────────
+   Kiftet — Night Indigo + Meskel Gold identity
+   Dark-first. Calm, competent, honest about the stakes.
+   Display: Fraunces (editorial serif). Body: Inter.
+   Ethiopic fallback always present so Amharic never breaks the face.
+   ──────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #f2ead8;
-  --foreground: #201c16;
-  --card: #f2ead8;
-  --card-foreground: #201c16;
-  --popover: #f2ead8;
-  --popover-foreground: #201c16;
-  --primary: #b3791e;
-  --primary-foreground: #f2ead8;
-  --secondary: #e5dbc2;
-  --secondary-foreground: #201c16;
-  --muted: #e5dbc2;
-  --muted-foreground: #6b6250;
-  --accent: #1b2340;
-  --accent-foreground: #f2ead8;
-  --destructive: #b54a2c;
-  --border: oklch(0.18 0.02 60 / 0.16);
-  --input: oklch(0.18 0.02 60 / 0.22);
-  --ring: #b3791e;
+	--background: #f3efe4;
+	--foreground: #201c14;
+	--card: rgba(255, 255, 255, 0.72);
+	--card-foreground: #201c14;
+	--popover: rgba(255, 255, 255, 0.94);
+	--popover-foreground: #201c14;
+	--primary: #b3791e;
+	--primary-foreground: #fbf7ec;
+	--secondary: #e9e1cd;
+	--secondary-foreground: #201c14;
+	--muted: #ece4d2;
+	--muted-foreground: #564f3e;
+	--accent: #1b2340;
+	--accent-foreground: #f3efe4;
+	--destructive: #b34a28;
+	--border: rgba(27, 35, 64, 0.14);
+	--input: rgba(27, 35, 64, 0.1);
+	--ring: #c98d2c;
 }
 
 .dark {
-  --background: #1b2340;
-  --foreground: #f2ead8;
-  --card: #232d52;
-  --card-foreground: #f2ead8;
-  --popover: #232d52;
-  --popover-foreground: #f2ead8;
-  --primary: #e8a33d;
-  --primary-foreground: #1b2340;
-  --secondary: #262f57;
-  --secondary-foreground: #f2ead8;
-  --muted: #262f57;
-  --muted-foreground: #b7ae9b;
-  --accent: #e8a33d;
-  --accent-foreground: #1b2340;
-  --destructive: #b54a2c;
-  --border: rgb(242 234 216 / 0.14);
-  --input: rgb(242 234 216 / 0.2);
-  --ring: #e8a33d;
-  --sidebar: #1b2340;
-  --sidebar-foreground: #f2ead8;
-  --sidebar-primary: #e8a33d;
-  --sidebar-primary-foreground: #1b2340;
-  --sidebar-accent: #262f57;
-  --sidebar-accent-foreground: #f2ead8;
-  --sidebar-border: rgb(242 234 216 / 0.1);
-  --sidebar-ring: #e8a33d;
+	--background: #121a2e;
+	--foreground: #f3eee2;
+	--card: rgba(29, 39, 66, 0.6);
+	--card-foreground: #f3eee2;
+	--popover: rgba(19, 27, 48, 0.97);
+	--popover-foreground: #f3eee2;
+	--primary: #e8a33d;
+	--primary-foreground: #1b2340;
+	--secondary: #232e4d;
+	--secondary-foreground: #f3eee2;
+	--muted: #202a49;
+	--muted-foreground: #a5adc4;
+	--accent: #e8a33d;
+	--accent-foreground: #1b2340;
+	--destructive: #b34a28;
+	--border: rgba(243, 238, 226, 0.12);
+	--input: rgba(243, 238, 226, 0.1);
+	--ring: #f2bf5d;
 }
 
 @theme {
-  --color-night: #1b2340;
-  --color-night-raised: #232d52;
-  --color-night-deep: #141a30;
-  --color-gold: #e8a33d;
-  --color-manuscript: #f2ead8;
-  --color-ink: #201c16;
-  --color-rust: #b54a2c;
-  --color-sage: #5c7a5e;
-  --font-display: "Space Grotesk", "Inter Variable", sans-serif;
+	/* Brand surfaces */
+	--color-night: #1b2340;
+	--color-night-2: #20294a;
+	--color-night-raised: #27314f;
+	--color-night-deep: #0f1523;
+	--color-gold: #e8a33d;
+	--color-gold-soft: #f2bf5d;
+	--color-gold-deep: #b3791e;
+	--color-manuscript: #f3eee2;
+	--color-ink: #221d12;
+	--color-rust: #b34a28;
+	--color-sage: #5f7d62;
+	--color-sage-soft: #8faa92;
+	--color-fog: #a5adc4;
+
+	/* Type */
+	--font-display:
+		"Fraunces", "Inter Variable", "Inter", "Noto Sans Ethiopic", ui-serif,
+		Georgia, serif;
+	--font-sans:
+		"Inter Variable", "Inter", "Noto Sans Ethiopic", ui-sans-serif, system-ui,
+		sans-serif;
+
+	/* Motion */
+	--animate-fade-up: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-fade-in: fade-in 0.4s ease-out both;
+	--animate-rise-in: rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+	--animate-ring-pulse: ring-pulse 2.6s ease-out infinite;
+	--animate-beam: beam 1.4s ease-out both;
+
+	@keyframes fade-up {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	@keyframes rise-in {
+		from {
+			opacity: 0;
+			transform: translateY(16px) scale(0.985);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
+	}
+	@keyframes pulse-soft {
+		0%,
+		100% {
+			opacity: 0.55;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+	@keyframes ring-pulse {
+		0% {
+			transform: scale(1);
+			opacity: 0.5;
+		}
+		80%,
+		100% {
+			transform: scale(1.35);
+			opacity: 0;
+		}
+	}
+	@keyframes beam {
+		from {
+			opacity: 0;
+			transform: scaleX(0.25);
+		}
+		to {
+			opacity: 1;
+			transform: scaleX(1);
+		}
+	}
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+
+	html {
+		scroll-behavior: smooth;
+	}
+
+	body {
+		@apply min-h-screen bg-background font-sans text-foreground antialiased;
+		background-image:
+			radial-gradient(
+				900px 500px at 50% -100px,
+				rgba(201, 141, 44, 0.1),
+				transparent 60%
+			),
+			linear-gradient(180deg, #f6f1e6 0%, #efe7d4 100%);
+		background-attachment: fixed;
+	}
+
+	/* Deep night stage: indigo field, a gold wash rising from the top. */
+	.dark body {
+		background-color: #101728;
+		background-image:
+			radial-gradient(
+				1100px 560px at 50% -130px,
+				rgba(232, 163, 61, 0.13),
+				transparent 60%
+			),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				rgba(64, 88, 160, 0.1),
+				transparent 55%
+			),
+			linear-gradient(180deg, #131b2d 0%, #1b2340 55%, #161d33 100%);
+		background-attachment: fixed;
+	}
+
+	::selection {
+		background: rgba(232, 163, 61, 0.32);
+		color: #1b2340;
+	}
+	.dark ::selection {
+		background: rgba(232, 163, 61, 0.34);
+		color: #f3eee2;
+	}
+
+	h1,
+	h2,
+	h3,
+	h4 {
+		@apply font-display tracking-[-0.02em];
+	}
+}
+
+@layer components {
+	/* Quiet hairline panel — the default stage surface. */
+	.surface {
+		@apply rounded-3xl border border-border/70 bg-card/70 shadow-[0_20px_60px_-24px_rgba(10,16,32,0.55)] backdrop-blur-sm;
+	}
+	.dark .surface {
+		@apply border-white/10 bg-[#1a2340]/80;
+	}
+
+	/* Nested quiet surface inside a panel. */
+	.inner-surface {
+		@apply rounded-2xl border border-border/60 bg-background/40;
+	}
+	.dark .inner-surface {
+		@apply border-white/[0.07] bg-white/[0.04];
+	}
+
+	/* A raised, tactile surface for primary actions / the ring. */
+	.raised-surface {
+		@apply rounded-2xl border border-gold/25 bg-night-raised/60;
+	}
+
+	/* Calm, sentence-case label. */
+	.k-label {
+		@apply text-[0.72rem] font-medium tracking-[0.01em] text-muted-foreground;
+	}
+	.dark .k-label {
+		@apply text-fog/80;
+	}
+
+	/* Dense reading surface: Manuscript paper in both themes, per the brief —
+     full text is easier to read light-on-dark than on a screen is reversed. */
+	.read-panel {
+		border-radius: 1rem;
+		border: 1px solid rgba(27, 35, 64, 0.14);
+		background: #f3eee2;
+		color: #221d12;
+	}
 }

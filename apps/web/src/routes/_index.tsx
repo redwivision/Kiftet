@@ -1,97 +1,377 @@
-import type { Route } from "./+types/_index";
-import { Link } from "react-router";
-import { ArrowRight, BookOpenText, BrainCircuit, Mic, Sparkles } from "lucide-react";
-
 import { buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
-import { VoiceRing } from "@/components/voice-ring";
+import { Mic, RefreshCcw, ScanSearch, Volume2 } from "lucide-react";
+import { Link } from "react-router";
+import { BrandMark, BrandSignature } from "@/components/brand-mark";
+import { CoverageView } from "@/components/gap-list";
+import type { Route } from "./+types/_index";
 
-const LOOP = [
-  {
-    title: "Speak freely",
-    text: "Tell Kiftet what you remember with no notes and no scripts.",
-    icon: Mic,
-  },
-  {
-    title: "Find the gap",
-    text: "The system identifies the concepts and misconceptions you missed.",
-    icon: BrainCircuit,
-  },
-  {
-    title: "Learn only what matters",
-    text: "A short lesson resets the exact misunderstood ideas, not the whole chapter.",
-    icon: BookOpenText,
-  },
-  {
-    title: "Retest and improve",
-    text: "Close the loop with fresh questions on the same gaps until they’re gone.",
-    icon: Sparkles,
-  },
-] as const;
-
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Kiftet — Close the gap" },
-    { name: "description", content: "A calm, voice-first study coach for Ethiopian STEM students." },
-  ];
+export function meta(_args: Route.MetaArgs) {
+	return [
+		{ title: "Kiftet — Close the gap" },
+		{
+			name: "description",
+			content:
+				"Kiftet listens to what you remember, finds the exact concepts you missed, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+		},
+	];
 }
 
+const LOOP = [
+	{
+		step: "Speak",
+		title: "Say what you remember",
+		text: "Pick a chapter and explain it out loud, no notes, no prompts. Talking is the test — you can't fake knowing something out loud.",
+		icon: Mic,
+	},
+	{
+		step: "Diagnose",
+		title: "See exactly what's missing",
+		text: "Every idea in the chapter is checked. Solid ideas stay, gaps surface — shown as a picture you can read in one glance.",
+		icon: ScanSearch,
+	},
+	{
+		step: "Relearn",
+		title: "Hear only what you missed",
+		text: "A short, spoken lesson covers just the gaps — not the whole chapter. Common misconceptions get corrected, not just topics re-listed.",
+		icon: Volume2,
+	},
+	{
+		step: "Retest",
+		title: "Prove it stuck",
+		text: "Freshly worded questions on those same gaps, then a before/after score. You leave knowing — not hoping — that it closed.",
+		icon: RefreshCcw,
+	},
+] as const;
+
+const PASS_RATES = [
+	{ year: "2023", rate: "3.2%" },
+	{ year: "2024", rate: "5.4%" },
+	{ year: "2025", rate: "8.4%" },
+	{ year: "2026", rate: "12.8%" },
+] as const;
+
 export default function Home() {
-  return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <section className="panel-surface mx-auto overflow-hidden rounded-[2rem] border border-gold/20 bg-[#171f35]/90 p-6 sm:p-8 lg:p-10">
-        <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <div className="space-y-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/8 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.26em] text-gold">
-              Ethiopia STEM review
-            </div>
+	return (
+		<main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
+			{/* ── Hero: the problem, stated plainly ─────────────────── */}
+			<section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
+				<div className="animate-fade-up space-y-7">
+					<p className="font-medium text-muted-foreground text-sm">
+						Kiftet · spoken study review for Grade 11–12 STEM students
+					</p>
 
-            <div className="space-y-5">
-              <h1 className="font-display text-4xl font-semibold tracking-[-0.05em] text-manuscript sm:text-5xl lg:text-6xl">
-                Close the gap.
-                <span className="mt-2 block text-gold">Study smarter, not wider.</span>
-              </h1>
+					<h1 className="space-y-2 font-display font-semibold text-[2.6rem] text-foreground leading-[1.04] tracking-[-0.03em] sm:text-6xl">
+						<span className="block text-gold">Close the gap.</span>
+						<span className="block">
+							87 in every 100 students fails the national exam. Trying harder
+							isn&apos;t the answer — finding the exact gaps is.
+						</span>
+					</h1>
 
-              <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-                Kiftet listens to what you remember, finds the exact concepts you missed, and gives a short, targeted lesson before testing you again.
-              </p>
-            </div>
+					<p className="max-w-xl text-base text-muted-foreground leading-7 sm:text-lg">
+						Kiftet listens to what you remember out loud, finds the specific
+						ideas that didn&apos;t stick, teaches only those in a short spoken
+						lesson — then retests until they do. Not another question bank. A
+						diagnosis.
+					</p>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/dashboard"
-                className={cn(buttonVariants({ size: "lg" }), "w-full sm:w-auto")}
-              >
-                Start studying
-                <ArrowRight className="ml-2 size-4" />
-              </Link>
-              <Link
-                to="/dashboard"
-                className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full sm:w-auto")}
-              >
-                Choose a chapter
-              </Link>
-            </div>
+					<div className="flex flex-col gap-3 sm:flex-row">
+						<Link
+							to="/dashboard"
+							className={cn(
+								buttonVariants({ size: "lg" }),
+								"w-full font-medium sm:w-auto",
+							)}
+						>
+							Start closing your gaps
+						</Link>
+						<a
+							href="#how"
+							className={cn(
+								buttonVariants({ variant: "outline", size: "lg" }),
+								"w-full sm:w-auto",
+							)}
+						>
+							How the loop works
+						</a>
+					</div>
+				</div>
 
-            <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Voice first</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">Gap-based review</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">STEM revision</span>
-            </div>
-          </div>
-        </div>
-      </section>
+				{/* The product, shown as itself */}
+				<DemoCard />
+			</section>
 
-      <div className="mt-12 flex flex-col items-center gap-6 text-center">
-        <VoiceRing state="idle" onStart={() => {}} onStop={() => {}} />
-        <p className="max-w-lg text-sm leading-6 text-muted-foreground">
-          Tap the ring and speak what you remember — Kiftet finds the exact concepts you missed, then teaches only those before testing again.
-        </p>
-        <Link to="/dashboard" className={cn(buttonVariants({ size: "lg" }))}>
-          Open the study room
-          <ArrowRight className="ml-2 size-4" />
-        </Link>
-      </div>
-    </main>
-  );
+			{/* ── The statistic that decides the stakes ─────────────── */}
+			<section className="surface mt-6 p-6 sm:p-8">
+				<div className="grid gap-6 sm:grid-cols-[auto_1fr] sm:items-center">
+					<p className="font-display font-semibold text-6xl text-gold tracking-[-0.04em] sm:text-7xl">
+						87.2<span className="text-3xl text-gold/70">%</span>
+					</p>
+					<div className="space-y-2 text-muted-foreground text-sm leading-6">
+						<p>
+							of the{" "}
+							<span className="font-medium text-foreground">
+								563,500 students
+							</span>{" "}
+							who sat the 2026 national exam were still failed by the system —
+							in the best result the country has recorded.{" "}
+							<span className="font-medium text-foreground">565 schools</span>{" "}
+							had zero students pass.
+						</p>
+						<p>
+							Students weren&apos;t absent. They sat through the classes.
+							What&apos;s missing isn&apos;t exposure — it&apos;s knowing,
+							before the exam, which specific ideas didn&apos;t stick.
+						</p>
+					</div>
+				</div>
+			</section>
+
+			{/* ── The loop ──────────────────────────────────────────── */}
+			<section id="how" className="scroll-mt-24 pt-20">
+				<div className="mb-10 max-w-2xl space-y-3">
+					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+						Four steps. One loop. Only the gaps.
+					</h2>
+					<p className="text-base text-muted-foreground leading-7">
+						The sequence is the whole product — recall, diagnose, relearn,
+						retest. Nothing in Kiftet exists outside it.
+					</p>
+				</div>
+
+				<ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+					{LOOP.map(({ step, title, text, icon: Icon }, i) => (
+						<li
+							key={step}
+							className="surface animate-fade-up p-5"
+							style={{ animationDelay: `${i * 0.08}s` }}
+						>
+							<div className="mb-4 flex items-center justify-between">
+								<span className="grid size-10 place-items-center rounded-full border border-gold/30 bg-gold/10 text-gold">
+									<Icon className="size-5" aria-hidden="true" />
+								</span>
+								<span
+									className="font-display font-medium text-2xl text-border"
+									aria-hidden="true"
+								>
+									0{i + 1}
+								</span>
+							</div>
+							<p className="font-medium text-[0.72rem] text-gold">{step}</p>
+							<h3 className="mt-1 font-display font-semibold text-lg tracking-tight">
+								{title}
+							</h3>
+							<p className="mt-2 text-muted-foreground text-sm leading-6">
+								{text}
+							</p>
+						</li>
+					))}
+				</ol>
+			</section>
+
+			{/* ── Why voice ─────────────────────────────────────────── */}
+			<section className="mt-20 grid gap-8 lg:grid-cols-2 lg:items-center">
+				<div className="space-y-5">
+					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+						Voice isn&apos;t a feature. It&apos;s the mechanism.
+					</h2>
+					<p className="text-base text-muted-foreground leading-7">
+						Explaining something out loud is how the underlying learning
+						technique actually works. You can&apos;t bluff your way through
+						speaking an idea — the words either come or they don&apos;t, and
+						that honesty is the diagnosis.
+					</p>
+					<p className="text-base text-muted-foreground leading-7">
+						So you speak. Kiftet transcribes, checks every concept in the
+						chapter, and reads the short lesson back in a calm voice. Talk in,
+						talk out.
+					</p>
+				</div>
+
+				<div className="surface flex flex-col items-center justify-center gap-4 p-8">
+					<div className="relative grid place-items-center">
+						<span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/25" />
+						<span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/15 [animation-delay:0.9s]" />
+						<div className="relative grid size-32 place-items-center rounded-full border-2 border-gold/50 bg-night-raised text-gold shadow-[0_0_40px_rgba(232,163,61,0.18)]">
+							<Mic className="size-11" aria-hidden="true" />
+						</div>
+					</div>
+					<p className="text-center font-medium text-foreground text-sm">
+						Tap and speak
+					</p>
+					<p className="max-w-xs text-center text-muted-foreground text-sm leading-6">
+						Says the student. The ring is listening, not judging. Every word is
+						a data point about exactly what to review.
+					</p>
+				</div>
+			</section>
+
+			{/* ── The numbers, honestly ─────────────────────────────── */}
+			<section className="mt-20">
+				<div className="mb-8 max-w-2xl space-y-3">
+					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+						The system is improving. That&apos;s not the same as reaching the
+						student.
+					</h2>
+					<p className="text-base text-muted-foreground leading-7">
+						The national pass rate has climbed every year on record. Each step
+						is real progress — and each one still leaves the overwhelming
+						majority of students outside it. The reform moves at the
+						country&apos;s pace. A student&apos;s exam doesn&apos;t wait.
+					</p>
+				</div>
+
+				<div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+					{PASS_RATES.map(({ year, rate }, i) => (
+						<div
+							key={year}
+							className={cn(
+								"surface p-5",
+								i === PASS_RATES.length - 1 && "border-gold/40 bg-gold/[0.07]",
+							)}
+						>
+							<p className="k-label">{year}</p>
+							<p
+								className={cn(
+									"mt-1 font-display font-semibold text-3xl tracking-[-0.02em]",
+									i === PASS_RATES.length - 1
+										? "text-gold"
+										: "text-muted-foreground",
+								)}
+							>
+								{rate}
+							</p>
+							<p className="mt-2 text-muted-foreground text-xs leading-5">
+								{i === PASS_RATES.length - 1
+									? "best year on record — and still 87 in 100 failed"
+									: "national pass rate"}
+							</p>
+						</div>
+					))}
+				</div>
+			</section>
+
+			{/* ── Built for the real exam room ──────────────────────── */}
+			<section className="mt-20 grid gap-4 md:grid-cols-3">
+				<div className="inner-surface p-5">
+					<h3 className="font-display font-semibold text-lg tracking-tight">
+						A school phone is enough
+					</h3>
+					<p className="mt-2 text-muted-foreground text-sm leading-6">
+						A web app, not an app-store install. Owns the network when it&apos;s
+						slow and works both by voice and by typing, whichever the moment
+						allows.
+					</p>
+				</div>
+				<div className="inner-surface p-5">
+					<h3 className="font-display font-semibold text-lg tracking-tight">
+						Made for night study
+					</h3>
+					<p className="mt-2 text-muted-foreground text-sm leading-6">
+						Review happens when the day finally quietens down. The interface
+						stays a calm gold-on- indigo room, not a bright quiz app.
+					</p>
+				</div>
+				<div className="inner-surface p-5">
+					<h3 className="font-display font-semibold text-lg tracking-tight">
+						Honest before/after
+					</h3>
+					<p className="mt-2 text-muted-foreground text-sm leading-6">
+						You see coverage before you start and after the lesson closes. If
+						part of it is still open, that answer is as useful as the progress.
+					</p>
+				</div>
+			</section>
+
+			{/* ── CTA ───────────────────────────────────────────────── */}
+			<section className="surface mt-20 border-gold/30 bg-gold/[0.06] p-8 text-center sm:p-12">
+				<BrandSignature size={72} className="mx-auto mb-6" />
+				<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+					Pick a chapter. Speak. Close the gap.
+				</h2>
+				<p className="mx-auto mt-3 max-w-md text-base text-muted-foreground leading-7">
+					It starts in about ten seconds, with a blank notebook and out loud.
+				</p>
+				<Link
+					to="/dashboard"
+					className={cn(buttonVariants({ size: "lg" }), "mt-7 font-medium")}
+				>
+					Open the study room
+				</Link>
+			</section>
+
+			<footer className="mt-16 border-border/60 border-t pt-8 dark:border-white/10">
+				<div className="flex flex-col items-center gap-4 text-center">
+					<BrandMark size={40} className="opacity-60" />
+					<p className="max-w-sm text-muted-foreground text-xs leading-6">
+						Closing the gap between what a class covers and what a student
+						keeps. Built for the national exam, tested by 1,000 words of honest
+						recall at a time.
+					</p>
+					<p className="text-[0.68rem] text-muted-foreground/60">
+						Kiftet · ክፍተት
+					</p>
+				</div>
+			</footer>
+		</main>
+	);
+}
+
+/* The product, shown as itself: a live-looking recall card that already
+   finished a diagnosis. Reuses the real CoverageView so the landing and the
+   product can never drift apart visually. */
+function DemoCard() {
+	return (
+		<div
+			className="surface animate-rise-in overflow-hidden"
+			style={{ animationDelay: "0.15s" }}
+		>
+			<div className="border-border/60 border-b px-6 py-4 dark:border-white/10">
+				<div className="mb-2 flex items-center gap-2.5">
+					<BrandMark size={22} className="rounded-full" />
+					<p className="font-medium text-[0.68rem] text-muted-foreground">
+						Kiftet
+					</p>
+				</div>
+				<div className="mb-1 flex items-center justify-between gap-3">
+					<p className="k-label">Physics · past paper prep</p>
+					<span className="inline-flex items-center gap-1.5 font-medium text-[0.72rem] text-sage">
+						<span
+							className="size-1.5 rounded-full bg-sage"
+							aria-hidden="true"
+						/>
+						recalled
+					</span>
+				</div>
+				<h3 className="font-display font-semibold text-xl tracking-tight">
+					Heat and Temperature
+				</h3>
+			</div>
+
+			<div className="p-6">
+				<CoverageView
+					covered={[
+						"Heat flows hot to cold",
+						"Thermal equilibrium",
+						"Phase changes",
+					]}
+					missing={[
+						"Temperature vs. heat",
+						"Heat capacity",
+						"Why metal feels colder",
+					]}
+				/>
+			</div>
+
+			<div className="border-border/60 border-t px-6 py-4 dark:border-white/10">
+				<Link
+					to="/dashboard"
+					className={cn(buttonVariants(), "w-full justify-center font-medium")}
+				>
+					See it on your own chapter
+				</Link>
+			</div>
+		</div>
+	);
 }
