@@ -10,6 +10,7 @@ import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { StudyProvider, useStudy } from "@/components/study-provider";
 import { VoxideRing } from "@/components/voxide-ring";
+import { speakAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
 
 const ACTIVE: VoxideStatus[] = [
@@ -148,10 +149,11 @@ function StudyScreen() {
 }
 
 function speak(text: string) {
-	const u = new SpeechSynthesisUtterance(text);
-	u.lang = "en-US";
-	window.speechSynthesis.cancel();
-	window.speechSynthesis.speak(u);
+	// Chrome's speechSynthesis truncates long utterances and drops a bulk-queued
+	// batch partway — so we always go through the sentence-chunked, end-chained
+	// queue in lib/voice.ts speakAloud. The read-back never cuts off without
+	// finishing. See docs/HOW_IT_WORKS.md §5 sep of concerns.
+	speakAloud(text);
 }
 
 function SessionHeader({
@@ -304,7 +306,21 @@ function VoiceCapture({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [baseKey]);
 
-	// Listen → hang up: finalize the capture and send the last thing the student said.
+	// Listen → hang up: finalize the capture and send everything the student
+	// said since the capture window opened. A long recall streams in as many
+	// partial transcript chunks, and Voxide only finalizes a turn once Gemini
+	// sends turn_complete — which can lag behind the student tapping the ring.
+	// Filtering to "final" alone would drop the whole recall; joining every
+	// user chunk (partial or final) rebuilds the full spoken answer.
+	const transcriptOf = (msgs: typeof voice.messages, start: number) =>
+		msgs
+			.slice(start)
+			.filter((m) => m.role === "user" && Boolean(m.text.trim()))
+			.map((m) => m.text.trim())
+			.join(" ")
+			.replace(/\s+/g, " ")
+			.trim();
+
 	useEffect(() => {
 		if (busyRef.current) return;
 		const wasActive = wasActiveRef.current;
@@ -313,49 +329,14 @@ function VoiceCapture({
 		if (!wasActive || isActive || baseRef.current === null || busyRef.current)
 			return;
 		const start = baseRef.current;
-
-		const finalize = () => {
-			const spoken = voice.messages
-				.slice(start)
-				.filter(
-					(m) =>
-						m.role === "user" && m.partial !== true && Boolean(m.text.trim()),
-				);
-			const last = spoken[spoken.length - 1];
-			if (last?.text.trim()) {
-				void submit(last.text.trim());
-			} else if (voice.status !== "error") {
-				setNotice(
-					"I didn't catch that — no rush. Tap the ring and try again whenever you're ready.",
-				);
-			}
-		};
-
-		const spokenNow = voice.messages
-			.slice(baseRef.current)
-			.filter(
-				(m) =>
-					m.role === "user" && m.partial !== true && Boolean(m.text.trim()),
+		const spoken = transcriptOf(voice.messages, start);
+		if (spoken) {
+			void submit(spoken);
+		} else if (voice.status !== "error") {
+			setNotice(
+				"I didn't catch that — no rush. Tap the ring and try again whenever you're ready.",
 			);
-		if (spokenNow[spokenNow.length - 1]?.text.trim()) {
-			void submit(spokenNow[spokenNow.length - 1].text.trim());
-			return;
 		}
-
-		const wholePhase = voice.messages
-			.slice(baseRef.current)
-			.filter(
-				(m) =>
-					m.role === "user" && m.partial !== true && Boolean(m.text.trim()),
-			);
-		const phaseFallback = wholePhase[wholePhase.length - 1];
-		if (phaseFallback?.text.trim() && voice.status !== "error") {
-			void submit(phaseFallback.text.trim());
-			return;
-		}
-
-		const t = setTimeout(finalize, 1600);
-		return () => clearTimeout(t);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [voice.status]);
 
@@ -382,10 +363,12 @@ function VoiceCapture({
 
 	const captured = voice.messages
 		.slice(baseRef.current ?? 0)
-		.filter(
-			(m) => m.role === "user" && m.partial !== true && Boolean(m.text.trim()),
-		);
-	const lastJustSaid = captured[captured.length - 1]?.text.trim();
+		.filter((m) => m.role === "user" && Boolean(m.text.trim()))
+		.map((m) => m.text.trim())
+		.join(" ")
+		.replace(/\s+/g, " ")
+		.trim();
+	const lastJustSaid = captured || undefined;
 
 	return (
 		<div className="space-y-5">
