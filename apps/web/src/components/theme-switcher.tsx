@@ -2,6 +2,7 @@ import { Button } from "@kiftet/ui/components/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
+	DropdownMenuGroup,
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
@@ -77,9 +78,11 @@ export function ThemeSwitcher() {
 				<Palette className="size-[1.1rem]" />
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-52">
-				<DropdownMenuLabel className="px-3 py-2">
-					Ink for the room
-				</DropdownMenuLabel>
+				<DropdownMenuGroup>
+					<DropdownMenuLabel className="px-3 py-2">
+						Ink for the room
+					</DropdownMenuLabel>
+				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
 				{THEMES.map((t) => {
 					const active = theme === t.value;
