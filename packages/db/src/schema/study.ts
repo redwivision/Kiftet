@@ -69,6 +69,12 @@ export const studySession = sqliteTable(
   ],
 );
 
+export type AttemptGaps = {
+  covered: string[];
+  missing: string[];
+  misconceptions: string[];
+};
+
 export const attempt = sqliteTable(
   "attempt",
   {
@@ -79,8 +85,7 @@ export const attempt = sqliteTable(
     stage: text("stage", { enum: ["recall", "retest"] }).notNull(),
     transcriptText: text("transcript_text"),
     gapsIdentified: text("gaps_identified", { mode: "json" })
-      .$type<string[]>()
-      .default([])
+      .$type<AttemptGaps>()
       .notNull(),
     score: integer("score"),
     createdAt: integer("created_at", { mode: "timestamp" })

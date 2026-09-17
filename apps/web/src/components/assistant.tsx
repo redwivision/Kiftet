@@ -3,6 +3,7 @@
 import { VoxideClient } from "@voxide/react";
 
 import { api } from "@/lib/api";
+import { detectSessionEnd } from "@/lib/intent";
 
 let activeSessionId: string | null = null;
 let activeChapterId: string | null = null;
@@ -11,6 +12,17 @@ let activeChapterId: string | null = null;
 // tool call and surfaced to the model, so it stops answering mid-recall with
 // generic filler and keeps to the study loop (see docs/HOW_IT_WORKS.md §5).
 let studyContext: Record<string, unknown> | null = null;
+
+// True while a recall/answer capture is in progress on screen. While it is,
+// the on-screen capture owns end-of-speech detection ("that's all I remember")
+// so those cues finalize the answer instead of being read as a whole-session
+// goodbye. When false, a farewell ("bye", "I'm done studying") closes the
+// session end-to-end.
+let captureActive = false;
+
+// Guards against two end cues (a spoken "bye" plus the model's own
+// completeSession call, say) racing to close the same session twice.
+let endingSession = false;
 
 export function setSession(id: string) {
 	activeSessionId = id;
@@ -24,11 +36,12 @@ export function setStudyContext(ctx: Record<string, unknown> | null) {
 	studyContext = ctx;
 }
 
-function commaList(value: string): string[] {
-	return value
-		.split(",")
-		.map((s) => s.trim())
-		.filter(Boolean);
+export function setCaptureActive(active: boolean) {
+	captureActive = active;
+}
+
+export function isCaptureActive(): boolean {
+	return captureActive;
 }
 
 export function hasVoxideKey(): boolean {
@@ -58,12 +71,16 @@ export function getVoxideClient(): VoxideClient | null {
 	});
 	clientCache.setFallback({
 		message:
-			"I'm set up for the study loop — recalling a chapter out loud, closing the gaps with a short lesson, and retesting. I couldn't find a study action for that. Try recalling what you remember from the chapter, or ask me to re-read the lesson or retest the missing ideas.",
+			"The study loop on screen — the recall, the diagnosis, the short version, the retest — is driven by the page, and I help by reading things back in a natural voice. Recite the chapter out loud or answer the question on screen, and when you're finished just tell me and I'll close the session.",
 		suggestions: [
-			"I'll say what I remember from the chapter",
-			"Re-read the short version",
-			"Take me through the retest",
+			"I'm done for now",
+			"Close the session",
+			"Take me back to the dashboard",
 		],
+	});
+	// End the whole session when the student says goodbye — no tap needed.
+	clientCache.on("message", (payload: unknown) => {
+		void maybeAutoEndSession(payload);
 	});
 	// Fire-and-forget: the SDK gates voice operations behind isInitialized.
 	clientCache.init().catch((err) => {
@@ -72,180 +89,106 @@ export function getVoxideClient(): VoxideClient | null {
 	return clientCache;
 }
 
+/** Close a study session for real: mark it complete, forget the active
+ *  session/chapter, hang up the voice, and send the student back to the
+ *  dashboard. The hang-up and navigation are deferred `delayMs` so a close
+ *  triggered by the agent's own completeSession tool can deliver its result
+ *  back to the model first. */
+async function endVoiceSession(delayMs = 0): Promise<string | null> {
+	if (endingSession) return activeSessionId;
+	endingSession = true;
+	try {
+		const id = activeSessionId;
+		if (id) {
+			try {
+				await api(`/sessions/${id}/complete`, { method: "POST" });
+			} catch {
+				// Non-fatal: an unfinished session simply stays open.
+			}
+		}
+		activeSessionId = null;
+		activeChapterId = null;
+		studyContext = null;
+		captureActive = false;
+		window.setTimeout(() => {
+			clientCache?.disconnect();
+			if (typeof window !== "undefined") {
+				window.location.assign("/dashboard");
+			}
+		}, delayMs);
+		return id;
+	} finally {
+		endingSession = false;
+	}
+}
+
+// Farewells ("bye", "I'm done studying", "close") end the session on their
+// own. Guarded by captureActive so a mid-recall "I'm done" still finalizes the
+// answer instead of wiping the session.
+async function maybeAutoEndSession(payload: unknown): Promise<void> {
+	if (captureActive) return;
+	if (typeof payload !== "object" || payload === null) return;
+	const msg = payload as { role?: string; text?: string; partial?: boolean };
+	if (msg.role !== "user" || !msg.text || msg.partial) return;
+	if (!activeSessionId) return;
+	if (!detectSessionEnd(msg.text)) return;
+	await endVoiceSession();
+}
+
+/** Read `text` aloud with the agent's natural voice. Returns false when the
+ *  voice layer isn't available so the caller can fall back to browser TTS. */
+export async function speakViaVoxide(text: string): Promise<boolean> {
+	if (typeof window === "undefined") return false;
+	if (!hasVoxideKey()) return false;
+	try {
+		const client = getVoxideClient();
+		if (!client) return false;
+		if (!client.isInitialized) await client.init();
+		if (!client.isInitialized) return false;
+		await client.connect();
+		await client.sendText(
+			`Please read the short piece below to the student aloud with your natural voice, exactly as written, slowly and clearly, then stop without adding anything:\n\n${text}`,
+		);
+		return true;
+	} catch (err) {
+		console.error("[Voxide] natural speech read-out failed:", err);
+		return false;
+	}
+}
+
+/** Cut off an agent read-back mid-speech. Sends a cooperative stop first,
+ *  then hangs up the voice channel as a hard stop so no audio keeps playing
+ *  behind the scene. A later speakViaVoxide reconnects on demand. */
+export function stopVoiceNarration(): void {
+	const client = clientCache;
+	if (!client) return;
+	try {
+		client.sendText("Stop reading right now and stay quiet.");
+		client.disconnect();
+	} catch {
+		// Best-effort: narration has no API to ask the agent to halt.
+	}
+}
+
 // ── Capabilities ───────────────────────────────────────────────
 
 function registerCapabilities(ai: VoxideClient): void {
+	// The study loop (recall → diagnose → lesson → retest → result) is owned
+	// by the on-screen UI, which grades directly against the API. The agent
+	// intentionally does NOT re-implement any of it — a second master of the
+	// same endpoints would produce duplicate attempts and out-of-sync phases
+	// (see docs/HOW_IT_WORKS.md §5). The single capability the agent keeps is
+	// closing the session, so a spoken "I'm done" ends the whole loop.
 	ai.register({
-		listChapters: {
-			description:
-				"List all available study chapters with titles, subjects, and IDs.",
-			handler: async () => {
-				const chapters =
-					await api<
-						{
-							id: string;
-							title: string;
-							textbookTitle: string;
-							subject: string;
-						}[]
-					>("/chapters");
-				return { chapters };
-			},
-		},
-
-		startStudy: {
-			description:
-				"Start a new study session for a chapter. Pass the chapter ID from listChapters.",
-			params: { chapterId: { type: "string", required: true } },
-			handler: async ({ chapterId }) => {
-				const { sessionId } = await api<{ sessionId: string }>(
-					"/sessions/start",
-					{
-						method: "POST",
-						body: JSON.stringify({ chapterId }),
-					},
-				);
-				activeSessionId = sessionId;
-				activeChapterId = chapterId;
-				return { sessionId, status: "ok" };
-			},
-		},
-
-		recall: {
-			description:
-				"Record the student's spoken explanation after they finish recalling a chapter. Posts the transcript and returns a gap analysis with score.",
-			params: { transcriptText: { type: "string", required: true } },
-			handler: async ({ transcriptText }) => {
-				if (!activeSessionId)
-					throw new Error("No active study session. Start one first.");
-				const result = await api<{
-					transcriptText: string;
-					gaps: {
-						covered: string[];
-						missing: string[];
-						misconceptions: string[];
-						score: number;
-					};
-				}>(`/sessions/${activeSessionId}/recall`, {
-					method: "POST",
-					body: JSON.stringify({ transcriptText }),
-				});
-				return {
-					score: result.gaps.score,
-					covered: result.gaps.covered,
-					missing: result.gaps.missing,
-					misconceptions: result.gaps.misconceptions,
-				};
-			},
-		},
-
-		getMicrolesson: {
-			description:
-				"Generate a short spoken micro-lesson that fixes the student's specific knowledge gaps. Pass the list of missing concepts and misconceptions from the recall gap analysis.",
-			params: {
-				missing: { type: "string", required: true },
-				misconceptions: { type: "string" },
-			},
-			handler: async ({ missing, misconceptions }) => {
-				if (!activeSessionId) throw new Error("No active study session.");
-				const { text } = await api<{ text: string }>(
-					`/sessions/${activeSessionId}/microlesson`,
-					{
-						method: "POST",
-						body: JSON.stringify({
-							missing: commaList(missing),
-							misconceptions: misconceptions ? commaList(misconceptions) : [],
-						}),
-					},
-				);
-				return { lesson: text };
-			},
-		},
-
-		startRetest: {
-			description:
-				"Generate retest questions targeting the student's knowledge gaps. Pass missing concepts and misconceptions from the recall gap analysis.",
-			params: {
-				missing: { type: "string", required: true },
-				misconceptions: { type: "string" },
-			},
-			handler: async ({ missing, misconceptions }) => {
-				if (!activeSessionId) throw new Error("No active study session.");
-				const { questions } = await api<{ questions: { question: string }[] }>(
-					`/sessions/${activeSessionId}/retest`,
-					{
-						method: "POST",
-						body: JSON.stringify({
-							missing: commaList(missing),
-							misconceptions: misconceptions ? commaList(misconceptions) : [],
-						}),
-					},
-				);
-				return {
-					questions: questions.map((q) => q.question),
-					count: questions.length,
-				};
-			},
-		},
-
-		answerRetest: {
-			description:
-				"Record the student's spoken retest answer and grade it. Posts the transcript and returns the updated score and gap analysis.",
-			params: {
-				transcriptText: { type: "string", required: true },
-				missing: { type: "string", required: true },
-				misconceptions: { type: "string" },
-			},
-			handler: async ({ transcriptText, missing, misconceptions }) => {
-				if (!activeSessionId) throw new Error("No active study session.");
-				const result = await api<{
-					score: number;
-					gaps: {
-						covered: string[];
-						missing: string[];
-						misconceptions: string[];
-						score: number;
-					};
-				}>(`/sessions/${activeSessionId}/retest/answer`, {
-					method: "POST",
-					body: JSON.stringify({
-						transcriptText,
-						missing: commaList(missing),
-						misconceptions: misconceptions ? commaList(misconceptions) : [],
-					}),
-				});
-				return {
-					score: result.score,
-					covered: result.gaps.covered,
-					missing: result.gaps.missing,
-					misconceptions: result.gaps.misconceptions,
-				};
-			},
-		},
-
-		getSessionResult: {
-			description:
-				"Get the before/after score comparison and improvement delta for the current study session.",
-			handler: async () => {
-				if (!activeSessionId) throw new Error("No active study session.");
-				const result = await api<{
-					before: number | null;
-					after: number | null;
-					delta: number | null;
-				}>(`/sessions/${activeSessionId}/result`);
-				return result;
-			},
-		},
-
 		completeSession: {
 			description:
-				"Mark the current study session as complete. Call this when the student is done studying.",
+				"Mark the current study session as complete. Call this when the student is done studying, says goodbye, or wants to close the session. It ends the voice and returns to the dashboard.",
 			handler: async () => {
 				if (!activeSessionId) throw new Error("No active study session.");
-				await api(`/sessions/${activeSessionId}/complete`, { method: "POST" });
 				const id = activeSessionId;
-				activeSessionId = null;
-				activeChapterId = null;
+				// Fire-and-forget with a delay so this tool result is delivered
+				// to the model before the client hangs up and navigates away.
+				void endVoiceSession(150);
 				return { status: "ok", sessionId: id };
 			},
 		},

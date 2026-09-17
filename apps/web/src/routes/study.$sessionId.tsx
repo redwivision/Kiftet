@@ -2,15 +2,23 @@ import { Button } from "@kiftet/ui/components/button";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
-import { Check, Loader2, MicOff, Volume2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, CircleAlert, Loader2, MicOff, Square, Volume2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { getVoxideClient, hasVoxideKey } from "@/components/assistant";
+import {
+	getVoxideClient,
+	hasVoxideKey,
+	setCaptureActive,
+	speakViaVoxide,
+	stopVoiceNarration,
+} from "@/components/assistant";
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
-import { StudyProvider, useStudy } from "@/components/study-provider";
+import { StudyProvider, useStudy, type Gaps } from "@/components/study-provider";
 import { VoxideRing } from "@/components/voxide-ring";
-import { speakAloud } from "@/lib/voice";
+import { api } from "@/lib/api";
+import { findBoundaryEnd, leadingText } from "@/lib/intent";
+import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
 
 const ACTIVE: VoxideStatus[] = [
@@ -289,6 +297,7 @@ function VoiceCapture({
 	// listening session (new phase, or a new retest question).
 	const baseRef = useRef<number | null>(null);
 	const wasActiveRef = useRef(false);
+	const submittedRef = useRef(false);
 	const busyRef = useRef(busy);
 	busyRef.current = busy;
 	const noticeRef = useRef<string | null>(state.notice);
@@ -302,6 +311,7 @@ function VoiceCapture({
 	useEffect(() => {
 		baseRef.current = voice.messages.length;
 		wasActiveRef.current = ACTIVE.includes(voice.status);
+		submittedRef.current = false;
 		clearNotice();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [baseKey]);
@@ -321,8 +331,49 @@ function VoiceCapture({
 			.replace(/\s+/g, " ")
 			.trim();
 
+	// While this capture owns the mic, end-of-speech cues ("that's all I
+	// remember") belong to the answer being recorded — a "bye" mid-answer must
+	// not be read as a whole-session goodbye.
+	useEffect(() => {
+		setCaptureActive(ACTIVE.includes(voice.status));
+		return () => setCaptureActive(false);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [voice.status]);
+
+	// Auto-end: when the student signals they've finished speaking, finalize
+	// the capture on the spot and hang up — the loop advances to the next step
+	// without waiting for a tap on the ring.
 	useEffect(() => {
 		if (busyRef.current) return;
+		if (voice.status !== "listening") return;
+		if (baseRef.current === null) return;
+		const spoken = transcriptOf(voice.messages, baseRef.current);
+		const marker = findBoundaryEnd(spoken);
+		if (!marker) return;
+		// A cue mid-sentence ("I'm done with the electron carriers") is not an
+		// ending — only fire when the cue is in the last words of the turn.
+		const remainder = spoken
+			.slice(marker.index + marker.phrase.length)
+			.replace(/[^a-z0-9\s]/gi, " ")
+			.trim();
+		if (remainder.split(/\s+/).filter(Boolean).length > 6) return;
+		const finished = leadingText(spoken, marker.index);
+		submittedRef.current = true;
+		setCaptureActive(false);
+		if (finished) {
+			void submit(finished);
+		} else {
+			setNotice(
+				"I didn't catch any words yet — tap the ring or type whenever you're ready.",
+			);
+		}
+		void voice.disconnect();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [voice.messages, voice.status]);
+
+	useEffect(() => {
+		if (busyRef.current) return;
+		if (submittedRef.current) return; // already finalized by auto-end
 		const wasActive = wasActiveRef.current;
 		const isActive = ACTIVE.includes(voice.status);
 		wasActiveRef.current = isActive;
@@ -379,9 +430,7 @@ function VoiceCapture({
 					</div>
 				) : (
 					<VoxideRing
-						autoArm={
-							state.phase === "recall" || state.phase === "retest"
-						}
+						autoArm={state.phase === "recall" || state.phase === "retest"}
 					/>
 				)}
 
@@ -503,17 +552,12 @@ function PhaseHeading({ title, text }: { title: string; text: string }) {
 }
 
 function RecallPhase() {
-	const { submitRecall } = useStudy();
+	const { state, submitRecall } = useStudy();
 
-	// Recall → gaps: once the short analysis lands, acknowledge out loud and let
-	// the ring turn itself off (autoArm flips off when phase becomes "gaps") —
-	// the loop goes straight to the short version, no dead silence in between.
-	const onRecall = async (text: string) => {
-		await submitRecall(text);
-		speak(
-			"Your analysis is underway — the short version will tell you which ideas came free.",
-		);
-	};
+	// Recall → gaps: once the short analysis lands, the phase flips to the
+	// diagnose/gaps view on its own and the ring turns itself off (autoArm
+	// flips off when phase becomes "gaps"). No robotic read-back — the voice
+	// layer only speaks from explicit buttons.
 
 	return (
 		<div className="space-y-6">
@@ -522,9 +566,9 @@ function RecallPhase() {
 				text="This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
 			/>
 			<VoiceCapture
-				submit={(text) => onRecall(text)}
+				submit={(text) => submitRecall(text)}
 				textDefault={!hasVoxideKey()}
-				busy={false}
+				busy={state.busy}
 			/>
 		</div>
 	);
@@ -533,6 +577,30 @@ function RecallPhase() {
 function GapsPhase() {
 	const { state, fetchLesson, startRetest } = useStudy();
 	const gaps = state.gaps;
+	const [weights, setWeights] = useState<Record<string, number>>({});
+
+	// Concept importance (1-5) lives on the chapter's checklist; pull it once
+	// so the coverage bars can reflect what actually matters.
+	useEffect(() => {
+		let cancelled = false;
+		const chapterId = state.chapter?.id;
+		if (!chapterId) return;
+		api<{ conceptText: string; weight: number }[]>(
+			`/chapters/${chapterId}/concepts`,
+		)
+			.then((rows) => {
+				if (cancelled) return;
+				const map: Record<string, number> = {};
+				for (const row of rows) map[row.conceptText] = row.weight;
+				setWeights(map);
+			})
+			.catch(() => {
+				// Non-fatal: bars just fall back to flat heights.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [state.chapter?.id]);
 
 	if (!gaps) return null;
 
@@ -540,9 +608,14 @@ function GapsPhase() {
 		<div className="space-y-6">
 			<PhaseHeading
 				title="Your starting picture"
-				text="The solid ideas stay. The open ones are what the short version will fix."
+				text="The solid ideas stay. The open ones are what the short version will fix. Bars that sit taller matter more."
 			/>
-			<CoverageView covered={gaps.covered} missing={gaps.missing} />
+			<CoverageView
+				covered={gaps.covered}
+				missing={gaps.missing}
+				misconceptions={gaps.misconceptions}
+				weights={weights}
+			/>
 			<div className="space-y-2 pt-2">
 				<Button
 					className="w-full justify-center"
@@ -567,30 +640,123 @@ function GapsPhase() {
 
 function LessonPhase() {
 	const { state, startRetest, viewGaps } = useStudy();
+	const narratedRef = useRef<string | null>(null);
+	// A single acknowledged "something is being read aloud" state for both
+	// engines: the agent's natural voice and the browser-TTS fallback.
+	// Every interaction flips it immediately, so a tap on the button is never
+	// answered with dead air or a silent button.
+	const [reading, setReading] = useState(false);
+	const stopRef = useRef<() => void>(null);
+	const [activeSentence, setActiveSentence] = useState<number | null>(null);
+	const sentences = useMemo(
+		() => splitSentences(state.lessonText ?? ""),
+		[state.lessonText],
+	);
+
+	// Voice + TEXT: the micro-lesson is meant to be taught, not just read. When
+	// a voice conversation is possible, hand the lesson text to the agent so it
+	// reads it with its natural voice while the text stays on screen. The agent
+	// connects on demand — a student who typed their recall gets the same
+	// spoken lesson as one who talked. The robotic browser voice is never used
+	// automatically — only from the button, as a deliberate fallback.
+	useEffect(() => {
+		const text = state.lessonText;
+		if (!text || text === narratedRef.current) return;
+		narratedRef.current = text;
+		if (!hasVoxideKey()) return;
+		const client = getVoxideClient();
+		if (!client) return;
+		narrate(text, "auto");
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [state.lessonText]);
+
+	// One narration entry point. Acknowledges immediately (reading state),
+	// prefers the agent's natural voice, and falls back to the browser voice
+	// with a sentence read-along. `mode: "auto"` never falls back to browser
+	// TTS — only the explicit button does.
+	const narrate = async (
+		t: string,
+		mode: "auto" | "button" = "button",
+	) => {
+		if (!t) return;
+		// Stop anything already playing so a second "Read it to me" replaces
+		// the first instead of stacking a double read-back.
+		stopRef.current?.();
+		setReading(true);
+		setActiveSentence(mode === "auto" ? null : sentences.length > 1 ? 0 : null);
+		const voiced = await speakViaVoxide(t);
+		if (voiced) return; // agent read it; stays "reading" until stopped
+		if (mode === "auto") {
+			setReading(false);
+			setActiveSentence(null);
+			return;
+		}
+		// acknowledged fallback: Voxide failed/absent → browser TTS.
+		setReading(true);
+		setActiveSentence(sentences.length > 1 ? 0 : null);
+		speakAloud(
+			t,
+			(i) => setActiveSentence(i),
+			() => {
+				setReading(false);
+				setActiveSentence(null);
+			},
+		);
+	};
+
+	const stopReading = () => {
+		stopReadingAloud();
+		stopVoiceNarration();
+		setReading(false);
+		setActiveSentence(null);
+	};
+
+	stopRef.current = stopReading;
+
+	// Leaving the phase (test, back to gaps, session end) must cut off any
+	// read-back still in flight — never bleed narration into the next phase.
+	useEffect(() => () => stopRef.current?.(), []);
 
 	return (
 		<div className="space-y-6">
 			<PhaseHeading
 				title="The short version"
-				text="Just what you missed — nothing more. Read it now, or let Kiftet speak it."
+				text="Just what you missed — nothing more. Read it now, or hear it spoken back to you."
 			/>
-			<div className="read-panel whitespace-pre-wrap px-5 py-5 text-[0.95rem] leading-7">
-				{state.lessonText ?? "Writing it…"}
+			<div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
+				{sentences.length > 1
+					? sentences.map((sentence, i) => (
+							<span
+								key={`${i}-${sentence}`}
+								className={cn(
+									"rounded px-0.5 transition-colors duration-150",
+									activeSentence === i &&
+										"bg-gold/15 text-foreground",
+								)}
+							>
+								{sentence}{" "}
+							</span>
+						))
+					: (state.lessonText ?? "Writing it…")}
 			</div>
 
 			{state.lessonText && (
 				<div className="flex items-center justify-center gap-2">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => {
-							const t = state.lessonText;
-							if (t) void speak(t);
-						}}
-					>
-						<Volume2 className="size-4" aria-hidden="true" />
-						Read it to me
-					</Button>
+					{reading ? (
+						<Button variant="outline" size="sm" onClick={stopReading}>
+							<Square className="size-3.5" aria-hidden="true" />
+							Stop reading
+						</Button>
+					) : (
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => void narrate(state.lessonText ?? "")}
+						>
+							<Volume2 className="size-4" aria-hidden="true" />
+							Read it to me
+						</Button>
+					)}
 				</div>
 			)}
 
@@ -641,7 +807,7 @@ function RetestPhase() {
 						const a = answered[i];
 						return (
 							<span
-								key={q}
+								key={i}
 								className={cn(
 									"size-2 rounded-full transition-colors",
 									a
@@ -661,7 +827,7 @@ function RetestPhase() {
 			{!done ? (
 				<div className="inner-surface p-5">
 					<p className="font-display font-medium text-foreground text-lg leading-7 tracking-[-0.01em] sm:text-xl">
-						{questions[currentQuestion] ?? ""}
+						{questions[currentQuestion]?.question ?? ""}
 					</p>
 					<div className="mt-5 border-border/60 border-t pt-5 dark:border-white/10">
 						<VoiceCapture
@@ -699,13 +865,40 @@ function RetestPhase() {
 											<X className="size-3" />
 										)}
 									</span>
-									<div className="min-w-0">
+									<div className="min-w-0 flex-1">
 										<p className="font-medium text-[0.72rem] text-muted-foreground">
 											Question {i + 1} · {a.correct ? "right" : "still open"}
 										</p>
 										<p className="mt-0.5 text-foreground/85 text-sm leading-6">
 											{a.question}
 										</p>
+										<p className="mt-2 text-foreground/70 text-xs leading-5">
+											<span className="font-medium text-muted-foreground">
+												You said:{" "}
+											</span>
+											{a.answer || "— recorded by voice —"}
+										</p>
+										{(a.gaps.missing.length > 0 ||
+											a.gaps.misconceptions.length > 0) && (
+											<p className="mt-2 flex flex-wrap gap-1.5">
+												{(a.gaps.missing.length > 0 ||
+													a.gaps.misconceptions.length > 0) && (
+													<span className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.68rem] text-rust">
+														open: [
+														{[
+															...a.gaps.missing,
+															...a.gaps.misconceptions,
+														].join(" · ")}
+														]
+													</span>
+												)}
+												{a.gaps.covered.length > 0 && (
+													<span className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.68rem] text-sage">
+														got: [{a.gaps.covered.join(" · ")}]
+													</span>
+												)}
+											</p>
+										)}
 									</div>
 								</li>
 							))}
@@ -731,7 +924,7 @@ function ResultPhase({
 	onDone: () => Promise<void>;
 	onTryAgain: () => void;
 }) {
-	const { state } = useStudy();
+	const { state, startRetest, goLesson } = useStudy();
 	const result = state.result;
 	const busy = state.busy;
 
@@ -751,6 +944,7 @@ function ResultPhase({
 				tone="sage"
 				headline="Nothing came up missing."
 				body="Every concept this chapter is checked against came out solid — cold, no notes. That's exactly the outcome this loop is built for."
+				metric={durationMetric(result)}
 				actions={
 					<Button
 						className="w-full justify-center"
@@ -771,6 +965,7 @@ function ResultPhase({
 				tone="gold"
 				headline="Gap closed."
 				body="The short version filled what was missing, and the retest shows it — the score climbed. That's the whole point of Kiftet."
+				metric={durationMetric(result)}
 				actions={
 					<Button
 						className="w-full justify-center"
@@ -788,34 +983,97 @@ function ResultPhase({
 	}
 
 	return (
-		<ResultPanel
-			tone="rust"
-			headline="A gap is still open."
-			body="Not everything sticks on the first pass — now you know which ideas are still open, so the next pass is faster than the first."
-			actions={
-				<div className="space-y-3">
-					<Button
-						className="w-full justify-center"
-						disabled={busy}
-						onClick={onTryAgain}
-					>
-						Try again
-					</Button>
-					{state.attempts >= 2 && (
+		<div className="space-y-6">
+			<ResultPanel
+				tone="rust"
+				headline="A gap is still open."
+				body="Not everything sticks on the first pass — now you know which ideas are still open, so the next pass is faster than the first."
+				actions={
+					<div className="space-y-3">
+						<Button
+							className="w-full justify-center"
+							disabled={busy}
+							onClick={() => void startRetest()}
+						>
+							Retest the gaps
+						</Button>
+						<Button
+							className="w-full justify-center"
+							variant="outline"
+							disabled={busy}
+							onClick={goLesson}
+						>
+							Relearn the short version
+						</Button>
 						<button
 							type="button"
 							className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
-							onClick={() => void onDone()}
+							onClick={onTryAgain}
 						>
-							Come back to this later
+							Start over with a cold recall
 						</button>
-					)}
-				</div>
-			}
-			before={result.before ?? 0}
-			after={result.after ?? 0}
-			delta={result.delta ?? 0}
-		/>
+						{state.attempts >= 2 && (
+							<button
+								type="button"
+								className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+								onClick={() => void onDone()}
+							>
+								Come back to this later
+							</button>
+						)}
+					</div>
+				}
+				before={result.before ?? 0}
+				after={result.after ?? 0}
+				delta={result.delta ?? 0}
+			/>
+			<StillOpen gaps={state.gaps} />
+		</div>
+	);
+}
+
+function durationMetric(
+	result: { durationMs?: number | null } | null,
+): { label: string; value: string }[] {
+	if (!result?.durationMs) return [];
+	const mins = Math.round(result.durationMs / 60000);
+	return [
+		{
+			label: "Session time",
+			value: mins < 1 ? "under a minute" : `${mins} ${mins === 1 ? "minute" : "minutes"}`,
+		},
+	];
+}
+
+// The result screen's number says "how much did you improve"; this list says
+// "which ideas are still open for exam day" — the actionable takeaway that a
+// bare delta hides. Every open item maps back to the gaps view the loop just
+// ran.
+function StillOpen({ gaps }: { gaps: Gaps | null }) {
+	if (!gaps) return null;
+	const items = [...gaps.missing, ...gaps.misconceptions];
+	if (!items.length) return null;
+	return (
+		<div className="inner-surface border-rust/25 p-5 dark:border-rust/30">
+			<p className="k-label mb-3 flex items-center gap-2 text-rust">
+				<CircleAlert className="size-3.5" aria-hidden="true" />
+				Still open for exam day
+			</p>
+			<ul className="space-y-2">
+				{items.map((concept) => (
+					<li
+						key={concept}
+						className="flex items-baseline gap-2 text-foreground/90 text-sm"
+					>
+						<span
+							aria-hidden="true"
+							className="mt-[7px] size-1.5 shrink-0 rounded-full border border-rust"
+						/>
+						{concept}
+					</li>
+				))}
+			</ul>
+		</div>
 	);
 }
 

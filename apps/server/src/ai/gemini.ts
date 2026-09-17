@@ -28,6 +28,7 @@ export type MicroLesson = {
 
 export type RetestQuestion = {
   question: string;
+  targetConcept?: string;
 };
 
 export type AiService = {
@@ -73,22 +74,47 @@ function significantTokens(text: string): Set<string> {
   );
 }
 
+// A concept counts as claimed only when the student actually addressed it —
+// matching a single shared token ("current" for "current is used up in a
+// resistor") would mark it covered far too cheaply. Require a majority of the
+// concept's own tokens to appear.
+function conceptLexicallyHit(nameTokens: Set<string>, tokens: Set<string>): boolean {
+  if (!nameTokens.size) return false;
+  const matched = [...nameTokens].filter((t) => tokens.has(t)).length;
+  return matched >= Math.max(1, Math.ceil(nameTokens.size * 0.6));
+}
+
+// Score = fraction of non-misconception concepts covered, weighted by each
+// concept's importance (weight 1-5). A weight-5 idea counts five times as
+// much as a weight-1 aside, so the number reflects what the chapter actually
+// requires, not just how many titles were touched.
+function weightedCoverage(covered: string[], concepts: ConceptChecklistItem[]): number {
+  const real = concepts.filter((c) => !c.isMisconception);
+  if (!real.length) return 1;
+  const seen = new Set(covered.map((c) => c.trim().toLowerCase()));
+  let coveredWeight = 0;
+  let totalWeight = 0;
+  for (const concept of real) {
+    totalWeight += concept.weight;
+    if (seen.has(concept.conceptText.trim().toLowerCase())) coveredWeight += concept.weight;
+  }
+  return totalWeight ? coveredWeight / totalWeight : 1;
+}
+
 function fallbackGrade(transcript: string, concepts: ConceptChecklistItem[]): GapAnalysis {
   const covered: string[] = [];
   const misconceptions: string[] = [];
   const tokens = significantTokens(transcript);
   for (const concept of concepts) {
     const nameTokens = significantTokens(concept.conceptText);
-    const hit = [...nameTokens].some((t) => tokens.has(t)) && nameTokens.size > 0;
-    if (!hit) continue;
+    if (!conceptLexicallyHit(nameTokens, tokens)) continue;
     if (concept.isMisconception) misconceptions.push(concept.conceptText);
     else covered.push(concept.conceptText);
   }
   const missing = concepts
     .filter((c) => !c.isMisconception && !covered.includes(c.conceptText))
     .map((c) => c.conceptText);
-  const score = covered.length / Math.max(1, concepts.filter((c) => !c.isMisconception).length);
-  return { covered, missing, misconceptions, score };
+  return { covered, missing, misconceptions, score: weightedCoverage(covered, concepts) };
 }
 
 function fallbackLesson(gaps: GapAnalysis): string {
@@ -104,6 +130,7 @@ function fallbackQuestions(gaps: GapAnalysis): RetestQuestion[] {
   const targets = [...gaps.missing, ...gaps.misconceptions].slice(0, 3);
   return targets.map((t) => ({
     question: `Explain “${t}” in your own words, as if teaching a friend.`,
+    targetConcept: t,
   }));
 }
 
@@ -203,9 +230,10 @@ function sanitizeGaps(gaps: GapAnalysis, concepts: ConceptChecklistItem[]): GapA
     );
     if (!isNamed) missingSet.add(name);
   }
-  const score = gaps.score > 0
-    ? gaps.score
-    : covered.length / Math.max(1, concepts.filter((c) => !c.isMisconception).length);
+  // The system recomputes the score itself (weighted by concept importance)
+  // so the number is deterministic and consistent across AI/fallback paths,
+  // instead of trusting whatever the model happened to guess.
+  const score = weightedCoverage(covered, concepts);
   return { covered, missing: [...missingSet], misconceptions, score };
 }
 
@@ -226,6 +254,32 @@ function gapsSummary(gaps: GapAnalysis): string {
 // ────────────────────────────────────────────────────────────────
 // The service
 // ────────────────────────────────────────────────────────────────
+
+// Per-question verdict score: a misconception counts as handled when the student
+// does NOT restate the wrong belief; a real concept counts when it shows up in
+// the covered set. This gives a fraction 0-1 that maps to "right/still open"
+// for the individual retest question.
+export function focusScore(
+  gaps: { covered: string[]; misconceptions: string[] },
+  concepts: ConceptChecklistItem[],
+): number {
+  if (!concepts.length) return 1;
+  const covered = new Set(gaps.covered.map((c) => c.trim().toLowerCase()));
+  const restated = new Set(gaps.misconceptions.map((c) => c.trim().toLowerCase()));
+  let numerator = 0;
+  let denominator = 0;
+  for (const concept of concepts) {
+    denominator += concept.weight;
+    const name = concept.conceptText.trim().toLowerCase();
+    if (concept.isMisconception) {
+      // Correct when the student does NOT restate the wrong belief.
+      if (!restated.has(name)) numerator += concept.weight;
+    } else {
+      if (covered.has(name)) numerator += concept.weight;
+    }
+  }
+  return denominator ? numerator / denominator : 1;
+}
 
 const EXTRACT_SYSTEM =
   "Extract the core concepts someone must understand to master this chapter. " +
@@ -251,7 +305,33 @@ const LESSON_SYSTEM =
 const RETEST_SYSTEM =
   "Write 2-3 short spoken check questions that re-test exactly the missing/misconception items in the GapAnalysis. " +
   "Each question must ask the student to speak aloud an explanation, definition, or worked example — not pick an option. " +
-  'Return STRICT JSON: {"questions":[{"question":"..."}]}.';
+  "Each question targets exactly ONE gap item: set targetConcept to the exact conceptText of that item " +
+  "(bare conceptText, never the [MISCONCEPTION] marker), so the answer is graded only against that idea. " +
+  'Return STRICT JSON: {"questions":[{"question":"...","targetConcept":"<one exact gap conceptText>"}]}.';
+
+// Pull a question list out of the model reply, carrying each question's target
+// concept when the model converged on one (it is validated against the stored
+// checklist by the route, never trusted blindly).
+function extractQuestions(raw: string): RetestQuestion[] | null {
+  const data = parseJson<{ questions?: unknown[] }>(raw);
+  if (!data || !Array.isArray(data.questions)) return null;
+  const out: RetestQuestion[] = [];
+  for (const q of data.questions) {
+    if (typeof q !== "object" || q === null) continue;
+    const record = q as Record<string, unknown>;
+    const question = record.question;
+    if (typeof question !== "string" || !question.trim()) continue;
+    out.push({
+      question: question.trim(),
+      targetConcept:
+        typeof record.targetConcept === "string" && record.targetConcept.trim()
+          ? record.targetConcept.trim()
+          : undefined,
+    });
+    if (out.length >= 3) break;
+  }
+  return out.length ? out : null;
+}
 
 export const ai: AiService = {
   async extractConcepts(rawText: string): Promise<ConceptChecklistItem[]> {
@@ -303,15 +383,7 @@ export const ai: AiService = {
     if (!isAiAvailable()) return fallback();
     try {
       const raw = await askJson(RETEST_SYSTEM, `GAP ANALYSIS:\n${gapsSummary(gaps)}`);
-      const data = parseJson<{ questions?: unknown[] }>(raw);
-      if (!data || !Array.isArray(data.questions)) return fallback();
-      const questions: RetestQuestion[] = [];
-      for (const q of data.questions) {
-        if (typeof q !== "object" || q === null) continue;
-        const question = (q as Record<string, unknown>).question;
-        if (typeof question === "string" && question.trim()) questions.push({ question: question.trim() });
-      }
-      return questions.length ? questions.slice(0, 3) : fallback();
+      return extractQuestions(raw) ?? fallback();
     } catch {
       return fallback();
     }

@@ -119,75 +119,824 @@ diagnosis loop).
 
 ---
 
-## 5. Follow one request through the system
+## 5. Data flow — how every feature works
 
-The most realistic thing to understand is a single request, end to end. Let's
-follow **"student records their recall of chapter X."**
+This section traces every feature end-to-end: what the student does, what the
+browser sends, what the server does, and what comes back. Each subsection has an
+ASCII diagram showing the exact path of data through the system.
 
-### Step 1 — The UI calls the API
-The web app sends an HTTP request to the server:
+### The components (a quick reminder)
+
 ```
-POST http://localhost:3000/api/sessions/<sessionId>/recall
-Body: { "transcriptText": "Thermal equilibrium is when two things become the same temperature…" }
-```
-The text is wrapped in **JSON** (a plain-text format for structured data).
-
-A small but important detail: the **URL** is a *convention* both sides agree on.
-`POST /api/sessions/:id/recall` reads like a sentence: "create something under
-`/api/sessions/<id>/recall`." REST APIs (Representational State Transfer) use
-URLs as nouns and HTTP methods as verbs:
-- `GET` = "read this"
-- `POST` = "create this" or "do this action"
-
-### Step 2 — The server receives it
-Code in [`apps/server/src/routes/study.ts`](../apps/server/src/routes/study.ts)
-`use()`s an Express **router**. The router matches the URL to a handler function.
-
-### Step 3 — Validation
-The handler first checks the body against a **Zod** schema:
-```ts
-const recallSchema = z.object({ transcriptText: z.string().min(1) });
-```
-Zod is a validation library. If the body is missing or malformed, the request is
-rejected with a clear error *before* touching the database or the AI. This is
-cheap insurance — bad input is the most common bug source. It also documents the
-contract: the shape a request *must* have is written right there in the code.
-
-### Step 4 — Read the chapter's concept checklist
-The handler looks up which chapter the session belongs to, then loads that
-chapter's "concept checklist" from the database. (The concepts are AI-extracted
-during ingestion — Phase 2. In Phase 0 they're a placeholder/empty.)
-
-### Step 5 — Call the AI
-The transcript + the concept list are handed to the AI service layer
-([`apps/server/src/ai/gemini.ts`](../apps/server/src/ai/gemini.ts)). Gemini
-grades the recall: which concepts were covered, which were missing, did the
-student show a known misconception — and computes a coverage score.
-
-> Notice the shape of this step: `ai.gradeRecall(transcript, concepts)`.
-> The route doesn't care *which* AI answers — it only knows the **interface**
-> (the agreed function signature). Phase 2 will implement the real Gemini
-> calling logic inside the seam that already exists. This is called
-> **separation of concerns**: "what the server must do" is separate from
-> "which vendor does it."
-
-### Step 6 — Save the result
-The handler writes a row into the `attempt` table: stage `recall`, the
-transcript, the gaps found, and the score. Now it's permanent memory — the
-"before" half of the before/after score.
-
-### Step 7 — Respond
-The handler sends JSON back to the browser:
-```json
-{
-  "transcriptText": "…",
-  "gaps": { "covered": ["…"], "missing": ["…"], "misconceptions": [], "score": 0.6 }
-}
+┌──────────────┐      ┌──────────────┐      ┌────────────┐
+│  Browser UI  │─────▶│  Backend API │─────▶│  Database  │
+│  (React)     │◀─────│  (Express)   │◀─────│  (SQLite)  │
+└──────┬───────┘      └──────┬───────┘      └────────────┘
+       │                     │
+       │  audio + text       │  prompts + answers
+       ▼                     ▼
+┌──────────────┐      ┌──────────────┐
+│    Voxide    │─────▶│  Google      │
+│  (voice)     │◀─────│  Gemini (AI) │
+└──────────────┘      └──────────────┘
 ```
 
-The whole journey is **synchronous and stateless per request**: the server
-doesn't open a room and wait; it just answers. The browser decides when to ask
-again. This keeps the API simple and predictable.
+---
+
+### 5.1 The complete study loop (overview)
+
+The student's journey through one study session follows a fixed loop:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        STUDY LOOP                               │
+│                                                                 │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐ │
+│   │  RECALL  │───▶│  GAPS    │───▶│  LESSON  │───▶│  RETEST  │ │
+│   │          │    │          │    │          │    │          │ │
+│   │ "What do │    │ "Here's  │    │ "Learn   │    │ "Prove   │ │
+│   │  you     │    │  what's  │    │  what    │    │  you     │ │
+│   │ remember"│    │  missing"│    │  you     │    │  learned"│ │
+│   └──────────┘    └──────────┘    │  missed" │    └──────────┘ │
+│        ▲                           └──────────┘          │      │
+│        │                                                 │      │
+│        │              ┌──────────┐                       │      │
+│        └──────────────│  RESULT  │◀──────────────────────┘      │
+│                       │          │                              │
+│                       │ "Score   │                              │
+│                       │  before  │                              │
+│                       │  vs after│                              │
+│                       └──────────┘                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Each phase is a screen in the UI. The browser decides when to advance; the
+server never pushes — it only answers requests. This keeps the API simple and
+the student in control.
+
+---
+
+### 5.2 Chapter ingest — putting content into the system
+
+Before any studying can happen, chapters must be loaded in. A chapter is raw
+text from a textbook, and the system AI-extracts a "concept checklist" — the
+specific ideas the student should understand.
+
+```
+TEXTBOOK (PDF/text)
+       │
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│  POST /api/chapters/ingest                               │
+│                                                          │
+│  body: { textbookTitle, subject, title, rawText }        │
+│                                                          │
+│  1. Insert textbook row                                  │
+│  2. Insert chapter row                                   │
+│  3. Call AI: extractConcepts(rawText)                    │
+│     ┌──────────────────────────────────────────────┐     │
+│     │  AI prompt:                                  │     │
+│     │  "Extract core concepts + common             │     │
+│     │   misconceptions from this chapter text.     │     │
+│     │   Return JSON: {items:[{conceptText,         │     │
+│     │   weight, isMisconception}]}                 │     │
+│     └──────────────────────────────────────────────┘     │
+│  4. Insert concept_node rows (5-12 concepts)             │
+│                                                          │
+│  response: { textbookId, chapterId, conceptsExtracted }  │
+└──────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────┐     ┌──────────┐     ┌─────────────────┐
+│textbook  │────▶│ chapter  │────▶│  concept_node   │
+│(1 row)   │     │ (1 row)  │     │  (5-12 rows)    │
+└──────────┘     └──────────┘     │  each with:      │
+                                  │  - conceptText   │
+                                  │  - isMisconception│
+                                  │  - weight (1-5)  │
+                                  └─────────────────┘
+```
+
+The concept checklist is the foundation of everything that follows. It tells
+the AI what to grade against, what to teach, and what to retest.
+
+---
+
+### 5.3 Starting a study session
+
+The student picks a chapter from the dashboard. This creates a session record
+that ties everything together.
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────┐
+│  Dashboard   │────────▶│  POST /api/  │────────▶│  SQLite  │
+│              │         │  sessions/   │         │          │
+│  "Pick a     │  body:  │  start       │  INSERT │study_    │
+│   chapter,   │ {chapter│              │────────▶│session   │
+│   then       │  Id}    │  generates   │         │(1 row)   │
+│   speak"     │         │  sessionId   │         └──────────┘
+│              │◀────────│              │
+│  navigates   │ {session│  201 Created │
+│  to /study/  │  Id}    │              │
+│  {sessionId} │         └──────────────┘
+└──────────────┘
+```
+
+**Data written:** `study_session` row with `chapterId`, `status: "in_progress"`.
+No AI call — this is just bookkeeping.
+
+The browser also sets `activeSessionId` and `activeChapterId` in the voice
+agent module, so the Voxide client knows which session it's working with.
+
+---
+
+### 5.4 Recall — "what do you remember?"
+
+This is the heart of the product. The student speaks out loud; the system
+grades their explanation against the concept checklist.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     RECALL FLOW                              │
+│                                                              │
+│  ┌──────────┐    audio    ┌─────────┐    text    ┌────────┐ │
+│  │ Student  │────────────▶│ Voxide  │───────────▶│ Gemini │ │
+│  │ speaks   │             │ (STT)   │            │ (AI)   │ │
+│  │ into mic │◀────────────│         │◀───────────│        │ │
+│  └──────────┘   voice     └────┬────┘  transcript └────────┘ │
+│                                │                             │
+│                                ▼                             │
+│                       ┌────────────────┐                     │
+│                       │  Browser UI    │                     │
+│                       │                │                     │
+│                       │  VoiceCapture  │                     │
+│                       │  collects all  │                     │
+│                       │  user message  │                     │
+│                       │  chunks into   │                     │
+│                       │  one transcript│                     │
+│                       └───────┬────────┘                     │
+│                               │                              │
+│              ┌────────────────┤                              │
+│              │                │                              │
+│              ▼                ▼                              │
+│    ┌──────────────┐  ┌──────────────┐                       │
+│    │ Auto-end     │  │ Manual tap   │                       │
+│    │ "that's all  │  │ on the ring  │                       │
+│    │  I remember" │  │ to stop      │                       │
+│    └──────┬───────┘  └──────┬───────┘                       │
+│           │                  │                               │
+│           └────────┬─────────┘                               │
+│                    ▼                                         │
+│         ┌──────────────────────┐                             │
+│         │  POST /sessions/     │                             │
+│         │  {id}/recall         │                             │
+│         │                      │                             │
+│         │  body: { transcript  │                             │
+│         │    Text }            │                             │
+│         └──────────┬───────────┘                             │
+│                    │                                         │
+│                    ▼                                         │
+│         ┌──────────────────────┐                             │
+│         │  Server              │                             │
+│         │                      │                             │
+│         │  1. Load concept     │                             │
+│         │     checklist from   │                             │
+│         │     concept_node     │                             │
+│         │                      │                             │
+│         │  2. Call AI:         │                             │
+│         │     gradeRecall(     │                             │
+│         │       transcript,    │                             │
+│         │       concepts)      │                             │
+│         │                      │                             │
+│         │  3. Save attempt     │                             │
+│         │     (stage=recall,   │                             │
+│         │      score, gaps)    │                             │
+│         └──────────┬───────────┘                             │
+│                    │                                         │
+│                    ▼                                         │
+│         ┌──────────────────────┐                             │
+│         │  Response:           │                             │
+│         │  { gaps: {           │                             │
+│         │    covered: [...],   │                             │
+│         │    missing: [...],   │                             │
+│         │    misconceptions:[] │                             │
+│         │    score: 60         │                             │
+│         │  }}                  │                             │
+│         └──────────────────────┘                             │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**What the AI grades:** The model receives the concept checklist and the
+student's transcript, then returns four lists:
+- `covered` — concepts the student correctly explained
+- `missing` — concepts not addressed
+- `misconceptions` — concepts the student got wrong
+- `score` — percentage of non-misconception concepts covered, weighted by each
+  concept's importance (`weight` 1–5) and corrected for stated misconceptions.
+  The score returned to the browser is always an **integer 0–100** — the AI's
+  float is re-computed deterministically server-side, never trusted raw.
+
+**What's saved:** An `attempt` row with `stage: "recall"`, the full transcript,
+the gap analysis stored as JSON `{covered: [], missing: [], misconceptions: []}`,
+and the integer score.
+
+**Idempotency:** the browser sends a random `attemptId` with every submission.
+The server inserts the row only once per (session, attemptId), so retries,
+replays, or a voice race can never double-count an attempt. The dedup is scoped
+to the session, so the same `attemptId` can be reused safely across sessions.
+
+**Auto-end detection:** While the student speaks, the browser watches for
+boundary phrases like "that's all I remember" or "I'm done". When detected, it
+auto-submits the recall without waiting for a tap. The phrases are defined in
+[`apps/web/src/lib/intent.ts`](../apps/web/src/lib/intent.ts).
+
+---
+
+### 5.5 Diagnose — "here's what's missing"
+
+No server call needed — the gaps were already computed during recall. The
+browser just displays them.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Phase: GAPS                                         │
+│                                                      │
+│  The browser already has the gap analysis from the   │
+│  recall response. It renders:                        │
+│                                                      │
+│  ┌────────────────────────────────────────────────┐  │
+│  │  Coverage: 60%  ████████████░░░░░░░░          │  │
+│  │                                                │  │
+│  │  ✓ Covered:                                  │  │
+│  │    • Ohm's law (V = IR)                       │  │
+│  │    • Series circuits                          │  │
+│  │                                                │  │
+│  │  ✗ Missing:                                   │  │
+│  │    • Parallel circuits                        │  │
+│  │    • Kirchhoff's voltage law                  │  │
+│  │                                                │  │
+│  │  ⚠ Misconceptions:                           │  │
+│  │    • "Current is used up in a resistor"       │  │
+│  └────────────────────────────────────────────────┘  │
+│                                                      │
+│  Two paths:                                          │
+│  "Hear the short version" ──▶ Lesson phase           │
+│  "Skip the lesson" ────────▶ Retest phase            │
+└──────────────────────────────────────────────────────┘
+```
+
+The coverage bars are **weighted**: each bar's height scales with the concept's
+`weight` (1–5) and the missing segments are proportioned by weight, so the
+visual emphasizes the high-value concepts. Misconceptions get their own
+"stated wrong" band so the student sees the mistake they made, not just an
+omission.
+
+---
+
+### 5.6 Microlesson — "learn what you missed"
+
+The student asks for a short lesson targeting exactly their gaps. The server
+generates it with AI.
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  MICROLESSON FLOW                    │
+│                                                      │
+│  Browser                    Server                   │
+│     │                          │                     │
+│     │  POST /sessions/         │                     │
+│     │  {id}/microlesson        │                     │
+│     │  body: { missing: [...], │                     │
+│     │         misconceptions:[] │                     │
+│     │  }                       │                     │
+│     │─────────────────────────▶│                     │
+│     │                          │                     │
+│     │                    1. Load concept checklist    │
+│     │                       from concept_node        │
+│     │                          │                     │
+│     │                    2. Call AI:                  │
+│     │                       generateMicroLesson(     │
+│     │                         gapAnalysis, concepts) │
+│     │                          │                     │
+│     │                       AI prompt:               │
+│     │                       "Write a short           │
+│     │                        pronunciation-friendly  │
+│     │                        lesson that fixes       │
+│     │                        exactly these gaps.     │
+│     │                        4-8 sentences, no       │
+│     │                        markdown, read aloud    │
+│     │                        friendly."              │
+│     │                          │                     │
+│     │◀─────────────────────────│                     │
+│     │  { text: "When current   │                     │
+│     │    flows through two      │                     │
+│     │    paths..." }            │                     │
+│     │                          │                     │
+│  Browser renders the lesson text.                    │
+│  If a voice session is live, the agent reads it     │
+│  aloud in its natural voice. Otherwise, the         │
+│  student can tap "Read it to me" for browser TTS.   │
+└──────────────────────────────────────────────────────┘
+```
+
+**No database write.** This is a pure read+AI operation. The lesson text is
+generated on the fly and never stored — it's always fresh for the specific gaps.
+
+---
+
+### 5.7 Retest — "prove you learned it"
+
+The retest has two parts: generating questions, then grading the student's
+spoken answers. The key design goal: **each question is graded in isolation
+against exactly one concept**, so a right answer on one question can't inflate
+the others.
+
+**Part A: Generate questions**
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Browser                    Server                   │
+│     │                          │                     │
+│     │  POST /sessions/         │                     │
+│     │  {id}/retest             │                     │
+│     │  body: { missing: [...], │                     │
+│     │         misconceptions:[] │                     │
+│     │  }                       │                     │
+│     │─────────────────────────▶│                     │
+│     │                          │                     │
+│     │                    Call AI:                    │
+│     │                    generateRetestQuestions(    │
+│     │                      gapAnalysis, concepts)   │
+│     │                          │                     │
+│     │                    AI prompt:                 │
+│     │                    "Write 2-3 spoken check     │
+│     │                     questions that re-test     │
+│     │                     the missing concepts.      │
+│     │                     Each must ask the          │
+│     │                     student to speak aloud     │
+│     │                     an explanation and         │
+│     │                     return per question the    │
+│     │                     targetConcept it tests."   │
+│     │                          │                     │
+│     │                    Server reconciles each      │
+│     │                    targetConcept against the   │
+│     │                    stored checklist            │
+│     │                    (case/whitespace tolerant); │
+│     │                    unverifiable ones fall back │
+│     │                    to the gap list in order.   │
+│     │                          │                     │
+│     │◀─────────────────────────│                     │
+│     │  { questions: [          │                     │
+│     │    {question:"Explain    │                     │
+│     │     parallel circuits",  │                     │
+│     │     focus:["Parallel     │                     │
+│     │       circuits..."],     │                     │
+│     │     ...}                 │                     │
+│     │  ]}                      │                     │
+└──────────────────────────────────────────────────────┘
+```
+
+Each question's `focus` is the **canonical conceptText** it grades against —
+pulled from `concept_node`, not from whatever the question writer happened to
+type.
+
+**Part B: Answer each question**
+
+For each question, the student speaks their answer and the browser sends the
+question's `focus` along with the transcript. The server grades **only that
+focus subset** of the checklist, not the whole chapter:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Student speaks answer                               │
+│     │                                                │
+│     ▼                                                │
+│  POST /sessions/{id}/retest/answer                   │
+│  body: { transcriptText, focus: [canonicalText],     │
+│          missing, misconceptions, attemptId }        │
+│     │                                                │
+│     ▼                                                │
+│  Server:                                             │
+│    1. Load concept checklist                         │
+│    2. Match focus against it (tolerant); a focus     │
+│       string with no stored counterpart is used as   │
+│       a standalone concept so the answer still gets  │
+│       graded against that idea alone                 │
+│    3. Call AI: gradeRecall(transcript, subset)       │
+│    4. Per-question verdict via focusScore():         │
+│       • misconception → handled if the student did   │
+│         NOT restate the wrong belief                 │
+│       • real concept → covered only if described     │
+│    5. Save attempt (stage="retest", attemptId)       │
+│     │                                                │
+│     ▼                                                │
+│  Response: { score: 100, gaps: {covered,missing,     │
+│              misconceptions, score} }                │
+│     │                                                │
+│     ▼                                                │
+│  Browser: appends to answered[] (with "You said:"    │
+│  transcript + open/got chips), shows next question   │
+│  When all questions answered: "See your result"      │
+└──────────────────────────────────────────────────────┘
+```
+
+---
+
+### 5.8 Result — "see your improvement"
+
+The server computes one canonical metric for the session. The browser fetches
+it and renders the outcome.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Browser                    Server                   │
+│     │                          │                     │
+│     │  GET /sessions/          │                     │
+│     │  {id}/result             │                     │
+│     │─────────────────────────▶│                     │
+│     │                          │                     │
+│     │                    SELECT stage, score         │
+│     │                    FROM attempt                │
+│     │                    WHERE sessionId = :id       │
+│     │                          │                     │
+│     │                    before = first recall score │
+│     │                    after  = AVERAGE of every   │
+│     │                            retest answer (not  │
+│     │                            just the last)      │
+│     │                    durationMs = live running   │
+│     │                            time; locked in on  │
+│     │                            completion          │
+│     │                          │                     │
+│     │◀─────────────────────────│                     │
+│     │  { before: 60,           │                     │
+│     │    after: 85,            │                     │
+│     │    delta: 25,            │                     │
+│     │    durationMs: 124000 }  │                     │
+│     │                          │                     │
+│  Three outcomes:                                     │
+│                                                      │
+│  delta > 0  → "Gap closed!" (gold) → Done           │
+│  delta ≤ 0  → "Gap still open" (rust)               │
+│                  • "Retest the gaps" again          │
+│                  • "Relearn the short version"      │
+│                  • "Start over with a cold recall"  │
+│  allCovered → "Nothing missing" (sage) → Done       │
+└──────────────────────────────────────────────────────┘
+```
+
+If the student didn't improve, the result screen shows a **Still-open** list
+(the missing concepts + misconceptions that remain) and targeted actions for
+closing exactly those. After 2 consecutive no-improvement rounds, the app
+suggests coming back later.
+
+**Refreshing the page mid-session:** the study screen restores itself from the
+attempt history — if retest answers already exist it re-fetches the result;
+otherwise it replays the recall from the stored gaps (never forcing a second
+cold recall).
+
+---
+
+### 5.9 Session end — "I'm done"
+
+The session can end two ways: the student taps "Done for now" on the result
+screen, or says a farewell phrase into the voice mic.
+
+**Path A: Button tap**
+
+```
+┌──────────────────────────────────────────────────────┐
+│  "Done for now" button                               │
+│     │                                                │
+│     ▼                                                │
+│  completeSession()                                   │
+│     │                                                │
+│     ├─▶ POST /sessions/{id}/complete                 │
+│     │   Server: UPDATE study_session                 │
+│     │   SET status='completed', completedAt=now      │
+│     │   Returns { ok, durationMs }                   │
+│     │                                                │
+│     └─▶ navigate("/dashboard")                       │
+└──────────────────────────────────────────────────────┘
+```
+
+**Path B: Voice farewell**
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Student says: "bye", "I'm done studying", "close"   │
+│     │                                                │
+│     ▼                                                │
+│  Voxide transcribes the speech                       │
+│     │                                                │
+│     ▼                                                │
+│  maybeAutoEndSession() fires on "message" event      │
+│     │                                                │
+│     ├─ Skipped if captureActive = true               │
+│     │  (mid-recall "I'm done" finalizes the answer   │
+│     │   instead of closing the session)              │
+│     │                                                │
+│     ├─ detectSessionEnd(text) checks against         │
+│     │  SESSION_END_PATTERNS in intent.ts             │
+│     │                                                │
+│     └─ If match: endVoiceSession()                   │
+│          │                                           │
+│          ├─ POST /sessions/{id}/complete             │
+│          ├─ clientCache.disconnect()                 │
+│          └─ window.location.assign("/dashboard")     │
+└──────────────────────────────────────────────────────┘
+```
+
+The `captureActive` guard is critical: during a recall capture, saying "I'm
+done" should finalize the answer, not close the whole session. The guard ensures
+only the on-screen `VoiceCapture` owns end-of-speech detection while the mic is
+recording an answer.
+
+`/complete` 404s unknown session ids, and `endVoiceSession(delayMs)` defers the
+disconnect + navigation long enough for a voice-tool close to deliver its
+spoken farewell before the page unloads.
+
+---
+
+### 5.10 Voice agent — a single-job assistant
+
+The voice agent (the Voxide client) is **not** a second driver of the study
+loop. The on-screen `StudyProvider` is the single master of the loop (recall →
+diagnose → learn → retest → result). The agent has exactly one background job:
+**end the session when the student says goodbye**, using a tool call
+("capability"). A capability is a registered function the AI can choose to
+invoke; the handler calls the same API endpoints as the browser.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    VOICE AGENT (1 CAPABILITY)                 │
+│                                                              │
+│  ┌──────────┐    audio    ┌─────────┐    text    ┌────────┐ │
+│  │ Student  │────────────▶│ Voxide  │───────────▶│ Gemini │ │
+│  │ speaks   │             │ WS      │            │ (AI)   │ │
+│  │          │◀────────────│ connect │◀───────────│        │ │
+│  └──────────┘   voice     └────┬────┘  transcript └────────┘ │
+│                                │                             │
+│                                ▼                             │
+│                           Says "I'm done for now"           │
+│                                │                             │
+│                                ▼                             │
+│                        ┌──────────────┐                     │
+│                        │  Tool call:  │                     │
+│                        │  complete-   │                     │
+│                        │  Session()   │                     │
+│                        └──────┬───────┘                     │
+│                               ▼                             │
+│                        ┌──────────────┐                     │
+│                        │  POST /      │                     │
+│                        │  sessions/   │                     │
+│                        │  {id}/       │                     │
+│                        │  complete    │                     │
+│                        └──────┬───────┘                     │
+│                               ▼                             │
+│                        endVoiceSession(150ms)               │
+│                        speaks farewell, THEN disconnects    │
+│                        + navigates to /dashboard            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**The registered capability:**
+
+| Capability | What it does | API call |
+|---|---|---|
+| `completeSession` | Ends the session, speaks a farewell, closes | `POST /sessions/{id}/complete` |
+
+The agent is deliberately **not** given recall/retest/lesson capabilities:
+those phases are the UI's job, driven by the on-screen ring button and
+end-of-speech cues. Keeping them out of the agent's hands means there is one
+source of truth for the loop — no voice race can produce a phantom attempt, and
+the grading no-ops (double-submit, "I'm done" mid-answer) all live in one place.
+
+**State grounding:** On every tool call, the agent receives the current study
+context (chapter title, subject, phase, attempt count) via `bindState` and
+`registerState`, so it talks about the right chapter and never re-asks which
+one is in progress.
+
+---
+
+### 5.11 Natural voice read-back — replacing robotic TTS
+
+When a lesson arrives, the system prefers the agent's natural voice over
+browser text-to-speech. The lesson speaks itself on enter (no tap needed) and
+connects Voxide on demand even if no session was live yet:
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Lesson text arrives in browser                      │
+│     │                                                │
+│     ▼                                                │
+│  speakViaVoxide(text) — connects the voice session   │
+│  on demand, then:                                    │
+│     │                                                │
+│     ├─ client.sendText(                              │
+│     │   "Please read this aloud to the student...")  │
+│     │                                                │
+│     └─ Agent reads it in its natural voice,          │
+│        sentence by sentence, highlighted on screen   │
+│        as the agent goes (read-along)                │
+│     │                                                │
+│  If Voxide is unavailable, the student taps          │
+│  "Read it to me" for browser TTS with the same       │
+│  sentence-by-sentence read-along; a Stop button      │
+│  cancels it                                          │
+└──────────────────────────────────────────────────────┘
+```
+
+**Browser TTS fallback** (`speakAloud` in `voice.ts`): Used only from explicit
+buttons ("Read it back", "Read it to me"). Picks the most natural English voice
+available (Google UK English Female → Samantha → Karen → etc.), chunks text into
+sentences via `splitSentences`, and reads at 0.97× speed.
+
+---
+
+### 5.12 End-of-speech detection — auto-submit without a tap
+
+While the student speaks, the browser watches their transcript for boundary
+phrases. This lets them say "that's all I remember" instead of tapping the ring.
+
+```
+┌──────────────────────────────────────────────────────┐
+│  VoiceCapture is listening                           │
+│     │                                                │
+│     ▼                                                │
+│  Every time voice.messages updates:                  │
+│     │                                                │
+│     ├─ Join all user messages since capture started  │
+│     │  into one transcript string                    │
+│     │                                                │
+│     ├─ findBoundaryEnd(transcript)                   │
+│     │  Checks against 16 phrases:                    │
+│     │  "that's all I remember", "I'm done",          │
+│     │  "nothing else", "next question", ...          │
+│     │                                                │
+│     ├─ If found AND fewer than 6 words follow:       │
+│     │  │                                             │
+│     │  ├─ Extract text before the cue                │
+│     │  ├─ Call submit(leadingText)                   │
+│     │  └─ Call voice.disconnect()                    │
+│     │                                                │
+│     └─ If not found: keep listening                  │
+│                                                      │
+│  The submitted text is the student's answer.         │
+│  The cue phrase itself ("I'm done") is stripped.     │
+└──────────────────────────────────────────────────────┘
+```
+
+The 6-word trailing check prevents false positives: "I'm done with the electron
+carriers" is not an ending — the student is mid-sentence.
+
+---
+
+### 5.13 The database — what gets saved
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  TEXTBOOK                                                    │
+│  ┌────┬─────────────┬──────────┬──────────┐                 │
+│  │ id │ title       │ subject  │ language │                 │
+│  └────┴─────────────┴──────────┴──────────┘                 │
+│       │ 1                                                       │
+│       │                                                         │
+│       │ N                                                       │
+│  CHAPTER                                                        │
+│  ┌────┬─────────────┬────────────────────────────┐           │
+│  │ id │ textbookId  │ title, rawText              │           │
+│  └────┴─────────────┴────────────────────────────┘           │
+│       │ 1                                                       │
+│       │                                                         │
+│       │ N                                                       │
+│  CONCEPT_NODE                                                   │
+│  ┌────┬─────────────┬──────────────────────┬────────┬───────┐ │
+│  │ id │ chapterId   │ conceptText          │ isMis- │ weight│ │
+│  │    │             │                      │ concept│       │ │
+│  └────┴─────────────┴──────────────────────┴────────┴───────┘ │
+│       │                                                         │
+│       │ (chapter also has N study_sessions)                      │
+│       │                                                         │
+│  STUDY_SESSION                                                  │
+│  ┌────┬───────────┬──────────┬──────────┬────────────┐        │
+│  │ id │ chapterId │ userId   │ status   │ startedAt  │        │
+│  └────┴───────────┴──────────┴──────────┴────────────┘        │
+│       │ 1                                                       │
+│       │                                                         │
+│       │ N                                                       │
+│  ATTEMPT                                                        │
+│  ┌────┬───────────┬────────┬───────────────┐                  │
+│  │ id │ sessionId │ stage  │ transcriptText│ gapped           │
+│  │(client │        │(recall │               │                 │
+│  │attemptId)│      │/retest)│               │ gapsIdentified  │
+│  │    │           │        │               │ score (0-100)   │
+│  └────┴───────────┴────────┴───────────────┴─────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
+
+What each write looks like:
+
+  Chapter ingest  →  textbook (1) + chapter (1) + concept_node (5-12)
+  Start session   →  study_session (1)
+  Recall          →  attempt (1, stage="recall")
+  Retest answer   →  attempt (1, stage="retest")
+  Complete        →  study_session UPDATE (status, completedAt)
+  Microlesson     →  (no write — pure AI generation)
+  Retest questions→  (no write — pure AI generation)
+  Result          →  (no write — reads existing attempts)
+  History         →  (no write — reads last session per chapter)
+```
+
+---
+
+### 5.14 AI prompts — what gets sent to Gemini
+
+Every AI call uses the same pattern: a system prompt + the student data, sent
+as a single user message with `temperature: 0.4` and `responseMimeType:
+"application/json"`.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  AI CALL PATTERN                                             │
+│                                                              │
+│  Gemini receives:                                            │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  role: "user"                                          │  │
+│  │  parts: [{ text:                                      │  │
+│  │    "{SYSTEM PROMPT}\n\n---\n{STUDENT DATA}"            │  │
+│  │  }]                                                    │  │
+│  │  config: { responseMimeType: "application/json",       │  │
+│  │            temperature: 0.4 }                          │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                              │
+│  The 4 prompts:                                              │
+│                                                              │
+│  1. EXTRACT  (chapter ingest)                                │
+│     "Extract core concepts + common misconceptions from      │
+│      this chapter. Return JSON:                              │
+│      {items:[{conceptText, weight, isMisconception}]}"      │
+│                                                              │
+│  2. GRADE    (recall + retest)                               │
+│     "Judge how well the student's recall covers the          │
+│      concept checklist. Return JSON:                         │
+│      {covered:[], missing:[], misconceptions:[], score}"    │
+│                                                              │
+│  3. LESSON   (microlesson)                                   │
+│     "Write a short pronunciation-friendly lesson that        │
+│      fixes exactly these gaps. 4-8 sentences,                │
+│      read-aloud friendly. Return JSON: {text}"              │
+│                                                              │
+│  4. RETEST   (retest questions)                              │
+│     "Write 2-3 spoken check questions that re-test           │
+│      the missing concepts. For each question return          │
+│      the targetConcept it tests. Return JSON:                │
+│      {questions:[{question, targetConcept}]}"                │
+│                                                              │
+│  5. FOCUS    (per-question verdict)                          │
+│     Deterministic focusScore(): a misconception is           │
+│     handled when NOT restated; a real concept counts         │
+│     when covered. Applied to the question's focus            │
+│     subset only.                                             │
+│                                                              │
+│  Every prompt has a fallback: if Gemini fails or the key     │
+│  is a placeholder, deterministic heuristics take over        │
+│  (weighted token overlap for grading, sentence extraction    │
+│  for concepts, templates for lessons/questions). All scores  │
+│  are recomputed deterministically server-side with weights   │
+│  — the AI's float is never stored raw.                       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 5.15 Complete data flow map — every request
+
+For reference, here is every API endpoint, who calls it, and what happens:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ENDPOINT                  │ CALLED BY        │ AI? │ DB WRITE? │
+├────────────────────────────┼──────────────────┼─────┼───────────┤
+│ GET  /chapters             │ Dashboard        │ no  │ no        │
+│ GET  /chapters/:id/concepts│ (view only)      │ no  │ no        │
+│ POST /chapters/ingest      │ Admin/seed       │ YES │ YES       │
+│                            │                  │     │           │
+│ POST /sessions/start       │ Dashboard        │ no  │ YES       │
+│ GET  /sessions             │ Dashboard        │ no  │ no        │
+│                            │ (history)        │     │           │
+│ GET  /sessions/:id         │ StudyProvider    │ no  │ no        │
+│ POST /sessions/:id/recall  │ StudyProvider    │ YES │ YES       │
+│ POST /sessions/:id/microl. │ StudyProvider    │ YES │ no        │
+│ POST /sessions/:id/retest  │ StudyProvider    │ YES │ no        │
+│ POST /sessions/:id/retest/ │ StudyProvider    │ YES │ YES       │
+│   answer                   │                  │     │           │
+│ GET  /sessions/:id/result  │ StudyProvider    │ no  │ no        │
+│ POST /sessions/:id/complete│ UI + voice agent │ no  │ YES (upd) │
+└────────────────────────────┴──────────────────┴─────┴───────────┘
+```
+
+The key insight: **the browser UI owns the whole study loop.** The only thing
+the voice agent can do is `completeSession` — one endpoint, one job. The
+server doesn't care who sent the request.
 
 ---
 
@@ -202,7 +951,7 @@ they relate?* Our bill of facts came directly from the PRD and system design:
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` |
 | `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status`, `startedAt`/`completedAt` |
-| `attempt` | One measurement inside a session: the recall, or the retest | `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified`, `score` |
+| `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client attemptId, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON `{covered,missing,misconceptions}`), `score` (int 0–100) |
 
 The `concept_node.isMisconception` flag is the interesting one: the product's
 whole trick is that we don't just grade "right/wrong," we grade *which specific
@@ -215,8 +964,8 @@ textbook 1 ──── n chapter 1 ──── n concept_node
                         └─── n study_session 1 ──── n attempt
 ```
 - One textbook has many chapters; one chapter has many concepts.
-- One chapter can appear in many study sessions; one session has two attempts
-  (recall before the lesson, retest after).
+- One chapter can appear in many study sessions; one session has one recall
+  attempt and one score per retest answer.
 
 These "1-to-many" links are stored by a foreign key: a column holding another
 table's row id, e.g. `concept_node.chapter_id`. A **foreign key** is just a

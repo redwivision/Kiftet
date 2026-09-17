@@ -5,45 +5,48 @@ import {
 	useEffect,
 	useReducer,
 	useRef,
-	useState,
 } from "react";
-import {
-	setChapter,
-	setSession,
-	setStudyContext,
-} from "@/components/assistant";
-import { api, apiError } from "@/lib/api";
 
-export interface ChapterInfo {
+import { setChapter, setSession, setStudyContext } from "@/components/assistant";
+import { api, apiError, ApiError } from "@/lib/api";
+
+export type Phase = "recall" | "gaps" | "lesson" | "retest" | "result";
+
+export type ChapterInfo = {
 	id: string;
 	title: string;
-	textbookTitle: string;
 	subject: string;
-}
+	textbookTitle: string;
+};
 
-export interface Gaps {
+export type Gaps = {
 	covered: string[];
 	missing: string[];
 	misconceptions: string[];
 	score: number;
-}
+};
 
-export interface SessionResult {
+export type SessionResult = {
 	before: number | null;
 	after: number | null;
 	delta: number | null;
-}
+	durationMs?: number | null;
+};
 
-export type Phase = "recall" | "gaps" | "lesson" | "retest" | "result";
+export type SessionQuestion = {
+	question: string;
+	focus: string[];
+};
 
-export interface AnswerRecord {
+export type AnswerRecord = {
 	question: string;
 	answer: string;
 	correct: boolean;
 	score: number;
-}
+	gaps: Gaps;
+};
 
-interface StudyState {
+export type StudyState = {
 	phase: Phase;
 	chapter: ChapterInfo | null;
 	chapterLoading: boolean;
@@ -53,7 +56,7 @@ interface StudyState {
 	lessonText: string | null;
 	lessonLoading: boolean;
 	retestLoading: boolean;
-	questions: string[];
+	questions: SessionQuestion[];
 	currentQuestion: number;
 	answered: AnswerRecord[];
 	result: SessionResult | null;
@@ -62,9 +65,9 @@ interface StudyState {
 	busy: boolean;
 	error: string | null;
 	notice: string | null;
-}
+};
 
-type StudyAction =
+export type StudyAction =
 	| { type: "LOAD_START" }
 	| { type: "LOAD_OK"; chapter: ChapterInfo }
 	| { type: "LOAD_NOT_FOUND" }
@@ -74,11 +77,19 @@ type StudyAction =
 	| { type: "RECALL"; gaps: Gaps }
 	| { type: "RECALL_FULL"; gaps: Gaps }
 	| { type: "LESSON"; text: string }
-	| { type: "QUESTIONS"; questions: string[] }
+	| { type: "QUESTIONS"; questions: SessionQuestion[] }
 	| { type: "ANSWER"; record: AnswerRecord }
 	| { type: "RESULT"; result: SessionResult }
 	| { type: "RETRY_CYCLE" }
 	| { type: "GO_PHASE"; phase: Phase };
+
+type SessionAttemptRow = {
+	id: string;
+	stage: "recall" | "retest";
+	score: number | null;
+	gapsIdentified: unknown;
+	transcriptText: string | null;
+};
 
 function initialState(sessionId: string): StudyState {
 	return {
@@ -101,6 +112,24 @@ function initialState(sessionId: string): StudyState {
 		error: null,
 		notice: null,
 	};
+}
+
+// gapsIdentified was originally stored as a bare array of missing concepts;
+// newer rows store {covered, missing, misconceptions}. Tolerate both so a
+// refresh mid-loop on an older session still restores correctly.
+function attemptGaps(raw: unknown): Gaps {
+	const stringList = (value: unknown): string[] =>
+		Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+	if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+		const o = raw as Record<string, unknown>;
+		return {
+			covered: stringList(o.covered),
+			missing: stringList(o.missing),
+			misconceptions: stringList(o.misconceptions),
+			score: 0,
+		};
+	}
+	return { covered: [], missing: stringList(raw), misconceptions: [], score: 0 };
 }
 
 function reducer(state: StudyState, action: StudyAction): StudyState {
@@ -136,7 +165,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				gaps: action.gaps,
 				allCovered: true,
 				result: {
-					before: Math.round(action.gaps.score * 100),
+					before: Math.round(action.gaps.score),
 					after: null,
 					delta: null,
 				},
@@ -210,6 +239,7 @@ interface StudyContextValue {
 	viewGaps: () => void;
 	submitRecall: (text: string) => Promise<void>;
 	fetchLesson: () => Promise<void>;
+	goLesson: () => void;
 	startRetest: () => Promise<void>;
 	submitAnswer: (text: string) => Promise<void>;
 	fetchResult: () => Promise<void>;
@@ -234,6 +264,8 @@ export function StudyProvider({
 	const stateRef = useRef(state);
 	stateRef.current = state;
 	const replayRef = useRef<(() => Promise<void>) | null>(null);
+	// Guards against two submissions racing to grade the same recall/answer.
+	const submittingRef = useRef(false);
 
 	const run = useCallback(
 		async (op: () => Promise<void>, onReplay?: () => Promise<void>) => {
@@ -260,7 +292,7 @@ export function StudyProvider({
 				const session = await api<{
 					chapterId: string;
 					status: string;
-					attempts: { stage: string; score: number | null }[];
+					attempts: SessionAttemptRow[];
 				}>(`/sessions/${sessionId}`);
 				const chapters = await api<ChapterInfo[]>("/chapters");
 				if (cancelled) return;
@@ -272,8 +304,37 @@ export function StudyProvider({
 				}
 				setChapter(chapter.id);
 				dispatch({ type: "LOAD_OK", chapter });
-			} catch {
-				if (!cancelled) dispatch({ type: "LOAD_NOT_FOUND" });
+
+				// Restore where the loop left off from the attempt history instead
+				// of silently restarting at "Speak" (a refresh mid-loop used to
+				// dump the student back into a second cold recall).
+				const recalls = session.attempts.filter((a) => a.stage === "recall");
+				const retests = session.attempts.filter((a) => a.stage === "retest");
+				if (retests.length) {
+					if (!cancelled) void fetchResult();
+				} else if (recalls.length) {
+					const last = recalls[recalls.length - 1];
+					const stored = attemptGaps(last.gapsIdentified);
+					const gaps: Gaps = {
+						covered: stored.covered,
+						missing: stored.missing,
+						misconceptions: stored.misconceptions,
+						score: last.score ?? 0,
+					};
+					if (cancelled) return;
+					if (gaps.missing.length) {
+						dispatch({ type: "RECALL", gaps });
+					} else {
+						dispatch({ type: "RECALL_FULL", gaps });
+					}
+				}
+			} catch (err) {
+				if (cancelled) return;
+				if (err instanceof ApiError && err.status === 404) {
+					dispatch({ type: "LOAD_NOT_FOUND" });
+				} else {
+					dispatch({ type: "ERROR", message: apiError(err) });
+				}
 			}
 		})();
 		return () => {
@@ -315,12 +376,17 @@ export function StudyProvider({
 	]);
 
 	const submitRecall = useCallback(
-		(text: string) =>
-			run(
+		(text: string) => {
+			if (submittingRef.current) return Promise.resolve();
+			submittingRef.current = true;
+			// A random id per submission makes replay/retry idempotent on the
+			// server (one attempt row), while still deduping double-posts.
+			const attemptId = crypto.randomUUID();
+			return run(
 				() =>
 					api<{ gaps: Gaps }>(`/sessions/${sessionId}/recall`, {
 						method: "POST",
-						body: JSON.stringify({ transcriptText: text }),
+						body: JSON.stringify({ transcriptText: text, attemptId }),
 					}).then(({ gaps }) => {
 						if (gaps.missing.length === 0) {
 							dispatch({ type: "RECALL_FULL", gaps });
@@ -329,7 +395,10 @@ export function StudyProvider({
 						}
 					}),
 				undefined,
-			),
+			).finally(() => {
+				submittingRef.current = false;
+			});
+		},
 		[run, sessionId],
 	);
 
@@ -349,12 +418,21 @@ export function StudyProvider({
 		);
 	}, [run, sessionId]);
 
+	const goLesson = useCallback(() => {
+		// Back into the lesson without a fresh API call when it's already loaded.
+		if (stateRef.current.lessonText) {
+			dispatch({ type: "GO_PHASE", phase: "lesson" });
+			return;
+		}
+		void fetchLesson();
+	}, [fetchLesson]);
+
 	const startRetest = useCallback(() => {
 		const gaps = stateRef.current.gaps;
 		if (!gaps) return Promise.resolve();
 		return run(
 			() =>
-				api<{ questions: { question: string }[] }>(
+				api<{ questions: SessionQuestion[] }>(
 					`/sessions/${sessionId}/retest`,
 					{
 						method: "POST",
@@ -366,7 +444,10 @@ export function StudyProvider({
 				).then(({ questions }) =>
 					dispatch({
 						type: "QUESTIONS",
-						questions: questions.map((q) => q.question),
+						questions: questions.map((q) => ({
+							question: q.question,
+							focus: q.focus,
+						})),
 					}),
 				),
 			undefined,
@@ -376,25 +457,41 @@ export function StudyProvider({
 	const submitAnswer = useCallback(
 		(text: string) => {
 			const { gaps, questions, currentQuestion } = stateRef.current;
-			const question = questions[currentQuestion] ?? "";
+			const question = questions[currentQuestion];
 			if (!gaps || !question) return Promise.resolve();
+			if (submittingRef.current) return Promise.resolve();
+			submittingRef.current = true;
+			const attemptId = crypto.randomUUID();
 			return run(
 				() =>
-					api<{ score: number }>(`/sessions/${sessionId}/retest/answer`, {
-						method: "POST",
-						body: JSON.stringify({
-							transcriptText: text,
-							missing: gaps.missing,
-							misconceptions: gaps.misconceptions,
-						}),
-					}).then(({ score }) =>
+					api<{ score: number; gaps: Gaps }>(
+						`/sessions/${sessionId}/retest/answer`,
+						{
+							method: "POST",
+							body: JSON.stringify({
+								transcriptText: text,
+								focus: question.focus,
+								missing: gaps.missing,
+								misconceptions: gaps.misconceptions,
+								attemptId,
+							}),
+						},
+					).then(({ score, gaps: answerGaps }) =>
 						dispatch({
 							type: "ANSWER",
-							record: { question, answer: text, correct: score >= 50, score },
+							record: {
+								question: question.question,
+								answer: text,
+								correct: score >= 50,
+								score,
+								gaps: answerGaps,
+							},
 						}),
 					),
 				undefined,
-			);
+			).finally(() => {
+				submittingRef.current = false;
+			});
 		},
 		[run, sessionId],
 	);
@@ -461,6 +558,7 @@ export function StudyProvider({
 				viewGaps,
 				submitRecall,
 				fetchLesson,
+				goLesson,
 				startRetest,
 				submitAnswer,
 				fetchResult,

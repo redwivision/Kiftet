@@ -2,6 +2,18 @@ const API = (import.meta.env.VITE_SERVER_URL as string) || "http://localhost:300
 const serverRoot = API.replace(/\/api\/?$/, "").replace(/\/+$/, "");
 const apiUrl = (path: string) => `${serverRoot}/api${path}`;
 
+// Carries the HTTP status so callers can tell a real 404 ("this session isn't
+// here") apart from a transient network failure before they render "not found".
+export class ApiError extends Error {
+	readonly status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.name = "ApiError";
+		this.status = status;
+	}
+}
+
 export async function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     ...init,
@@ -9,7 +21,7 @@ export async function api<T = unknown>(path: string, init?: RequestInit): Promis
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${res.status})`);
+    throw new ApiError(res.status, body.error ?? `Request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
 }

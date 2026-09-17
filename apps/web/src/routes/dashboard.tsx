@@ -7,9 +7,20 @@ import { BrandSignature } from "@/components/brand-mark";
 import type { ChapterInfo } from "@/components/study-provider";
 import { api, apiError } from "@/lib/api";
 
+type SessionHistory = {
+	id: string;
+	chapterId: string;
+	status: "in_progress" | "completed";
+	before: number | null;
+	after: number | null;
+	delta: number | null;
+	durationMs: number | null;
+};
+
 export default function Dashboard() {
 	const navigate = useNavigate();
 	const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
+	const [history, setHistory] = useState<SessionHistory[]>([]);
 	const [starting, setStarting] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -22,10 +33,22 @@ export default function Dashboard() {
 			.catch((err) => {
 				if (!cancelled) setError(apiError(err));
 			});
+		// Most recent study sessions (server returns newest first) so each
+		// chapter card can show what the last run did.
+		api<SessionHistory[]>("/sessions")
+			.then((rows) => {
+				if (!cancelled) setHistory(rows);
+			})
+			.catch(() => {
+				// Non-fatal: cards just render without a history line.
+			});
 		return () => {
 			cancelled = true;
 		};
 	}, []);
+
+	const lastFor = (chapterId: string): SessionHistory | undefined =>
+		history.find((h) => h.chapterId === chapterId);
 
 	const start = async (chapter: ChapterInfo) => {
 		setStarting(chapter.id);
@@ -112,19 +135,25 @@ export default function Dashboard() {
 
 			{chapters && chapters.length > 0 && (
 				<ul className="grid gap-4 md:grid-cols-2">
-					{chapters.map((chapter, i) => (
-						<li
-							key={chapter.id}
-							className="animate-fade-up"
-							style={{ animationDelay: `${i * 0.06}s` }}
-						>
-							<ChapterCard
-								chapter={chapter}
-								starting={starting === chapter.id}
-								onStart={() => start(chapter)}
-							/>
-						</li>
-					))}
+					{chapters.map((chapter, i) => {
+						const last = lastFor(chapter.id);
+						return (
+							<li
+								key={chapter.id}
+								className="animate-fade-up"
+								style={{ animationDelay: `${i * 0.06}s` }}
+							>
+								<div className="space-y-2">
+									<ChapterCard
+										chapter={chapter}
+										starting={starting === chapter.id}
+										onStart={() => start(chapter)}
+									/>
+									<ChapterHistory last={last} />
+								</div>
+							</li>
+						);
+					})}
 				</ul>
 			)}
 		</main>
@@ -169,5 +198,47 @@ function ChapterCard({
 				Speak what you remember, see what&apos;s missing, close it.
 			</p>
 		</button>
+	);
+}
+
+function ChapterHistory({ last }: { last?: SessionHistory }) {
+	if (!last) return null;
+	const minutes =
+		typeof last.durationMs === "number"
+			? Math.round(last.durationMs / 60000)
+			: null;
+	const duration =
+		minutes == null
+			? ""
+			: minutes < 1
+				? "under a minute"
+				: `${minutes} min`;
+
+	if (last.status === "in_progress") {
+		return (
+			<div className="flex items-center justify-between px-1 text-[0.72rem] text-muted-foreground">
+				<span>A study session is open</span>
+				<Link
+					to={`/study/${last.id}`}
+					className="font-medium text-gold underline underline-offset-4 hover:text-gold-soft"
+				>
+					Resume
+				</Link>
+			</div>
+		);
+	}
+
+	const deltaText =
+		last.before != null && last.after != null && last.delta != null
+			? `${last.before}% → ${last.after}%${
+					last.delta > 0 ? ` · +${last.delta}%` : last.delta < 0 ? ` · ${last.delta}%` : ""
+				}`
+			: "completed";
+
+	return (
+		<p className="px-1 text-[0.72rem] text-muted-foreground">
+			Last session: {deltaText}
+			{duration ? ` · ${duration}` : ""}
+		</p>
 	);
 }

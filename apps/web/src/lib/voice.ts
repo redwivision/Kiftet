@@ -1,5 +1,14 @@
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
 
+// Browsers populate speechSynthesis voices asynchronously. Touch the list once
+// on load so pickNaturalVoice has real voices by the time a read-back button
+// is clicked.
+if (typeof window !== "undefined" && "speechSynthesis" in window) {
+	const synth = window.speechSynthesis;
+	synth.getVoices();
+	synth.addEventListener?.("voiceschanged", () => synth.getVoices());
+}
+
 export type VoiceCallbacks = {
 	onTranscript?: (text: string, isFinal: boolean) => void;
 	onStateChange?: (state: VoiceState) => void;
@@ -15,37 +24,137 @@ export interface VoiceClient {
 	cancelSpeech(): void;
 }
 
-// The product's voice contract (Voxide). Everything in the app talks to this
-// interface, never to a vendor directly — see docs/HOW_IT_WORKS.md §5 "sep of concerns".
-export function speakAloud(text: string): void {
+// ── TTS cancellation token ───────────────────────────────────────
+// Every new speakAloud call bumps speakToken so an in-flight chain
+// stopped by cancel() or a subsequent read never advances.
+let speakToken = 0;
+
+export function stopReadingAloud(): void {
+	speakToken += 1;
+	if (typeof window === "undefined") return;
 	const synth = window.speechSynthesis;
 	if (!synth) return;
 	synth.cancel();
 	synth.resume?.();
+}
 
-	// Chrome drops utterances beyond a small queue budget when many are
-	// queued in one burst — a long lesson or retest read-back would silently
-	// cut off mid-way. Chain the chunks on `onend` so exactly one utterance is
-	// in flight at a time and the read-back always finishes.
+// The product's voice contract. Everything in the app talks through this
+// seam and never to a vendor directly — see docs/HOW_IT_WORKS.md §5 "sep of
+// concerns". speakAloud is the last-resort read-back, kept as an explicit
+// option: the natural voice path is Voxide's agent (see speakViaVoxide), and
+// the browser's speechSynthesis is only the fallback for "Read it to me".
+export function speakAloud(
+	text: string,
+	onChunk?: (index: number) => void,
+	onDone?: () => void,
+): void {
+	const synth = window.speechSynthesis;
+	if (!synth) {
+		onDone?.();
+		return;
+	}
+	const token = ++speakToken;
+	synth.cancel();
+	synth.resume?.();
+
+	const voice = pickNaturalVoice(synth);
 	const chunks = chunkSentences(text);
 	let i = 0;
+	let finished = false;
+	const finish = () => {
+		if (finished) return;
+		finished = true;
+		synth.cancel();
+		clearInterval(resumeTick);
+		onDone?.();
+	};
+
+	// Chrome suspends speechSynthesis after cancel() or when the tab is
+	// backgrounded; queued utterances never fire onend. A beat that calls
+	// resume() while we are still in an active read keeps the queue alive.
+	const resumeTick = setInterval(() => {
+		if (token !== speakToken || finished) {
+			clearInterval(resumeTick);
+			return;
+		}
+		if (synth.paused) synth.resume?.();
+	}, 5000);
+
 	const next = () => {
-		const chunk = chunks[i++];
-		if (!chunk) return;
+		if (token !== speakToken) {
+			finish();
+			return;
+		}
+		const chunk = chunks[i];
+		if (!chunk) {
+			finish();
+			return;
+		}
+		onChunk?.(i);
+		i += 1;
 		const u = new SpeechSynthesisUtterance(chunk);
-		u.lang = "en-US";
-		u.rate = 1.02;
+		u.lang = voice?.lang ?? "en-US";
+		u.voice = voice ?? null;
+		u.rate = 0.97;
 		u.onend = next;
-		u.onerror = next;
+		u.onerror = (e) => {
+			if (token !== speakToken) {
+				finish();
+				return;
+			}
+			// "interrupted"/"canceled" come from synth.cancel() inside
+			// stopReadingAloud or an overlapping read — the token already
+			// invalidates the chain, so just stop here.
+			if (e.error === "interrupted" || e.error === "canceled") return;
+			// Other transient errors: advance to the next chunk and nudge
+			// Chrome out of any paused state so the chain stays alive.
+			synth.resume?.();
+			next();
+		};
 		synth.speak(u);
+		synth.resume?.();
 	};
 	if (chunks.length) next();
+	else finish();
+}
+
+// Prefer the least robotic-sounding voices the browser ships (Google/Apple's
+// neural voices on en locales), falling back to the platform default. The
+// robotic voice is still available underneath — speechSynthesis is only ever
+// invoked from explicit buttons, never automatically.
+function pickNaturalVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
+	const voices = synth.getVoices();
+	if (!voices.length) return null;
+	const preferred = [
+		"google uk english female",
+		"google us english",
+		"samantha",
+		"karen",
+		"serena",
+		"aria",
+		"libby",
+		"uygur",
+		"daniel",
+		"zira",
+		"en-gb",
+	];
+	for (const name of preferred) {
+		const hit = voices.find(
+			(v) =>
+				v.lang.toLowerCase().startsWith("en") && v.name.toLowerCase() === name,
+		);
+		if (hit) return hit;
+	}
+	const en = voices.find((v) => v.lang.toLowerCase() === "en-gb" && !v.default);
+	if (en) return en;
+	return voices.find((v) => v.lang.toLowerCase().startsWith("en")) ?? null;
 }
 
 // Chrome's speechSynthesis truncates long utterances and sometimes stops
 // mid-sentence. Queueing short sentence-level chunks keeps the read-back
-// from cutting off without finishing.
-function chunkSentences(text: string): string[] {
+// from cutting off without finishing. Also exported so the lesson read-along
+// can highlight the exact sentence currently being spoken.
+export function splitSentences(text: string): string[] {
 	const clean = text.replace(/\s+/g, " ").trim();
 	if (!clean) return [];
 	const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [clean];
@@ -60,6 +169,10 @@ function chunkSentences(text: string): string[] {
 	}
 	if (buffer.trim()) out.push(buffer.trim());
 	return out;
+}
+
+function chunkSentences(text: string): string[] {
+	return splitSentences(text);
 }
 
 export function createVoiceClient(callbacks: VoiceCallbacks = {}): VoiceClient {
