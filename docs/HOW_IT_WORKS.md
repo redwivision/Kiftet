@@ -1,9 +1,16 @@
 # How Kiftet Works — a guide for everyone
 
-This document explains what this project is, how the code is organized, how a
-request flows through the system, and **why** the team made the choices we made.
+This document is the **single source of truth** for Kiftet: every feature,
+every technology, every library we literally use, and why we chose each. If a
+behavior is in the product, it's documented here — and anything that stops being
+true gets fixed here first. The inventory in §4 and §11 is cross-checked against
+the repo's `package.json` files and source code, so a tool only appears if it's
+actually used.
+
 It's written to be read by anyone — including people who are still learning
-software engineering. Terms get explained the first time they appear.
+software engineering. Terms get explained the first time they appear. Features
+are drawn as **numbered flow diagrams you can trace with your eye** (GitHub
+renders them; §5 explains how to read them).
 
 ---
 
@@ -100,18 +107,31 @@ company.
 
 ## 4. The tech stack and why we chose each piece
 
+This is the full stack in one table. The **exact** package list — every
+dependency and dev-dependency, audited line-by-line — is in §11.
+
 | Concern | Choice | Why |
 |---|---|---|
 | Language everywhere | **TypeScript** | One language front-to-back; types catch whole classes of bugs before the code even runs. |
-| Package manager | **Bun** | Extremely fast installs, runs TypeScript directly, and is the poster-child for hackathon speed. |
+| Runtime + package manager | **Bun** | Extremely fast installs, runs TypeScript directly, and is the poster-child for hackathon speed. Also runs our server and *is* the database driver (`bun:sqlite`). |
 | Task runner | **Turborepo** | Runs the "build" of all packages, caches results, only rebuilds what changed. |
 | UI app | **React + React Router** | Industry-standard component model; router turns URLs into screens; PWA support for offline. |
+| Web bundler | **Vite** | React Router's recommended build tool: instant dev server, fast HMR. |
+| Styling | **Tailwind CSS v4** | Utility-first CSS, compiled by Vite (`@tailwindcss/vite`). |
+| UI kit | **shadcn/ui on Base UI** | Copy-in components we own (not a black-box dependency) on React-19-compatible primitives (`@shadcn/react`, `@base-ui/react`). |
+| Forms | **TanStack React Form** | Typed, framework-native form state for sign-in / sign-up. |
+| Icons / toasts / themes | **lucide-react, sonner, next-themes** | Icons, notifications, and dark/light theming with animated transitions. |
 | Backend | **Express** | Tiny, boring, universal Node web framework — perfect for a small API. |
-| Database | **SQLite (prototype) → PostgreSQL (main)** | The prototype branch uses SQLite because it's a single file — zero setup, works offline. Postgres is the "real" production database and stays on `main`. (More in §6.) |
-| Database toolkit | **Drizzle ORM** | Lets us write the schema in TypeScript. "Migrations" (change history of the schema) are generated, not hand-written. |
+| Validation | **Zod** | One schema language, shared across web, server, db, and auth packages. |
+| Database | **SQLite (prototype) → PostgreSQL (main)** | The prototype branch uses SQLite via the Bun driver — a single file, zero setup, works offline. Postgres is the "real" production database and stays on `main`. (More in §6.) |
+| Database toolkit | **Drizzle ORM** | Lets us write the schema in TypeScript. "Migrations" (change history of the schema) are generated with drizzle-kit, not hand-written. |
 | Auth | **Better Auth** | Login, signup, password hashing, session cookies — the hard, security-critical parts are battle-tested and we don't reinvent them. |
-| AI | **Google Gemini** | Chosen by the team lead for cost + speed. Encapsulated in one service so we can swap providers later. |
-| Voice | **Voxide** | The sponsor product — the signature mechanic (STT + TTS). We'll integrate it in Phase 1. |
+| AI | **Google Gemini** (`@google/genai`) | Chosen for cost + speed. Encapsulated in one service so we can swap providers later. |
+| Voice | **Voxide** (`@voxide/react`) | The sponsor product — the signature mechanic (STT + TTS). The official React SDK drives the voice session in the browser and is integrated now. |
+| Env / secrets | **Varlock** | Typesafe `.env` values, generated TS bindings, and plugin integration for Vite. |
+| PWA / offline | **vite-plugin-pwa** | Makes the app installable and usable offline (exam halls have no signal). |
+| Lint + format | **Biome** | One fast tool for both; replaces ESLint + Prettier. |
+| Bundling the server | **tsdown** | Compiles `apps/server` to a standalone `dist` for `bun start`. |
 
 **Key principle:** we use libraries for the hard, generic problems (auth,
 database, HTTP) and write ourselves the few things that make us special (the gap
@@ -121,818 +141,440 @@ diagnosis loop).
 
 ## 5. Data flow — how every feature works
 
-This section traces every feature end-to-end: what the student does, what the
-browser sends, what the server does, and what comes back. Each subsection has an
-ASCII diagram showing the exact path of data through the system.
+Every feature down the page is drawn as a **numbered visual flow**. The boxes
+are in the exact order things happen, and each arrow shows the step that comes
+next — follow the numbers and the arrows and you can *retrace* the whole
+feature. Under each diagram you'll find the exact messages the programs
+exchange (`Sending:` / `Receiving:` / `Data kept:`), and a one-line `Trace:`
+key so you never lose your place.
+
+GitHub and most editors render these diagrams automatically. If yours doesn't,
+the numbering still tells you the order, and the `Trace:` line is there as a
+plain fallback. Plain words are used only where a picture adds nothing —
+tables for data structures, endpoints, and AI prompts.
 
 ### The components (a quick reminder)
 
-```
-┌──────────────┐      ┌──────────────┐      ┌────────────┐
-│  Browser UI  │─────▶│  Backend API │─────▶│  Database  │
-│  (React)     │◀─────│  (Express)   │◀─────│  (SQLite)  │
-└──────┬───────┘      └──────┬───────┘      └────────────┘
-       │                     │
-       │  audio + text       │  prompts + answers
-       ▼                     ▼
-┌──────────────┐      ┌──────────────┐
-│    Voxide    │─────▶│  Google      │
-│  (voice)     │◀─────│  Gemini (AI) │
-└──────────────┘      └──────────────┘
-```
+Four programs cooperate, and exactly two of them talk to the outside world:
+
+1. **Browser UI** — the screens the student sees and taps. It also captures the
+   microphone.
+2. **Backend API** — the server. It receives requests, does the thinking, saves
+   and reads data, and answers.
+3. **Database** — permanent storage. What survives after the phone is closed.
+4. **Voice provider (Voxide)** — hears the student and talks back.
+5. **AI model (Gemini)** — does the reasoning: understanding the spoken
+   explanation, spotting gaps, writing the lesson, grading retests.
+
+So the student only ever touches the **Browser**, the Browser talks to the
+**Server**, and the Server calls both the **AI** and the **Database**.
 
 ---
 
 ### 5.1 The complete study loop (overview)
 
-The student's journey through one study session follows a fixed loop:
+One study session moves through five screens, in this fixed order:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        STUDY LOOP                               │
-│                                                                 │
-│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐ │
-│   │  RECALL  │───▶│  GAPS    │───▶│  LESSON  │───▶│  RETEST  │ │
-│   │          │    │          │    │          │    │          │ │
-│   │ "What do │    │ "Here's  │    │ "Learn   │    │ "Prove   │ │
-│   │  you     │    │  what's  │    │  what    │    │  you     │ │
-│   │ remember"│    │  missing"│    │  you     │    │  learned"│ │
-│   └──────────┘    └──────────┘    │  missed" │    └──────────┘ │
-│        ▲                           └──────────┘          │      │
-│        │                                                 │      │
-│        │              ┌──────────┐                       │      │
-│        └──────────────│  RESULT  │◀──────────────────────┘      │
-│                       │          │                              │
-│                       │ "Score   │                              │
-│                       │  before  │                              │
-│                       │  vs after│                              │
-│                       └──────────┘                              │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · RECALL — speak<br/>what you remember"] --> B["2 · DIAGNOSE —<br/>see your gaps"]
+  B --> C["3 · LESSON — learn<br/>what you missed"]
+  C --> D["4 · RETEST —<br/>prove you learned it"]
+  D --> E["5 · RESULT —<br/>score before vs after"]
+  E -. "still unsure" .-> A
 ```
 
-Each phase is a screen in the UI. The browser decides when to advance; the
-server never pushes — it only answers requests. This keeps the API simple and
-the student in control.
+> **Trace:** recall → diagnose → lesson → retest → result (and, if unsure, back
+> to recall).
+
+Some rules that keep this simple:
+
+- The **browser decides** when to move from one screen to the next. The server
+  never pushes; it only answers requests.
+- If the student didn't improve, the loop can go back to step 1 — a fresh
+  recall — or loop inside step 4 (retest again) / step 3 (relearn).
 
 ---
 
 ### 5.2 Chapter ingest — putting content into the system
 
-Before any studying can happen, chapters must be loaded in. A chapter is raw
-text from a textbook, and the system AI-extracts a "concept checklist" — the
-specific ideas the student should understand.
+Before any studying can happen, someone must load a chapter in. This only
+happens for admins/seeds, not during a student's session:
 
-```
-TEXTBOOK (PDF/text)
-       │
-       ▼
-┌──────────────────────────────────────────────────────────┐
-│  POST /api/chapters/ingest                               │
-│                                                          │
-│  body: { textbookTitle, subject, title, rawText }        │
-│                                                          │
-│  1. Insert textbook row                                  │
-│  2. Insert chapter row                                   │
-│  3. Call AI: extractConcepts(rawText)                    │
-│     ┌──────────────────────────────────────────────┐     │
-│     │  AI prompt:                                  │     │
-│     │  "Extract core concepts + common             │     │
-│     │   misconceptions from this chapter text.     │     │
-│     │   Return JSON: {items:[{conceptText,         │     │
-│     │   weight, isMisconception}]}                 │     │
-│     └──────────────────────────────────────────────┘     │
-│  4. Insert concept_node rows (5-12 concepts)             │
-│                                                          │
-│  response: { textbookId, chapterId, conceptsExtracted }  │
-└──────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌──────────┐     ┌──────────┐     ┌─────────────────┐
-│textbook  │────▶│ chapter  │────▶│  concept_node   │
-│(1 row)   │     │ (1 row)  │     │  (5-12 rows)    │
-└──────────┘     └──────────┘     │  each with:      │
-                                  │  - conceptText   │
-                                  │  - isMisconception│
-                                  │  - weight (1-5)  │
-                                  └─────────────────┘
+```mermaid
+flowchart LR
+  A["1 · send the chapter's<br/>raw text"] --> B["2 · save textbook<br/>+ chapter rows"]
+  B --> C["3 · Gemini builds the<br/>concept checklist"]
+  C --> D["4 · save concepts<br/>(5–12 per chapter)"]
+  D --> E["5 · reply with the ids"]
 ```
 
-The concept checklist is the foundation of everything that follows. It tells
-the AI what to grade against, what to teach, and what to retest.
+> **Trace:** raw text → saved rows → Gemini extracts concepts → concepts saved →
+> ids returned.
+
+```
+Sending:   { textbookTitle, subject, title, rawText }
+Receiving: { textbookId, chapterId, conceptsExtracted }
+Data kept: textbook (1) → chapter (1) → concept_node (5-12)
+```
+
+That checklist is the **foundation of everything that follows**: it's what the
+AI grades against, what it teaches, and what it re-tests. If the AI ever fails,
+the server falls back to a deterministic extraction (sentence splitting + token
+matching), so ingest never hard-fails.
 
 ---
 
 ### 5.3 Starting a study session
 
-The student picks a chapter from the dashboard. This creates a session record
-that ties everything together.
+Here's the order when a student picks a chapter:
 
-```
-┌──────────────┐         ┌──────────────┐         ┌──────────┐
-│  Dashboard   │────────▶│  POST /api/  │────────▶│  SQLite  │
-│              │         │  sessions/   │         │          │
-│  "Pick a     │  body:  │  start       │  INSERT │study_    │
-│   chapter,   │ {chapter│              │────────▶│session   │
-│   then       │  Id}    │  generates   │         │(1 row)   │
-│   speak"     │         │  sessionId   │         └──────────┘
-│              │◀────────│              │
-│  navigates   │ {session│  201 Created │
-│  to /study/  │  Id}    │              │
-│  {sessionId} │         └──────────────┘
-└──────────────┘
+```mermaid
+flowchart LR
+  A["1 · tap a chapter<br/>card"] --> B["2 · POST /sessions/start<br/>{ chapterId }"]
+  B --> C["3 · real server creates<br/>study_session · in_progress"]
+  C --> D["4 · go to /study/{id}<br/>+ brief the voice layer"]
 ```
 
-**Data written:** `study_session` row with `chapterId`, `status: "in_progress"`.
-No AI call — this is just bookkeeping.
+> **Trace:** pick chapter → server opens a session → return `sessionId` →
+> navigate to the study screen.
 
-The browser also sets `activeSessionId` and `activeChapterId` in the voice
-agent module, so the Voxide client knows which session it's working with.
+```
+Sending:   { chapterId }
+Receiving: { sessionId }
+Data kept: study_session (1 row, status = "in_progress")
+```
+
+No AI call happens here — it's just bookkeeping. All study screens for the rest
+of the session use this `sessionId`.
 
 ---
 
 ### 5.4 Recall — "what do you remember?"
 
 This is the heart of the product. The student speaks out loud; the system
-grades their explanation against the concept checklist.
+grades their explanation against the concept checklist:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     RECALL FLOW                              │
-│                                                              │
-│  ┌──────────┐    audio    ┌─────────┐    text    ┌────────┐ │
-│  │ Student  │────────────▶│ Voxide  │───────────▶│ Gemini │ │
-│  │ speaks   │             │ (STT)   │            │ (AI)   │ │
-│  │ into mic │◀────────────│         │◀───────────│        │ │
-│  └──────────┘   voice     └────┬────┘  transcript └────────┘ │
-│                                │                             │
-│                                ▼                             │
-│                       ┌────────────────┐                     │
-│                       │  Browser UI    │                     │
-│                       │                │                     │
-│                       │  VoiceCapture  │                     │
-│                       │  collects all  │                     │
-│                       │  user message  │                     │
-│                       │  chunks into   │                     │
-│                       │  one transcript│                     │
-│                       └───────┬────────┘                     │
-│                               │                              │
-│              ┌────────────────┤                              │
-│              │                │                              │
-│              ▼                ▼                              │
-│    ┌──────────────┐  ┌──────────────┐                       │
-│    │ Auto-end     │  │ Manual tap   │                       │
-│    │ "that's all  │  │ on the ring  │                       │
-│    │  I remember" │  │ to stop      │                       │
-│    └──────┬───────┘  └──────┬───────┘                       │
-│           │                  │                               │
-│           └────────┬─────────┘                               │
-│                    ▼                                         │
-│         ┌──────────────────────┐                             │
-│         │  POST /sessions/     │                             │
-│         │  {id}/recall         │                             │
-│         │                      │                             │
-│         │  body: { transcript  │                             │
-│         │    Text }            │                             │
-│         └──────────┬───────────┘                             │
-│                    │                                         │
-│                    ▼                                         │
-│         ┌──────────────────────┐                             │
-│         │  Server              │                             │
-│         │                      │                             │
-│         │  1. Load concept     │                             │
-│         │     checklist from   │                             │
-│         │     concept_node     │                             │
-│         │                      │                             │
-│         │  2. Call AI:         │                             │
-│         │     gradeRecall(     │                             │
-│         │       transcript,    │                             │
-│         │       concepts)      │                             │
-│         │                      │                             │
-│         │  3. Save attempt     │                             │
-│         │     (stage=recall,   │                             │
-│         │      score, gaps)    │                             │
-│         └──────────┬───────────┘                             │
-│                    │                                         │
-│                    ▼                                         │
-│         ┌──────────────────────┐                             │
-│         │  Response:           │                             │
-│         │  { gaps: {           │                             │
-│         │    covered: [...],   │                             │
-│         │    missing: [...],   │                             │
-│         │    misconceptions:[] │                             │
-│         │    score: 60         │                             │
-│         │  }}                  │                             │
-│         └──────────────────────┘                             │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+  A["1 · SPEAK<br/>tap the ring, mic on"] --> B["2 · LISTEN<br/>one running transcript"]
+  B --> C["3 · END?<br/>boundary phrase or tap"]
+  C -- "done" --> D["4 · SUBMIT<br/>POST /recall<br/>{ transcript, attemptId }"]
+  D --> E["5 · GEMINI GRADES<br/>covered / missing /<br/>misconceptions"]
+  E --> F["6 · DETERMINISTIC SCORE<br/>weighted, int 0–100"]
+  F --> G["7 · SAVE + SHOW GAPS<br/>attempt row → Diagnose"]
 ```
 
-**What the AI grades:** The model receives the concept checklist and the
-student's transcript, then returns four lists:
-- `covered` — concepts the student correctly explained
-- `missing` — concepts not addressed
-- `misconceptions` — concepts the student got wrong
-- `score` — percentage of non-misconception concepts covered, weighted by each
-  concept's importance (`weight` 1–5) and corrected for stated misconceptions.
-  The score returned to the browser is always an **integer 0–100** — the AI's
-  float is re-computed deterministically server-side, never trusted raw.
+> **Trace:** speak → listen → detect the end → submit → Gemini grades →
+> deterministic score → save + show gaps.
+>
+> **Data kept:** attempt (1 row, stage = "recall")
 
-**What's saved:** An `attempt` row with `stage: "recall"`, the full transcript,
-the gap analysis stored as JSON `{covered: [], missing: [], misconceptions: []}`,
-and the integer score.
+```
+Sending:   { transcriptText, attemptId }
+Receiving: { gaps: { covered: [...], missing: [...], misconceptions: [], score: 60 } }
+```
 
-**Idempotency:** the browser sends a random `attemptId` with every submission.
-The server inserts the row only once per (session, attemptId), so retries,
-replays, or a voice race can never double-count an attempt. The dedup is scoped
-to the session, so the same `attemptId` can be reused safely across sessions.
+A few things worth knowing:
 
-**Auto-end detection:** While the student speaks, the browser watches for
-boundary phrases like "that's all I remember" or "I'm done". When detected, it
-auto-submits the recall without waiting for a tap. The phrases are defined in
-[`apps/web/src/lib/intent.ts`](../apps/web/src/lib/intent.ts).
+- **What's graded:** covered (explained correctly), missing (never mentioned),
+  misconceptions (stated a wrong belief). The score is a **weighted** percentage
+  — higher-weight concepts count more, and stating a misconception lowers it.
+- **Idempotency:** because every submission carries a random `attemptId`, a
+  double-tap, a retry, or a network replay can never create a phantom second
+  attempt. The dedup is scoped to the session.
+- **Restore on refresh:** if the student reloads the page, the screen rebuilds
+  itself from the saved attempts instead of asking the student to recall a
+  second time.
+
+**Auto-end detection** details live in section 5.12 below.
 
 ---
 
 ### 5.5 Diagnose — "here's what's missing"
 
-No server call needed — the gaps were already computed during recall. The
-browser just displays them.
-
-```
-┌──────────────────────────────────────────────────────┐
-│  Phase: GAPS                                         │
-│                                                      │
-│  The browser already has the gap analysis from the   │
-│  recall response. It renders:                        │
-│                                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  Coverage: 60%  ████████████░░░░░░░░          │  │
-│  │                                                │  │
-│  │  ✓ Covered:                                  │  │
-│  │    • Ohm's law (V = IR)                       │  │
-│  │    • Series circuits                          │  │
-│  │                                                │  │
-│  │  ✗ Missing:                                   │  │
-│  │    • Parallel circuits                        │  │
-│  │    • Kirchhoff's voltage law                  │  │
-│  │                                                │  │
-│  │  ⚠ Misconceptions:                           │  │
-│  │    • "Current is used up in a resistor"       │  │
-│  └────────────────────────────────────────────────┘  │
-│                                                      │
-│  Two paths:                                          │
-│  "Hear the short version" ──▶ Lesson phase           │
-│  "Skip the lesson" ────────▶ Retest phase            │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · gaps already<br/>in hand — no call"] --> B["2 · coverage bars<br/>= concept weight"]
+  B --> C["3 · three lists<br/>✓ covered · ✗ missing<br/>· stated wrong"]
+  C --> D{"4 · student picks"}
+  D -->|"hear the short version"| L["→ Lesson"]
+  D -->|"skip the lesson"| T["→ Retest"]
 ```
 
-The coverage bars are **weighted**: each bar's height scales with the concept's
-`weight` (1–5) and the missing segments are proportioned by weight, so the
-visual emphasizes the high-value concepts. Misconceptions get their own
-"stated wrong" band so the student sees the mistake they made, not just an
-omission.
+> **Trace:** gaps in hand → weighted bars → three lists → student chooses the
+> path. Nothing is saved in this phase — it's a read-only screen.
 
 ---
 
 ### 5.6 Microlesson — "learn what you missed"
 
-The student asks for a short lesson targeting exactly their gaps. The server
-generates it with AI.
-
-```
-┌──────────────────────────────────────────────────────┐
-│                  MICROLESSON FLOW                    │
-│                                                      │
-│  Browser                    Server                   │
-│     │                          │                     │
-│     │  POST /sessions/         │                     │
-│     │  {id}/microlesson        │                     │
-│     │  body: { missing: [...], │                     │
-│     │         misconceptions:[] │                     │
-│     │  }                       │                     │
-│     │─────────────────────────▶│                     │
-│     │                          │                     │
-│     │                    1. Load concept checklist    │
-│     │                       from concept_node        │
-│     │                          │                     │
-│     │                    2. Call AI:                  │
-│     │                       generateMicroLesson(     │
-│     │                         gapAnalysis, concepts) │
-│     │                          │                     │
-│     │                       AI prompt:               │
-│     │                       "Write a short           │
-│     │                        pronunciation-friendly  │
-│     │                        lesson that fixes       │
-│     │                        exactly these gaps.     │
-│     │                        4-8 sentences, no       │
-│     │                        markdown, read aloud    │
-│     │                        friendly."              │
-│     │                          │                     │
-│     │◀─────────────────────────│                     │
-│     │  { text: "When current   │                     │
-│     │    flows through two      │                     │
-│     │    paths..." }            │                     │
-│     │                          │                     │
-│  Browser renders the lesson text.                    │
-│  If a voice session is live, the agent reads it     │
-│  aloud in its natural voice. Otherwise, the         │
-│  student can tap "Read it to me" for browser TTS.   │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · tap 'Hear the<br/>short version'"] --> B["2 · POST /microlesson<br/>{ missing, misconceptions }"]
+  B --> C["3 · Gemini writes<br/>4–8 sentence lesson"]
+  C --> D["4 · text on screen<br/>+ reads itself aloud"]
+  D --> E["5 · no DB write —<br/>always fresh"]
 ```
 
-**No database write.** This is a pure read+AI operation. The lesson text is
-generated on the fly and never stored — it's always fresh for the specific gaps.
+> **Trace:** tap → generate the lesson → show it → speak it. Nothing is saved;
+> the lesson is always freshly generated for the specific gaps.
+
+```
+Sending:   { missing: [...], misconceptions: [...] }
+Receiving: { text: "When current flows through two paths..." }
+Data kept: nothing — pure AI generation
+```
+
+The read-aloud step uses the agent's natural voice when available, otherwise
+the browser's TTS from the "Read it to me" button (see 5.11).
 
 ---
 
 ### 5.7 Retest — "prove you learned it"
 
-The retest has two parts: generating questions, then grading the student's
-spoken answers. The key design goal: **each question is graded in isolation
-against exactly one concept**, so a right answer on one question can't inflate
-the others.
+The retest has two parts: generating questions, then grading each answer. One
+design goal matters above all: **each question is graded alone against exactly
+one concept**, so getting one right can't secretly help the others.
 
-**Part A: Generate questions**
+**Part A — Generate the questions:**
 
-```
-┌──────────────────────────────────────────────────────┐
-│  Browser                    Server                   │
-│     │                          │                     │
-│     │  POST /sessions/         │                     │
-│     │  {id}/retest             │                     │
-│     │  body: { missing: [...], │                     │
-│     │         misconceptions:[] │                     │
-│     │  }                       │                     │
-│     │─────────────────────────▶│                     │
-│     │                          │                     │
-│     │                    Call AI:                    │
-│     │                    generateRetestQuestions(    │
-│     │                      gapAnalysis, concepts)   │
-│     │                          │                     │
-│     │                    AI prompt:                 │
-│     │                    "Write 2-3 spoken check     │
-│     │                     questions that re-test     │
-│     │                     the missing concepts.      │
-│     │                     Each must ask the          │
-│     │                     student to speak aloud     │
-│     │                     an explanation and         │
-│     │                     return per question the    │
-│     │                     targetConcept it tests."   │
-│     │                          │                     │
-│     │                    Server reconciles each      │
-│     │                    targetConcept against the   │
-│     │                    stored checklist            │
-│     │                    (case/whitespace tolerant); │
-│     │                    unverifiable ones fall back │
-│     │                    to the gap list in order.   │
-│     │                          │                     │
-│     │◀─────────────────────────│                     │
-│     │  { questions: [          │                     │
-│     │    {question:"Explain    │                     │
-│     │     parallel circuits",  │                     │
-│     │     focus:["Parallel     │                     │
-│     │       circuits..."],     │                     │
-│     │     ...}                 │                     │
-│     │  ]}                      │                     │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · POST /retest<br/>{ missing, misconceptions }"] --> B["2 · Gemini writes<br/>2–3 spoken-check questions"]
+  B --> C["3 · reconcile each focus tag<br/>against the stored checklist"]
+  C --> D["4 · each question returns<br/>with its focus subset"]
 ```
 
-Each question's `focus` is the **canonical conceptText** it grades against —
-pulled from `concept_node`, not from whatever the question writer happened to
-type.
-
-**Part B: Answer each question**
-
-For each question, the student speaks their answer and the browser sends the
-question's `focus` along with the transcript. The server grades **only that
-focus subset** of the checklist, not the whole chapter:
+> **Trace:** ask for questions → Gemini writes them → tags are verified →
+> canonical focus returned. (Case/whitespace tolerant; an unverifiable tag
+> falls back to the gap list — a question never grades against a made-up idea.)
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Student speaks answer                               │
-│     │                                                │
-│     ▼                                                │
-│  POST /sessions/{id}/retest/answer                   │
-│  body: { transcriptText, focus: [canonicalText],     │
-│          missing, misconceptions, attemptId }        │
-│     │                                                │
-│     ▼                                                │
-│  Server:                                             │
-│    1. Load concept checklist                         │
-│    2. Match focus against it (tolerant); a focus     │
-│       string with no stored counterpart is used as   │
-│       a standalone concept so the answer still gets  │
-│       graded against that idea alone                 │
-│    3. Call AI: gradeRecall(transcript, subset)       │
-│    4. Per-question verdict via focusScore():         │
-│       • misconception → handled if the student did   │
-│         NOT restate the wrong belief                 │
-│       • real concept → covered only if described     │
-│    5. Save attempt (stage="retest", attemptId)       │
-│     │                                                │
-│     ▼                                                │
-│  Response: { score: 100, gaps: {covered,missing,     │
-│              misconceptions, score} }                │
-│     │                                                │
-│     ▼                                                │
-│  Browser: appends to answered[] (with "You said:"    │
-│  transcript + open/got chips), shows next question   │
-│  When all questions answered: "See your result"      │
-└──────────────────────────────────────────────────────┘
+Sending:   { missing: [...], misconceptions: [...] }
+Receiving: { questions: [ { question: "...", focus: ["..."] }, ... ] }
+```
+
+**Part B — Answer each question:**
+
+```mermaid
+flowchart TD
+  A["1 · SPEAK the answer<br/>into the mic ring"] --> B["2 · POST /retest/answer<br/>{ transcript, focus, attemptId }"]
+  B --> C["3 · grade against the<br/>focus subset only"]
+  C --> D["4 · per-concept verdict<br/>misconception restated?<br/>concept described?"]
+  D --> E["5 · save the attempt<br/>score 0–100"]
+  E --> F["6 · next question<br/>or → Result"]
+```
+
+> **Trace:** speak → submit → grade the focus only → verdict → save + score →
+> next question.
+
+```
+Sending:   { transcriptText, focus: ["..."], attemptId }
+Receiving: { score: 100, gaps: { covered, missing, misconceptions, score } }
 ```
 
 ---
 
 ### 5.8 Result — "see your improvement"
 
-The server computes one canonical metric for the session. The browser fetches
-it and renders the outcome.
-
-```
-┌──────────────────────────────────────────────────────┐
-│  Browser                    Server                   │
-│     │                          │                     │
-│     │  GET /sessions/          │                     │
-│     │  {id}/result             │                     │
-│     │─────────────────────────▶│                     │
-│     │                          │                     │
-│     │                    SELECT stage, score         │
-│     │                    FROM attempt                │
-│     │                    WHERE sessionId = :id       │
-│     │                          │                     │
-│     │                    before = first recall score │
-│     │                    after  = AVERAGE of every   │
-│     │                            retest answer (not  │
-│     │                            just the last)      │
-│     │                    durationMs = live running   │
-│     │                            time; locked in on  │
-│     │                            completion          │
-│     │                          │                     │
-│     │◀─────────────────────────│                     │
-│     │  { before: 60,           │                     │
-│     │    after: 85,            │                     │
-│     │    delta: 25,            │                     │
-│     │    durationMs: 124000 }  │                     │
-│     │                          │                     │
-│  Three outcomes:                                     │
-│                                                      │
-│  delta > 0  → "Gap closed!" (gold) → Done           │
-│  delta ≤ 0  → "Gap still open" (rust)               │
-│                  • "Retest the gaps" again          │
-│                  • "Relearn the short version"      │
-│                  • "Start over with a cold recall"  │
-│  allCovered → "Nothing missing" (sage) → Done       │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · GET /result"] --> B["2 · before = recall score<br/>after = avg of every<br/>retest answer"]
+  B --> C["3 · delta = after − before<br/>+ live durationMs"]
+  C --> D{"4 · which outcome?"}
+  D -->|"delta > 0"| E["Improved — done ✓"]
+  D -->|"delta ≤ 0"| F["Still open — retest /<br/>relearn / fresh recall"]
+  D -->|"nothing missing"| G["Nothing missing — done ✓"]
 ```
 
-If the student didn't improve, the result screen shows a **Still-open** list
-(the missing concepts + misconceptions that remain) and targeted actions for
-closing exactly those. After 2 consecutive no-improvement rounds, the app
-suggests coming back later.
+> **Trace:** fetch result → compute the metrics → pick the outcome → suggest the
+> next move. After two consecutive no-improvement rounds, the app suggests
+> coming back later.
 
-**Refreshing the page mid-session:** the study screen restores itself from the
-attempt history — if retest answers already exist it re-fetches the result;
-otherwise it replays the recall from the stored gaps (never forcing a second
-cold recall).
+```
+Receiving: { before: 60, after: 85, delta: 25, durationMs: 124000 }
+Data kept: nothing — reads earlier attempts
+```
 
 ---
 
 ### 5.9 Session end — "I'm done"
 
-The session can end two ways: the student taps "Done for now" on the result
-screen, or says a farewell phrase into the voice mic.
+The session ends two ways: a button tap or a spoken farewell.
 
-**Path A: Button tap**
+**Path A — Button ("Done for now"):**
 
-```
-┌──────────────────────────────────────────────────────┐
-│  "Done for now" button                               │
-│     │                                                │
-│     ▼                                                │
-│  completeSession()                                   │
-│     │                                                │
-│     ├─▶ POST /sessions/{id}/complete                 │
-│     │   Server: UPDATE study_session                 │
-│     │   SET status='completed', completedAt=now      │
-│     │   Returns { ok, durationMs }                   │
-│     │                                                │
-│     └─▶ navigate("/dashboard")                       │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · tap 'Done<br/>for now'"] --> B["2 · POST /complete"]
+  B --> C["3 · marked completed<br/>+ end time stamped"]
+  C --> D["4 · back to dashboard"]
 ```
 
-**Path B: Voice farewell**
+> **Trace:** tap → complete → stamp → dashboard. Unknown session ids get a
+> **404**, so a stale "complete" can never blow up a fresh session.
 
-```
-┌──────────────────────────────────────────────────────┐
-│  Student says: "bye", "I'm done studying", "close"   │
-│     │                                                │
-│     ▼                                                │
-│  Voxide transcribes the speech                       │
-│     │                                                │
-│     ▼                                                │
-│  maybeAutoEndSession() fires on "message" event      │
-│     │                                                │
-│     ├─ Skipped if captureActive = true               │
-│     │  (mid-recall "I'm done" finalizes the answer   │
-│     │   instead of closing the session)              │
-│     │                                                │
-│     ├─ detectSessionEnd(text) checks against         │
-│     │  SESSION_END_PATTERNS in intent.ts             │
-│     │                                                │
-│     └─ If match: endVoiceSession()                   │
-│          │                                           │
-│          ├─ POST /sessions/{id}/complete             │
-│          ├─ clientCache.disconnect()                 │
-│          └─ window.location.assign("/dashboard")     │
-└──────────────────────────────────────────────────────┘
+**Path B — Spoken farewell:**
+
+```mermaid
+flowchart LR
+  A["1 · 'bye' / 'I'm done<br/>studying' / 'close'"] --> B["2 · agent calls its one<br/>capability: completeSession"]
+  B --> C["3 · close deferred ~150 ms<br/>so the agent says goodbye"]
+  C --> D["4 · hang up → dashboard"]
 ```
 
-The `captureActive` guard is critical: during a recall capture, saying "I'm
-done" should finalize the answer, not close the whole session. The guard ensures
-only the on-screen `VoiceCapture` owns end-of-speech detection while the mic is
-recording an answer.
+> **Trace:** hear the farewell → one tool call → speak the goodbye → leave. If
+> the microphone is mid-answer (a recall being captured), the farewell is **NOT**
+> treated as "end session" — it finalizes the answer instead.
 
-`/complete` 404s unknown session ids, and `endVoiceSession(delayMs)` defers the
-disconnect + navigation long enough for a voice-tool close to deliver its
-spoken farewell before the page unloads.
+```
+Sending:   POST /sessions/{id}/complete
+Receiving: { ok: true, durationMs: 53659 }
+Data kept: study_session UPDATE (status = "completed", completedAt = now)
+```
 
 ---
 
 ### 5.10 Voice agent — a single-job assistant
 
-The voice agent (the Voxide client) is **not** a second driver of the study
-loop. The on-screen `StudyProvider` is the single master of the loop (recall →
-diagnose → learn → retest → result). The agent has exactly one background job:
-**end the session when the student says goodbye**, using a tool call
-("capability"). A capability is a registered function the AI can choose to
-invoke; the handler calls the same API endpoints as the browser.
+The voice agent (Voxide) is a conversational assistant that knows **what** the
+student is studying (the subject, chapter, and current step) but not the lesson
+content or the score breakdown — that detailed thinking stays with Gemini, the
+grader. Its only *action* is closing the session.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    VOICE AGENT (1 CAPABILITY)                 │
-│                                                              │
-│  ┌──────────┐    audio    ┌─────────┐    text    ┌────────┐ │
-│  │ Student  │────────────▶│ Voxide  │───────────▶│ Gemini │ │
-│  │ speaks   │             │ WS      │            │ (AI)   │ │
-│  │          │◀────────────│ connect │◀───────────│        │ │
-│  └──────────┘   voice     └────┬────┘  transcript └────────┘ │
-│                                │                             │
-│                                ▼                             │
-│                           Says "I'm done for now"           │
-│                                │                             │
-│                                ▼                             │
-│                        ┌──────────────┐                     │
-│                        │  Tool call:  │                     │
-│                        │  complete-   │                     │
-│                        │  Session()   │                     │
-│                        └──────┬───────┘                     │
-│                               ▼                             │
-│                        ┌──────────────┐                     │
-│                        │  POST /      │                     │
-│                        │  sessions/   │                     │
-│                        │  {id}/       │                     │
-│                        │  complete    │                     │
-│                        └──────┬───────┘                     │
-│                               ▼                             │
-│                        endVoiceSession(150ms)               │
-│                        speaks farewell, THEN disconnects    │
-│                        + navigates to /dashboard            │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · app briefs the agent<br/>subject, chapter, step"] --> B["2 · agent chats about<br/>the topic — no grading"]
+  B -. "student says bye" .-> C["3 · one capability<br/>completeSession"]
+  C --> D["4 · farewell ~150 ms<br/>then hang up"]
 ```
 
-**The registered capability:**
+> **Trace:** brief the agent → chat (topic only) → farewell heard → one
+> capability → hang up.
 
-| Capability | What it does | API call |
-|---|---|---|
-| `completeSession` | Ends the session, speaks a farewell, closes | `POST /sessions/{id}/complete` |
-
-The agent is deliberately **not** given recall/retest/lesson capabilities:
-those phases are the UI's job, driven by the on-screen ring button and
-end-of-speech cues. Keeping them out of the agent's hands means there is one
-source of truth for the loop — no voice race can produce a phantom attempt, and
-the grading no-ops (double-submit, "I'm done" mid-answer) all live in one place.
-
-**State grounding:** On every tool call, the agent receives the current study
-context (chapter title, subject, phase, attempt count) via `bindState` and
-`registerState`, so it talks about the right chapter and never re-asks which
-one is in progress.
+Why exactly one capability? Because one source of truth is easier than two.
+Everything that *grades* — the recall, the retest answers, the lessons — is
+driven by the on-screen loop, so the agent can never create a duplicate attempt
+or get out of sync with what's on the screen.
 
 ---
 
 ### 5.11 Natural voice read-back — replacing robotic TTS
 
-When a lesson arrives, the system prefers the agent's natural voice over
-browser text-to-speech. The lesson speaks itself on enter (no tap needed) and
-connects Voxide on demand even if no session was live yet:
+When a lesson arrives it reads itself aloud so the student can follow both the
+text and the voice:
 
-```
-┌──────────────────────────────────────────────────────┐
-│  Lesson text arrives in browser                      │
-│     │                                                │
-│     ▼                                                │
-│  speakViaVoxide(text) — connects the voice session   │
-│  on demand, then:                                    │
-│     │                                                │
-│     ├─ client.sendText(                              │
-│     │   "Please read this aloud to the student...")  │
-│     │                                                │
-│     └─ Agent reads it in its natural voice,          │
-│        sentence by sentence, highlighted on screen   │
-│        as the agent goes (read-along)                │
-│     │                                                │
-│  If Voxide is unavailable, the student taps          │
-│  "Read it to me" for browser TTS with the same       │
-│  sentence-by-sentence read-along; a Stop button      │
-│  cancels it                                          │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  A["1 · LESSON ARRIVES<br/>speaks itself aloud"] --> B["2 · AGENT READS<br/>natural voice, sentence<br/>by sentence"]
+  B --> C["3 · spoken sentence<br/>highlighted (read-along)"]
+  C --> D["4 · STOP READING<br/>cancels both engines"]
+  B -. "no voice layer" .-> E["'Read it to me' button<br/>browser TTS, same<br/>read-along"]
 ```
 
-**Browser TTS fallback** (`speakAloud` in `voice.ts`): Used only from explicit
-buttons ("Read it back", "Read it to me"). Picks the most natural English voice
-available (Google UK English Female → Samantha → Karen → etc.), chunks text into
-sentences via `splitSentences`, and reads at 0.97× speed.
+> **Trace:** lesson → natural read → highlight → stop on demand. The browser
+> voice is never automatic — it only runs from the explicit button, and a read
+> is cut off if the student leaves the screen mid-sentence.
+
+The browser voice (`speakAloud`) picks the least robotic English voice
+available and reads at a slightly relaxed pace. A safety beat also keeps it
+alive through Chrome's known "paused speech" stall, so a long lesson never
+stops mid-sentence.
 
 ---
 
 ### 5.12 End-of-speech detection — auto-submit without a tap
 
 While the student speaks, the browser watches their transcript for boundary
-phrases. This lets them say "that's all I remember" instead of tapping the ring.
+phrases:
 
-```
-┌──────────────────────────────────────────────────────┐
-│  VoiceCapture is listening                           │
-│     │                                                │
-│     ▼                                                │
-│  Every time voice.messages updates:                  │
-│     │                                                │
-│     ├─ Join all user messages since capture started  │
-│     │  into one transcript string                    │
-│     │                                                │
-│     ├─ findBoundaryEnd(transcript)                   │
-│     │  Checks against 16 phrases:                    │
-│     │  "that's all I remember", "I'm done",          │
-│     │  "nothing else", "next question", ...          │
-│     │                                                │
-│     ├─ If found AND fewer than 6 words follow:       │
-│     │  │                                             │
-│     │  ├─ Extract text before the cue                │
-│     │  ├─ Call submit(leadingText)                   │
-│     │  └─ Call voice.disconnect()                    │
-│     │                                                │
-│     └─ If not found: keep listening                  │
-│                                                      │
-│  The submitted text is the student's answer.         │
-│  The cue phrase itself ("I'm done") is stripped.     │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+  A["1 · MIC OPEN<br/>one running transcript"] --> B["2 · ends with a<br/>cue phrase?"]
+  B -->|"yes · ≤6 words trail"| C["3 · STRIP THE CUE<br/>submit · stop listening"]
+  B -->|"no"| D["4 · KEEP LISTENING<br/>until the ring is tapped"]
 ```
 
-The 6-word trailing check prevents false positives: "I'm done with the electron
-carriers" is not an ending — the student is mid-sentence.
+> **Trace:** listen → check for the cue → either submit or keep listening. The
+> submitted text is the student's answer; the cue phrase itself is removed
+> before submission. (16 cues total — "that's all I remember", "I'm done", "next
+> question", ... — defined in `apps/web/src/lib/intent.ts`.)
 
 ---
 
 ### 5.13 The database — what gets saved
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  TEXTBOOK                                                    │
-│  ┌────┬─────────────┬──────────┬──────────┐                 │
-│  │ id │ title       │ subject  │ language │                 │
-│  └────┴─────────────┴──────────┴──────────┘                 │
-│       │ 1                                                       │
-│       │                                                         │
-│       │ N                                                       │
-│  CHAPTER                                                        │
-│  ┌────┬─────────────┬────────────────────────────┐           │
-│  │ id │ textbookId  │ title, rawText              │           │
-│  └────┴─────────────┴────────────────────────────┘           │
-│       │ 1                                                       │
-│       │                                                         │
-│       │ N                                                       │
-│  CONCEPT_NODE                                                   │
-│  ┌────┬─────────────┬──────────────────────┬────────┬───────┐ │
-│  │ id │ chapterId   │ conceptText          │ isMis- │ weight│ │
-│  │    │             │                      │ concept│       │ │
-│  └────┴─────────────┴──────────────────────┴────────┴───────┘ │
-│       │                                                         │
-│       │ (chapter also has N study_sessions)                      │
-│       │                                                         │
-│  STUDY_SESSION                                                  │
-│  ┌────┬───────────┬──────────┬──────────┬────────────┐        │
-│  │ id │ chapterId │ userId   │ status   │ startedAt  │        │
-│  └────┴───────────┴──────────┴──────────┴────────────┘        │
-│       │ 1                                                       │
-│       │                                                         │
-│       │ N                                                       │
-│  ATTEMPT                                                        │
-│  ┌────┬───────────┬────────┬───────────────┐                  │
-│  │ id │ sessionId │ stage  │ transcriptText│ gapped           │
-│  │(client │        │(recall │               │                 │
-│  │attemptId)│      │/retest)│               │ gapsIdentified  │
-│  │    │           │        │               │ score (0-100)   │
-│  └────┴───────────┴────────┴───────────────┴─────────────────┘ │
-└────────────────────────────────────────────────────────────────┘
+Five tables, and what one row of each means:
 
-What each write looks like:
+| Table | One row = | Key columns |
+|---|---|---|
+| `textbook` | A real textbook (e.g. "Physics Grade 12") | `title`, `subject`, `language` |
+| `chapter` | One chapter in a textbook, with its text | `textbookId`, `title`, `rawText` |
+| `concept_node` | One idea (or misconception) in the checklist | `chapterId`, `conceptText`, `isMisconception`, `weight` |
+| `study_session` | One study attempt on a chapter | `chapterId`, `userId`, `status`, `startedAt`, `completedAt` |
+| `attempt` | One measurement inside a session: the recall, or one retest answer | `id` (client `attemptId`), `sessionId`, `stage`, `transcriptText`, `gapsIdentified` (JSON), `score` |
 
-  Chapter ingest  →  textbook (1) + chapter (1) + concept_node (5-12)
-  Start session   →  study_session (1)
-  Recall          →  attempt (1, stage="recall")
-  Retest answer   →  attempt (1, stage="retest")
-  Complete        →  study_session UPDATE (status, completedAt)
-  Microlesson     →  (no write — pure AI generation)
-  Retest questions→  (no write — pure AI generation)
-  Result          →  (no write — reads existing attempts)
-  History         →  (no write — reads last session per chapter)
-```
+What each action writes:
+
+- **Chapter ingest** → `textbook` (1) + `chapter` (1) + `concept_node` (5–12)
+- **Start session** → `study_session` (1)
+- **Recall** → `attempt` (1, stage `"recall"`)
+- **Retest answer** → `attempt` (1, stage `"retest"`)
+- **Complete** → `study_session` UPDATE (status, completedAt)
+- **Microlesson, retest questions, result, history** → nothing (pure AI
+  generation or reads)
 
 ---
 
 ### 5.14 AI prompts — what gets sent to Gemini
 
-Every AI call uses the same pattern: a system prompt + the student data, sent
-as a single user message with `temperature: 0.4` and `responseMimeType:
-"application/json"`.
+Every AI call follows the same shape: one system prompt plus the student's
+data, sent as a single message with `temperature: 0.4` and JSON output. Five
+different things get asked:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  AI CALL PATTERN                                             │
-│                                                              │
-│  Gemini receives:                                            │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │  role: "user"                                          │  │
-│  │  parts: [{ text:                                      │  │
-│  │    "{SYSTEM PROMPT}\n\n---\n{STUDENT DATA}"            │  │
-│  │  }]                                                    │  │
-│  │  config: { responseMimeType: "application/json",       │  │
-│  │            temperature: 0.4 }                          │  │
-│  └────────────────────────────────────────────────────────┘  │
-│                                                              │
-│  The 4 prompts:                                              │
-│                                                              │
-│  1. EXTRACT  (chapter ingest)                                │
-│     "Extract core concepts + common misconceptions from      │
-│      this chapter. Return JSON:                              │
-│      {items:[{conceptText, weight, isMisconception}]}"      │
-│                                                              │
-│  2. GRADE    (recall + retest)                               │
-│     "Judge how well the student's recall covers the          │
-│      concept checklist. Return JSON:                         │
-│      {covered:[], missing:[], misconceptions:[], score}"    │
-│                                                              │
-│  3. LESSON   (microlesson)                                   │
-│     "Write a short pronunciation-friendly lesson that        │
-│      fixes exactly these gaps. 4-8 sentences,                │
-│      read-aloud friendly. Return JSON: {text}"              │
-│                                                              │
-│  4. RETEST   (retest questions)                              │
-│     "Write 2-3 spoken check questions that re-test           │
-│      the missing concepts. For each question return          │
-│      the targetConcept it tests. Return JSON:                │
-│      {questions:[{question, targetConcept}]}"                │
-│                                                              │
-│  5. FOCUS    (per-question verdict)                          │
-│     Deterministic focusScore(): a misconception is           │
-│     handled when NOT restated; a real concept counts         │
-│     when covered. Applied to the question's focus            │
-│     subset only.                                             │
-│                                                              │
-│  Every prompt has a fallback: if Gemini fails or the key     │
-│  is a placeholder, deterministic heuristics take over        │
-│  (weighted token overlap for grading, sentence extraction    │
-│  for concepts, templates for lessons/questions). All scores  │
-│  are recomputed deterministically server-side with weights   │
-│  — the AI's float is never stored raw.                       │
-└──────────────────────────────────────────────────────────────┘
-```
+1. **EXTRACT** (chapter ingest) — "Pull the core concepts + common
+   misconceptions from this chapter" → `{items: [{conceptText, weight,
+   isMisconception}]}`.
+2. **GRADE** (recall + retest) — "Judge how well the student's explanation
+   covers the checklist" → `{covered: [], missing: [], misconceptions: [],
+   score}`.
+3. **LESSON** (microlesson) — "Write a short, pronunciation-friendly lesson
+   that fixes exactly these gaps" → `{text}`.
+4. **RETEST** (retest questions) — "Write 2–3 spoken-check questions that
+   re-test the missing concepts; tag each with the targetConcept it tests" →
+   `{questions: [{question, targetConcept}]}`.
+5. **FOCUS** (per-question verdict) — a deterministic helper, not a prompt: a
+   misconception counts as handled when *not* restated; a real concept counts
+   when covered. Applied to the question's focus subset only.
+
+Grading never trusts the AI's raw float: every score is recomputed
+deterministically server-side using the concept weights. And every prompt has a
+fallback — if Gemini fails or the key is a placeholder, deterministic
+heuristics take over (token matching for grading, sentence splitting for
+concepts, templates for lessons/questions).
 
 ---
 
 ### 5.15 Complete data flow map — every request
 
-For reference, here is every API endpoint, who calls it, and what happens:
+Every API request in the product, who makes it, and whether it touches the AI
+or the database:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  ENDPOINT                  │ CALLED BY        │ AI? │ DB WRITE? │
-├────────────────────────────┼──────────────────┼─────┼───────────┤
-│ GET  /chapters             │ Dashboard        │ no  │ no        │
-│ GET  /chapters/:id/concepts│ (view only)      │ no  │ no        │
-│ POST /chapters/ingest      │ Admin/seed       │ YES │ YES       │
-│                            │                  │     │           │
-│ POST /sessions/start       │ Dashboard        │ no  │ YES       │
-│ GET  /sessions             │ Dashboard        │ no  │ no        │
-│                            │ (history)        │     │           │
-│ GET  /sessions/:id         │ StudyProvider    │ no  │ no        │
-│ POST /sessions/:id/recall  │ StudyProvider    │ YES │ YES       │
-│ POST /sessions/:id/microl. │ StudyProvider    │ YES │ no        │
-│ POST /sessions/:id/retest  │ StudyProvider    │ YES │ no        │
-│ POST /sessions/:id/retest/ │ StudyProvider    │ YES │ YES       │
-│   answer                   │                  │     │           │
-│ GET  /sessions/:id/result  │ StudyProvider    │ no  │ no        │
-│ POST /sessions/:id/complete│ UI + voice agent │ no  │ YES (upd) │
-└────────────────────────────┴──────────────────┴─────┴───────────┘
-```
+| Endpoint | Called by | AI? | DB write? |
+|---|---|---|---|
+| `GET /chapters` | Dashboard | no | no |
+| `GET /chapters/:id/concepts` | (view only) | no | no |
+| `POST /chapters/ingest` | Admin / seed | yes | yes |
+| `POST /sessions/start` | Dashboard | no | yes |
+| `GET /sessions` | Dashboard (history) | no | no |
+| `GET /sessions/:id` | StudyProvider | no | no |
+| `POST /sessions/:id/recall` | StudyProvider | yes | yes |
+| `POST /sessions/:id/microlesson` | StudyProvider | yes | no |
+| `POST /sessions/:id/retest` | StudyProvider | yes | no |
+| `POST /sessions/:id/retest/answer` | StudyProvider | yes | yes |
+| `GET /sessions/:id/result` | StudyProvider | no | no |
+| `POST /sessions/:id/complete` | UI + voice agent | no | yes (update) |
 
 The key insight: **the browser UI owns the whole study loop.** The only thing
 the voice agent can do is `completeSession` — one endpoint, one job. The
@@ -1088,9 +730,79 @@ bun run --cwd apps/web dev           # → http://localhost:5173
 The server creates `kiftet-dev.db` on first run (that's the whole SQLite
 "database") and applies migrations automatically.
 
----
+## 11. Everything we use — the source-of-truth inventory
 
-## Glossary (plain-English cheat sheet)
+This section is the audit trail for the whole repo. Every feature and every
+package (dependency **and** dev-dependency) is listed here, cross-checked
+against the `package.json` files and source. **Rule of repo:** if you add a
+package or a feature, add a row here; if a row stops being true, fix the row.
+
+### 11.1 Feature index
+
+| Feature | Section | Where it lives (key files) | API |
+|---|---|---|---|
+| Study loop (the master state) | §5.1 | `apps/web/src/components/study-provider.tsx` | — |
+| Dashboard + last-session history | §5.3 | `apps/web/src/routes/dashboard.tsx` | `GET /chapters`, `GET /sessions` |
+| Recall ("what do you remember?") | §5.4 | `apps/web/src/routes/study.$sessionId.tsx` (RecallPhase) | `POST /sessions/:id/recall` |
+| Diagnose (gap chips + bars) | §5.5 | `study.$sessionId.tsx` (DiagnosePhase) | — |
+| Microlesson + read-aloud | §5.6 | `study.$sessionId.tsx` (LessonPhase), `lib/voice.ts` | `POST /sessions/:id/microlesson` |
+| Retest (questions + per-focus grading) | §5.7 | `study.$sessionId.tsx` (RetestPhase) | `POST /sessions/:id/retest`, `POST /sessions/:id/retest/answer` |
+| Result (before/after/delta) | §5.8 | `study.$sessionId.tsx` (ResultPhase) | `GET /sessions/:id/result` |
+| End session (button + voice) | §5.9 | `components/assistant.tsx` (the `completeSession` capability) | `POST /sessions/:id/complete` |
+| Voice chat with the agent | §5.10 | `components/assistant.tsx` | WebSocket via `@voxide/react` |
+| Natural read-back (read-along) | §5.11 | `lib/voice.ts`, `components/assistant.tsx` | — |
+| Auto end-of-speech detection | §5.12 | `lib/intent.ts`, `lib/voice.ts` | — |
+| Auth (sign in / sign up) | §4 | `packages/auth`, `lib/auth-client.ts`, `components/sign-in-form.tsx`, `sign-up-form.tsx` | Better Auth `/api/auth/*` |
+| Themes (dark/light) | §4 | `components/theme-provider.tsx` | — |
+| Offline / installable (PWA) | §4 | `apps/web/vite.config.ts` | — |
+| AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
+
+### 11.2 Dependency inventory
+
+**Runtime deps** — shipped with the product:
+
+| Package | Lives in | What it's literally used for |
+|---|---|---|
+| `react`, `react-dom` (19) | apps/web, packages/ui | The UI framework. |
+| `react-router` + `@react-router/fs-routes` + `@react-router/node` + `@react-router/serve` | apps/web | URL → screen routing, file-based routes, SSR server, static serving. |
+| `@tanstack/react-form` | apps/web | Typed forms for sign-in and sign-up. |
+| `@voxide/react` | apps/web | The voice session: speech-to-text (hears the student) and the agent's natural text-to-speech. |
+| `better-auth` | apps/web, apps/server, packages/auth | Authentication: credentials, sessions, cookies, and the client hooks. |
+| `isbot` | apps/web | Bot detection for SSR. |
+| `lucide-react` | apps/web, packages/ui | All the icons. |
+| `next-themes` | apps/web, packages/ui | Dark/light theme state. |
+| `sonner` | apps/web, packages/ui | Toast notifications. |
+| `varlock` | apps/web, apps/server, packages/db | Typesafe environment variables (`.env` → generated TS). |
+| `@varlock/vite-integration` | apps/web | Feeds the generated env types into Vite. |
+| `zod` | every package | Runtime validation of API bodies, responses, and env. |
+| `vite-plugin-pwa` | apps/web | Makes the app installable and offline-capable. |
+| `express`, `cors` | apps/server | The HTTP API and cross-origin policy. |
+| `@google/genai` | apps/server | The Gemini SDK — the only AI door in the system. |
+| `drizzle-orm` | apps/server, packages/db | Typesafe SQL (schema, queries, and auto-migrations on startup via `drizzle-orm/bun-sqlite`). |
+| `@neondatabase/serverless` | packages/db | Postgres driver for the production (`main`) branch's Lakebase/Neon database. |
+| `@shadcn/react`, `@base-ui/react`, `class-variance-authority`, `cn`, `tw-animate-css` | packages/ui | The UI kit: shadcn/ui components built on Base UI primitives, style variants, and animated transitions. |
+| `shadcn` | packages/ui | The component source-of-truth for scaffolding/copying UI components. |
+
+**Dev / build deps** — only on our machines:
+
+| Package | Lives in | What it's literally used for |
+|---|---|---|
+| `bun` (runtime) | root | Package manager + runtime; also *is* the SQLite driver (`bun:sqlite`). |
+| `typescript` + `@types/*` (bun, node, react, react-dom, cors, express) | root + packages | The compiler for `check-types` and ambient types. |
+| `turbo` | root | Runs builds/tasks across all packages with caching. |
+| `@biomejs/biome` | root | Lint + format (replaces ESLint + Prettier). |
+| `tsdown` | apps/server | Bundles the server into a standalone `dist`. |
+| `vite`, `@tailwindcss/vite`, `tailwindcss`, `@tailwindcss/postcss` | apps/web, packages/ui | Dev server + build + CSS compilation (Tailwind v4). |
+| `@react-router/dev` | apps/web | React Router's dev server and build pipeline. |
+| `drizzle-kit` | packages/db | Schema → migration SQL generation. |
+| `@vite-pwa/assets-generator` | apps/web | Generates the PWA icon set. |
+| `@kiftet/config` | packages/config | Shared TypeScript project config used by the workspace. |
+| `varlock` | root + packages/db | Env-schema codegen tooling. |
+
+> **Reading note:** `bun run check-types` (TypeScript) and `bun run build`
+> (Turborepo) are the gates that prove this inventory is wired together correctly.
+
+---
 
 - **API** — the agreed list of operations one program exposes to another.
 - **JSON** — a readable text format for sending structured data.

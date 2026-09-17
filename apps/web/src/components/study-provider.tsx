@@ -342,31 +342,48 @@ export function StudyProvider({
 		};
 	}, [sessionId]);
 
-	// Keep the voice agent grounded in the running phase and chapter, so its
-	// replies stay inside the study loop instead of answering mid-recall.
+	// Keep the voice agent grounded in WHAT the student is studying (topic
+	// only — never the lesson content or score breakdown, that's the Gemini
+	// grader's job) and WHERE in the loop they are right now, so its replies
+	// stay specific to the subject and never re-ask which chapter is open.
 	useEffect(() => {
 		const ch = state.chapter;
-		setStudyContext(
-			ch
-				? {
-						phase: state.phase,
-						chapterTitle: ch.title,
-						subject: ch.subject,
-						attempts: state.attempts,
-						studentHint:
-							state.phase === "recall"
-								? "Listening for the student's recall. Stay quiet while they speak; when they finish, run the gap analysis."
-								: state.phase === "lesson"
-									? "The student is reading the short lesson. Offer follow-ups on the missing ideas."
-									: state.phase === "retest"
-										? `Question ${Math.min(
-												state.currentQuestion + 1,
-												state.questions.length,
-											)} of ${state.questions.length} is on screen. Wait for the student's answer, don't read the question back.`
-										: "Summarize where the student landed and wait.",
-					}
-				: null,
-		);
+		if (!ch) {
+			setStudyContext(null);
+			return;
+		}
+		const step: Record<Phase, string> = {
+			recall: "listen as the student speaks what they remember about the chapter",
+			gaps: "look at the gap analysis the student is seeing on screen",
+			lesson: "read back the short lesson that fixes the student's gaps",
+			retest: state.questions.length
+				? `wait for the student to answer retest question ${
+						Math.min(state.currentQuestion + 1, state.questions.length)
+					} of ${state.questions.length}`
+				: "prepare the retest questions",
+			result: "review the student's before/after score",
+		};
+		setStudyContext({
+			overview: `A ${ch.subject} student is reviewing "${ch.title}" from the textbook "${ch.textbookTitle}".`,
+			chapterTitle: ch.title,
+			subject: ch.subject,
+			phase: state.phase,
+			step: step[state.phase],
+			attempts: state.attempts,
+			boundary:
+				"You know the topic, but you do NOT have the lesson text, the concept list, or the score breakdown — never invent specifics you were not given. Stay quiet while the student speaks and only answer at the prompt.",
+			studentHint:
+				state.phase === "recall"
+					? "Listening for the student's recall. Stay quiet while they speak; when they finish, run the gap analysis."
+					: state.phase === "lesson"
+						? "The student is reading the short lesson. Offer follow-ups on the missing ideas."
+						: state.phase === "retest"
+							? `Question ${Math.min(
+									state.currentQuestion + 1,
+									state.questions.length,
+								)} of ${state.questions.length} is on screen. Wait for the student's answer, don't read the question back.`
+							: "Summarize where the student landed and wait.",
+		});
 	}, [
 		state.chapter,
 		state.phase,
