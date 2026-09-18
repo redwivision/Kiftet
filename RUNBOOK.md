@@ -15,7 +15,7 @@ This is the *operations* document. For *how the code works* read
 | Piece | What it is | Runs where |
 |---|---|---|
 | `apps/web` | The app users see — React Router + Tailwind + PWA (installable, offline fallback) + Voxide voice agent | Vercel, or any Bun/Node host |
-| `apps/server` | Express API — Better Auth sessions, the study loop (recall / diagnose / lesson / retest), Gemini grading, rate limiting | Any Bun/Node host with a **persistent disk** |
+| `apps/server` | The **one production process** — Express API (Better Auth sessions, the study loop, Gemini grading, rate limiting) **plus** the built web app (SSR + static) in `NODE_ENV=production` | Any Bun/Node host; SQLite needs a **persistent disk** (see §6) |
 | `packages/db` | Drizzle schema + migrations. **SQLite today** (`bun:sqlite`); the Postgres/Neon driver + env scaffold exist but are not yet wired in | Same box as the API |
 | `packages/auth` | Better Auth configuration | part of `apps/server` |
 | `packages/ui` | Shared shadcn-style components | build-time only |
@@ -95,55 +95,75 @@ stale Node — run `nvm use` and retry before investigating further.
    git merge <branch> --ff-only
    git push origin main
    ```
-4. Deploy the API (§6) and the web app (§7). Set the production environment
-   variables from §8 on both hosts.
+4. Deploy the combined service (§6) and set the production environment
+   variables from §8.
 5. Run the verification checklist (§9). Fix → redeploy → re-verify.
 
 ---
 
-## 6. Deploying the API (`apps/server`)
+## 6. Deploying the combined service (one process that runs everything)
 
-The API is a long-running Express server that must keep its disk.
+In production the Express server **also serves the built web app** — API,
+SSR pages, static assets, and the PWA all behind one process and one domain.
+This is the layout EthioDeploy needs (one service per project), and it makes
+cookies and CORS a non-issue because everything is same-origin.
 
-```bash
-bun run build          # tsdown → apps/server/dist/index.mjs
-bun run start          # run dist/index.mjs (listens on port 3000)
-```
-
-Single-binary alternative (no Bun runtime required on the host):
+Build then start, from the repo root:
 
 ```bash
-bun run compile        # → ./server self-contained binary
+bun run build          # Turbo: web build + tsdown → apps/server/dist/index.mjs
+bun run start          # = bun run serve → runs the built server
 ```
 
-**Host notes**
+The server reads the `PORT` env (PaaS platforms inject it) and falls back to
+3000 locally.
 
-- The listen port is **hardcoded to 3000** — expose/route to 3000.
-- A persistent volume must hold the SQLite file (plus its `-wal` sidecar).
-- On crash, restart with backoff; probe `GET /` (§9.1) from your health check.
-- Every release needs the full env set from §8.2.
+Routes this one process owns:
+
+| Path | What | Notes |
+|---|---|---|
+| `/health` | liveness | returns `200 OK` — **probe this, not `/`** |
+| `/api/*` | API (auth + study loop) | `/api/auth/*` is public; the rest requires a session |
+| `/` + everything else | the web app | SSR + static, only when `NODE_ENV=production` |
+
+In local development you don't use this process — `bun run dev:server` and
+`bun run dev:web` run the two dev servers separately.
+
+**EthioDeploy / PaaS host notes**
+
+- Build command: `bun install && bun run build`
+- Start command: `bun run start`
+- Set the full env set from §8.2 on this service — including the same-origin
+  values: `BETTER_AUTH_URL` and `CORS_ORIGIN` are both just
+  `https://<your-site>.ethiodeploy.com`.
+- **The container disk is recycled on every deploy.** Until the Postgres path
+  is wired (below), every redeploy erases all accounts and study history.
+  Treat the current state as a live preview, not a store of user data.
 
 > Not yet committed: a `Dockerfile`, `docker-compose.yml`. The root `docker:*`
-> scripts target one but the file doesn't exist — use the plain Bun path above
-> until it's added.
+> scripts target one but the file doesn't exist — this runbook's plain-Bun
+> path is the supported production path.
 
-### Postgres? (optional, not yet active)
+### Postgres — the designed fix for the ephemeral-disk problem
 
-`DATABASE_URL` / `DATABASE_URL_DIRECT`, the Neon driver, and the typed env
-already exist, but `createDb()` still opens SQLite. Until that switch is made,
-production runs on `DATABASE_FILE`. See `docs/HOW_IT_WORKS.md` §6.
+EthioDeploy offers built-in Postgres. `DATABASE_URL` /
+`DATABASE_URL_DIRECT`, the Neon driver, and the typed env already exist, but
+`createDb()` still opens SQLite. Wiring the Postgres data path is the
+#1 follow-up before real students sign up. See `docs/HOW_IT_WORKS.md` §6.
 
 ---
 
-## 7. Deploying the web app (`apps/web`)
+## 7. Web-only split (advanced — do not use until you know why)
 
-Build is `react-router build` → `apps/web/build`.
+Running the web app on its own (Vercel, or `react-router-serve`) while the
+API lives elsewhere is possible but brings real costs: a second origin means
+`VITE_SERVER_URL`, cross-origin cookies, and `CORS_ORIGIN` must all line up,
+and a missing API will manifest exactly as "the site renders but sign-up
+stops" (all `/api/*` calls hit the web server and come back 404). Prefer §6.
 
-- **Option A — Vercel (recommended).** Framework preset detect: React Router;
-  build command `bun run build`; output directory `build`. Verify the PWA
-  manifest (`/manifest.webmanifest`) is served after deploy.
-- **Option B — any Bun/Node host.** `bun run start` serves the SSR bundle
-  (`react-router-serve ./build/server/index.js`).
+If you do split: build the web with `VITE_SERVER_URL=https://api.domain`,
+`VITE_SITE_URL=https://app.domain`, and run the API from §6 with
+`BETTER_AUTH_URL=https://api.domain` and `CORS_ORIGIN=https://app.domain`.
 
 **PWA behavior to know:** the service worker auto-updates (`autoUpdate`);
 page navigations are network-first circuits with a branded offline page as
@@ -154,12 +174,17 @@ page after a deploy resolves itself on the next load; hard-refresh if it lingers
 
 ## 8. Environment variables — the full checklist
 
-Three groups. **Do not commit real secrets.** The `.env.schema` files carry
-dev-only placeholders so local builds pass with no `.env` files; every one of
-them must be replaced by its real value on the hosts listing below.
+**In the recommended combined mode (§6) you only need one set: §8.2 (the
+service's env).** The `VITE_*` build-time values (§8.3) only matter if you
+revert to the split layout (§7) — in combined mode the client talks to the
+same origin automatically and `VITE_SITE_URL` is the sole nice-to-have (it
+makes link-preview images absolute; on the combined service use the same
+origin your site already is). Example values below use
+`https://kiftet.ethiodeploy.com`.
 
-The two `VITE_*` vars are **public by design** — they live in the client
-bundle (the API's public URL and the app's public origin).
+**Do not commit real secrets.** The `.env.schema` files carry dev-only
+placeholders so local builds pass with no `.env` files; every one of them
+must be replaced by its real value on the host.
 
 ### 8.1 The web app's note (VITE_SITE_URL) — a short walkthrough
 
@@ -214,7 +239,7 @@ do not "fix" it by removing `secure`.
 
 Run in order; expected result in parentheses.
 
-1. **Health** — `curl https://api.yourdomain.com/` → `200 OK`.
+1. **Health** — `curl https://<your-site>/health` → `200 OK`.
 2. **Sign-up happy path** — browser → web origin → sign up with a real email →
    you land on the dashboard (not a 401/loop).
 3. **Study loop smoke** — open a chapter, run one recall → one diagnose →

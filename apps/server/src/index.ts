@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { createRequestListener } from "@react-router/node";
 import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
 import express from "express";
@@ -7,6 +10,7 @@ import studyRouter from "./routes/study";
 import { auth } from "./services";
 
 const app = express();
+const IS_PROD = env.NODE_ENV === "production";
 
 // Normalize the configured origin(s): trim whitespace, strip trailing slashes,
 // and accept a comma-separated list. Browsers send a slash-less origin, so a
@@ -32,10 +36,49 @@ app.use(express.json({ limit: "256kb" }));
 
 app.use("/api", requireAuth, studyRouter);
 
-app.get("/", (_req, res) => {
+// Unknown /api paths should answer JSON, not an HTML page.
+app.use("/api", (_req, res) => {
+	res.status(404).json({ error: "not_found" });
+});
+
+// ── Health ────────────────────────────────────────────────────────────
+// In development "/" returns "OK" so the API-only server is quick to
+// probe. In production "/" belongs to the web app, so monitoring uses
+// `/health` instead.
+app.get("/health", (_req, res) => {
 	res.status(200).send("OK");
 });
 
-app.listen(3000, () => {
-	console.log("Server is running on http://localhost:3000");
+if (!IS_PROD) {
+	app.get("/", (_req, res) => {
+		res.status(200).send("OK");
+	});
+}
+
+// ── Production: serve the web app from the same process ───────────────
+// When building for a single-service host (e.g. EthioDeploy), the web
+// build sits next to the server build inside the repo. The catch-all at
+// the very bottom forwards every non-API request to React Router's SSR
+// request handler, and express.static serves the built client assets
+// (JS/CSS, icons, offline.html, manifest, service worker).
+if (IS_PROD) {
+	const webClientDir = resolve(import.meta.dirname, "../../web/build/client");
+	const webServerEntry = resolve(
+		import.meta.dirname,
+		"../../web/build/server/index.js",
+	);
+
+	app.use(express.static(webClientDir));
+
+	const webBuild = await import(pathToFileURL(webServerEntry).href);
+	app.use(
+		createRequestListener({ build: webBuild, mode: env.NODE_ENV }),
+	);
+}
+
+// EthioDeploy (and most PaaS) expose a PORT env; use it as the canonical
+// listen address. Falls back to 3000 for local development.
+const PORT = Number(process.env.PORT ?? 3000);
+app.listen(PORT, () => {
+	console.log(`Server is running on http://localhost:${PORT}`);
 });
