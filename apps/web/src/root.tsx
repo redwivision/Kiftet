@@ -41,12 +41,13 @@ export const links: Route.LinksFunction = () => [
 // individual routes override only title + description.
 export function meta(): ReturnType<Route.MetaFunction> {
 	// og:image must be an absolute URL or social platforms refuse to render
-	// the preview. VITE_SITE_URL (e.g. https://app.kiftet.com) turns the
-	// relative path into one; devs without it get the relative fallback.
-	const siteUrl = (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(
-		/\/$/,
-		"",
-	);
+	// the preview. Prefer the explicit VITE_SITE_URL; on Vercel the platform
+	// injects VERCEL_PROJECT_PRODUCTION_URL into the SSR build automatically,
+	// so a plain `vercel deploy` gets working previews with no config at all.
+	const siteUrl = (
+		(import.meta.env.VITE_SITE_URL as string | undefined) ??
+		(import.meta.env.VERCEL_PROJECT_PRODUCTION_URL as string | undefined)
+	)?.replace(/\/$/, "");
 	const logoUrl = siteUrl ? `${siteUrl}/logo-mark.png` : "/logo-mark.png";
 	return [
 		{ title: "Kiftet — Close the gap" },
