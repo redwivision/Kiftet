@@ -49,6 +49,7 @@
     "VERCEL_PROJECT_PRODUCTION_URL",
     "VERCEL_URL",
     "VITE_SERVER_URL",
+    "VITE_SITE_URL",
     "_VARLOCK_ENV_KEY"
   ],
   "globalDependencies": [".env*", "apps/*/.env*", "packages/*/.env*"]

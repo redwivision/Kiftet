@@ -40,6 +40,14 @@ export const links: Route.LinksFunction = () => [
 // OG/Twitter previews, and the iOS/Android home-screen label all inherit it;
 // individual routes override only title + description.
 export function meta(): ReturnType<Route.MetaFunction> {
+	// og:image must be an absolute URL or social platforms refuse to render
+	// the preview. VITE_SITE_URL (e.g. https://app.kiftet.com) turns the
+	// relative path into one; devs without it get the relative fallback.
+	const siteUrl = (import.meta.env.VITE_SITE_URL as string | undefined)?.replace(
+		/\/$/,
+		"",
+	);
+	const logoUrl = siteUrl ? `${siteUrl}/logo-mark.png` : "/logo-mark.png";
 	return [
 		{ title: "Kiftet — Close the gap" },
 		{ name: "application-name", content: "Kiftet" },
@@ -66,7 +74,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
 		},
 		{
 			property: "og:image",
-			content: "/logo-mark.png",
+			content: logoUrl,
 		},
 		{
 			property: "og:image:alt",
@@ -81,7 +89,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
 			content:
 				"Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those.",
 		},
-		{ name: "twitter:image", content: "/logo-mark.png" },
+		{ name: "twitter:image", content: logoUrl },
 		{ name: "robots", content: "index, follow" },
 	];
 }

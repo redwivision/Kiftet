@@ -969,6 +969,7 @@ wrong.
 | `DATABASE_URL_DIRECT` | DB package | Direct (non-pooled) Postgres connection for migrations | Migrations fail, schema stale |
 | `GEMINI_API_KEY` | Server | Google Gemini API key | Grading returns empty placeholders; lessons fallback to templates |
 | `VITE_SERVER_URL` | Web (client) | Root URL of the API (no `/api` suffix); falls back to `localhost:3000` in dev | All API calls 404; loud console warning in production |
+| `VITE_SITE_URL` | Web (client) | Public origin of the web app (e.g. `https://app.kiftet.com`); makes `og:image`/`twitter:image` absolute | Relative share images — social previews may not render |
 | `VITE_VOXIDE_KEY` | Web (client) | Voxide publishable key | Voice features disabled; typed fallback activates |
 
 **How to set them:**
