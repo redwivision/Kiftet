@@ -27,7 +27,7 @@ export default function Header() {
 	] as const;
 
 	return (
-		<header className="sticky top-0 z-30 border-border/70 border-b bg-background/70 backdrop-blur-xl dark:border-white/10 dark:bg-[#0f1523]/70">
+		<header className="sticky top-0 z-30 border-border/70 border-b bg-background/90 dark:border-white/10 dark:bg-[#0f1523]/90">
 			<div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
 				<div className="flex items-center gap-5">
 					<NavLink

@@ -93,7 +93,7 @@ export function VoxideRing({
 	return (
 		<div className="relative grid place-items-center" aria-live="polite">
 			{initReady && isActive && (
-				<span className="absolute inset-0 animate-ping rounded-full bg-gold/20" />
+				<span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/20" />
 			)}
 			<button
 				type="button"

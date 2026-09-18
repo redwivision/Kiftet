@@ -126,6 +126,7 @@
 	--animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
 	--animate-ring-pulse: ring-pulse 2.6s ease-out infinite;
 	--animate-beam: beam 1.4s ease-out both;
+	--animate-grow: grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 
 	@keyframes fade-up {
 		from {
@@ -185,6 +186,14 @@
 			transform: scaleX(1);
 		}
 	}
+	@keyframes grow {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
 }
 
 @layer base {
@@ -205,7 +214,15 @@
 				transparent 60%
 			),
 			linear-gradient(180deg, #f6f1e6 0%, #efe7d4 100%);
-		background-attachment: fixed;
+	}
+
+	/* Fixed attachment is re-painted on every scroll and is janky on low-end
+	   phones (and flaky on iOS Safari), so keep the glow viewport-fixed only
+	   on screens where the cost is acceptable. */
+	@media (min-width: 640px) {
+		body {
+			background-attachment: fixed;
+		}
 	}
 
 	/* Deep night stage: indigo field, a gold wash rising from the top. */
@@ -223,7 +240,6 @@
 				transparent 55%
 			),
 			linear-gradient(180deg, #131b2d 0%, #1b2340 55%, #161d33 100%);
-		background-attachment: fixed;
 	}
 
 	/* Forest stage: deep sage field, a soft green wash from the top. */
@@ -241,7 +257,6 @@
 				transparent 55%
 			),
 			linear-gradient(180deg, #22322b 0%, #1b2a23 55%, #17261f 100%);
-		background-attachment: fixed;
 	}
 
 	/* Gold stage: deep amber field, the gold wash rising from the top. */
@@ -259,7 +274,30 @@
 				transparent 55%
 			),
 			linear-gradient(180deg, #2c2110 0%, #211809 55%, #1c1507 100%);
-		background-attachment: fixed;
+	}
+
+	/* Desktop keeps the glow pinned to the viewport; phones get the smooth
+	   (non-attached) gradients above. */
+	@media (min-width: 640px) {
+		.dark body,
+		.forest body,
+		.gold body {
+			background-attachment: fixed;
+		}
+	}
+
+	/* Motion is a garnish, never a requirement: users who opt out (and
+	   low-end devices where animation costs frames) get instant, calm UIs.
+	   Gates EVERY entrance + infinite animation in one rule (WCAG 2.3.3). */
+	@media (prefers-reduced-motion: reduce) {
+		*,
+		*::before,
+		*::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
 	}
 
 	::selection {
@@ -288,7 +326,15 @@
 @layer components {
 	/* Quiet hairline panel — the default stage surface. */
 	.surface {
-		@apply rounded-3xl border border-border/70 bg-card/70 shadow-[0_20px_60px_-24px_rgba(10,16,32,0.55)] backdrop-blur-sm;
+		@apply rounded-3xl border border-border/70 bg-card/70 shadow-[0_20px_60px_-24px_rgba(10,16,32,0.55)];
+	}
+	/* backdrop-filter is the expensive part on low-end phones. Apply it only
+	   where the browser can actually composite it — and even then keep it
+	   hairline. The translucent card reads the same without it. */
+	@supports (backdrop-filter: blur(4px)) {
+		.surface {
+			backdrop-filter: blur(4px);
+		}
 	}
 	.dark .surface {
 		@apply border-white/10 bg-[#1a2340]/80;

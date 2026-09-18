@@ -237,6 +237,7 @@ function SessionHeader({
 					return (
 						<li key={step} className="flex flex-1 items-center gap-1">
 							<span
+								aria-current={active ? "step" : undefined}
 								className={cn(
 									"flex items-center gap-1.5 rounded-full py-1 pr-3 pl-2 font-medium text-[0.72rem] transition-colors",
 									active && "border border-gold/40 bg-gold/10 text-gold",
@@ -258,13 +259,25 @@ function SessionHeader({
 										</span>
 									)}
 								</span>
-								{step}
+								{/* Label text hides on very narrow screens — the four pills
+								    then fit 320px without wrapping. Names stay in the DOM for
+								    screen readers (aria-label on the list + aria-current here). */}
+								<span className="hidden sm:inline">{step}</span>
 							</span>
 							{i < STEPS.length - 1 && (
 								<span
-									className="h-px flex-1 bg-border/70 dark:bg-white/10"
+									className="relative h-px flex-1 overflow-hidden bg-border/60 dark:bg-white/10"
 									aria-hidden="true"
-								/>
+								>
+									{/* The gold fill — "the gap closing through the loop".
+									    Scales from the left as its step completes. */}
+									<span
+										className={cn(
+											"absolute inset-0 origin-left bg-gradient-to-r from-gold to-gold/40 transition-transform duration-500 ease-out",
+											done ? "scale-x-100" : "scale-x-0",
+										)}
+									/>
+								</span>
 							)}
 						</li>
 					);
@@ -1286,6 +1299,7 @@ function BeforeAfter({
 								value={after ?? 0}
 								active
 								barColor={afterBar}
+								delay={0.35}
 							/>
 						)}
 					</>
@@ -1307,11 +1321,14 @@ function ScoreBar({
 	value,
 	active,
 	barColor = "bg-sage",
+	delay = 0,
 }: {
 	label: string;
 	value: number;
 	active?: boolean;
 	barColor?: string;
+	/** Seconds to wait before the bar grows in — lets "After" follow "Before". */
+	delay?: number;
 }) {
 	return (
 		<div className="space-y-1.5">
@@ -1331,10 +1348,13 @@ function ScoreBar({
 			<div className="h-2 overflow-hidden rounded-full bg-muted/60 dark:bg-white/10">
 				<div
 					className={cn(
-						"h-full rounded-full transition-all duration-700",
+						"h-full origin-left animate-grow rounded-full transition-all duration-700",
 						active ? barColor : "bg-muted-foreground/40",
 					)}
-					style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+					style={{
+						width: `${Math.max(0, Math.min(100, value))}%`,
+						animationDelay: `${delay}s`,
+					}}
 				/>
 			</div>
 		</div>

@@ -3,28 +3,94 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>You are offline</title>
+    <meta name="theme-color" content="#101728" />
+    <title>You are offline — Kiftet</title>
     <style>
       :root {
-        color-scheme: light dark;
-        font-family: system-ui, sans-serif;
+        color-scheme: dark;
+        font-family: system-ui, -apple-system, sans-serif;
       }
       body {
         min-height: 90vh;
         display: grid;
         place-content: center;
+        margin: 0;
         padding: 1.5rem;
+        background-color: #101728;
+        background-image: radial-gradient(
+            1100px 560px at 50% -130px,
+            rgba(232, 163, 61, 0.13),
+            transparent 60%
+          ),
+          linear-gradient(180deg, #131b2d 0%, #1b2340 55%, #161d33 100%);
+      }
+      main {
+        max-width: 26rem;
+        text-align: center;
+        color: #f3eee2;
+      }
+      .mark {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 1.25rem;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 1.5rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        color: #a5adc4;
+        font-size: 0.9rem;
+        line-height: 1.6;
       }
       a {
-        color: inherit;
+        display: inline-block;
+        padding: 0.65rem 1.4rem;
+        border-radius: 999px;
+        background: #e8a33d;
+        color: #1b2340;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-decoration: none;
+      }
+      a:hover {
+        background: #f2bf5d;
       }
     </style>
   </head>
   <body>
     <main>
+      <svg
+        class="mark"
+        viewBox="0 0 100 100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <!-- The Kiftet open ring: a whole that isn't whole, with the 72° gap. -->
+        <path
+          d="M 93.46 43.12 A 44 44 0 1 1 56.88 6.54"
+          stroke="#E8A33D"
+          stroke-width="8"
+          stroke-linecap="round"
+        />
+      </svg>
       <h1>You are offline</h1>
-      <p>Reconnect to the internet to load this page.</p>
-      <a href="/">Try again</a>
+      <p>
+        The study room needs a connection — the diagnosis runs on the network.
+        Get back online, then try again. Nothing you studied is lost.
+      </p>
+      <a href="/" id="retry">Try again</a>
     </main>
+    <script>
+      const retry = document.getElementById("retry");
+      window.addEventListener("online", () => {
+        location.reload();
+      });
+    </script>
   </body>
 </html>

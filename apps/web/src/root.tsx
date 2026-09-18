@@ -25,7 +25,12 @@ export const links: Route.LinksFunction = () => [
 	},
 	{
 		rel: "stylesheet",
-		href: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Noto+Sans+Ethiopic:wght@400..700&display=swap",
+		// Constrained on purpose — weak wifi has no budget for fonts nobody
+		// uses. Fraunces + Inter load variable but only in the ranges that
+		// actually appear (400–700, no italics); Ethiopic stays in the same
+		// sheet, and Google's unicode-range means its WOFF2 only downloads
+		// once an Amharic glyph shows up on screen.
+		href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400..700&family=Noto+Sans+Ethiopic:wght@400..700&display=swap",
 	},
 ];
 

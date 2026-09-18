@@ -3,7 +3,7 @@
 This document is the **single source of truth** for Kiftet: every feature,
 every technology, every library we literally use, and why we chose each. If a
 behavior is in the product, it's documented here — and anything that stops being
-true gets fixed here first. The inventory in §4 and §11 is cross-checked against
+true gets fixed here first. The inventory in §4 and §15 is cross-checked against
 the repo's `package.json` files and source code, so a tool only appears if it's
 actually used.
 
@@ -108,7 +108,7 @@ company.
 ## 4. The tech stack and why we chose each piece
 
 This is the full stack in one table. The **exact** package list — every
-dependency and dev-dependency, audited line-by-line — is in §11.
+dependency and dev-dependency, audited line-by-line — is in §15.
 
 | Concern | Choice | Why |
 |---|---|---|
@@ -505,15 +505,20 @@ flowchart TD
 
 ### 5.13 The database — what gets saved
 
-Five tables, and what one row of each means:
+The study domain uses **five tables**, and one row of each means:
 
 | Table | One row = | Key columns |
 |---|---|---|
-| `textbook` | A real textbook (e.g. "Physics Grade 12") | `title`, `subject`, `language` |
+| `textbook` | A real textbook that **belongs to a user** (e.g. "Physics Grade 12") | `ownerId` (→ user), `title`, `subject`, `language` |
 | `chapter` | One chapter in a textbook, with its text | `textbookId`, `title`, `rawText` |
 | `concept_node` | One idea (or misconception) in the checklist | `chapterId`, `conceptText`, `isMisconception`, `weight` |
-| `study_session` | One study attempt on a chapter | `chapterId`, `userId`, `status`, `startedAt`, `completedAt` |
+| `study_session` | One study attempt on a chapter | `chapterId`, `userId` (→ user), `status`, `startedAt`, `completedAt`, `retestQuestions` (JSON), `retestIndex` |
 | `attempt` | One measurement inside a session: the recall, or one retest answer | `id` (client `attemptId`), `sessionId`, `stage`, `transcriptText`, `gapsIdentified` (JSON), `score` |
+
+*Why `retestQuestions` and `retestIndex` exist:* if the student reloads
+mid-retest, the server can rebuild the exact question they were on and restore
+their answered list — instead of dumping them back into a cold recall. Auth
+adds four more tables (`user`, `session`, `account`, `verification`) — see §6.
 
 What each action writes:
 
@@ -559,22 +564,24 @@ concepts, templates for lessons/questions).
 ### 5.15 Complete data flow map — every request
 
 Every API request in the product, who makes it, and whether it touches the AI
-or the database:
+or the database. **All of these require a signed-in session** — see §8 for how
+that works:
 
 | Endpoint | Called by | AI? | DB write? |
 |---|---|---|---|
-| `GET /chapters` | Dashboard | no | no |
-| `GET /chapters/:id/concepts` | (view only) | no | no |
-| `POST /chapters/ingest` | Admin / seed | yes | yes |
-| `POST /sessions/start` | Dashboard | no | yes |
-| `GET /sessions` | Dashboard (history) | no | no |
-| `GET /sessions/:id` | StudyProvider | no | no |
-| `POST /sessions/:id/recall` | StudyProvider | yes | yes |
-| `POST /sessions/:id/microlesson` | StudyProvider | yes | no |
-| `POST /sessions/:id/retest` | StudyProvider | yes | no |
-| `POST /sessions/:id/retest/answer` | StudyProvider | yes | yes |
-| `GET /sessions/:id/result` | StudyProvider | no | no |
-| `POST /sessions/:id/complete` | UI + voice agent | no | yes (update) |
+| `POST /api/auth/*` | Sign-in / sign-up / session | no | yes (auth tables) |
+| `GET /api/chapters` | Dashboard | no | no |
+| `GET /api/chapters/:id/concepts` | (view only) | no | no |
+| `POST /api/chapters/ingest` | Admin / seed | yes | yes |
+| `POST /api/sessions/start` | Dashboard | no | yes |
+| `GET /api/sessions` | Dashboard (history) | no | no |
+| `GET /api/sessions/:id` | StudyProvider | no | no |
+| `POST /api/sessions/:id/recall` | StudyProvider | yes | yes |
+| `POST /api/sessions/:id/microlesson` | StudyProvider | yes | no |
+| `POST /api/sessions/:id/retest` | StudyProvider | yes | no |
+| `POST /api/sessions/:id/retest/answer` | StudyProvider | yes | yes |
+| `GET /api/sessions/:id/result` | StudyProvider | no | no |
+| `POST /api/sessions/:id/complete` | UI + voice agent | no | yes (update) |
 
 The key insight: **the browser UI owns the whole study loop.** The only thing
 the voice agent can do is `completeSession` — one endpoint, one job. The
@@ -585,29 +592,60 @@ server doesn't care who sent the request.
 ## 6. The database — our data model
 
 A database's design is basically: *what facts do we need to remember, and how do
-they relate?* Our bill of facts came directly from the PRD and system design:
+they relate?* Kiftet has **nine tables** in two families: the five **study-domain**
+tables (the product) and the four **auth tables** (who is signed in).
+
+### 6.1 The study domain (5 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
-| `textbook` | A real school textbook (e.g. Physics Grade 12) | `title`, `subject`, `language` |
+| `textbook` | A real school textbook (e.g. Physics Grade 12) that a **user owns** | `ownerId` → user, `title`, `subject`, `language` |
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `title`, `rawText` |
-| `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` |
-| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status`, `startedAt`/`completedAt` |
-| `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client attemptId, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON `{covered,missing,misconceptions}`), `score` (int 0–100) |
+| `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
+| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
+| `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON `{covered,missing,misconceptions}`), `score` (int 0–100) |
 
 The `concept_node.isMisconception` flag is the interesting one: the product's
 whole trick is that we don't just grade "right/wrong," we grade *which specific
 concepts didn't stick* — and we pre-warn about the common mistakes students make.
 
+**Ownership / tenant isolation (added with real auth):** every textbook belongs
+to the user who ingested it (`textbook.owner_id`). Every server query that lists
+or reads chapters, concepts, or sessions filters by the signed-in user, and the
+owners are checked when a session starts (`POST /sessions/start` refuses chapters
+that aren't yours). Two students can never see each other's material — there's
+no "list all rows" anywhere in the API anymore. See §8.
+
+### 6.2 The auth tables (4 tables)
+
+*These tables exist because Better Auth created them (`packages/db/src/schema/auth.ts`). You should never need to touch them, but it helps to know what they hold:*
+
+| Table | One row = | Key fields |
+|---|---|---|
+| `user` | One account | `id`, `name`, `email` (unique), `emailVerified`, `createdAt` |
+| `session` | One logged-in browser | `token` (the hashed session cookie value), `expiresAt`, `userId`, `ipAddress`, `userAgent` |
+| `account` | One credential set / provider link | `userId`, `providerId`, `password` (hashed), `accessToken`, `refreshToken` |
+| `verification` | One short-lived verification code | `identifier`, `value`, `expiresAt` |
+
+The password is stored **hashed** (never in plain text) inside `account.password`.
+"Deleting an account cascades": because `user.id` is referenced with
+`ON DELETE CASCADE`, removing a user automatically removes their sessions,
+accounts, textbooks, chapters, study sessions, and attempts.
+
 ### Relationships (the arrows between tables)
+
 ```
 textbook 1 ──── n chapter 1 ──── n concept_node
-                        │
-                        └─── n study_session 1 ──── n attempt
+     │                   │
+     └─── owner ── n     └─── n study_session 1 ──── n attempt
+     user 1 ──── n session
+     user 1 ──── n account
 ```
+
 - One textbook has many chapters; one chapter has many concepts.
 - One chapter can appear in many study sessions; one session has one recall
   attempt and one score per retest answer.
+- One user owns many textbooks and can have many open sessions.
 
 These "1-to-many" links are stored by a foreign key: a column holding another
 table's row id, e.g. `concept_node.chapter_id`. A **foreign key** is just a
@@ -628,7 +666,29 @@ against Postgres on `main` before merge, since main is the "real" app.
 When the schema changes, Drizzle **generates** a SQL file describing the exact
 change (`packages/db/src/migrations/*.sql`). Running them upgrades a real
 database safely. This is like a version history for your tables — teammates don't
-have to manually recreate columns; they just run the migration.
+have to manually recreate columns; they just run a migration.
+
+**How migrations actually run here:** there is no "run migrations" step to
+remember. `packages/db/src/index.ts` applies every pending `.sql` migration
+**automatically on server startup**, so booting the API is the same as migrating
+the database. (`PRAGMA journal_mode = WAL` and `PRAGMA foreign_keys = ON` are
+also set on boot — WAL for concurrent reads, foreign keys so the cascade
+deletes above actually work.)
+
+**How to look at the database yourself:**
+```bash
+sqlite3 apps/server/kiftet-dev.db ".tables"
+sqlite3 apps/server/kiftet-dev.db "select * from study_session order by started_at desc limit 5;"
+```
+(On `main` with Postgres, use your database console / a Postgres client instead —
+the tables are the same names.)
+
+### The current migration history
+| Migration | What it changes |
+|---|---|
+| `0000_lethal_jazinda` | Base schema: all domain + auth tables |
+| `0001_retest_resume` | Add `study_session.retest_questions` + `retest_index` |
+| `0002_textbook_ownership` | Add `textbook.owner_id`, backfill one owner, index it |
 
 ---
 
@@ -654,9 +714,274 @@ In Phase 0, the AI-graded endpoints return **empty placeholders** (empty gaps,
 empty questions). The *shape* of the contract is real — the *brains* arrive in
 Phase 2.
 
+Every route below is mounted behind the `requireAuth` middleware — a request
+without a valid session gets `401` before it ever reaches the route (see §8).
+
 ---
 
-## 8. Design decisions worth remembering
+## 8. How authentication works — accounts, sessions, cookies
+
+Kiftet uses **Better Auth** (`packages/auth/src/index.ts`): battle-tested
+infrastructure so we never have to hand-roll password hashing or session
+management. Here's every step.
+
+### 8.1 The sign-up flow
+
+```mermaid
+flowchart LR
+  A["1 · fill the form"] --> B["2 · POST /api/auth/sign-up/email"]
+  B --> C["3 · Better Auth hashes\nthe password with scrypt"]
+  C --> D["4 · rows written:\nuser + account"]
+  D --> E["5 · session created,\ncookie set in response"]
+  E --> F["6 · browser goes\nto /dashboard"]
+```
+
+> **Trace:** form → hash → save → session → cookie → dashboard.
+>
+> **What's stored:** `user` (name, email) + `account` (hashed password). The
+> password is **never** stored in plain text — it's hashed with scrypt, a
+> memory-hard function designed to make brute-force attacks expensive.
+
+### 8.2 The sign-in flow
+
+```mermaid
+flowchart LR
+  A["1 · enter email + password"] --> B["2 · POST /api/auth/sign-in/email"]
+  B --> C["3 · Better Auth verifies\nthe hash"]
+  C --> D["4 · session row\ncreated in DB"]
+  D --> E["5 · signed cookie\nset in response"]
+  E --> F["6 · browser goes\nto /dashboard"]
+```
+
+> **Trace:** credentials → verify hash → create session → cookie → dashboard.
+>
+> **Bad password:** the server returns `401` immediately — no timing leak, no
+> extra information about what was wrong.
+
+### 8.3 Every request after login
+
+Once a session exists, the browser sends the **session cookie** with every API
+call (`credentials: "include"` in `apps/web/src/lib/api.ts`). Here's what the
+server does every time it receives a request:
+
+```mermaid
+flowchart LR
+  A["1 · request\narrives with cookie"] --> B["2 · extract token\nfrom cookie"]
+  B --> C["3 · look up session\nrow by token"]
+  C --> D{"4 · exists and\nnot expired?"}
+  D -->|"yes"| E["5 · attach userId\nto the request\n+ call the route"]
+  D -->|"no"| F["6 · return 401\n'sign in again'"]
+```
+
+> **Trace:** cookie → token → DB lookup → valid → proceed. The entire auth check
+> happens inside `apps/server/src/auth-middleware.ts` before the study router
+> even sees the request.
+
+### 8.4 What a session cookie contains
+
+| Property | Value | Why |
+|---|---|---|
+| Name | `better-auth.session_token` | Better Auth default; you don't choose this |
+| Value | A random string that maps to the `session` row | The actual authentication proof |
+| `HttpOnly` | `true` | JavaScript in the page can't read it (XSS protection) |
+| `Secure` | `true` | Only sent over HTTPS (protects against network sniffing) |
+| `SameSite` | `none` | Sends cross-origin — required because the server and client may run on different ports in dev |
+| Expires | 7 days (Better Auth default) | Long-lived so the student doesn't have to sign in again on a shared school phone |
+| `path` | `/` | Sent with every request on the site |
+
+**Important:** because `Secure: true`, the cookie **only works on HTTPS** in
+production. On `localhost` it works because browsers treat localhost as a secure
+context automatically.
+
+### 8.5 How the browser knows who's signed in
+
+The web app never reads the cookie directly. Instead, every few seconds it asks
+the server for the current session:
+
+```mermaid
+flowchart LR
+  A["1 · GET /api/auth/get-session"] --> B["2 · server returns\n{ user, session }"]
+  B --> C["3 · React rerenders\nwith the user's name,\nor redirects to login"]
+```
+
+The client (`apps/web/src/lib/auth-client.ts`) sets `baseURL` to
+`/api/auth` and adds `credentials: "include"` to every fetch, so the cookie
+travels with every call. If the server ever returns 401, the browser redirects
+to `/login` — there is no manual check.
+
+### 8.6 Logout
+
+Logout destroys the session row on the server, which means the cookie no longer
+matches any session. The browser sends a 401 on the next request and the route
+guard redirects to `/login`. No data is deleted — just the current session.
+
+---
+
+## 9. How the browser and server trust each other — CORS, CSRF, origin
+
+When a browser sends a request to a *different* origin (domain or port) the
+server must explicitly decide whether to trust it. This is **CORS** (Cross-Origin
+Resource Sharing).
+
+### 9.1 CORS_ORIGIN — the trusted origin
+
+Every server deploy sets one environment variable for this: `CORS_ORIGIN`. This
+is the **single origin** the server trusts for state-changing requests (POST,
+PUT, DELETE). During build or config this value is normalized:
+
+```
+https://app.example.com/  →  https://app.example.com   (trailing slash stripped)
+https://app.example.com,http://localhost:3000           (comma-separated = multiple)
+```
+
+This normalized list is fed to both the Express `cors` middleware (for the
+`Access-Control-Allow-Origin` header) and to Better Auth's `trustedOrigins`.
+
+### 9.2 Preflight — the OPTIONS request
+
+Before the browser sends a POST to a cross-origin server, it sends an `OPTIONS`
+request ("preflight") to ask permission. The server's CORS config replies:
+
+```
+Access-Control-Allow-Origin: https://app.example.com
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Allow-Credentials: true
+```
+
+If the origin doesn't match any in the configured list, the server replies with
+no `Access-Control-Allow-Origin` header, and the browser blocks the request
+entirely — cookies never travel.
+
+### 9.3 Why `credentials: "include"` matters
+
+By default, browsers don't send cookies cross-origin. Adding `credentials:
+"include"` to the fetch options tells the browser: "yes, attach cookies even
+though the origin is different." The server must then reply with
+`Access-Control-Allow-Credentials: true` — otherwise the browser still blocks
+the cookie.
+
+### 9.4 Origin check on writes (extra protection beyond CORS)
+
+CORS protects the **browser**. But a direct curl or a script that ignores CORS
+could still POST to the server. That's why `requireAuth` (§8) does an
+**additional origin check** on every non-GET request:
+
+```mermaid
+flowchart LR
+  A["1 · POST request\narrives"] --> B["2 · has Origin header?"]
+  B -->|"yes"| C{"3 · origin in\nCORS_ORIGIN list?"}
+  C -->|"no"| D["4 · return 403\n'origin not allowed'"]
+  C -->|"yes"| E["5 · continue\nto auth + route"]
+  B -->|"no (same-origin)\nGET/HEAD/OPTIONS"| E
+```
+
+This catches a class of CSRF (Cross-Site Request Forgery) attack where a
+malicious site tricks a logged-in user's browser into POSTing data to our
+server. The origin header the browser sends (if any) won't match our list.
+
+### 9.5 What `sameSite: "none"` means for the cookie
+
+`samesite: none` means the session cookie is sent with **any** cross-origin
+request — which is exactly what we need for the React app talking to the API on
+a different origin. The cost: `samesite: none` also allows the cookie in
+third-party embeds. We mitigate this by requiring HTTPS (`secure: true`) and
+rejecting any non-trusted origin in the middleware.
+
+---
+
+## 10. Policies, limits, and guards
+
+These are the invisible walls that keep the product from being misused or
+overloaded. Every one of them is applied server-side; the client is never trusted
+to police itself.
+
+### 10.1 Ownership / tenant isolation
+
+**Principle:** a user can only see their own data.
+
+Every query that returns chapters, concepts, sessions, or results filters by
+the signed-in user's `userId`. The chapter ingest path stamps the new textbook
+with `owner_id = currentUser`. When a session starts, the server verifies that
+the requested `chapterId` belongs to a textbook owned by that user — returning
+`404` otherwise. Two students sharing a login would still only see one set of
+chapters; two separate accounts see nothing of each other.
+
+### 10.2 AI rate limiting (in-memory)
+
+Every AI-grading call (`recall`, `microlesson`, `retest`, `retest/answer`) and
+chapter ingest is rate-limited at **30 requests per user per minute**, tracked
+in an in-memory `Map`. When the limit is hit the server returns `429 Too Many
+Requests`.
+
+This is the *only* rate limiter; plain reads (chapters, sessions, results) are
+unlimited. In-memory means the counter resets on server restart — this is a
+safety net, not a billing system.
+
+### 10.3 Request size limits
+
+The server rejects HTTP request bodies larger than **256 KB**
+(`express.json({ limit: '256kb' })`). Transcript submissions are individually
+capped at **20,000 characters** via Zod validation, and concept text is capped
+at **500 characters**. These prevent accidental upload of an entire textbook or
+a pathological prompt.
+
+### 10.4 Idempotency — no phantom duplicates
+
+Every submission carries a **client-generated `attemptId`** (a random UUID). The
+server calls `INSERT ... ON CONFLICT DO NOTHING` — if a network retry sends the
+same attempt twice, the duplicate is silently dropped and the first score is
+returned. The dedup is scoped to the session, so different sessions can have the
+same `attemptId` without conflict.
+
+### 10.5 Retest ordering
+
+The server tracks `study_session.retestIndex` — the ordinal of the next
+unanswered retest question. If a client sends an answer for question 3 when
+question 2 is still open, the server rejects it with `409 Conflict`. This keeps
+the grading pipeline strict and prevents clients from submitting answers out of
+order after a page reload.
+
+### 10.6 Env-based mode switching
+
+| Variable | Effect |
+|---|---|
+| `NODE_ENV=development` | Verbose errors, relaxed cookie policy |
+| `NODE_ENV=production` | HTTPS-only cookies, no stack traces in error responses |
+| `VITE_SERVER_URL` not set in production | loud console.error on client, API calls fail visibly |
+| `CORS_ORIGIN` wrong or missing | every login silently fails (cookie never attaches) |
+
+---
+
+## 11. Environment variables — every env var and what it does
+
+Every env var used by the system, where it's set, and what happens if it's
+wrong.
+
+| Variable | Where | What | Wrong = |
+|---|---|---|---|
+| `NODE_ENV` | Server, web | `development` / `production` / `test` | Dev-only features exposed in prod, or vice versa |
+| `BETTER_AUTH_SECRET` | Server | Random string (≥32 chars), the master signing key for session tokens | Sessions rejected, every login 500s |
+| `BETTER_AUTH_URL` | Server | The public URL of the API (e.g. `https://api.kiftet.com`) | Session cookie points to the wrong domain |
+| `CORS_ORIGIN` | Server | Comma-separated trusted origins (e.g. `https://app.kiftet.com`) | Browser silently blocks every POST, login loop |
+| `DATABASE_FILE` | Server (SQLite only) | Path to the `.db` file (e.g. `./kiftet-dev.db`) | Server crashes on boot |
+| `DATABASE_URL` | Server (Postgres only) | Postgres connection string | Server crashes on boot |
+| `DATABASE_URL_DIRECT` | DB package | Direct (non-pooled) Postgres connection for migrations | Migrations fail, schema stale |
+| `GEMINI_API_KEY` | Server | Google Gemini API key | Grading returns empty placeholders; lessons fallback to templates |
+| `VITE_SERVER_URL` | Web (client) | Root URL of the API (no `/api` suffix); falls back to `localhost:3000` in dev | All API calls 404; loud console warning in production |
+| `VITE_VOXIDE_KEY` | Web (client) | Voxide publishable key | Voice features disabled; typed fallback activates |
+
+**How to set them:**
+- **Local dev:** every package has a `.env.schema` file with safe placeholder
+  values; `bun run env:generate` reads the schema and produces TypeScript types
+  (`apps/server/src/env.ts`, `packages/db/src/env.ts`). Fill in real values
+  in a `.env` file (never committed).
+- **Production (hosting platform):** set the same variable names as environment
+  secrets — Varlock reads them at build and runtime automatically.
+
+---
+
+## 12. Design decisions worth remembering
 
 1. **Voice is the core, not a bolt-on.** The PRD says Voxide is the mechanic —
    capture the student's explanation, speak the lesson. So we build the voice
@@ -687,7 +1012,7 @@ Phase 2.
 
 ---
 
-## 9. Where we are (roadmap)
+## 13. Where we are (roadmap)
 
 | Phase | Name | Status |
 |---|---|---|
@@ -711,7 +1036,7 @@ each phase is a checkpoint.
 
 ---
 
-## 10. How to run everything yourself
+## 14. How to run everything yourself
 
 ```bash
 # 1. Install dependencies
@@ -730,14 +1055,14 @@ bun run --cwd apps/web dev           # → http://localhost:5173
 The server creates `kiftet-dev.db` on first run (that's the whole SQLite
 "database") and applies migrations automatically.
 
-## 11. Everything we use — the source-of-truth inventory
+## 15. Everything we use — the source-of-truth inventory
 
 This section is the audit trail for the whole repo. Every feature and every
 package (dependency **and** dev-dependency) is listed here, cross-checked
 against the `package.json` files and source. **Rule of repo:** if you add a
 package or a feature, add a row here; if a row stops being true, fix the row.
 
-### 11.1 Feature index
+### 15.1 Feature index
 
 | Feature | Section | Where it lives (key files) | API |
 |---|---|---|---|
@@ -752,12 +1077,17 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Voice chat with the agent | §5.10 | `components/assistant.tsx` | WebSocket via `@voxide/react` |
 | Natural read-back (read-along) | §5.11 | `lib/voice.ts`, `components/assistant.tsx` | — |
 | Auto end-of-speech detection | §5.12 | `lib/intent.ts`, `lib/voice.ts` | — |
-| Auth (sign in / sign up) | §4 | `packages/auth`, `lib/auth-client.ts`, `components/sign-in-form.tsx`, `sign-up-form.tsx` | Better Auth `/api/auth/*` |
-| Themes (dark/light) | §4 | `components/theme-provider.tsx` | — |
-| Offline / installable (PWA) | §4 | `apps/web/vite.config.ts` | — |
+| Auth (sign in / sign up / session cookie) | §8 | `packages/auth`, `lib/auth-client.ts`, `components/sign-in-form.tsx`, `sign-up-form.tsx` | Better Auth `/api/auth/*` |
+| CORS / CSRF origin guard | §9 | `apps/server/src/index.ts` (cors), `apps/server/src/auth-middleware.ts` | — |
+| Ownership / tenant isolation | §10.1 | `apps/server/src/routes/study.ts` (every query filtered by userId) | — |
+| AI rate limiting | §10.2 | `apps/server/src/routes/study.ts` (`allowAiRequest`) | — |
+| Idempotent submissions | §10.4 | `apps/server/src/routes/study.ts` (`insertAttemptOnce`) | — |
+| Retest resume on reload | §5.13 | `study.$sessionId.tsx`, `study-provider.tsx`, server `/sessions/:id` | — |
+| Themes (dark/light/forest/gold) | §4 | `components/theme-provider.tsx`, `components/theme-switcher.tsx` | — |
+| Offline / installable (PWA) | §4 | `apps/web/vite.config.ts`, `public/offline.html` | — |
 | AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
 
-### 11.2 Dependency inventory
+### 15.2 Dependency inventory
 
 **Runtime deps** — shipped with the product:
 
@@ -817,3 +1147,24 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 - **PWA** — a website that can be installed and works offline like an app.
 - **Separation of concerns** — splitting a system so each part has one job and
   only talks to others through clear interfaces.
+- **Cookie** — a small key/value a server tells the browser to remember and send
+  back with every subsequent request. Our session cookie is how the server knows
+  "this request is from who signed in on that phone."
+- **Session** — in our app, a row in the `session` table representing one
+  logged-in browser. The cookie value maps to a session row; the row says when it
+  expires and which user owns it.
+- **Hash / hashing** — turning a value into a one-way fingerprint. Passwords are
+  stored hashed (with scrypt) so even the database leaking can't reveal them.
+- **Origin** — scheme + host + port, e.g. `https://app.kiftet.com`. Browsers use
+  origins, not just domains, to decide what to trust.
+- **CORS** — "Cross-Origin Resource Sharing"; the rules a server publishes for
+  *which other origins* may call it. See §9.
+- **CSRF** — "Cross-Site Request Forgery"; a hostile website tricking your
+  browser into sending an authenticated request to a site you trust. We defend
+  against it by verifying the Origin header (§9.4).
+- **Rate limit** — capping how many times something can happen per unit of time
+  (e.g. 30 AI calls per user per minute) so one user can't overload the system.
+- **Idempotency** — doing the same operation twice has no extra effect. Our
+  duplicate-recognizing `attemptId` makes a network retry harmless (§10.4).
+- **Health check** — a ping endpoint (`GET /`) that monitoring systems hit to
+  confirm the server is alive.
