@@ -1,11 +1,18 @@
-import { Database as BunSQLiteDatabase } from "bun:sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
-import { drizzle } from "drizzle-orm/bun-sqlite";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import pg from "pg";
 
 import type { DatabaseConfig } from "./config";
 import * as schema from "./schema";
+
+// kiftet runs on Neon Postgres. The pooled (-pooler) hostname is the app's
+// connection; the unpooled/direct hostname is reserved for migrations, which
+// need a session-stable connection the pool cannot guarantee.
+function sslFor(url: string) {
+	return /[?&]sslmode=require/.test(url) ? { rejectUnauthorized: false } : false;
+}
 
 // The migrations folder lives in this package's source. When the API is
 // bundled (tsdown → apps/server/dist) this module is inlined, so
@@ -28,17 +35,34 @@ function findMigrationsDir(): string {
 	return found;
 }
 
+// The application handle: a warm node-postgres pool (small because Neon caps
+// connections per endpoint) wrapped by Drizzle. This stays synchronous to
+// build — no I/O happens until a query runs.
 export function createDb(env: DatabaseConfig) {
-	const sqlite = new BunSQLiteDatabase(env.DATABASE_FILE);
-	sqlite.exec("PRAGMA journal_mode = WAL;");
-	sqlite.exec("PRAGMA foreign_keys = ON;");
-	const db = drizzle(sqlite, { schema });
+	const pool = new pg.Pool({
+		connectionString: env.DATABASE_URL,
+		max: 5,
+		ssl: sslFor(env.DATABASE_URL),
+	});
+	return drizzle(pool, { schema });
+}
 
-	const migrationsDir = findMigrationsDir();
-	if (readdirSync(migrationsDir).some((file) => file.endsWith(".sql"))) {
-		migrate(db, { migrationsFolder: migrationsDir });
+// Apply pending migrations on a dedicated, unpooled connection. node-postgres
+// runs the whole migration file inside a transaction, so a crash mid-migrate
+// leaves no half-applied schema and no stale journal entry. Awaited at server
+// boot before anything listens.
+export async function migrateDb(env: DatabaseConfig): Promise<void> {
+	const url = env.DATABASE_URL_DIRECT || env.DATABASE_URL;
+	const pool = new pg.Pool({ connectionString: url, max: 1, ssl: sslFor(url) });
+	try {
+		const db = drizzle(pool, { schema });
+		const migrationsDir = findMigrationsDir();
+		if (readdirSync(migrationsDir).some((file) => file.endsWith(".sql"))) {
+			await migrate(db, { migrationsFolder: migrationsDir });
+		}
+	} finally {
+		await pool.end();
 	}
-	return db;
 }
 
 export type Database = ReturnType<typeof createDb>;

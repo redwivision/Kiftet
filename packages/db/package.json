@@ -21,12 +21,13 @@
     "db:migrate": "bun run src/migrate.ts"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.45.2",
+    "pg": "^8.16.3",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@kiftet/config": "workspace:*",
+    "@types/pg": "^8.15.4",
     "drizzle-kit": "^0.31.10",
     "typescript": "catalog:",
     "varlock": "catalog:"

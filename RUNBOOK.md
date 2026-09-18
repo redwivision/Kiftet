@@ -14,18 +14,17 @@ This is the *operations* document. For *how the code works* read
 
 | Piece | What it is | Runs where |
 |---|---|---|
-| `apps/web` | The app users see — React Router + Tailwind + PWA (installable, offline fallback) + Voxide voice agent | Vercel, or any Bun/Node host |
-| `apps/server` | The **one production process** — Express API (Better Auth sessions, the study loop, Gemini grading, rate limiting) **plus** the built web app (SSR + static) in `NODE_ENV=production` | Any Bun/Node host; SQLite needs a **persistent disk** (see §6) |
-| `packages/db` | Drizzle schema + migrations. **SQLite today** (`bun:sqlite`); the Postgres/Neon driver + env scaffold exist but are not yet wired in | Same box as the API |
+| `apps/web` | The app users see — React Router + Tailwind + PWA (installable, offline fallback) + Voxide voice agent | served by `apps/server` in prod (§6) |
+| `apps/server` | The **one production process** — Express API (Better Auth sessions, the study loop, Gemini grading, rate limiting) **plus** the built web app (SSR + static) in `NODE_ENV=production` | Any Bun/Node host (EthioDeploy today) |
+| `packages/db` | Drizzle schema + migrations on **Neon Postgres** (`pg` driver; pooled string for traffic, direct string for migrations) | same box as the API |
 | `packages/auth` | Better Auth configuration | part of `apps/server` |
 | `packages/ui` | Shared shadcn-style components | build-time only |
 
-**One fact that decides everything:** the database is a SQLite *file*
-(`DATABASE_FILE`, default `./kiftet-dev.db`). The box running the API must
-give that file a **persistent volume**. On ephemeral filesystems (most
-serverless/PaaS redeploys discard the disk) every account and every study
-history is lost on each deploy. Either mount a volume, or take the time to
-switch to the scaffolded Postgres path (`/docs/HOW_IT_WORKS.md` §6).
+**One fact that decides everything:** the database is **Neon Postgres**, not a
+file. That means the API's disk can be a throwaway container — accounts and
+study history live in Neon and survive every redeploy. The two connection
+strings (`DATABASE_URL` pooled, `DATABASE_URL_DIRECT` unpooled) come from the
+Neon console and are set as env vars on the host. See §6.4.
 
 ---
 
@@ -35,9 +34,10 @@ switch to the scaffolded Postgres path (`/docs/HOW_IT_WORKS.md` §6).
   22.23.2 in `.nvmrc`. Run `nvm use` (or `fnm use`) before any non-trivial
   work — the local shell may be on an older Node.
 - **Bun ≥ 1.4.2** — `bun install` at the repo root installs everything.
-- Accounts: **Vercel** (web), a **Bun/Node host** for the API (Railway, Fly,
-  Render, or a VPS with a volume), **Google AI Studio** (Gemini key),
-  **Voxide** (optional — voice; pages fall back to typing/browser speech).
+- Accounts: **EthioDeploy** (hosts the combined service), **Neon** (the
+  Postgres database — connection strings in §6.4), **Google AI Studio**
+  (Gemini key), **Voxide** (optional — voice; pages fall back to
+  typing/browser speech).
 
 ---
 
@@ -51,11 +51,12 @@ bun run dev:web            # terminal 2 — web app
 
 - No `.env` files are required locally — the `.env.schema` files ship dev-safe
   placeholders and generate `src/env.ts` types on install.
-- The **server runs migrations automatically on boot**
-  (`packages/db/src/index.ts` reads the migrations folder and applies any new
-  SQL before serving).
-- The SQLite file is created on first server start (`./kiftet-dev.db`, WAL
-  mode, foreign keys on).
+- The **server runs migrations automatically on boot** — `migrateDb` in
+  `packages/db/src/index.ts` applies any pending SQL over the *direct*
+  (unpooled) connection before the server starts listening. Each migration is
+  transactional, so a crash mid-migrate can't leave a half-applied schema.
+- No local database file to manage — both local dev and production talk to
+  the same Neon project configured in `apps/server/.env`.
 
 ### When you change a `.env.schema`
 
@@ -136,20 +137,49 @@ In local development you don't use this process — `bun run dev:server` and
 - Set the full env set from §8.2 on this service — including the same-origin
   values: `BETTER_AUTH_URL` and `CORS_ORIGIN` are both just
   `https://<your-site>.ethiodeploy.com`.
-- **The container disk is recycled on every deploy.** Until the Postgres path
-  is wired (below), every redeploy erases all accounts and study history.
-  Treat the current state as a live preview, not a store of user data.
+- **The container disk is recycled on every deploy — and that's fine now.**
+  All data lives in Neon Postgres (§6.4), so redeploys are stateless and safe.
 
 > Not yet committed: a `Dockerfile`, `docker-compose.yml`. The root `docker:*`
 > scripts target one but the file doesn't exist — this runbook's plain-Bun
 > path is the supported production path.
 
-### Postgres — the designed fix for the ephemeral-disk problem
+### 6.4 The database — Neon Postgres (persistent, no disk needed)
 
-EthioDeploy offers built-in Postgres. `DATABASE_URL` /
-`DATABASE_URL_DIRECT`, the Neon driver, and the typed env already exist, but
-`createDb()` still opens SQLite. Wiring the Postgres data path is the
-#1 follow-up before real students sign up. See `docs/HOW_IT_WORKS.md` §6.
+The app runs on **Neon**, a serverless Postgres. No data lives on the host's
+disk, which removes the ephemeral-disk failure mode entirely — this is now
+wired and verified, not a plan.
+
+- `DATABASE_URL` — the **pooled** connection string (hostname has
+  `-pooler`). Used for all application traffic (`createDb` in
+  `packages/db/src/index.ts` keeps a small warm pool).
+- `DATABASE_URL_DIRECT` — the **unpooled** string (no `-pooler`). Used only
+  for migrations at boot (`migrateDb`), which need a session-stable
+  connection.
+- Migrations are plain Drizzle SQL in `packages/db/src/migrations/`, generated
+  with `bun run db:generate` and applied on every boot; each runs inside a
+  transaction.
+
+**How to control Neon** (the "it was set up automatically" feeling goes away
+here):
+
+1. Open https://console.neon.tech and sign in with the account that owns the
+   project (it's the one whose credentials are already in your
+   `apps/server/.env`). The project will be listed — its name is what that
+   "automatic" setup used.
+2. Dashboard → the project → **Connection details**: copy the **pooled** and
+   **direct** strings. They are all you ever need; paste them into the host's
+   `DATABASE_URL` / `DATABASE_URL_DIRECT`.
+3. The **SQL Editor** tab queries the DB directly (check `SELECT * FROM user`,
+   `SELECT * FROM study_session`, etc.).
+4. Point-and-click **Backups / PITR** (instant restore) is under
+   **Branching**; Neon keeps a history window automatically.
+5. To inspect schema or browse tables visually from a terminal:
+   `bun run db:studio` (Drizzle Studio, driven by
+   `packages/db/drizzle.config.ts`).
+6. After any schema change: edit `packages/db/src/schema/*`, then
+   `bun run db:generate` (creates the next migration) and redeploy — the next
+   boot applies it. Never hand-edit the database directly for app schema.
 
 ---
 
@@ -215,10 +245,10 @@ verify via §9.5.
 |---|---|---|
 | `NODE_ENV` | `production` | HTTPS-only cookies off, verbose errors exposed |
 | `BETTER_AUTH_SECRET` | random string ≥ 32 chars | every login 500s / sessions rejected |
-| `BETTER_AUTH_URL` | API's public URL (e.g. `https://api.kiftet.com`) | session cookie points at the wrong domain |
-| `CORS_ORIGIN` | comma-separated trusted origins, **includes the web origin** (e.g. `https://app.kiftet.com`) | browser blocks every POST; login appears to loop on 401 |
-| `DATABASE_FILE` | path to the SQLite file **on the volume** (e.g. `/data/kiftet.db`) | server crashes on boot |
-| `DATABASE_URL` / `DATABASE_URL_DIRECT` | Postgres conn. strings — only if you switch off SQLite first | (currently unused at runtime) |
+| `BETTER_AUTH_URL` | the site's public URL (same-origin in combined mode, e.g. `https://kiftet.ethiodeploy.com`) | session cookie points at the wrong domain |
+| `CORS_ORIGIN` | comma-separated trusted origins (same-origin in combined mode) | browser blocks every POST; login appears to loop on 401 |
+| `DATABASE_URL` | **pooled** Neon string (hostname has `-pooler`) | server crashes on boot |
+| `DATABASE_URL_DIRECT` | **unpooled** Neon string (no `-pooler`) | migrations fall back to pooled (still works) or fail on session ops |
 | `GEMINI_API_KEY` | real key from Google AI Studio | grading returns empty placeholders; lessons fall back to templates |
 
 ### 8.3 The web app's build-time variables (Vercel/host: web app)
@@ -262,11 +292,12 @@ Run in order; expected result in parentheses.
 
 - **Code:** push the offending build's parent commit (or `git revert`) and
   redeploy. Migrations are forward-only, so roll back code — never the schema.
-- **Data (SQLite):** keep a nightly copy of the DB file, taken after a safe
-  checkpoint:
+- **Data (Neon):** Neon keeps an automatic history window and point-in-time
+  restore (console → **Branching** → restore to a point in time). For a
+  portable copy, dump via a Postgres client over the **direct** URL:
   ```bash
-  sqlite3 /data/kiftet.db "PRAGMA wal_checkpoint(TRUNCATE);"   # flush WAL
-  cp /data/kiftet.db /backups/kiftet-$(date +%F).db            # then copy
+  psql "$DATABASE_URL_DIRECT" -c "SELECT count(*) FROM \"user\";"  # sanity
+  pg_dump "$DATABASE_URL_DIRECT" > kiftet-$(date +%F).sql           # full copy
   ```
 - **Before any release:** one fresh backup + one manual
   `SELECT count(*) FROM user;` to know the fleet you're protecting.
@@ -283,7 +314,8 @@ Run in order; expected result in parentheses.
 | Any login 500s | `BETTER_AUTH_SECRET` mismatch or too short (`< 32`) | set a stable secret, redeploy API |
 | Empty "graded" output / template lessons | `GEMINI_API_KEY` missing/invalid | set key, redeploy; check the server log |
 | `429 Too Many Requests` | AI rate limit (30/min/user) — working as designed | wait a minute; don't throttle-cap it |
-| API process dies every boot | `DATABASE_FILE` points at a path that isn't writable/persistent | point it at the volume; check the disk |
+| API process dies every boot | `DATABASE_URL` missing, malformed, or pointing at the wrong Neon project | set pooled URL (`-pooler`); check the Neon console for the right project |
+| Migrations fail on boot ("already exists") | stale DB schema vs. migration journal (e.g. after a manual schema edit) | do not hand-edit schema; `git revert` unschema changes and redeploy, or ask before touching the DB |
 | Stale UI after a deploy | cached by the service worker | hard refresh; it self-heals on next load (autoUpdate) |
 | Offline page on every load | web app can't reach the API *or* no network | check §9.1 health; check the client's connectivity |
 | Server boots but locals see 500s while you don't | node/bun version drift | `nvm use` to 22.23.2, `bun install`, restart |
@@ -295,10 +327,11 @@ When you take corrective action, update this table, then re-run §9.
 
 ## 12. Scheduled care (calendar, every month)
 
-- Rotate `BETTER_AUTH_SECRET` (log everyone out) and `GEMINI_API_KEY`.
-- Confirm nightly backups ran and open one to check it isn't empty.
+- Rotate `BETTER_AUTH_SECRET` (logs everyone out) and `GEMINI_API_KEY`.
+- Confirm Neon backups/PITR window is healthy and a `pg_dump` copy restores.
 - Re-run Lighthouse on the home page; keep the PWA badge green.
-- Confirm the API's disk has headroom (SQLite grows with study history).
+- Keep Neon under its free-tier limits (connections, storage) — the server
+  pool is capped at 5 connections already.
 - Re-audit the dependency tree (`bun audit`) — dependency health is in
   `docs/HOW_IT_WORKS.md` §15.
 

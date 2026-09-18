@@ -1,4 +1,4 @@
 export type DatabaseConfig = {
-  DATABASE_FILE: string;
-  DATABASE_URL?: string;
+  DATABASE_URL: string;
+  DATABASE_URL_DIRECT?: string;
 };
