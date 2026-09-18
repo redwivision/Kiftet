@@ -78,6 +78,11 @@ export type StudyAction =
 	| { type: "RECALL_FULL"; gaps: Gaps }
 	| { type: "LESSON"; text: string }
 	| { type: "QUESTIONS"; questions: SessionQuestion[] }
+	| {
+			type: "RESTORE_RETEST";
+			questions: SessionQuestion[];
+			answered: AnswerRecord[];
+	  }
 	| { type: "ANSWER"; record: AnswerRecord }
 	| { type: "RESULT"; result: SessionResult }
 	| { type: "RETRY_CYCLE" }
@@ -190,6 +195,16 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				error: null,
 				notice: null,
 			};
+		case "RESTORE_RETEST":
+			return {
+				...state,
+				phase: "retest",
+				questions: action.questions,
+				currentQuestion: action.answered.length,
+				answered: action.answered,
+				error: null,
+				notice: "Your retest progress was restored.",
+			};
 		case "ANSWER":
 			return {
 				...state,
@@ -293,6 +308,8 @@ export function StudyProvider({
 					chapterId: string;
 					status: string;
 					attempts: SessionAttemptRow[];
+					retestQuestions: SessionQuestion[] | null;
+					retestIndex: number;
 				}>(`/sessions/${sessionId}`);
 				const chapters = await api<ChapterInfo[]>("/chapters");
 				if (cancelled) return;
@@ -310,7 +327,31 @@ export function StudyProvider({
 				// dump the student back into a second cold recall).
 				const recalls = session.attempts.filter((a) => a.stage === "recall");
 				const retests = session.attempts.filter((a) => a.stage === "retest");
-				if (retests.length) {
+				if (
+					retests.length &&
+					session.status === "in_progress" &&
+					session.retestQuestions?.length
+				) {
+					const restored = retests
+						.slice(0, session.retestIndex)
+						.map((attempt, index) => {
+							const gaps = attemptGaps(attempt.gapsIdentified);
+							return {
+								question:
+									session.retestQuestions?.[index]?.question ??
+									"Previously answered retest question",
+								answer: attempt.transcriptText ?? "",
+								correct: (attempt.score ?? 0) >= 50,
+								score: attempt.score ?? 0,
+								gaps,
+							};
+						});
+					dispatch({
+						type: "RESTORE_RETEST",
+						questions: session.retestQuestions,
+						answered: restored,
+					});
+				} else if (retests.length && session.status === "completed") {
 					if (!cancelled) void fetchResult();
 				} else if (recalls.length) {
 					const last = recalls[recalls.length - 1];
@@ -368,7 +409,12 @@ export function StudyProvider({
 			chapterTitle: ch.title,
 			subject: ch.subject,
 			phase: state.phase,
-			step: step[state.phase],
+			step:
+				state.phase === "gaps"
+					? "show the student the gap analysis on screen; do not summarize details"
+					: state.phase === "result"
+						? "wait while the student reviews the result on screen"
+						: step[state.phase],
 			attempts: state.attempts,
 			boundary:
 				"You know the topic, but you do NOT have the lesson text, the concept list, or the score breakdown — never invent specifics you were not given. Stay quiet while the student speaks and only answer at the prompt.",
@@ -382,7 +428,7 @@ export function StudyProvider({
 									state.currentQuestion + 1,
 									state.questions.length,
 								)} of ${state.questions.length} is on screen. Wait for the student's answer, don't read the question back.`
-							: "Summarize where the student landed and wait.",
+							: "Wait while the student reviews the screen.",
 		});
 	}, [
 		state.chapter,
@@ -487,9 +533,7 @@ export function StudyProvider({
 							method: "POST",
 							body: JSON.stringify({
 								transcriptText: text,
-								focus: question.focus,
-								missing: gaps.missing,
-								misconceptions: gaps.misconceptions,
+								questionIndex: currentQuestion,
 								attemptId,
 							}),
 						},
@@ -541,8 +585,9 @@ export function StudyProvider({
 	const completeSession = useCallback(async () => {
 		try {
 			await api(`/sessions/${sessionId}/complete`, { method: "POST" });
-		} catch {
-			// Non-fatal: an unfinished session simply stays open.
+		} catch (err) {
+			dispatch({ type: "ERROR", message: apiError(err) });
+			throw err;
 		}
 	}, [sessionId]);
 

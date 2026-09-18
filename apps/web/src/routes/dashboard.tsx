@@ -6,6 +6,7 @@ import { setChapter, setSession } from "@/components/assistant";
 import { BrandSignature } from "@/components/brand-mark";
 import type { ChapterInfo } from "@/components/study-provider";
 import { api, apiError } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
 
 type SessionHistory = {
 	id: string;
@@ -19,12 +20,18 @@ type SessionHistory = {
 
 export default function Dashboard() {
 	const navigate = useNavigate();
+	const { data: session, isPending: sessionPending } = authClient.useSession();
 	const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
 	const [history, setHistory] = useState<SessionHistory[]>([]);
 	const [starting, setStarting] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
+		if (!sessionPending && !session) {
+			navigate("/login");
+			return;
+		}
+		if (sessionPending || !session) return;
 		let cancelled = false;
 		api<ChapterInfo[]>("/chapters")
 			.then((rows) => {
@@ -45,7 +52,7 @@ export default function Dashboard() {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [navigate, session, sessionPending]);
 
 	const lastFor = (chapterId: string): SessionHistory | undefined =>
 		history.find((h) => h.chapterId === chapterId);
@@ -174,7 +181,7 @@ function ChapterCard({
 			type="button"
 			onClick={onStart}
 			disabled={starting}
-			className="group w-full rounded-3xl border border-border/70 bg-card/70 p-6 text-left backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(232,163,61,0.25)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 dark:bg-[#1a2340]/80"
+			className="group w-full rounded-3xl border border-border/70 bg-card/70 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(232,163,61,0.25)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 dark:bg-[#1a2340]/80"
 		>
 			<div className="flex items-start justify-between gap-3">
 				<div className="space-y-1.5">

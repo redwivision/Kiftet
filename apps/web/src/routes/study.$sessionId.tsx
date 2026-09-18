@@ -2,7 +2,15 @@ import { Button } from "@kiftet/ui/components/button";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
-import { Check, CircleAlert, Loader2, MicOff, Square, Volume2, X } from "lucide-react";
+import {
+	Check,
+	CircleAlert,
+	Loader2,
+	MicOff,
+	Square,
+	Volume2,
+	X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -14,9 +22,14 @@ import {
 } from "@/components/assistant";
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
-import { StudyProvider, useStudy, type Gaps } from "@/components/study-provider";
+import {
+	type Gaps,
+	StudyProvider,
+	useStudy,
+} from "@/components/study-provider";
 import { VoxideRing } from "@/components/voxide-ring";
 import { api } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
 import { findBoundaryEnd, leadingText } from "@/lib/intent";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
@@ -54,11 +67,30 @@ const ANSWER_CAPTION: Record<string, string> = {
 const STEPS = ["Speak", "Diagnose", "Relearn", "Retest"] as const;
 
 export default function StudyRoute({ params }: Route.ComponentProps) {
+	const { data: session, isPending } = authClient.useSession();
+	if (isPending) {
+		return (
+			<main className="mx-auto grid min-h-64 place-items-center px-6 py-24 text-muted-foreground">
+				<Loader2 className="size-6 animate-spin" />
+			</main>
+		);
+	}
+	if (!session) {
+		return <NavigateToLogin />;
+	}
 	return (
 		<StudyProvider sessionId={params.sessionId}>
 			<StudyScreen />
 		</StudyProvider>
 	);
+}
+
+function NavigateToLogin() {
+	const navigate = useNavigate();
+	useEffect(() => {
+		navigate("/login", { replace: true });
+	}, [navigate]);
+	return null;
 }
 
 function StudyScreen() {
@@ -430,7 +462,10 @@ function VoiceCapture({
 					</div>
 				) : (
 					<VoxideRing
-						autoArm={state.phase === "recall" || state.phase === "retest"}
+						autoArm={false}
+						// Planned: arm the mic when the phase opens (pass
+						// state.phase === "recall" || state.phase === "retest"
+						// once VoxideRing's voice-first flow ships).
 					/>
 				)}
 
@@ -659,6 +694,8 @@ function LessonPhase() {
 	// connects on demand — a student who typed their recall gets the same
 	// spoken lesson as one who talked. The robotic browser voice is never used
 	// automatically — only from the button, as a deliberate fallback.
+	// (Voice-first auto-arming of the ring is planned, not active — see
+	// VoxideRing.)
 	useEffect(() => {
 		const text = state.lessonText;
 		if (!text || text === narratedRef.current) return;
@@ -674,10 +711,7 @@ function LessonPhase() {
 	// prefers the agent's natural voice, and falls back to the browser voice
 	// with a sentence read-along. `mode: "auto"` never falls back to browser
 	// TTS — only the explicit button does.
-	const narrate = async (
-		t: string,
-		mode: "auto" | "button" = "button",
-	) => {
+	const narrate = async (t: string, mode: "auto" | "button" = "button") => {
 		if (!t) return;
 		// Stop anything already playing so a second "Read it to me" replaces
 		// the first instead of stacking a double read-back.
@@ -730,8 +764,7 @@ function LessonPhase() {
 								key={`${i}-${sentence}`}
 								className={cn(
 									"rounded px-0.5 transition-colors duration-150",
-									activeSentence === i &&
-										"bg-gold/15 text-foreground",
+									activeSentence === i && "bg-gold/15 text-foreground",
 								)}
 							>
 								{sentence}{" "}
@@ -880,23 +913,35 @@ function RetestPhase() {
 										</p>
 										{(a.gaps.missing.length > 0 ||
 											a.gaps.misconceptions.length > 0) && (
-											<p className="mt-2 flex flex-wrap gap-1.5">
-												{(a.gaps.missing.length > 0 ||
-													a.gaps.misconceptions.length > 0) && (
-													<span className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.68rem] text-rust">
-														open: [
-														{[
-															...a.gaps.missing,
-															...a.gaps.misconceptions,
-														].join(" · ")}
-														]
-													</span>
+											<p className="mt-2 flex flex-wrap items-center gap-1.5">
+												<span className="font-medium text-[0.68rem] text-muted-foreground">
+													Still open
+												</span>
+												{[...a.gaps.missing, ...a.gaps.misconceptions].map(
+													(concept, gi) => (
+														<span
+															key={`${gi}-${concept}`}
+															className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.68rem] text-rust"
+														>
+															{concept}
+														</span>
+													),
 												)}
-												{a.gaps.covered.length > 0 && (
-													<span className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.68rem] text-sage">
-														got: [{a.gaps.covered.join(" · ")}]
+											</p>
+										)}
+										{a.gaps.covered.length > 0 && (
+											<p className="mt-2 flex flex-wrap items-center gap-1.5">
+												<span className="font-medium text-[0.68rem] text-muted-foreground">
+													Landed
+												</span>
+												{a.gaps.covered.map((concept, gi) => (
+													<span
+														key={`${gi}-${concept}`}
+														className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.68rem] text-sage"
+													>
+														{concept}
 													</span>
-												)}
+												))}
 											</p>
 										)}
 									</div>
@@ -1040,7 +1085,10 @@ function durationMetric(
 	return [
 		{
 			label: "Session time",
-			value: mins < 1 ? "under a minute" : `${mins} ${mins === 1 ? "minute" : "minutes"}`,
+			value:
+				mins < 1
+					? "under a minute"
+					: `${mins} ${mins === 1 ? "minute" : "minutes"}`,
 		},
 	];
 }

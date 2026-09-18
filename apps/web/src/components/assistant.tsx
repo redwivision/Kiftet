@@ -100,11 +100,7 @@ async function endVoiceSession(delayMs = 0): Promise<string | null> {
 	try {
 		const id = activeSessionId;
 		if (id) {
-			try {
-				await api(`/sessions/${id}/complete`, { method: "POST" });
-			} catch {
-				// Non-fatal: an unfinished session simply stays open.
-			}
+			await api(`/sessions/${id}/complete`, { method: "POST" });
 		}
 		activeSessionId = null;
 		activeChapterId = null;

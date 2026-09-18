@@ -48,6 +48,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<Links />
 			</head>
 			<body>
+				<a
+					href="#main-content"
+					className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-foreground"
+				>
+					Skip to content
+				</a>
 				{children}
 				<ScrollRestoration />
 				<Scripts />
@@ -67,7 +73,7 @@ export default function App() {
 		>
 			<div className="flex min-h-dvh flex-col">
 				<Header />
-				<div className="flex-1">
+				<div id="main-content" className="flex-1" tabIndex={-1}>
 					<Outlet />
 				</div>
 			</div>

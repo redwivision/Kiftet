@@ -1,8 +1,13 @@
 import { cn } from "@kiftet/ui/lib/utils";
 import { useVoxideVoice } from "@voxide/react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { getVoxideClient, hasVoxideKey } from "@/components/assistant";
 import { VoxideRing } from "@/components/voxide-ring";
+
+// Dev-only harness: exercises the raw voice ring without the study loop.
+// In a production build the route renders a quiet dead end instead — the
+// page is part of the demo story only in development.
 
 const STATUS_LABEL: Record<string, string> = {
 	idle: "Tap the ring and talk — anything.",
@@ -23,6 +28,26 @@ export default function VoiceTest() {
 		setReady(true);
 		setHasKey(hasVoxideKey());
 	}, []);
+
+	// Production builds never expose the harness — just a calm way back.
+	if (import.meta.env.PROD) {
+		return (
+			<main className="mx-auto grid w-full max-w-md content-center justify-items-center gap-4 px-6 py-24 text-center">
+				<h1 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+					Nothing to see here
+				</h1>
+				<p className="text-muted-foreground text-sm">
+					The study room lives in the chapters, not the test bench.
+				</p>
+				<Link
+					to="/dashboard"
+					className="font-medium text-gold text-sm underline underline-offset-4 hover:text-gold-soft"
+				>
+					Go to your chapters
+				</Link>
+			</main>
+		);
+	}
 
 	const voice = useVoxideVoice(ready && hasKey ? getVoxideClient() : null);
 

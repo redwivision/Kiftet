@@ -36,7 +36,7 @@ export default function Header() {
 					>
 						<Brand />
 					</NavLink>
-					<nav className="hidden items-center gap-1 sm:flex">
+					<nav className="flex items-center gap-1">
 						{links.map(({ to, label }) => (
 							<NavLink
 								key={to}

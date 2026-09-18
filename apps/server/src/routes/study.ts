@@ -1,14 +1,32 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { chapter, textbook, studySession, attempt, conceptNode } from "@kiftet/db/schema";
 import { getDb } from "../services";
 import { ai, focusScore } from "../ai/gemini";
 
 const router = Router();
+const aiWindows = new Map<string, number[]>();
+const AI_REQUESTS_PER_MINUTE = 30;
+
+function allowAiRequest(req: Request): boolean {
+  const key = ownerId(req);
+  const now = Date.now();
+  const recent = (aiWindows.get(key) ?? []).filter((time) => now - time < 60_000);
+  if (recent.length >= AI_REQUESTS_PER_MINUTE) return false;
+  recent.push(now);
+  aiWindows.set(key, recent);
+  return true;
+}
 
 function db() {
   return getDb();
+}
+
+function ownerId(req: Request): string {
+  const id = req.authSession?.user.id;
+  if (!id) throw new Error("Authenticated user missing from request");
+  return id;
 }
 
 function ok<T>(res: any, data: T, status = 200) {
@@ -23,11 +41,11 @@ function firstIssue(issues: z.ZodIssue[]): string {
   return issues[0]?.message ?? "Invalid request";
 }
 
-async function sessionChapterId(sessionId: string): Promise<string | null> {
+async function sessionChapterId(sessionId: string, userId: string): Promise<string | null> {
   const rows = await db()
     .select({ chapterId: studySession.chapterId })
     .from(studySession)
-    .where(eq(studySession.id, sessionId))
+    .where(and(eq(studySession.id, sessionId), eq(studySession.userId, userId)))
     .limit(1);
   return rows[0]?.chapterId ?? null;
 }
@@ -49,19 +67,22 @@ const ingestSchema = z.object({
   subject: z.string().min(1),
   language: z.string().default("en"),
   title: z.string().min(1),
-  rawText: z.string().min(1),
+  rawText: z.string().min(1).max(200_000),
 });
 
 router.post("/chapters/ingest", async (req, res) => {
+  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
   const parsed = ingestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
   const { textbookTitle, subject, language, title, rawText } = parsed.data;
+  const owner = ownerId(req);
   const textbookId = crypto.randomUUID();
   const chapterId = crypto.randomUUID();
 
   await db().insert(textbook).values({
     id: textbookId,
+    ownerId: owner,
     title: textbookTitle,
     subject,
     language,
@@ -91,7 +112,8 @@ router.post("/chapters/ingest", async (req, res) => {
   ok(res, { textbookId, chapterId, conceptsExtracted: extracted.length }, 201);
 });
 
-router.get("/chapters", async (_req, res) => {
+router.get("/chapters", async (req, res) => {
+  const owner = ownerId(req);
   const rows = await db()
     .select({
       id: chapter.id,
@@ -102,16 +124,20 @@ router.get("/chapters", async (_req, res) => {
     })
     .from(chapter)
     .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(eq(textbook.ownerId, owner))
     .orderBy(desc(chapter.createdAt));
 
   ok(res, rows);
 });
 
 router.get("/chapters/:id/concepts", async (req, res) => {
+  const owner = ownerId(req);
   const rows = await db()
     .select()
     .from(conceptNode)
-    .where(eq(conceptNode.chapterId, req.params.id))
+    .innerJoin(chapter, eq(conceptNode.chapterId, chapter.id))
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(and(eq(conceptNode.chapterId, req.params.id), eq(textbook.ownerId, owner)))
     .orderBy(conceptNode.sortOrder);
 
   ok(res, rows);
@@ -123,7 +149,6 @@ router.get("/chapters/:id/concepts", async (req, res) => {
 
 const startSessionSchema = z.object({
   chapterId: z.string().min(1),
-  userId: z.string().optional(),
 });
 
 router.post("/sessions/start", async (req, res) => {
@@ -131,7 +156,15 @@ router.post("/sessions/start", async (req, res) => {
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
   const sessionId = crypto.randomUUID();
-  const { chapterId, userId } = parsed.data;
+  const { chapterId } = parsed.data;
+  const userId = ownerId(req);
+  const chapterExists = await db()
+    .select({ id: chapter.id })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(and(eq(chapter.id, chapterId), eq(textbook.ownerId, userId)))
+    .limit(1);
+  if (!chapterExists.length) return err(res, "Chapter not found", 404);
 
   await db().insert(studySession).values({
     id: sessionId,
@@ -142,11 +175,15 @@ router.post("/sessions/start", async (req, res) => {
   ok(res, { sessionId }, 201);
 });
 
-async function findSession(sessionId: string) {
+async function findSession(sessionId: string, userId?: string) {
   const rows = await db()
     .select()
     .from(studySession)
-    .where(eq(studySession.id, sessionId))
+    .where(
+      userId
+        ? and(eq(studySession.id, sessionId), eq(studySession.userId, userId))
+        : eq(studySession.id, sessionId),
+    )
     .limit(1);
   return rows[0] ?? null;
 }
@@ -162,8 +199,11 @@ type SessionResultSummary = {
 // recall attempt, after from the AVERAGE of the retest answers (the delta is
 // the product's metric, so it should reflect the whole retest, not whichever
 // question was answered last).
-async function resultSummary(sessionId: string): Promise<SessionResultSummary | null> {
-  const session = await findSession(sessionId);
+async function resultSummary(
+  sessionId: string,
+  userId?: string,
+): Promise<SessionResultSummary | null> {
+  const session = await findSession(sessionId, userId);
   if (!session) return null;
 
   const attemptsRows = await db()
@@ -196,11 +236,17 @@ async function resultSummary(sessionId: string): Promise<SessionResultSummary | 
 
 // Recent session history for the dashboard, with each session's result folded
 // in so cards can show "62% → 81% · 12 min" without a second round-trip.
-router.get("/sessions", async (_req, res) => {
-  const rows = await db().select().from(studySession).orderBy(desc(studySession.startedAt)).limit(20);
+router.get("/sessions", async (req, res) => {
+  const userId = ownerId(req);
+  const rows = await db()
+    .select()
+    .from(studySession)
+    .where(eq(studySession.userId, userId))
+    .orderBy(desc(studySession.startedAt))
+    .limit(20);
   const out = [];
   for (const row of rows) {
-    const summary = await resultSummary(row.id);
+    const summary = await resultSummary(row.id, userId);
     if (!summary) continue;
     out.push({
       id: row.id,
@@ -215,10 +261,11 @@ router.get("/sessions", async (_req, res) => {
 });
 
 router.get("/sessions/:id", async (req, res) => {
+  const userId = ownerId(req);
   const rows = await db()
     .select()
     .from(studySession)
-    .where(eq(studySession.id, req.params.id))
+    .where(and(eq(studySession.id, req.params.id), eq(studySession.userId, userId)))
     .limit(1);
 
   if (!rows.length) return err(res, "Session not found", 404);
@@ -269,17 +316,18 @@ async function insertAttemptOnce(record: AttemptInsert): Promise<boolean> {
 // ────────────────────────────────────────────────────────────────
 
 const recallSchema = z.object({
-  transcriptText: z.string().min(1),
+  transcriptText: z.string().trim().min(1).max(20_000),
   attemptId: z.string().optional(),
 });
 
 router.post("/sessions/:id/recall", async (req, res) => {
+  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
   const parsed = recallSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
   const sessionId = req.params.id;
 
-  const chapterId = await sessionChapterId(sessionId);
+  const chapterId = await sessionChapterId(sessionId, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
   const concepts = await chapterConcepts(chapterId);
@@ -308,15 +356,16 @@ router.post("/sessions/:id/recall", async (req, res) => {
 // ────────────────────────────────────────────────────────────────
 
 const microlessonSchema = z.object({
-  missing: z.array(z.string()),
-  misconceptions: z.array(z.string()),
+  missing: z.array(z.string().trim().min(1).max(500)).max(50),
+  misconceptions: z.array(z.string().trim().min(1).max(500)).max(50),
 });
 
 router.post("/sessions/:id/microlesson", async (req, res) => {
+  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
   const parsed = microlessonSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  const chapterId = await sessionChapterId(req.params.id);
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
   const concepts = await chapterConcepts(chapterId);
@@ -337,15 +386,16 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
 // ────────────────────────────────────────────────────────────────
 
 const retestSchema = z.object({
-  missing: z.array(z.string()),
-  misconceptions: z.array(z.string()),
+  missing: z.array(z.string().trim().min(1).max(500)).max(50),
+  misconceptions: z.array(z.string().trim().min(1).max(500)).max(50),
 });
 
 router.post("/sessions/:id/retest", async (req, res) => {
+  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
   const parsed = retestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  const chapterId = await sessionChapterId(req.params.id);
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
   const concepts = await chapterConcepts(chapterId);
@@ -386,26 +436,41 @@ const gapItems = [...parsed.data.missing, ...parsed.data.misconceptions];
     return { question: q.question, focus: target ? [target] : [] };
   });
 
+  await db()
+    .update(studySession)
+    .set({ retestQuestions: withFocus, retestIndex: 0 })
+    .where(
+      and(
+        eq(studySession.id, req.params.id),
+        eq(studySession.userId, ownerId(req)),
+      ),
+    );
+
   ok(res, { questions: withFocus });
 });
 
 const answerSchema = z.object({
-  transcriptText: z.string().min(1),
-  missing: z.array(z.string()).default([]),
-  misconceptions: z.array(z.string()).default([]),
-  focus: z.array(z.string()).default([]),
+  transcriptText: z.string().trim().min(1).max(20_000),
+  questionIndex: z.number().int().min(0),
   attemptId: z.string().optional(),
 });
 
 router.post("/sessions/:id/retest/answer", async (req, res) => {
+  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
   const parsed = answerSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  const chapterId = await sessionChapterId(req.params.id);
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
+  const session = await findSession(req.params.id, ownerId(req));
+  const question = session?.retestQuestions?.[parsed.data.questionIndex];
+  if (!session || !question) return err(res, "Retest question not found", 400);
+  if (parsed.data.questionIndex !== session.retestIndex) {
+    return err(res, "That retest question is out of order", 409);
+  }
   const allConcepts = await chapterConcepts(chapterId);
-  const focus = parsed.data.focus;
+  const focus = question.focus;
   const byName = (value: string) => value.trim().toLowerCase();
   // Match focus against the stored checklist tolerantly; a focus string that
   // has no stored counterpart (e.g. a freshly graded misconception text) is
@@ -420,7 +485,7 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
       id: crypto.randomUUID(),
       chapterId,
       conceptText: f,
-      isMisconception: parsed.data.misconceptions.includes(f),
+      isMisconception: false,
       weight: 1,
       sortOrder: 0,
       createdAt: new Date(),
@@ -434,7 +499,8 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
   // is the per-question verdict the UI's "right/still open" actually means.
   const score = Math.round(focusScore(gaps, subset) * 100);
 
-  await insertAttemptOnce({
+  const currentSession = session;
+  const inserted = await insertAttemptOnce({
     id: parsed.data.attemptId,
     sessionId: req.params.id,
     stage: "retest",
@@ -446,6 +512,17 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
     },
     score,
   });
+  if (inserted) {
+    await db()
+      .update(studySession)
+      .set({ retestIndex: (currentSession?.retestIndex ?? 0) + 1 })
+      .where(
+        and(
+          eq(studySession.id, req.params.id),
+          eq(studySession.userId, ownerId(req)),
+        ),
+      );
+  }
 
   ok(res, { score, gaps: { ...gaps, score } });
 });
@@ -455,7 +532,7 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
 // ────────────────────────────────────────────────────────────────
 
 router.get("/sessions/:id/result", async (req, res) => {
-  const summary = await resultSummary(req.params.id);
+  const summary = await resultSummary(req.params.id, ownerId(req));
   if (!summary) return err(res, "Session not found", 404);
   ok(res, summary);
 });
@@ -465,7 +542,7 @@ router.get("/sessions/:id/result", async (req, res) => {
 // ────────────────────────────────────────────────────────────────
 
 router.post("/sessions/:id/complete", async (req, res) => {
-  const session = await findSession(req.params.id);
+  const session = await findSession(req.params.id, ownerId(req));
   if (!session) return err(res, "Session not found", 404);
 
   await db()

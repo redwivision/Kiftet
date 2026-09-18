@@ -5,6 +5,9 @@ import { user } from "./auth";
 
 export const textbook = sqliteTable("textbook", {
   id: text("id").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   subject: text("subject").notNull(),
   language: text("language").notNull().default("en"),
@@ -59,6 +62,10 @@ export const studySession = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date()),
     completedAt: integer("completed_at", { mode: "timestamp" }),
+    retestQuestions: text("retest_questions", { mode: "json" }).$type<
+      { question: string; focus: string[] }[] | null
+    >(),
+    retestIndex: integer("retest_index").default(0).notNull(),
     status: text("status", { enum: ["in_progress", "completed"] })
       .default("in_progress")
       .notNull(),

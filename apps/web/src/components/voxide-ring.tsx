@@ -28,10 +28,12 @@ const ACTIVE: VoxideStatus[] = [
 export function VoxideRing({
 	autoArm = false,
 }: {
-	/** Voice-first: when true the ring arms/opens the mic on its own as soon as
-	 *  the phase opens, so speaking is the default interaction — no tap needed.
-	 *  Keyboard stays available underneath; autoArm is only a default, never a
-	 *  dead end. See docs/HOW_IT_WORKS.md §5 "step of concerns". */
+	/** Reserved for the planned voice-first flow: the ring opening the mic on
+	 *  its own when a phase opens, so speaking needs no tap. NOT active yet —
+	 *  the ring always waits for an explicit tap, which also keeps the browser
+	 *  mic-permission prompt from appearing unannounced. The prop is threaded
+	 *  through already so enabling the flow is a one-line change. See
+	 *  docs/HOW_IT_WORKS.md §5. */
 	autoArm?: boolean;
 }) {
 	const client = getVoxideClient();
@@ -42,16 +44,14 @@ export function VoxideRing({
 		client ? client.isInitialized : false,
 	);
 
-	// Voice-first: open the mic automatically when autoArm flips on and the
-	// ring is ready & not already partway through a turn. Leaving autoArm on
-	// through a whole phase leaves the mic armed continuously; flipping it off
-	// (hanging up) drops the session instantly — mirroring a tap-to-hang-up.
-	// Voice-first: autoArms connect()/disconnect() mirror connect()/disconnect()
-	// on the ring's own toggle, so flipping autoArm on is identical to the
-	// student tapping the ring — except nothing needed a tap. Leave it on for
-	// a whole speaking phase (ring stays live), flip it off = hang up.
-	const prevAutoArm = useRef(autoArm);
+	// Voice-first (planned): the mic would open automatically when autoArm flips
+	// on and the ring is ready — mirroring a tap. Not active yet: the ring is
+	// tap-to-talk only until the voice-first flow ships.
+	const prevAutoArm = useRef(false);
 	useEffect(() => {
+		// Planned (not yet enabled): when autoArm flips false→true while the ring
+		// is quiet, the mic would open on its own. Until that ships, the prop is
+		// effectively inert and the ring is tap-to-talk only.
 		const connectWhenQuiet =
 			initReady &&
 			autoArm &&
