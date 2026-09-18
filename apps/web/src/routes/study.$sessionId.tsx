@@ -42,6 +42,17 @@ const ACTIVE: VoxideStatus[] = [
 	"executing",
 ];
 
+export function meta(_args: Route.MetaArgs) {
+	return [
+		{ title: "Study — Kiftet" },
+		{
+			name: "description",
+			content:
+				"Speak what you remember, see what's missing, hear only what you missed, then prove it stuck.",
+		},
+	];
+}
+
 const RECALL_CAPTION: Record<string, string> = {
 	idle: "Tap the ring, then say what you remember about this chapter out loud. No notes — rough and honest is perfect. Tap again when you're done.",
 	armed: "Ready — tap to start.",

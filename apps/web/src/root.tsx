@@ -16,6 +16,8 @@ import { ThemeProvider } from "./components/theme-provider";
 export const links: Route.LinksFunction = () => [
 	{ rel: "icon", href: "/logo-mark.svg", type: "image/svg+xml" },
 	{ rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+	// The brand: an open ring with a question inside. Never stale — keep this
+	// file in sync with what the client signs off as the logo.
 	{ rel: "apple-touch-icon", href: "/apple-touch-icon-180x180.png" },
 	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
 	{
@@ -34,6 +36,56 @@ export const links: Route.LinksFunction = () => [
 	},
 ];
 
+// Site-wide metadata. This is the shared "name, slogan, logo" set — landing,
+// OG/Twitter previews, and the iOS/Android home-screen label all inherit it;
+// individual routes override only title + description.
+export function meta(): ReturnType<Route.MetaFunction> {
+	return [
+		{ title: "Kiftet — Close the gap" },
+		{ name: "application-name", content: "Kiftet" },
+		{ name: "apple-mobile-web-app-title", content: "Kiftet" },
+		{
+			name: "description",
+			content:
+				"Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+		},
+		{ name: "theme-color", content: "#1B2340" },
+		{ property: "og:type", content: "website" },
+		{
+			property: "og:site_name",
+			content: "Kiftet — Close the gap",
+		},
+		{
+			property: "og:title",
+			content: "Kiftet — Close the gap",
+		},
+		{
+			property: "og:description",
+			content:
+				"Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+		},
+		{
+			property: "og:image",
+			content: "/logo-mark.png",
+		},
+		{
+			property: "og:image:alt",
+			content: "Kiftet — an open ring and a question mark",
+		},
+		{ property: "og:image:width", content: "512" },
+		{ property: "og:image:height", content: "512" },
+		{ name: "twitter:card", content: "summary" },
+		{ name: "twitter:title", content: "Kiftet — Close the gap" },
+		{
+			name: "twitter:description",
+			content:
+				"Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those.",
+		},
+		{ name: "twitter:image", content: "/logo-mark.png" },
+		{ name: "robots", content: "index, follow" },
+	];
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
@@ -43,7 +95,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
-				<meta name="theme-color" content="#1B2340" />
+				<meta name="format-detection" content="telephone=no" />
+				{/* iOS Home Screen: give the installed app the brand name and a
+				    dark status bar instead of the page title. */}
+				<meta name="mobile-web-app-capable" content="yes" />
+				<meta name="apple-mobile-web-app-capable" content="yes" />
+				<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 				<script
 					dangerouslySetInnerHTML={{
 						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["light","forest","dark","gold"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,

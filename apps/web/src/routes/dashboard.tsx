@@ -7,6 +7,18 @@ import { BrandSignature } from "@/components/brand-mark";
 import type { ChapterInfo } from "@/components/study-provider";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import type { Route } from "./+types/dashboard";
+
+export function meta(_args: Route.MetaArgs) {
+	return [
+		{ title: "Dashboard — Kiftet" },
+		{
+			name: "description",
+			content:
+				"Pick a chapter and keep closing the gap — every session's score is saved and waiting.",
+		},
+	];
+}
 
 type SessionHistory = {
 	id: string;

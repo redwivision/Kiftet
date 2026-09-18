@@ -61,7 +61,7 @@ export default function Home() {
 						Kiftet · spoken study review for Grade 11–12 STEM students
 					</p>
 
-					<h1 className="space-y-2 font-display font-semibold text-[2.6rem] text-foreground leading-[1.04] tracking-[-0.03em] sm:text-6xl">
+					<h1 className="space-y-2 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
 						<span className="block text-gold">Close the gap.</span>
 						<span className="block">
 							87 in every 100 students fail the national exam. Trying harder
