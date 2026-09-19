@@ -22,6 +22,27 @@ const THEMES = [
 		chip: "ring-1 ring-gold/60",
 	},
 	{
+		value: "ember",
+		label: "Ember",
+		note: "The brazier, after dark",
+		swatch: "#e26d2a",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
+		value: "jade",
+		label: "Jade",
+		note: "The lake at night",
+		swatch: "#41bf9c",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
+		value: "violet",
+		label: "Violet",
+		note: "The dusk before study",
+		swatch: "#8b7cf6",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
 		value: "light",
 		label: "Sunlight",
 		note: "Paper and morning light",
@@ -32,6 +53,9 @@ const THEMES = [
 
 const THEME_COLOR: Record<string, string> = {
 	dark: "#0a0b0d",
+	ember: "#120d09",
+	jade: "#0a120f",
+	violet: "#100d18",
 	light: "#f6f1e6",
 };
 

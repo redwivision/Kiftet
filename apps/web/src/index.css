@@ -64,6 +64,88 @@
 	--ring: #f2efe9;
 }
 
+/* Accent rooms — identical black walls, a different candle. The room never
+   changes, only the light does: each hue is a single muted note so the
+   monochrome calm survives. Ember is the brazier, Jade the lake at night,
+   Violet the dusk before study. */
+.ember {
+	--brand-accent: #e26d2a;
+	--brand-accent-soft: #ff8a45;
+	--brand-accent-deep: #a84c16;
+	--brand-status: #e8cfb4;
+
+	--background: #0b0b0c;
+	--foreground: #f4e7d6;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #f4e7d6;
+	--popover: rgba(10, 9, 8, 0.97);
+	--popover-foreground: #f4e7d6;
+	--primary: #e26d2a;
+	--primary-foreground: #0b0b0c;
+	--secondary: #221a15;
+	--secondary-foreground: #f4e7d6;
+	--muted: #1d1713;
+	--muted-foreground: #b0a69b;
+	--accent: #e26d2a;
+	--accent-foreground: #0b0b0c;
+	--destructive: #c2464c;
+	--border: rgba(244, 231, 214, 0.1);
+	--input: rgba(244, 231, 214, 0.12);
+	--ring: #e26d2a;
+}
+
+.jade {
+	--brand-accent: #41bf9c;
+	--brand-accent-soft: #5dd6b4;
+	--brand-accent-deep: #1e8a6b;
+	--brand-status: #a8d9c8;
+
+	--background: #0a0d0c;
+	--foreground: #dcf0e8;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #dcf0e8;
+	--popover: rgba(7, 10, 9, 0.97);
+	--popover-foreground: #dcf0e8;
+	--primary: #41bf9c;
+	--primary-foreground: #07231c;
+	--secondary: #12201b;
+	--secondary-foreground: #dcf0e8;
+	--muted: #101c18;
+	--muted-foreground: #87a098;
+	--accent: #41bf9c;
+	--accent-foreground: #07231c;
+	--destructive: #c2464c;
+	--border: rgba(220, 240, 232, 0.1);
+	--input: rgba(220, 240, 232, 0.12);
+	--ring: #41bf9c;
+}
+
+.violet {
+	--brand-accent: #8b7cf6;
+	--brand-accent-soft: #a99bff;
+	--brand-accent-deep: #6a57d9;
+	--brand-status: #b9b4ef;
+
+	--background: #0b0b0e;
+	--foreground: #ebe9f2;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #ebe9f2;
+	--popover: rgba(9, 8, 13, 0.97);
+	--popover-foreground: #ebe9f2;
+	--primary: #8b7cf6;
+	--primary-foreground: #0b0a16;
+	--secondary: #1e1a2c;
+	--secondary-foreground: #ebe9f2;
+	--muted: #1a1726;
+	--muted-foreground: #a39fbf;
+	--accent: #8b7cf6;
+	--accent-foreground: #0b0a16;
+	--destructive: #c2464c;
+	--border: rgba(235, 233, 242, 0.1);
+	--input: rgba(235, 233, 242, 0.12);
+	--ring: #8b7cf6;
+}
+
 @theme inline {
 	/* Brand surfaces — night is the true black room. "gold" is now the
 	   adaptive candle/ink accent (kept as a token name for zero churn). */
@@ -196,13 +278,18 @@
 	}
 
 	/* The black room: near-black field, a faint ivory wash rising from the
-	   top, one cool graphite pool off to the right. Light is the accent. */
-	.dark body {
+	   top, one cool graphite pool off to the right, and a soft vignette so
+	   the edges fall away into ink. Light is the accent. Shared by every
+	   dark room — the accents below only change the colour of that light. */
+	.dark body,
+	.ember body,
+	.jade body,
+	.violet body {
 		background-color: #08090b;
 		background-image:
 			radial-gradient(
 				1100px 560px at 50% -130px,
-				rgba(242, 239, 233, 0.05),
+				rgba(242, 239, 233, 0.06),
 				transparent 60%
 			),
 			radial-gradient(
@@ -210,13 +297,80 @@
 				rgba(82, 86, 98, 0.08),
 				transparent 55%
 			),
+			radial-gradient(
+				1000px 700px at 50% 115%,
+				rgba(0, 0, 0, 0.42),
+				transparent 60%
+			),
 			linear-gradient(180deg, #0b0c0e 0%, #0a0b0d 55%, #050506 100%);
+	}
+
+	/* Accent rooms keep the same walls — only the candle changes. */
+	.ember body {
+		background-image:
+			radial-gradient(
+				1100px 560px at 50% -130px,
+				rgba(226, 109, 42, 0.1),
+				transparent 60%
+			),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				rgba(226, 109, 42, 0.055),
+				transparent 55%
+			),
+			radial-gradient(
+				1000px 700px at 50% 115%,
+				rgba(0, 0, 0, 0.42),
+				transparent 60%
+			),
+			linear-gradient(180deg, #0d0b09 0%, #0b0b0c 55%, #060505 100%);
+	}
+	.jade body {
+		background-image:
+			radial-gradient(
+				1100px 560px at 50% -130px,
+				rgba(65, 191, 156, 0.1),
+				transparent 60%
+			),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				rgba(65, 191, 156, 0.055),
+				transparent 55%
+			),
+			radial-gradient(
+				1000px 700px at 50% 115%,
+				rgba(0, 0, 0, 0.42),
+				transparent 60%
+			),
+			linear-gradient(180deg, #0a0f0d 0%, #0a0d0c 55%, #040706 100%);
+	}
+	.violet body {
+		background-image:
+			radial-gradient(
+				1100px 560px at 50% -130px,
+				rgba(139, 124, 246, 0.1),
+				transparent 60%
+			),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				rgba(139, 124, 246, 0.055),
+				transparent 55%
+			),
+			radial-gradient(
+				1000px 700px at 50% 115%,
+				rgba(0, 0, 0, 0.42),
+				transparent 60%
+			),
+			linear-gradient(180deg, #0d0c12 0%, #0b0b0e 55%, #060509 100%);
 	}
 
 	/* Desktop keeps the glow pinned to the viewport; phones get the smooth
 	   (non-attached) gradients above. */
 	@media (min-width: 640px) {
-		.dark body {
+		.dark body,
+		.ember body,
+		.jade body,
+		.violet body {
 			background-attachment: fixed;
 		}
 	}
@@ -243,6 +397,18 @@
 		background: rgba(242, 239, 233, 0.26);
 		color: #0a0b0d;
 	}
+	.ember ::selection {
+		background: rgba(226, 109, 42, 0.3);
+		color: #0b0b0c;
+	}
+	.jade ::selection {
+		background: rgba(65, 191, 156, 0.3);
+		color: #07231c;
+	}
+	.violet ::selection {
+		background: rgba(139, 124, 246, 0.32);
+		color: #0b0a16;
+	}
 
 	h1,
 	h2,
@@ -265,16 +431,22 @@
 			backdrop-filter: blur(4px);
 		}
 	}
-	.dark .surface {
-		@apply border-white/10 bg-[#14151a]/80;
+	.dark .surface,
+	.ember .surface,
+	.jade .surface,
+	.violet .surface {
+		@apply border-white/10 bg-[#14151a]/80 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)];
 	}
 
 	/* Nested quiet surface inside a panel. */
 	.inner-surface {
 		@apply rounded-2xl border border-border/60 bg-background/40;
 	}
-	.dark .inner-surface {
-		@apply border-white/[0.07] bg-white/[0.04];
+	.dark .inner-surface,
+	.ember .inner-surface,
+	.jade .inner-surface,
+	.violet .inner-surface {
+		@apply border-white/[0.07] bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)];
 	}
 
 	/* A raised, tactile surface for primary actions / the ring. */
@@ -282,11 +454,35 @@
 		@apply rounded-2xl border border-gold/25 bg-night-raised/60;
 	}
 
+	/* Candlelight: a soft pool of the accent behind a headline. Invisible on
+	   paper; in a dark room it reads as light falling on the words. */
+	.halo {
+		position: absolute;
+		inset: -45% -10%;
+		z-index: -1;
+		border-radius: 9999px;
+		pointer-events: none;
+	}
+	.dark .halo,
+	.ember .halo,
+	.jade .halo,
+	.violet .halo {
+		background: radial-gradient(
+			closest-side,
+			color-mix(in srgb, var(--brand-accent) 16%, transparent),
+			transparent 72%
+		);
+		filter: blur(14px);
+	}
+
 	/* Calm, sentence-case label. */
 	.k-label {
 		@apply text-[0.72rem] font-medium tracking-[0.01em] text-muted-foreground;
 	}
-	.dark .k-label {
+	.dark .k-label,
+	.ember .k-label,
+	.jade .k-label,
+	.violet .k-label {
 		@apply text-fog/80;
 	}
 

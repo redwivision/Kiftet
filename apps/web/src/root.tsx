@@ -112,7 +112,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 				<script
 					dangerouslySetInnerHTML={{
-						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["dark","light"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,
+						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["dark","ember","jade","violet","light"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,
 					}}
 				/>
 				<Meta />
@@ -140,7 +140,7 @@ export default function App() {
 			defaultTheme="dark"
 			disableTransitionOnChange
 			storageKey="kiftet-theme"
-			themes={["dark", "light"]}
+			themes={["dark", "ember", "jade", "violet", "light"]}
 		>
 			<div className="flex min-h-dvh flex-col">
 				<Header />

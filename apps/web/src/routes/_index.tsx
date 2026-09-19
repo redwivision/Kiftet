@@ -117,7 +117,8 @@ export default function Home() {
 						Kiftet · spoken study review for Ethiopian students
 					</p>
 
-					<h1 className="space-y-3 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
+					<h1 className="relative isolate space-y-3 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
+						<span aria-hidden="true" className="halo" />
 						<span className="block">
 							<Words text="Close the gap." className="text-gold" />
 						</span>
