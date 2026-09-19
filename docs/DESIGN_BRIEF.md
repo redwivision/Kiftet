@@ -2,7 +2,7 @@
 
 ## 1. Who this is for, and what the design has to do
 
-**Audience:** Ethiopian Grade 11–12 STEM students under real, immediate pressure — the national exam pass rate is 12.8% even in its best year. They are not casual app browsers; they are stressed, time-pressed, and have likely already tried other tools (Ethio Matric, TikuretEntrance) that didn't fully work for them.
+**Audience:** Ethiopian students under real, immediate pressure — the national exam pass rate is 12.8% even in its best year. They are not casual app browsers; they are stressed, time-pressed, and have likely already tried other tools (Ethio Matric, TikuretEntrance) that didn't fully work for them.
 
 **The design's job:** Make the product feel calm, competent, and honest about the stakes — not panicked, not childish, not a generic imported SaaS tool. It needs to feel like it was built *for* an Ethiopian student specifically, not localized after the fact. Voice is the core interaction, so the interface has real work to do making a mostly-invisible interaction (talking) feel present and trustworthy on screen.
 

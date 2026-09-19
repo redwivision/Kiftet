@@ -70,7 +70,7 @@ export default function AuthShell({
 						</p>
 					</blockquote>
 					<p className="font-medium text-[0.72rem] text-gold">
-						Grade 11–12 STEM · National exam
+						Ethiopian students · National exam
 					</p>
 				</aside>
 			</div>

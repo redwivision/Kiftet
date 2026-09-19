@@ -40,7 +40,7 @@ export default defineConfig({
       manifest: {
         name: "KIFTET — Close the gap",
         short_name: "Kiftet",
-        description: "Find what's missing in your Grade 11–12 STEM studies and close the gap.",
+        description: "Find what's missing in your studies and close the gap.",
         theme_color: "#1B2340",
         background_color: "#1B2340",
         display: "standalone",

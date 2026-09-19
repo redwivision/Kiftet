@@ -13,7 +13,7 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 
 ## 2. Target users
 
-- **Primary (end user):** Grade 11–12 STEM students preparing for the national exam, reviewing content across multiple textbook chapters/subjects.
+- **Primary (end user):** Ethiopian students preparing for the national exam, reviewing content across multiple textbook chapters/subjects.
 - **Secondary (buyer):** Schools and private tutoring centers — the actual paying customer (see business model, §7).
 
 ## 3. Goals / success metrics

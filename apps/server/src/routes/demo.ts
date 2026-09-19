@@ -17,7 +17,7 @@ export function demoUserFor(req: Request): string | null {
 }
 
 const DEMO_TEXTBOOK = {
-	title: "Grade 12 Biology — Unit 3",
+	title: "Biology — Cell Biology",
 	subject: "Biology",
 	language: "en",
 };

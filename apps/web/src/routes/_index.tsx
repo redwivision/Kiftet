@@ -61,7 +61,7 @@ export default function Home() {
 			<section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
 				<div className="animate-fade-up space-y-7">
 					<p className="font-medium text-muted-foreground text-sm">
-						Kiftet · spoken study review for Grade 11–12 STEM students
+						Kiftet · spoken study review for Ethiopian students
 					</p>
 
 					<h1 className="space-y-2 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
@@ -340,7 +340,7 @@ function DemoCard() {
 					</p>
 				</div>
 				<div className="mb-1 flex items-center justify-between gap-3">
-					<p className="k-label">Physics · wave mechanics · Grade 11</p>
+					<p className="k-label">Physics · wave mechanics</p>
 					<span className="inline-flex items-center gap-1.5 font-medium text-[0.72rem] text-sage">
 						<span
 							className="size-1.5 rounded-full bg-sage"

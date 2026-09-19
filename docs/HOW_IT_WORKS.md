@@ -16,7 +16,7 @@ renders them; §5 explains how to read them).
 
 ## 1. The product — what Kiftet does
 
-Kiftet (ክፍተት, "gap") is a studying tool for Ethiopian Grade 11–12 STEM students
+Kiftet (ክፍተት, "gap") is a studying tool for Ethiopian students
 preparing for the national exam. The idea is simple:
 
 > A student speaks out loud what they remember about a topic. The app listens,
@@ -509,7 +509,7 @@ The study domain uses **five tables**, and one row of each means:
 
 | Table | One row = | Key columns |
 |---|---|---|
-| `textbook` | A real textbook that **belongs to a user** (e.g. "Physics Grade 12") | `ownerId` (→ user), `title`, `subject`, `language` |
+| `textbook` | A real textbook that **belongs to a user** (e.g. "Physics") | `ownerId` (→ user), `title`, `subject`, `language` |
 | `chapter` | One chapter in a textbook, with its text | `textbookId`, `title`, `rawText` |
 | `concept_node` | One idea (or misconception) in the checklist | `chapterId`, `conceptText`, `isMisconception`, `weight` |
 | `study_session` | One study attempt on a chapter | `chapterId`, `userId` (→ user), `status`, `startedAt`, `completedAt`, `retestQuestions` (JSON), `retestIndex` |
@@ -599,7 +599,7 @@ tables (the product) and the four **auth tables** (who is signed in).
 
 | Table | What one row means | Key fields |
 |---|---|---|
-| `textbook` | A real school textbook (e.g. Physics Grade 12) that a **user owns** | `ownerId` → user, `title`, `subject`, `language` |
+| `textbook` | A real school textbook (e.g. Physics) that a **user owns** | `ownerId` → user, `title`, `subject`, `language` |
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
