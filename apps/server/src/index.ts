@@ -5,11 +5,13 @@ import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
 import express from "express";
 import { migrateDb } from "@kiftet/db";
+import { logEnvProbe } from "./env-probe";
 import { requireAuth } from "./auth-middleware";
 import { env } from "./env.server";
 import studyRouter from "./routes/study";
 import { auth } from "./services";
 
+logEnvProbe();
 await migrateDb(env);
 
 const app = express();
