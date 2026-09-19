@@ -493,3 +493,37 @@ finalized turn (`partial !== true`) — so a mid-word whisper can never be taken
 as the answer. The ring's own live caption is SDK-owned UI and is the one place
 that shows words landing one-by-one *visually*; the app itself never lets that
 half-finished stream drive what we grade or read back.
+
+## Phase 6 — Your own textbook (import → study)
+
+### How to test
+
+1. Down a real PDF with a text layer (any textbook excerpt), or just copy-paste
+   chapter text.
+2. In the app: **Add your textbook** → name it, pick subject + language, attach
+   the PDF (or choose "paste text"). The PDF is read **on the device** — the
+   file is never uploaded.
+3. Chapter rows appear with extracted titles. Editing → in and out of the flow
+   and back in **resumes** where it stopped (already-done chapters are skipped,
+   not re-ingested).
+4. Each chapter is POSTed one at a time to `/api/chapters/ingest`; a fresh
+   concept checklist is built per chapter. Watch for per-chapter progress, and
+   a clear failure/retry on any single chapter (weak-wifi friendly: small text
+   payloads, no giant upload).
+5. Ingested chapters show up in the dashboard's chapter list like the seeded
+   ones — start a study session on your own chapter and run recall → gaps →
+   lesson → retest against **its** checklist.
+6. Wrong-language or scanned/image-only PDF (no embedded text): the app should
+   tell you the file has no readable text and point you at the paste path.
+
+### How you can test
+
+1. Dev: `bun run --cwd apps/server dev` + `bun run --cwd apps/web dev`, open
+   http://localhost:5173. (The lazy-loaded PDF engine only downloads on first
+   use — confirm the base bundle doesn't grow when this feature is closed.)
+2. Dashboard empty state shows **Add your textbook**; the flow works end-to-end
+   with a real PDF of a few pages (fast) and a long PDF (progress + resume).
+3. With a `GEMINI_API_KEY` absent, ingest must still complete via the
+   deterministic fallback (concepts of lower fidelity but never a hard failure).
+4. Kill the wifi mid-import on one chapter → that chapter shows failed/retry and
+   the next tap resumes without re-sending finished chapters.

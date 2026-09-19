@@ -70,24 +70,50 @@ const ingestSchema = z.object({
   rawText: z.string().min(1).max(200_000),
 });
 
+async function textbookIdFor(owner: string, title: string, subject: string, language: string) {
+  const [existing] = await db()
+    .select({ id: textbook.id })
+    .from(textbook)
+    .where(and(eq(textbook.ownerId, owner), eq(textbook.title, title)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const id = crypto.randomUUID();
+  await db().insert(textbook).values({
+    id,
+    ownerId: owner,
+    title,
+    subject,
+    language,
+  });
+  return id;
+}
+
 router.post("/chapters/ingest", async (req, res) => {
-  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
   const parsed = ingestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
   const { textbookTitle, subject, language, title, rawText } = parsed.data;
   const owner = ownerId(req);
-  const textbookId = crypto.randomUUID();
+
+  // One textbook row per (owner, title) — re-ingesting chapters of the same
+  // book attaches to the existing row instead of spawning a new textbook.
+  const textbookId = await textbookIdFor(owner, textbookTitle, subject, language);
+
+  // Resume-safety: a chapter whose title already exists in this book is
+  // already ingested. Return it without spending an AI call.
+  const [existingChapter] = await db()
+    .select({ id: chapter.id })
+    .from(chapter)
+    .where(and(eq(chapter.textbookId, textbookId), eq(chapter.title, title)))
+    .limit(1);
+  if (existingChapter) {
+    return ok(res, { textbookId, chapterId: existingChapter.id, conceptsExtracted: 0, reused: true });
+  }
+
+  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
+
   const chapterId = crypto.randomUUID();
-
-  await db().insert(textbook).values({
-    id: textbookId,
-    ownerId: owner,
-    title: textbookTitle,
-    subject,
-    language,
-  });
-
   await db().insert(chapter).values({
     id: chapterId,
     textbookId,
@@ -109,7 +135,38 @@ router.post("/chapters/ingest", async (req, res) => {
     );
   }
 
-  ok(res, { textbookId, chapterId, conceptsExtracted: extracted.length }, 201);
+  ok(res, { textbookId, chapterId, conceptsExtracted: extracted.length, reused: false }, 201);
+});
+
+// Each textbook with its chapters, in import order — the library view and the
+// resume-import logic (skip chapters whose title already exists) both read this.
+router.get("/textbooks", async (req, res) => {
+  const owner = ownerId(req);
+  const textbooks = await db()
+    .select()
+    .from(textbook)
+    .where(eq(textbook.ownerId, owner))
+    .orderBy(desc(textbook.createdAt));
+
+  const chapterRows = await db()
+    .select({
+      id: chapter.id,
+      textbookId: chapter.textbookId,
+      title: chapter.title,
+      createdAt: chapter.createdAt,
+    })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(eq(textbook.ownerId, owner))
+    .orderBy(chapter.createdAt);
+
+  ok(
+    res,
+    textbooks.map((t) => ({
+      ...t,
+      chapters: chapterRows.filter((c) => c.textbookId === t.id),
+    })),
+  );
 });
 
 router.get("/chapters", async (req, res) => {

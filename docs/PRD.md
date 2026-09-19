@@ -46,8 +46,13 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 - Native mobile app (building a **web app / PWA** instead — see §8).
 - Location-based or push notification reminders (mention as roadmap only).
 - Full gamification, 3D models, avatar/character layer.
-- Multi-textbook library beyond the one demo textbook.
 - Spaced-repetition scheduling across sessions/days.
+
+> The one lonely book in the demo is a **post-hackathon** gap. The next phase
+> (Phase 6) is "bring your own book": the student uploads their textbook (PDF or
+> pasted text), the device extracts per-chapter text locally, and each chapter
+> flows through the existing ingest pipeline into a study. The server API already
+> supports it — the work is the on-device extraction flow and the import UI.
 
 ## 6. Non-functional requirements
 

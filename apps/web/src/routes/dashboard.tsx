@@ -1,4 +1,4 @@
-import { Button } from "@kiftet/ui/components/button";
+import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -92,15 +92,27 @@ export default function Dashboard() {
 
 	return (
 		<main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-			<header className="mb-8 max-w-2xl space-y-2">
-				<p className="k-label">The study room</p>
-				<h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-					Pick a chapter, then speak.
-				</h1>
-				<p className="text-muted-foreground text-sm leading-6">
-					Each chapter runs the same loop — recall, diagnose, relearn, retest.
-					You&apos;ll see your coverage after each recall, and again at the end.
-				</p>
+			<header className="mb-8 flex items-start justify-between gap-4">
+				<div className="max-w-2xl space-y-2">
+					<p className="k-label">The study room</p>
+					<h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+						Pick a chapter, then speak.
+					</h1>
+					<p className="text-muted-foreground text-sm leading-6">
+						Each chapter runs the same loop — recall, diagnose, relearn, retest.
+						You&apos;ll see your coverage after each recall, and again at the end.
+					</p>
+				</div>
+				{chapters && chapters.length > 0 && (
+					<div className="hidden shrink-0 sm:block">
+						<Link
+							to="/textbooks"
+							className={buttonVariants({ variant: "outline", size: "sm" })}
+						>
+							Add your textbook
+						</Link>
+					</div>
+				)}
 			</header>
 
 			{!session && getDemoUser() && (
@@ -160,10 +172,10 @@ export default function Dashboard() {
 						</p>
 					</div>
 					<Link
-						to="/"
-						className="font-medium text-gold text-xs underline underline-offset-4 hover:text-gold-soft"
+						to="/textbooks"
+						className={buttonVariants({ size: "sm" })}
 					>
-						Back to the intro
+						Add your textbook — it&apos;s on your device, not ours
 					</Link>
 				</div>
 			)}

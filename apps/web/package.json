@@ -18,6 +18,7 @@
     "@tanstack/react-form": "^1.33.5",
     "@varlock/vite-integration": "1.5.1",
     "@voxide/react": "^0.8.0",
+    "pdfjs-dist": "^6.3.289",
     "better-auth": "catalog:",
     "isbot": "^5.2.2",
     "lucide-react": "catalog:",

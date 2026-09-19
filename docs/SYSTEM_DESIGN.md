@@ -40,7 +40,7 @@ Keep the AI-calling layer behind a **provider fallback chain** (multiple LLM pro
 
 ## 3. Core pipeline, step by step
 
-1. **Chapter ingestion** — chapter text goes to the LLM with a prompt asking it to output a structured list of: (a) core testable concepts, (b) common misconceptions specific to that concept. Store as `ConceptNode` rows tied to the chapter. Do this once per chapter, cache the result — don't re-run extraction on every session.
+1. **Chapter ingestion** — chapter text goes to the LLM with a prompt asking it to output a structured list of: (a) core testable concepts, (b) common misconceptions specific to that concept. Store as `ConceptNode` rows tied to the chapter. Do this once per chapter, cache the result — don't re-run extraction on every session. **For a student's own textbook (Phase 6):** the file (PDF/pasted text) is opened on the device, per-chapter text is extracted in the browser via a lazy-loaded PDF engine, cleaned, and only the raw text is POSTed to `/api/chapters/ingest`. File bytes never leave the phone.
 2. **Recall capture** — student speaks into the mic. Voxide handles speech-to-text, producing a transcript.
 3. **Gap grading** — transcript + the chapter's ConceptNode list go to the LLM with a grading prompt: which concepts were covered correctly, which were missing, which misconceptions showed up. Output: a gap list + a numeric coverage score.
 4. **Micro-lesson generation** — LLM generates a short, targeted explanation covering *only* the gap concepts (use local analogies where natural). Voxide converts this to speech and plays it back.
@@ -73,6 +73,7 @@ GET  /sessions/:id/result      — before/after delta
 - **Cache concept extraction per chapter** — never re-run it live during a demo; pre-process your demo chapters in advance so nothing depends on a slow API call in front of judges.
 - **Test on a real, throttled connection** before demo day — Ethiopia's mobile connectivity is inconsistent, and "works on my fast office wifi" is not the same as "works on stage."
 - **Have a recorded backup** of at least one full successful run, in case live voice input fails in the room (background noise, mic issues) — don't let your whole demo depend on one live voice capture working perfectly under pressure.
+- **Textbook import is device-first for weak wifi.** PDFs stay on the phone; the extraction library is lazy-loaded (never in the base bundle); chapters ingest one at a time with small text payloads + progress/resume, not one giant upload. Scanned/image-only PDFs (no text layer) and OCR are out of scope for the first cut — the paste-text path covers those.
 
 ## 7. Open technical risk to test early, not late
 

@@ -408,7 +408,82 @@ export default function Home() {
 				</div>
 			</section>
 
-{/* ── CTA ───────────────────────────────────────────────── */}
+{/* ── The bookshelf: your textbook becomes the study room ── */}
+			<section className="mt-20 grid gap-8 lg:grid-cols-2 lg:items-center">
+				<div className="space-y-5">
+					<p className="k-label">Bring your own book</p>
+					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+						Your textbook <span className="text-gold">is</span> the study room.
+					</h2>
+					<p className="text-base text-muted-foreground leading-7">
+						Upload the book you&apos;re actually studying — the one that matches
+						your syllabus — and Kiftet turns each of its chapters into its own
+						recall → diagnose → relearn → retest loop.
+					</p>
+					<p className="text-base text-muted-foreground leading-7">
+						The file is read on your device. Only the text is sent, chapter by
+						chapter, so a whole book never becomes one heavy upload — it works
+						on the school&apos;s wifi.
+					</p>
+					<Link
+						to="/textbooks"
+						className={cn(
+							buttonVariants({ size: "lg" }),
+							"mt-2 font-medium",
+						)}
+					>
+						Preview it on your book
+					</Link>
+					<p className="text-muted-foreground text-sm">
+						No PDF? Paste the chapter text instead — the loop doesn&apos;t
+						care where a chapter begins.
+					</p>
+				</div>
+
+				<div className="surface p-6">
+					<div className="mb-4 flex items-center justify-between">
+						<div>
+							<p className="font-medium text-[0.72rem] text-gold">Physics · Grade 11</p>
+							<h3 className="font-display font-semibold text-xl tracking-tight">
+								Waves and Optics
+							</h3>
+						</div>
+						<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
+							7 chapters
+						</span>
+					</div>
+					<ul className="divide-y divide-border/60">
+						{[
+							["Sound Waves", "closed"],
+							["Wave Properties", "closed"],
+							["Reflection and Refraction", "open"],
+							["Lenses and Mirrors", "open"],
+							["Optical Instruments", "open"],
+							["Light and Colour", "open"],
+						].map(([chapter, state], i) => (
+							<li key={chapter} className="flex items-center justify-between gap-3 py-2.5">
+								<div className="flex min-w-0 items-center gap-3">
+<span className="font-medium text-[0.7rem] text-muted-foreground">
+									{String(i + 1).padStart(2, "0")}
+								</span>
+									<p className="truncate text-sm">{chapter}</p>
+								</div>
+								{state === "closed" ? (
+									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
+										Study loop ready
+									</span>
+								) : (
+									<span className="shrink-0 text-[0.72rem] text-muted-foreground">
+										lines up next
+									</span>
+								)}
+							</li>
+						))}
+					</ul>
+				</div>
+			</section>
+
+			{/* ── CTA ───────────────────────────────────────────────── */}
 			<section
 				ref={cta.ref}
 				className={cn(

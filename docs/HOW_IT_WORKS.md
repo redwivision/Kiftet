@@ -198,22 +198,35 @@ Some rules that keep this simple:
 
 ### 5.2 Chapter ingest — putting content into the system
 
-Before any studying can happen, someone must load a chapter in. This only
-happens for admins/seeds, not during a student's session:
+Before any studying can happen, a chapter must be loaded in. Ingest runs **once
+per chapter** and its result (the concept checklist) is cached and reused by
+every later session — it is never re-run live during a study loop.
+
+Two ways content gets in:
+
+- **Seeded/demo content** — the demo (and any seeds) load chapters directly on
+  the server (see §13 Part II).
+- **The student's own textbook (Phase 6)** — the student uploads their book
+  (PDF or pasted text) from the app. The file's text is extracted **on the
+  device**, chapter by chapter, and only that cleaner text is POSTed to
+  `/api/chapters/ingest`. The file bytes never leave the phone — the server
+  never sees a PDF.
 
 ```mermaid
 flowchart LR
-  A["1 · send the chapter's<br/>raw text"] --> B["2 · save textbook<br/>+ chapter rows"]
-  B --> C["3 · Gemini builds the<br/>concept checklist"]
-  C --> D["4 · save concepts<br/>(5–12 per chapter)"]
-  D --> E["5 · reply with the ids"]
+  A["1 · student's file<br/>(PDF / pasted text)"] --> B["2 · extract text<br/>on the device"]
+  B --> C["3 · POST the chapter's<br/>raw text"]
+  C --> D["4 · save textbook<br/>+ chapter rows"]
+  D --> E["5 · Gemini builds the<br/>concept checklist"]
+  E --> F["6 · save concepts<br/>(5–12 per chapter)"]
+  F --> G["7 · reply with the ids"]
 ```
 
-> **Trace:** raw text → saved rows → Gemini extracts concepts → concepts saved →
-> ids returned.
+> **Trace:** file → device-side text extraction → raw text → saved rows → Gemini
+> extracts concepts → concepts saved → ids returned.
 
 ```
-Sending:   { textbookTitle, subject, title, rawText }
+Sending:   { textbookTitle, subject, language, title, rawText }
 Receiving: { textbookId, chapterId, conceptsExtracted }
 Data kept: textbook (1) → chapter (1) → concept_node (5-12)
 ```
@@ -651,7 +664,7 @@ These "1-to-many" links are stored by a foreign key: a column holding another
 table's row id, e.g. `concept_node.chapter_id`. A **foreign key** is just a
 promise: "this value must exist in that other table."
 
-### Why SQLite on this branch and Postgres on main
+### Why the dev branch used SQLite and production uses Postgres
 - **SQLite** = one file (`kiftet-dev.db`). No server to install, no credentials,
   works offline, impossible to break. Perfect for iterating fast on the
   prototype.
@@ -659,8 +672,10 @@ promise: "this value must exist in that other table."
   write safety. That's what production needs when many students hit it at once.
 
 Drizzle lets us switch by changing the driver (the bit that actually talks to the
-database). The schema language is ~90% identical, so the swap is cheap. We test
-against Postgres on `main` before merge, since main is the "real" app.
+database). The schema language is ~90% identical, so the swap is cheap.
+**Production today runs Postgres on Neon** (`DATABASE_URL` pooled + 
+`DATABASE_URL_DIRECT`); local dev can still point at SQLite (or Neon) freely —
+the app itself doesn't care.
 
 ### Migrations — the schema's change history
 When the schema changes, Drizzle **generates** a SQL file describing the exact
@@ -716,6 +731,11 @@ Phase 2.
 
 Every route below is mounted behind the `requireAuth` middleware — a request
 without a valid session gets `401` before it ever reaches the route (see §8).
+
+**Phase 6 (textbook import) note:** no new server routes are needed for the
+student's own book. The device extracts text from the file locally and posts
+each chapter through the existing `POST /api/chapters/ingest`; the server API
+surface below is unchanged.
 
 ---
 
@@ -1017,12 +1037,13 @@ wrong.
 
 | Phase | Name | Status |
 |---|---|---|
-| 0 | Skeleton — SQLite domain, API shell, AI seam | ✅ Done |
-| 1 | Voice spine — Voxide capture/playback + voice-state UI | ⏭️ Next |
-| 2 | AI loop — real Gemini: extraction, grading, micro-lessons, retest | ⛔ |
-| 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ |
-| 4 | Demo dataset + polish | ⛔ |
-| 5 | Deploy (EthioDeploy) + Postgres switch | ⛔ |
+| 0 | Skeleton — domain, API shell, AI seam | ✅ Done |
+| 1 | Voice spine — Voxide capture/playback + voice-state UI | ✅ Done |
+| 2 | AI loop — real Gemini: extraction, grading, micro-lessons, retest | ✅ Done |
+| 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ Done |
+| 4 | Demo dataset + polish | ✅ Done (live demo) |
+| 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
+| 6 | Your own textbook — student uploads their book (PDF/paste), device extracts text, per-chapter ingest → study | ⏭️ Next |
 
 > **The voice seam, honestly.** The SDK owns the orb + its word-by-word
 > caption (no hide flag in `VoxideAppearance`). We never bet the platform on
@@ -1084,7 +1105,9 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | AI rate limiting | §10.2 | `apps/server/src/routes/study.ts` (`allowAiRequest`) | — |
 | Idempotent submissions | §10.4 | `apps/server/src/routes/study.ts` (`insertAttemptOnce`) | — |
 | Retest resume on reload | §5.13 | `study.$sessionId.tsx`, `study-provider.tsx`, server `/sessions/:id` | — |
-| Themes (dark/light/forest/gold) | §4 | `components/theme-provider.tsx`, `components/theme-switcher.tsx` | — |
+| Chapter ingest — putting content in | §5.2 | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/web/src/lib/textbook.ts` | `POST /chapters/ingest` |
+| Your own textbook (import → library) | §5.2, Phase 6 | `apps/web/src/routes/textbooks.tsx`, `apps/web/src/lib/textbook.ts` | `GET /textbooks`, `POST /chapters/ingest` |
+| Themes (9 rooms: 8 dark + Sunlight) | §4 | `components/theme-provider.tsx`, `components/theme-switcher.tsx` | — |
 | Offline / installable (PWA) | §4 | `apps/web/vite.config.ts`, `public/offline.html` | — |
 | AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
 
@@ -1098,6 +1121,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | `react-router` + `@react-router/fs-routes` + `@react-router/node` + `@react-router/serve` | apps/web | URL → screen routing, file-based routes, SSR server, static serving. |
 | `@tanstack/react-form` | apps/web | Typed forms for sign-in and sign-up. |
 | `@voxide/react` | apps/web | The voice session: speech-to-text (hears the student) and the agent's natural text-to-speech. |
+| `pdfjs-dist` | apps/web | On-device PDF text extraction for the textbook import flow — lazy-loaded (dynamic `import()`) so it never ships in the base bundle. |
 | `better-auth` | apps/web, apps/server, packages/auth | Authentication: credentials, sessions, cookies, and the client hooks. |
 | `isbot` | apps/web | Bot detection for SSR. |
 | `lucide-react` | apps/web, packages/ui | All the icons. |
