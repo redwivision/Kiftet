@@ -1,9 +1,12 @@
-import { buttonVariants } from "@kiftet/ui/components/button";
+import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
 import { Mic, RefreshCcw, ScanSearch, Volume2 } from "lucide-react";
-import { Link } from "react-router";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { BrandMark, BrandSignature } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
+import { apiError } from "@/lib/api";
+import { setDemoUser, startDemo } from "@/lib/demo";
 import type { Route } from "./+types/_index";
 
 export function meta(_args: Route.MetaArgs) {
@@ -76,7 +79,7 @@ export default function Home() {
 						diagnosis.
 					</p>
 
-					<div className="flex flex-col gap-3 sm:flex-row">
+					<div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
 						<Link
 							to="/dashboard"
 							className={cn(
@@ -86,6 +89,7 @@ export default function Home() {
 						>
 							Start closing your gaps
 						</Link>
+						<DemoButton />
 						<a
 							href="#how"
 							className={cn(
@@ -373,6 +377,40 @@ function DemoCard() {
 					See it on your own chapter
 				</Link>
 			</div>
+		</div>
+	);
+}
+
+function DemoButton() {
+	const navigate = useNavigate();
+	const [pending, setPending] = useState(false);
+	const [failure, setFailure] = useState<string | null>(null);
+
+	const launch = async () => {
+		setPending(true);
+		setFailure(null);
+		try {
+			const userId = await startDemo();
+			setDemoUser(userId);
+			navigate("/dashboard");
+		} catch (error) {
+			setFailure(apiError(error));
+			setPending(false);
+		}
+	};
+
+	return (
+		<div className="flex w-full flex-col gap-1 sm:w-auto">
+			<Button
+				variant="outline"
+				size="lg"
+				onClick={launch}
+				disabled={pending}
+				className="w-full font-medium sm:w-auto"
+			>
+				{pending ? "Setting up your demo…" : "Try a live demo"}
+			</Button>
+			{failure && <p className="text-rust text-xs">{failure}</p>}
 		</div>
 	);
 }

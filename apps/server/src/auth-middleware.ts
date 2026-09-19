@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { env } from "./env.server";
+import { demoUserFor } from "./routes/demo";
 import { auth } from "./services";
 
 // Origins allowed to make state-changing requests. CORS_ORIGIN may list
@@ -53,6 +54,12 @@ export async function requireAuth(
 				res.status(403).json({ error: "Request origin is not allowed." });
 				return;
 			}
+		}
+		const demoId = demoUserFor(req);
+		if (demoId) {
+			req.authSession = { user: { id: demoId }, session: { id: "demo" } };
+			next();
+			return;
 		}
 		const session = await auth.api.getSession({ headers: requestHeaders(req) });
 		if (!session) {

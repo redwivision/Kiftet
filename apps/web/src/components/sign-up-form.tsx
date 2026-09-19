@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { clearDemoUser } from "@/lib/demo";
 
 import AuthShell from "./auth-shell";
 import Loader from "./loader";
@@ -33,10 +34,11 @@ export default function SignUpForm({
 					name: value.name,
 				},
 				{
-					onSuccess: () => {
-						navigate("/dashboard");
-						toast.success("Account created");
-					},
+onSuccess: () => {
+					clearDemoUser();
+					navigate("/dashboard");
+					toast.success("Account created");
+				},
 					onError: (error) => {
 						toast.error(error.error.message || error.error.statusText);
 					},

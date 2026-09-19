@@ -7,6 +7,7 @@ import { BrandSignature } from "@/components/brand-mark";
 import type { ChapterInfo } from "@/components/study-provider";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { getDemoUser } from "@/lib/demo";
 import type { Route } from "./+types/dashboard";
 
 export function meta(_args: Route.MetaArgs) {
@@ -39,11 +40,11 @@ export default function Dashboard() {
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		if (!sessionPending && !session) {
+		if (!sessionPending && !session && !getDemoUser()) {
 			navigate("/login");
 			return;
 		}
-		if (sessionPending || !session) return;
+		if (sessionPending || (!session && !getDemoUser())) return;
 		let cancelled = false;
 		api<ChapterInfo[]>("/chapters")
 			.then((rows) => {
@@ -101,6 +102,21 @@ export default function Dashboard() {
 					You&apos;ll see your coverage after each recall, and again at the end.
 				</p>
 			</header>
+
+			{!session && getDemoUser() && (
+				<div className="surface mb-8 flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+					<p className="text-muted-foreground">
+						<span className="font-medium text-gold">Live demo</span> — this study
+						room isn&apos;t saved to an account. Sign up to keep your progress.
+					</p>
+					<Link
+						to="/login"
+						className="font-medium text-gold text-xs underline underline-offset-4 hover:text-gold-soft"
+					>
+						Create a free account
+					</Link>
+				</div>
+			)}
 
 			{error && (
 				<div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">

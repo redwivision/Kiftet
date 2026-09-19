@@ -1,3 +1,5 @@
+import { getDemoUser } from "@/lib/demo";
+
 const API = (import.meta.env.VITE_SERVER_URL as string) || "";
 // A missing VITE_SERVER_URL falls back to localhost, which is correct in dev
 // but fatal in production — every API call would 404 against the visitor's
@@ -10,7 +12,7 @@ if (!API && import.meta.env.PROD) {
 }
 const resolvedApi = API || "http://localhost:3000/api";
 const serverRoot = resolvedApi.replace(/\/api\/?$/, "").replace(/\/+$/, "");
-const apiUrl = (path: string) => `${serverRoot}/api${path}`;
+export const apiUrl = (path: string) => `${serverRoot}/api${path}`;
 
 // Carries the HTTP status so callers can tell a real 404 ("this session isn't
 // here") apart from a transient network failure before they render "not found".
@@ -28,10 +30,15 @@ export async function api<T = unknown>(
 	path: string,
 	init?: RequestInit,
 ): Promise<T> {
+	const demoUser = getDemoUser();
 	const res = await fetch(apiUrl(path), {
 		...init,
 		credentials: "include",
-		headers: { "Content-Type": "application/json", ...init?.headers },
+		headers: {
+			"Content-Type": "application/json",
+			...(demoUser ? { "X-Demo-User-Id": demoUser } : {}),
+			...init?.headers,
+		},
 	});
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));

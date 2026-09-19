@@ -30,6 +30,7 @@ import {
 import { VoxideRing } from "@/components/voxide-ring";
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { getDemoUser } from "@/lib/demo";
 import { findBoundaryEnd, leadingText } from "@/lib/intent";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
@@ -86,7 +87,7 @@ export default function StudyRoute({ params }: Route.ComponentProps) {
 			</main>
 		);
 	}
-	if (!session) {
+	if (!session && !getDemoUser()) {
 		return <NavigateToLogin />;
 	}
 	return (

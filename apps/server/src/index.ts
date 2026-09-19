@@ -9,6 +9,7 @@ import { logEnvProbe } from "./env-probe";
 import { requireAuth } from "./auth-middleware";
 import { env } from "./env.server";
 import studyRouter from "./routes/study";
+import demoRouter from "./routes/demo";
 import { auth } from "./services";
 
 logEnvProbe();
@@ -44,6 +45,10 @@ app.use(
 app.all("/api/auth{/*path}", toNodeHandler(auth));
 
 app.use(express.json({ limit: "256kb" }));
+
+// Demo mode: anonymous visitors get a throwaway study room. Mounted before the
+// auth gate because /demo/start is the one endpoint a stranger may call.
+app.use("/api/demo", demoRouter);
 
 app.use("/api", requireAuth, studyRouter);
 

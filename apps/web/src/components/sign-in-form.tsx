@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { clearDemoUser } from "@/lib/demo";
 
 import AuthShell from "./auth-shell";
 import Loader from "./loader";
@@ -31,10 +32,11 @@ export default function SignInForm({
 					password: value.password,
 				},
 				{
-					onSuccess: () => {
-						navigate("/dashboard");
-						toast.success("Welcome back");
-					},
+onSuccess: () => {
+					clearDemoUser();
+					navigate("/dashboard");
+					toast.success("Welcome back");
+				},
 					onError: (error) => {
 						toast.error(error.error.message || error.error.statusText);
 					},
