@@ -9,9 +9,17 @@ import * as schema from "./schema";
 
 // kiftet runs on Neon Postgres. The pooled (-pooler) hostname is the app's
 // connection; the unpooled/direct hostname is reserved for migrations, which
-// need a session-stable connection the pool cannot guarantee.
+// need a session-stable connection the pool cannot guarantee. Neon requires
+// TLS for every endpoint, so any non-local host connects over SSL regardless
+// of whether the URL carries an explicit sslmode query param.
 function sslFor(url: string) {
-	return /[?&]sslmode=require/.test(url) ? { rejectUnauthorized: false } : false;
+	try {
+		const host = new URL(url).hostname;
+		if (host === "localhost" || host === "127.0.0.1") return false;
+	} catch {
+		return false;
+	}
+	return { rejectUnauthorized: false };
 }
 
 // The migrations folder lives in this package's source. When the API is

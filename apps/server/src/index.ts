@@ -12,7 +12,13 @@ import studyRouter from "./routes/study";
 import { auth } from "./services";
 
 logEnvProbe();
-await migrateDb(env);
+try {
+	await migrateDb(env);
+} catch (error) {
+	console.error(`[boot] database migration FAILED: ${error instanceof Error ? error.message : String(error)}`);
+	console.error(error);
+	process.exit(1);
+}
 
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";
