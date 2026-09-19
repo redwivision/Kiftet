@@ -127,7 +127,7 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 - **[`HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** — the single source of truth: every feature, library, and the data model (9 tables) explained from zero.
 - **[`PRD.md`](docs/PRD.md)** — product requirements, the market case, sponsor integrations.
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
-- **[`DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)** — the visual identity: gold `#E8A33D` on indigo `#1B2340`, the open-ring mark, type and UI principles.
+- **[`DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)** — the visual identity: monochrome — ivory `#F2EFE9` on black `#0A0B0D`, the open-ring mark, type and UI principles.
 - **[`TESTING_GUIDE.md`](docs/TESTING_GUIDE.md)** — end-to-end verification of every phase.
 
 ## Status

@@ -3,23 +3,16 @@
  *
  * A circle with a segment missing: the gap (ክፍተት). It is the one
  * idea the whole product is about, drawn once so it can be read in a
- * frame: a whole that isn't whole — with a piece missing that gold
- * (the brand's "gap closed" colour) is the only thing that can fill.
+ * frame: a whole that isn't whole. The missing piece stays empty — an
+ * honest gap, never painted over — while the rest of the interface
+ * (actions, highlights, the beam) carries the brand colour.
  *
  * Rendered as inline SVG, stroke follows `currentColor` so the same
  * mark works on light and dark surfaces.
  */
 
-const R = 44;
-
 /* The 288° arc — the ring with a 72° segment missing at the top-right. */
 const OPEN_ARC = "M 93.46 43.12 A 44 44 0 1 1 56.88 6.54";
-
-/* The missing 72° segment — the gold piece that closes the gap. */
-const GAP_ARC = "M 56.88 6.54 A 44 44 0 0 1 93.46 43.12";
-
-/* Arc length of a 72° arc on the ring circle (2π·44 · 72/360). */
-const GAP_LENGTH = (2 * Math.PI * R * 72) / 360;
 
 const STROKE = 8;
 
@@ -51,9 +44,9 @@ export function BrandMark({
 }
 
 /**
- * The gap closing, live. The open ring plus the missing segment drawn in
- * gold as a growing arc — used where the product shows a gap being
- * closed (result crescents, "gap closed" moments).
+ * The gap, left openly empty. Kept as its own component so call sites that
+ * used "the gap closing" read the same intent clearly, but the missing
+ * segment is never filled — it stays a pause in the ring.
  */
 export function GapClosingMark({
 	size = 56,
@@ -62,49 +55,14 @@ export function GapClosingMark({
 	size?: number;
 	className?: string;
 }) {
-	return (
-		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 100 100"
-			fill="none"
-			xmlns="http://www.w3.org/2000/svg"
-			className={className}
-			aria-hidden="true"
-		>
-			<path
-				d={OPEN_ARC}
-				stroke="currentColor"
-				strokeWidth={STROKE}
-				strokeLinecap="round"
-			/>
-			<path
-				d={GAP_ARC}
-				stroke="#E8A33D"
-				strokeWidth={STROKE}
-				strokeLinecap="round"
-				strokeDasharray={`${GAP_LENGTH} 70`}
-				strokeDashoffset={GAP_LENGTH}
-			>
-				<animate
-					attributeName="stroke-dashoffset"
-					from={GAP_LENGTH}
-					to="0"
-					dur="1.4s"
-					begin="0.15s"
-					fill="freeze"
-					calcMode="spline"
-					keySplines="0.22 1 0.36 1"
-				/>
-			</path>
-		</svg>
-	);
+	return <BrandMark size={size} className={className} />;
 }
 
 /**
  * Large brand signature — used on empty states, CTAs, and anywhere
  * the brand wants to make a statement. Renders the mark at a hero
- * scale with a soft gold glow.
+ * scale with a soft ivory glow in dark rooms (the candle) and a soft
+ * shadow in the light one.
  */
 export function BrandSignature({
 	size = 96,
@@ -121,7 +79,7 @@ export function BrandSignature({
 				className="absolute inset-0 rounded-full"
 				style={{
 					background:
-						"radial-gradient(circle, rgba(232,163,61,0.18) 0%, transparent 65%)",
+						"radial-gradient(circle, rgba(242,239,233,0.16) 0%, transparent 65%)",
 					filter: "blur(20px)",
 				}}
 			/>

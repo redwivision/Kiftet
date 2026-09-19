@@ -28,14 +28,14 @@ Log this decision (name, logo direction, and the reasoning above) as a dated ent
 
 ### Color (named, tested together, not generic defaults)
 
-**Core identity — Night Indigo and Meskel Gold, clashed together, not separate.** This pairing is the brand, not two independent accent choices sitting apart from each other. Confirmed by mockup: gold reads clearly and deliberately against indigo, both in a small logo mark and as a full app surface.
+**Core identity — Black and Ivory, a deliberate monochrome.** The app is a near-black room lit by flat ivory — one colour axis, no rainbow. Accent utilities (`gold` tokens) resolve to the adaptive candle/ink value so the same classes read correctly in both rooms. Confirmed by mockup: ivory reads cleanly against true black, both in the small logo mark and as a full app surface.
 
-- **Night Indigo** `#1B2340` — **primary surface**, not just an accent. Used as the main dark background across the app, not only reserved for "focus mode." Study happens under real pressure, often at night — this is the app's default register, not a special state.
-- **Meskel Gold** `#E8A33D` — **primary accent**, always read against indigo. Meskel flowers mark the end of the rainy season and new beginnings in Ethiopian tradition — used for the logo, key actions, and "gap closed" moments.
-- **Manuscript** `#F2EAD8` — secondary **light** surface, reserved for screens with dense reading content (a full chapter of text is harder to read light-on-dark for long stretches than a short review screen is).
-- **Ink** `#201C16` — text on Manuscript/light surfaces. On Night Indigo surfaces, text uses Manuscript instead of Ink.
-- **Oxide Rust** `#B54A2C` — one meaning, used consistently: something needs attention. Covers both "gap identified" in the diagnostic screen and "incorrect" in retest feedback — deliberately not the generic AI-default terracotta, a deeper, more mineral red.
-- **Sage** `#5C7A5E` — one meaning, used consistently: this is solid. Covers both "correct" in retest feedback and "mastered" in longer-term concept tracking — a muted, earthy green, not a bright generic success-green, so it still feels calm rather than gamified.
+- **Ink black** `#0A0B0D` — **primary surface**, not just an accent. Used as the main dark background across the app, not only reserved for "focus mode." Study happens under real pressure, often at night — this is the app's default register, not a special state.
+- **Ivory** `#F2EFE9` — **primary accent**, always read against black. Candlelight on a dark room: used for the logo, key actions, and "gap closed" moments. On light surfaces it flips to ink (`#201D18`) so the same mark stays legible on paper.
+- **Manuscript** `#F2EFE9` — secondary **light** surface, reserved for screens with dense reading content (a full chapter of text is harder to read light-on-dark for long stretches than a short review screen is).
+- **Ink** `#16151A` — text on Manuscript/light surfaces. On the dark room, text uses Ivory instead of Ink.
+- **Oxide Rust** `#C2464C` — one meaning, used consistently: something needs attention. Covers both "gap identified" in the diagnostic screen and "incorrect" in retest feedback — the single functional colour allowed in the monochrome identity, muted and mineral rather than generic red.
+- **Fog** `#8B8F98` — one meaning, used consistently: muted secondary text on dark surfaces. Keeps hierarchies calm without adding a second tint.
 
 Rust and Sage double as the correct/incorrect feedback convention deliberately — using the same two colors for both the diagnostic gap-finding and the retest scoring keeps the whole app speaking one consistent visual language, rather than introducing a separate "quiz app" color system on top of the brand.
 

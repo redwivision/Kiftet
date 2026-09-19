@@ -1,12 +1,12 @@
 <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- The Kiftet app icon: the open ring (ክፍተት) on a rounded-square
-       Night Indigo tile. Same ring geometry as assets/logo-mark.svg and
+  <!-- The Kiftet app icon: the open ring (ክፍተት) on a true-black,
+       near-square tile. Same ring geometry as assets/logo-mark.svg and
        apps/web/public/logo-mark.svg, so the home-screen icon stays in
        sync with the brand. -->
-  <rect x="2" y="2" width="116" height="116" rx="26" fill="#1B2340"/>
+  <rect x="2" y="2" width="116" height="116" rx="26" fill="#0A0B0D"/>
   <path d="M 93.46 43.12 A 44 44 0 1 1 56.88 6.54"
         transform="translate(10 10)"
-        stroke="#E8A33D"
+        stroke="#F2EFE9"
         stroke-width="10"
         stroke-linecap="round"/>
 </svg>

@@ -15,40 +15,24 @@ import { useTheme } from "@/components/theme-provider";
 
 const THEMES = [
 	{
+		value: "dark",
+		label: "Ink",
+		note: "Black and ivory, quiet",
+		swatch: "#0a0b0d",
+		chip: "ring-1 ring-gold/60",
+	},
+	{
 		value: "light",
 		label: "Sunlight",
 		note: "Paper and morning light",
 		swatch: "#f3efe4",
 		chip: "ring-1 ring-ink/20",
 	},
-	{
-		value: "forest",
-		label: "Forest",
-		note: "Deep sage study room",
-		swatch: "#2c3d35",
-		chip: "ring-1 ring-sage/60",
-	},
-	{
-		value: "dark",
-		label: "Night",
-		note: "Indigo, gold, quiet",
-		swatch: "#1b2340",
-		chip: "ring-1 ring-gold/60",
-	},
-	{
-		value: "gold",
-		label: "Gold",
-		note: "Meskel gold after dark",
-		swatch: "#332a16",
-		chip: "ring-1 ring-gold/60",
-	},
 ] as const;
 
 const THEME_COLOR: Record<string, string> = {
+	dark: "#0a0b0d",
 	light: "#f6f1e6",
-	forest: "#1d2b25",
-	dark: "#101728",
-	gold: "#211809",
 };
 
 export function ThemeSwitcher() {

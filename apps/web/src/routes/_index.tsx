@@ -306,7 +306,7 @@ export default function Home() {
 					<div className="relative grid place-items-center">
 						<span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/25" />
 						<span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/15 [animation-delay:0.9s]" />
-						<div className="relative grid size-32 place-items-center rounded-full border-2 border-gold/50 bg-night-raised text-gold shadow-[0_0_40px_rgba(232,163,61,0.18)]">
+						<div className="relative grid size-32 place-items-center rounded-full border-2 border-gold/50 bg-night-raised text-gold shadow-[0_0_40px_rgba(242,239,233,0.15)]">
 							<Mic className="size-11" aria-hidden="true" />
 						</div>
 					</div>
@@ -392,7 +392,7 @@ export default function Home() {
 					</h3>
 					<p className="mt-2 text-muted-foreground text-sm leading-6">
 						Review happens when the day finally quietens down. The interface
-						stays a calm gold-on- indigo room, not a bright quiz app.
+						stays a calm black room lit by flat ivory, not a bright quiz app.
 					</p>
 				</div>
 				<div className="inner-surface p-5">

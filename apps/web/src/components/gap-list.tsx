@@ -14,7 +14,7 @@ interface CoverageViewProps {
  *
  * Before/after coverage is shown as a segmented strip: each concept the
  * chapter is checked against is one segment. Solid concepts sit tall and
- * filled (sage). Missing concepts sit low and open (rust) — the gap is
+ * filled (bright ivory). Missing concepts sit low and open (rust) — the gap is
  * legible at a glance, not just scored. Bar height follows the concept's
  * importance weight, so a heavy missing idea looks like the hole it is.
  * Misconceptions (the ideas the student stated WRONG, not just skipped)

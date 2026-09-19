@@ -5,7 +5,7 @@ import { BrandMark, BrandSignature } from "@/components/brand-mark";
 /**
  * The study-room door. Auth is the first surface a new student touches
  * after the landing page, so it wears the same identity: a calm surface
- * on the themed stage, the open-ring mark, and gold for the way forward.
+ * on the themed stage, the open-ring mark, and ivory for the way forward.
  */
 export default function AuthShell({
 	title,

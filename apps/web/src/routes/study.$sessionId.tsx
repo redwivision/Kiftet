@@ -1188,7 +1188,7 @@ function ResultPanel({
 						className="pointer-events-none absolute inset-0"
 						style={{
 							background:
-								"radial-gradient(480px 240px at 85% -20%, rgba(232,163,61,0.18), transparent 60%)",
+								"radial-gradient(480px 240px at 85% -20%, rgba(242,239,233,0.14), transparent 60%)",
 						}}
 					/>
 				)}

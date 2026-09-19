@@ -209,7 +209,7 @@ function ChapterCard({
 			type="button"
 			onClick={onStart}
 			disabled={starting}
-			className="group w-full rounded-3xl border border-border/70 bg-card/70 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(232,163,61,0.25)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 dark:bg-[#1a2340]/80"
+			className="group w-full rounded-3xl border border-border/70 bg-card/70 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(242,239,233,0.18)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 dark:bg-[#14151a]/80"
 		>
 			<div className="flex items-start justify-between gap-3">
 				<div className="space-y-1.5">

@@ -58,7 +58,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
 			content:
 				"Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
 		},
-		{ name: "theme-color", content: "#1B2340" },
+		{ name: "theme-color", content: "#0A0B0D" },
 		{ property: "og:type", content: "website" },
 		{
 			property: "og:site_name",
@@ -112,7 +112,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 				<script
 					dangerouslySetInnerHTML={{
-						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["light","forest","dark","gold"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,
+						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["dark","light"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,
 					}}
 				/>
 				<Meta />
@@ -140,7 +140,7 @@ export default function App() {
 			defaultTheme="dark"
 			disableTransitionOnChange
 			storageKey="kiftet-theme"
-			themes={["light", "forest", "dark", "gold"]}
+			themes={["dark", "light"]}
 		>
 			<div className="flex min-h-dvh flex-col">
 				<Header />

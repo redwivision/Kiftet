@@ -205,7 +205,7 @@
     background: linear-gradient(
       90deg,
       transparent,
-      color-mix(in srgb, var(--color-gold, #e8a33d) 40%, transparent),
+      color-mix(in srgb, var(--color-gold, #f2efe9) 40%, transparent),
       transparent
     );
   }

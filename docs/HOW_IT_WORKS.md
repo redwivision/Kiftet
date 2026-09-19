@@ -998,8 +998,8 @@ wrong.
    expensive AI call during a live session**. The demo must not depend on a slow
    API call while judges watch.
 
-4. **Mobile-first, calm design.** Night Indigo `#1B2340` + Meskel Gold `#E8A33D`
-   is the identity. The voice state ("Listening…", "Thinking…") is a first-class
+4. **Mobile-first, calm design.** True black `#0A0B0D` + Ivory `#F2EFE9`
+   is the monochrome identity. The voice state ("Listening…", "Thinking…") is a first-class
    UI element — a student has to trust the app is hearing them. The one place we
    spend visual boldness is the gap visualization: show *which* concepts are
    covered vs missing, not just "62%".

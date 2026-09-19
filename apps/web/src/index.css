@@ -1,115 +1,85 @@
 @import "@kiftet/ui/globals.css";
 
 /* ────────────────────────────────────────────────────────────────
-   Kiftet — Night Indigo + Meskel Gold identity
+   Kiftet — Black + Ivory monochrome identity
    Dark-first. Calm, competent, honest about the stakes.
    Display: Fraunces (editorial serif). Body: Inter.
    Ethiopic fallback always present so Amharic never breaks the face.
    ──────────────────────────────────────────────────────────────── */
 
 :root {
-	--background: #f3efe4;
-	--foreground: #201c14;
+	/* Black + Ivory monochrome — adaptive accent (ink on paper, candle on
+	   night). All brand utilities (gold/sage) map to these so the same
+	   classes read correctly in both rooms. */
+	--brand-accent: #201d18;
+	--brand-accent-soft: #4d4940;
+	--brand-accent-deep: #000000;
+	--brand-status: #615c53;
+
+	--background: #f6f1e6;
+	--foreground: #201d18;
 	--card: rgba(255, 255, 255, 0.72);
-	--card-foreground: #201c14;
+	--card-foreground: #201d18;
 	--popover: rgba(255, 255, 255, 0.94);
-	--popover-foreground: #201c14;
-	--primary: #b3791e;
-	--primary-foreground: #fbf7ec;
-	--secondary: #e9e1cd;
-	--secondary-foreground: #201c14;
-	--muted: #ece4d2;
-	--muted-foreground: #564f3e;
-	--accent: #1b2340;
-	--accent-foreground: #f3efe4;
+	--popover-foreground: #201d18;
+	--primary: #201d18;
+	--primary-foreground: #f6f1e6;
+	--secondary: #eae4d6;
+	--secondary-foreground: #201d18;
+	--muted: #ece6d8;
+	--muted-foreground: #5c574c;
+	--accent: #201d18;
+	--accent-foreground: #f6f1e6;
 	--destructive: #b34a28;
-	--border: rgba(27, 35, 64, 0.14);
-	--input: rgba(27, 35, 64, 0.1);
-	--ring: #c98d2c;
+	--border: rgba(32, 29, 24, 0.14);
+	--input: rgba(32, 29, 24, 0.1);
+	--ring: #201d18;
 }
 
+/* The default room: near-black, lit by flat ivory. No second colour —
+   everything is measured as light against dark. */
 .dark {
-	--background: #121a2e;
-	--foreground: #f3eee2;
-	--card: rgba(29, 39, 66, 0.6);
-	--card-foreground: #f3eee2;
-	--popover: rgba(19, 27, 48, 0.97);
-	--popover-foreground: #f3eee2;
-	--primary: #e8a33d;
-	--primary-foreground: #1b2340;
-	--secondary: #232e4d;
-	--secondary-foreground: #f3eee2;
-	--muted: #202a49;
-	--muted-foreground: #a5adc4;
-	--accent: #e8a33d;
-	--accent-foreground: #1b2340;
-	--destructive: #b34a28;
-	--border: rgba(243, 238, 226, 0.12);
-	--input: rgba(243, 238, 226, 0.1);
-	--ring: #f2bf5d;
+	--brand-accent: #f2efe9;
+	--brand-accent-soft: #ffffff;
+	--brand-accent-deep: #d6d2cc;
+	--brand-status: #dedbd4;
+
+	--background: #0a0b0d;
+	--foreground: #f2efe9;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #f2efe9;
+	--popover: rgba(8, 9, 11, 0.97);
+	--popover-foreground: #f2efe9;
+	--primary: #f2efe9;
+	--primary-foreground: #0a0b0d;
+	--secondary: #17181c;
+	--secondary-foreground: #f2efe9;
+	--muted: #16171b;
+	--muted-foreground: #8b8f98;
+	--accent: #f2efe9;
+	--accent-foreground: #0a0b0d;
+	--destructive: #c2464c;
+	--border: rgba(242, 239, 233, 0.1);
+	--input: rgba(242, 239, 233, 0.12);
+	--ring: #f2efe9;
 }
 
-/* Forest — deep sage as the field. Calm, grounding, made for a long night
-   of study without the screen leaning cold. */
-.forest {
-	--background: #23302b;
-	--foreground: #ecf3e7;
-	--card: rgba(255, 255, 255, 0.05);
-	--card-foreground: #ecf3e7;
-	--popover: rgba(27, 41, 33, 0.97);
-	--popover-foreground: #ecf3e7;
-	--primary: #9cc3a0;
-	--primary-foreground: #16231d;
-	--secondary: #2c3d35;
-	--secondary-foreground: #ecf3e7;
-	--muted: #2c3d35;
-	--muted-foreground: #a8c0ad;
-	--accent: #9cc3a0;
-	--accent-foreground: #16231d;
-	--destructive: #c0603a;
-	--border: rgba(236, 243, 231, 0.14);
-	--input: rgba(236, 243, 231, 0.12);
-	--ring: #9cc3a0;
-}
-
-/* Gold — Meskel Gold as the field. The warmest room in the house: amber
-   dusk, not a bright quiz app. */
-.gold {
-	--background: #29200f;
-	--foreground: #f7f0df;
-	--card: rgba(255, 255, 255, 0.05);
-	--card-foreground: #f7f0df;
-	--popover: rgba(39, 30, 15, 0.97);
-	--popover-foreground: #f7f0df;
-	--primary: #e8a33d;
-	--primary-foreground: #241a08;
-	--secondary: #3a2d17;
-	--secondary-foreground: #f7f0df;
-	--muted: #3a2d17;
-	--muted-foreground: #cfb68a;
-	--accent: #e8a33d;
-	--accent-foreground: #241a08;
-	--destructive: #d75f35;
-	--border: rgba(247, 240, 223, 0.16);
-	--input: rgba(247, 240, 223, 0.12);
-	--ring: #e8a33d;
-}
-
-@theme {
-	/* Brand surfaces */
-	--color-night: #1b2340;
-	--color-night-2: #20294a;
-	--color-night-raised: #27314f;
-	--color-night-deep: #0f1523;
-	--color-gold: #e8a33d;
-	--color-gold-soft: #f2bf5d;
-	--color-gold-deep: #b3791e;
-	--color-manuscript: #f3eee2;
-	--color-ink: #221d12;
-	--color-rust: #b34a28;
-	--color-sage: #5f7d62;
-	--color-sage-soft: #8faa92;
-	--color-fog: #a5adc4;
+@theme inline {
+	/* Brand surfaces — night is the true black room. "gold" is now the
+	   adaptive candle/ink accent (kept as a token name for zero churn). */
+	--color-night: #0b0c0e;
+	--color-night-2: #101114;
+	--color-night-raised: #15161a;
+	--color-night-deep: #050506;
+	--color-gold: var(--brand-accent);
+	--color-gold-soft: var(--brand-accent-soft);
+	--color-gold-deep: var(--brand-accent-deep);
+	--color-manuscript: #f2efe9;
+	--color-ink: #16151a;
+	--color-rust: #c2464c;
+	--color-sage: var(--brand-status);
+	--color-sage-soft: color-mix(in srgb, var(--brand-status) 68%, white);
+	--color-fog: #8b8f98;
 
 	/* Type */
 	--font-display:
@@ -210,7 +180,7 @@
 		background-image:
 			radial-gradient(
 				900px 500px at 50% -100px,
-				rgba(201, 141, 44, 0.1),
+				rgba(32, 29, 24, 0.05),
 				transparent 60%
 			),
 			linear-gradient(180deg, #f6f1e6 0%, #efe7d4 100%);
@@ -225,63 +195,28 @@
 		}
 	}
 
-	/* Deep night stage: indigo field, a gold wash rising from the top. */
+	/* The black room: near-black field, a faint ivory wash rising from the
+	   top, one cool graphite pool off to the right. Light is the accent. */
 	.dark body {
-		background-color: #101728;
+		background-color: #08090b;
 		background-image:
 			radial-gradient(
 				1100px 560px at 50% -130px,
-				rgba(232, 163, 61, 0.13),
+				rgba(242, 239, 233, 0.05),
 				transparent 60%
 			),
 			radial-gradient(
 				900px 480px at 92% 8%,
-				rgba(64, 88, 160, 0.1),
+				rgba(82, 86, 98, 0.08),
 				transparent 55%
 			),
-			linear-gradient(180deg, #131b2d 0%, #1b2340 55%, #161d33 100%);
-	}
-
-	/* Forest stage: deep sage field, a soft green wash from the top. */
-	.forest body {
-		background-color: #1d2b25;
-		background-image:
-			radial-gradient(
-				1100px 560px at 50% -130px,
-				rgba(156, 195, 160, 0.14),
-				transparent 60%
-			),
-			radial-gradient(
-				900px 480px at 92% 8%,
-				rgba(95, 125, 98, 0.16),
-				transparent 55%
-			),
-			linear-gradient(180deg, #22322b 0%, #1b2a23 55%, #17261f 100%);
-	}
-
-	/* Gold stage: deep amber field, the gold wash rising from the top. */
-	.gold body {
-		background-color: #211809;
-		background-image:
-			radial-gradient(
-				1100px 560px at 50% -130px,
-				rgba(232, 163, 61, 0.18),
-				transparent 60%
-			),
-			radial-gradient(
-				900px 480px at 92% 8%,
-				rgba(160, 112, 48, 0.16),
-				transparent 55%
-			),
-			linear-gradient(180deg, #2c2110 0%, #211809 55%, #1c1507 100%);
+			linear-gradient(180deg, #0b0c0e 0%, #0a0b0d 55%, #050506 100%);
 	}
 
 	/* Desktop keeps the glow pinned to the viewport; phones get the smooth
 	   (non-attached) gradients above. */
 	@media (min-width: 640px) {
-		.dark body,
-		.forest body,
-		.gold body {
+		.dark body {
 			background-attachment: fixed;
 		}
 	}
@@ -301,18 +236,12 @@
 	}
 
 	::selection {
-		background: rgba(232, 163, 61, 0.32);
-		color: #1b2340;
+		background: rgba(32, 29, 24, 0.22);
+		color: #1b1a16;
 	}
-	.dark ::selection,
-	.forest ::selection,
-	.gold ::selection {
-		background: rgba(232, 163, 61, 0.34);
-		color: #f3eee2;
-	}
-	.forest ::selection {
-		background: rgba(156, 195, 160, 0.32);
-		color: #16231d;
+	.dark ::selection {
+		background: rgba(242, 239, 233, 0.26);
+		color: #0a0b0d;
 	}
 
 	h1,
@@ -337,13 +266,7 @@
 		}
 	}
 	.dark .surface {
-		@apply border-white/10 bg-[#1a2340]/80;
-	}
-	.forest .surface {
-		@apply border-white/[0.09] bg-[#2c3d35]/80;
-	}
-	.gold .surface {
-		@apply border-white/[0.09] bg-[#332a16]/80;
+		@apply border-white/10 bg-[#14151a]/80;
 	}
 
 	/* Nested quiet surface inside a panel. */
@@ -352,10 +275,6 @@
 	}
 	.dark .inner-surface {
 		@apply border-white/[0.07] bg-white/[0.04];
-	}
-	.forest .inner-surface,
-	.gold .inner-surface {
-		@apply border-white/[0.08] bg-white/[0.05];
 	}
 
 	/* A raised, tactile surface for primary actions / the ring. */
@@ -375,8 +294,8 @@
      full text is easier to read light-on-dark than on a screen is reversed. */
 	.read-panel {
 		border-radius: 1rem;
-		border: 1px solid rgba(27, 35, 64, 0.14);
-		background: #f3eee2;
-		color: #221d12;
+		border: 1px solid rgba(32, 29, 24, 0.14);
+		background: #f2efe9;
+		color: #16151a;
 	}
 }
