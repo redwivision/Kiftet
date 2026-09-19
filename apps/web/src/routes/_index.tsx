@@ -1,7 +1,13 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
 import { Mic, RefreshCcw, ScanSearch, Volume2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { Link, useNavigate } from "react-router";
 import { BrandMark, BrandSignature, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
@@ -392,71 +398,124 @@ function DemoCard() {
 	);
 }
 
-function useInView<T extends HTMLElement>(options?: IntersectionObserverInit) {
+function useScrollReveal<T extends HTMLElement>() {
 	const ref = useRef<T | null>(null);
 	const [inView, setInView] = useState(false);
+	const [proximity, setProximity] = useState(0);
+	const [cycle, setCycle] = useState(0);
 
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
-		if (typeof IntersectionObserver === "undefined") {
+
+		const reduceMotion =
+			typeof window.matchMedia === "function" &&
+			window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		if (reduceMotion) {
 			setInView(true);
+			setProximity(1);
 			return;
 		}
-		const observer = new IntersectionObserver(
-			(entries) => {
-				for (const entry of entries) {
-					if (entry.isIntersecting) {
-						setInView(true);
-						observer.disconnect();
-					}
-				}
-			},
-			{ threshold: 0.2, rootMargin: "0px 0px -10% 0px", ...options },
-		);
-		observer.observe(el);
-		return () => observer.disconnect();
-	}, [options]);
 
-	return { ref, inView };
+		if (typeof IntersectionObserver === "undefined") {
+			setInView(true);
+			setProximity(1);
+			return;
+		}
+
+		const io = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				if (!entry) return;
+				setInView(entry.isIntersecting);
+				if (entry.isIntersecting) setCycle((c) => c + 1);
+			},
+			{ threshold: 0.25 },
+		);
+		io.observe(el);
+
+		let raf = 0;
+		const measure = () => {
+			cancelAnimationFrame(raf);
+			raf = requestAnimationFrame(() => {
+				const r = el.getBoundingClientRect();
+				const vh = window.innerHeight;
+				const center = r.top + r.height / 2 - vh / 2;
+				const reach = vh * 0.85;
+				setProximity(
+					Math.max(0, Math.min(1, 1 - Math.abs(center) / reach)),
+				);
+			});
+		};
+		measure();
+		window.addEventListener("scroll", measure, { passive: true });
+		window.addEventListener("resize", measure);
+		return () => {
+			io.disconnect();
+			cancelAnimationFrame(raf);
+			window.removeEventListener("scroll", measure);
+			window.removeEventListener("resize", measure);
+		};
+	}, []);
+
+	return { ref, inView, proximity, cycle };
 }
 
 function DemoSection() {
-	const { ref, inView } = useInView<HTMLElement>();
+	const { ref, inView, proximity, cycle } = useScrollReveal<HTMLElement>();
+
+	const spring =
+		"transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none";
+
+	const stagger = (i: number, child: ReactNode) => (
+		<div
+			className={cn(
+				spring,
+				inView ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
+			)}
+			style={{ transitionDelay: inView ? `${i * 90}ms` : "0ms" } as CSSProperties}
+		>
+			{child}
+		</div>
+	);
+
+	const glowIntensity = inView ? Math.max(proximity, 0.5) : proximity * 0.4;
 
 	return (
 		<section
 			ref={ref}
 			id="demo"
-			className={cn(
-				"surface relative mt-10 scroll-mt-24 overflow-hidden rounded-[2rem] border border-gold/25 px-6 py-14 text-center sm:px-12 sm:py-16",
-				"transition-all duration-700 ease-out",
-				inView ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0",
-			)}
+			className="surface relative mt-10 scroll-mt-24 overflow-hidden rounded-[2rem] border border-gold/25 px-6 py-14 text-center sm:px-12 sm:py-16"
 		>
 			<div
 				aria-hidden="true"
 				className="pointer-events-none absolute -top-32 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-gold/15 blur-3xl"
+				style={{ opacity: glowIntensity }}
 			/>
 			<div
 				aria-hidden="true"
 				className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-gold/10 blur-3xl"
+				style={{ opacity: glowIntensity * 0.7 }}
 			/>
 			<div
 				aria-hidden="true"
 				className="pointer-events-none absolute -right-16 -top-10 size-56 rounded-full bg-gold/10 blur-3xl"
+				style={{ opacity: glowIntensity * 0.6 }}
 			/>
 
 			<div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6">
 				<div className="relative size-32">
-					{inView ? (
+					{cycle > 0 ? (
 						<>
 							<span
 								aria-hidden="true"
-								className="absolute inset-0 animate-pulse rounded-full bg-gold/25 blur-2xl"
+								className={cn(
+									"absolute inset-0 rounded-full bg-gold/25 blur-2xl transition-opacity duration-500",
+									proximity > 0.2 ? "animate-pulse opacity-100" : "opacity-60",
+								)}
 							/>
 							<GapClosingMark
-								key="play-on-scroll"
+								key={`ring-${cycle}`}
 								size={128}
 								className="relative text-gold"
 							/>
@@ -464,32 +523,44 @@ function DemoSection() {
 					) : null}
 				</div>
 
-				<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.68rem] tracking-wide text-sage uppercase">
-					<span
-						className={cn(
-							"size-1.5 animate-pulse rounded-full bg-sage",
-							!inView && "opacity-0",
-						)}
-						aria-hidden="true"
-					/>
-					Live demo · no account
-				</span>
+				{stagger(
+					0,
+					<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.68rem] tracking-wide text-sage uppercase">
+						<span
+							className={cn(
+								"size-1.5 rounded-full bg-sage transition-opacity duration-500",
+								inView && "animate-pulse opacity-100",
+							)}
+							aria-hidden="true"
+						/>
+						Live demo · no account
+					</span>,
+				)}
 
-				<h2 className="font-display font-semibold text-3xl leading-[1.12] text-foreground tracking-[-0.02em] sm:text-4xl">
-					Feel it for yourself — one round of the loop, right now.
-				</h2>
+				{stagger(
+					1,
+					<h2 className="font-display font-semibold text-3xl leading-[1.12] text-foreground tracking-[-0.02em] sm:text-4xl">
+						Feel it for yourself — one round of the loop, right now.
+					</h2>,
+				)}
 
-				<p className="max-w-md text-base text-muted-foreground leading-7">
-					Pick the chapter, speak what you remember, and watch Kiftet find
-					what didn&apos;t stick — then teach only that, and prove it stayed.
-				</p>
+				{stagger(
+					2,
+					<p className="max-w-md text-base text-muted-foreground leading-7">
+						Pick the chapter, speak what you remember, and watch Kiftet find
+						what didn&apos;t stick — then teach only that, and prove it stayed.
+					</p>,
+				)}
 
-				<DemoButton variant="primary" size="lg" />
+				{stagger(3, <DemoButton variant="primary" size="lg" />,)}
 
-				<p className="text-[0.72rem] text-muted-foreground">
-					No email, no password, no card. Your demo is private and expires
-					on its own.
-				</p>
+				{stagger(
+					4,
+					<p className="text-[0.72rem] text-muted-foreground">
+						No email, no password, no card. Your demo is private and expires
+						on its own.
+					</p>,
+				)}
 			</div>
 		</section>
 	);
