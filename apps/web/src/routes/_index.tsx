@@ -13,6 +13,7 @@ import { BrandMark, BrandSignature, GapClosingMark } from "@/components/brand-ma
 import { CoverageView } from "@/components/gap-list";
 import { apiError } from "@/lib/api";
 import { setDemoUser, startDemo } from "@/lib/demo";
+import { useOnScreen } from "@/lib/on-screen";
 import type { Route } from "./+types/_index";
 
 export function meta(_args: Route.MetaArgs) {
@@ -60,32 +61,89 @@ const PASS_RATES = [
 	{ year: "2026", rate: "12.8%" },
 ] as const;
 
+/* Reveals a string word-by-word: each word slides up and straightens out of
+   its clipped box. Staggered by --kft-i, so the whole line reads left to
+   right — the landing page's signature reveal. Pure CSS, no library. */
+function Words({
+	text,
+	offset = 0,
+	gap = 45,
+	className,
+}: {
+	text: string;
+	offset?: number;
+	gap?: number;
+	className?: string;
+}) {
+	const words = text.replace(/\s+/g, " ").trim().split(" ");
+	return (
+		<>
+			{words.map((w, i) => (
+				<span key={`${i}-${w}`} className="kft-word">
+					<span
+						className={className}
+						style={
+							{ "--kft-i": `${(offset + i) * gap}ms` } as CSSProperties
+						}
+					>
+						{w}
+						{i < words.length - 1 ? "\u00A0" : ""}
+					</span>
+				</span>
+			))}
+		</>
+	);
+}
+
 export default function Home() {
+	const hero = useOnScreen<HTMLDivElement>();
+	const stats = useOnScreen<HTMLDivElement>();
+	const how = useOnScreen<HTMLElement>();
+	const rates = useOnScreen<HTMLElement>();
+	const cta = useOnScreen<HTMLElement>();
+
 	return (
 		<main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
 			{/* ── Hero: the problem, stated plainly ─────────────────── */}
 			<section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
-				<div className="animate-fade-up space-y-7">
-					<p className="font-medium text-muted-foreground text-sm">
+				<div
+					ref={hero.ref}
+					className={cn("space-y-7", hero.shown && "kft-in")}
+				>
+					<p
+						className="kft-rise font-medium text-muted-foreground text-sm"
+						style={{ "--kft-i": "0ms" } as CSSProperties}
+					>
 						Kiftet · spoken study review for Ethiopian students
 					</p>
 
-					<h1 className="space-y-2 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
-						<span className="block text-gold">Close the gap.</span>
+					<h1 className="space-y-3 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
 						<span className="block">
-							87 in every 100 students fail the national exam. Trying harder
-							isn&apos;t the answer — knowing which gaps are yours is.
+							<Words text="Close the gap." className="text-gold" />
+						</span>
+						<span className="block">
+							<Words
+								text="87 in every 100 students fail the national exam. Trying harder isn't the answer — knowing which gaps are yours is."
+								offset={3}
+								gap={30}
+							/>
 						</span>
 					</h1>
 
-					<p className="max-w-xl text-base text-muted-foreground leading-7 sm:text-lg">
+					<p
+						className="kft-rise max-w-xl text-base text-muted-foreground leading-7 sm:text-lg"
+						style={{ "--kft-i": "300ms" } as CSSProperties}
+					>
 						Kiftet listens to what you remember out loud, finds the specific
 						ideas that didn&apos;t stick, teaches only those in a short spoken
 						lesson — then retests what stayed. Not another question bank. A
 						diagnosis.
 					</p>
 
-					<div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+					<div
+						className="kft-rise flex flex-col gap-3 sm:flex-row sm:flex-wrap"
+						style={{ "--kft-i": "400ms" } as CSSProperties}
+					>
 						<Link
 							to="/dashboard"
 							className={cn(
@@ -105,7 +163,10 @@ export default function Home() {
 							How the loop works
 						</a>
 					</div>
-					<p className="text-sm text-muted-foreground">
+					<p
+						className="kft-rise text-sm text-muted-foreground"
+						style={{ "--kft-i": "480ms" } as CSSProperties}
+					>
 						No account?{" "}
 						<a
 							href="#demo"
@@ -122,11 +183,27 @@ export default function Home() {
 
 			{/* ── The statistic that decides the stakes ─────────────── */}
 			<section className="surface mt-6 p-6 sm:p-8">
-				<div className="grid gap-6 sm:grid-cols-[auto_1fr] sm:items-center">
-					<p className="font-display font-semibold text-6xl text-gold tracking-[-0.04em] sm:text-7xl">
-						87.2<span className="text-3xl text-gold/70">%</span>
-					</p>
-					<div className="space-y-2 text-muted-foreground text-sm leading-6">
+				<div
+					ref={stats.ref}
+					className={cn(
+						"grid gap-6 sm:grid-cols-[auto_1fr] sm:items-center",
+						stats.shown && "kft-in",
+					)}
+				>
+					<div>
+						<p className="kft-pop font-display font-semibold text-6xl text-gold tracking-[-0.04em] sm:text-7xl">
+							87.2<span className="text-3xl text-gold/70">%</span>
+						</p>
+						<div
+							aria-hidden="true"
+							className="kft-draw mt-3 h-0.5 w-16 rounded-full bg-gradient-to-r from-gold to-gold/20"
+							style={{ "--kft-i": "180ms" } as CSSProperties}
+						/>
+					</div>
+					<div
+						className="kft-rise space-y-2 text-muted-foreground text-sm leading-6"
+						style={{ "--kft-i": "120ms" } as CSSProperties}
+					>
 						<p>
 							of the{" "}
 							<span className="font-medium text-foreground">
@@ -150,23 +227,38 @@ export default function Home() {
 			<DemoSection />
 
 			{/* ── The loop ──────────────────────────────────────────── */}
-			<section id="how" className="scroll-mt-24 pt-20">
+			<section
+				id="how"
+				ref={how.ref}
+				className={cn("scroll-mt-24 pt-20", how.shown && "kft-in")}
+			>
 				<div className="mb-10 max-w-2xl space-y-3">
-					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+					<h2
+						className="kft-rise font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl"
+						style={{ "--kft-i": "0ms" } as CSSProperties}
+					>
 						Four steps. One loop. Only the gaps.
 					</h2>
-					<p className="text-base text-muted-foreground leading-7">
+					<p
+						className="kft-rise text-base text-muted-foreground leading-7"
+						style={{ "--kft-i": "80ms" } as CSSProperties}
+					>
 						The sequence is the whole product — recall, diagnose, relearn,
 						retest. Nothing in Kiftet exists outside it.
 					</p>
+					<div
+						aria-hidden="true"
+						className="kft-draw mt-4 h-0.5 w-24 rounded-full bg-gradient-to-r from-gold/60 to-gold/10"
+						style={{ "--kft-i": "140ms" } as CSSProperties}
+					/>
 				</div>
 
 				<ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 					{LOOP.map(({ step, title, text, icon: Icon }, i) => (
 						<li
 							key={step}
-							className="surface animate-fade-up p-5"
-							style={{ animationDelay: `${i * 0.08}s` }}
+							className="surface kft-rise p-5"
+							style={{ "--kft-i": `${160 + i * 90}ms` } as CSSProperties}
 						>
 							<div className="mb-4 flex items-center justify-between">
 								<span className="grid size-10 place-items-center rounded-full border border-gold/30 bg-gold/10 text-gold">
@@ -229,13 +321,22 @@ export default function Home() {
 			</section>
 
 			{/* ── The numbers, honestly ─────────────────────────────── */}
-			<section className="mt-20">
+			<section
+				ref={rates.ref}
+				className={cn("mt-20", rates.shown && "kft-in")}
+			>
 				<div className="mb-8 max-w-2xl space-y-3">
-					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+					<h2
+						className="kft-rise font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl"
+						style={{ "--kft-i": "0ms" } as CSSProperties}
+					>
 						The system is improving. That&apos;s not the same as reaching the
 						student.
 					</h2>
-					<p className="text-base text-muted-foreground leading-7">
+					<p
+						className="kft-rise text-base text-muted-foreground leading-7"
+						style={{ "--kft-i": "100ms" } as CSSProperties}
+					>
 						The national pass rate has climbed every year on record. Each step
 						is real progress — and each one still leaves the overwhelming
 						majority of students outside it. The reform moves at the
@@ -248,9 +349,10 @@ export default function Home() {
 						<div
 							key={year}
 							className={cn(
-								"surface p-5",
+								"surface kft-rise p-5",
 								i === PASS_RATES.length - 1 && "border-gold/40 bg-gold/[0.07]",
 							)}
+							style={{ "--kft-i": `${160 + i * 80}ms` } as CSSProperties}
 						>
 							<p className="k-label">{year}</p>
 							<p
@@ -305,19 +407,32 @@ export default function Home() {
 				</div>
 			</section>
 
-			{/* ── CTA ───────────────────────────────────────────────── */}
-			<section className="surface mt-20 border-gold/30 bg-gold/[0.06] p-8 text-center sm:p-12">
-				<BrandSignature size={72} className="mx-auto mb-6" />
+{/* ── CTA ───────────────────────────────────────────────── */}
+			<section
+				ref={cta.ref}
+				className={cn(
+					"surface mt-20 border-gold/30 bg-gold/[0.06] p-8 text-center sm:p-12",
+					cta.shown && "kft-in",
+				)}
+			>
+				<BrandSignature size={72} className="kft-rise mx-auto mb-6" />
 				<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-					Pick a chapter. Speak. Close the gap.
+					<Words text="Pick a chapter. Speak. Close the gap." />
 				</h2>
-				<p className="mx-auto mt-3 max-w-md text-base text-muted-foreground leading-7">
+				<p
+					className="kft-rise mx-auto mt-3 max-w-md text-base text-muted-foreground leading-7"
+					style={{ "--kft-i": "160ms" } as CSSProperties}
+				>
 					Pick a chapter, press the ring, and start speaking. The diagnosis
 					comes from your own words.
 				</p>
 				<Link
 					to="/dashboard"
-					className={cn(buttonVariants({ size: "lg" }), "mt-7 font-medium")}
+					className={cn(
+						buttonVariants({ size: "lg" }),
+						"kft-rise mt-7 font-medium",
+					)}
+					style={{ "--kft-i": "240ms" } as CSSProperties}
 				>
 					Open the study room
 				</Link>
@@ -504,6 +619,10 @@ function DemoSection() {
 			/>
 
 			<div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6">
+				<div
+					aria-hidden="true"
+					className={cn("kft-beam", inView && "kft-in")}
+				/>
 				<div className="relative size-32">
 					{cycle > 0 ? (
 						<>
@@ -537,12 +656,17 @@ function DemoSection() {
 					</span>,
 				)}
 
-				{stagger(
-					1,
-					<h2 className="font-display font-semibold text-3xl leading-[1.12] text-foreground tracking-[-0.02em] sm:text-4xl">
-						Feel it for yourself — one round of the loop, right now.
-					</h2>,
-				)}
+				<h2
+					className={cn(
+						"font-display font-semibold text-3xl leading-[1.12] text-foreground tracking-[-0.02em] sm:text-4xl",
+						inView && "kft-in",
+					)}
+				>
+					<Words
+						text="Feel it for yourself — one round of the loop, right now."
+						gap={40}
+					/>
+				</h2>
 
 				{stagger(
 					2,
