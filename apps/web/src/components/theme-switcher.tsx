@@ -43,6 +43,34 @@ const THEMES = [
 		chip: "ring-1 ring-gold/40",
 	},
 	{
+		value: "ochre",
+		label: "Ochre",
+		note: "Sunset saffron, soft and warm",
+		swatch: "#d9a441",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
+		value: "midnight",
+		label: "Midnight",
+		note: "Deep indigo-blue, dusk focus",
+		swatch: "#6c78e0",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
+		value: "meadow",
+		label: "Meadow",
+		note: "Deep leaf green on black",
+		swatch: "#6fae7c",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
+		value: "copper",
+		label: "Copper",
+		note: "Muted ember rust, roastery",
+		swatch: "#cd7652",
+		chip: "ring-1 ring-gold/40",
+	},
+	{
 		value: "light",
 		label: "Sunlight",
 		note: "Paper and morning light",
@@ -53,9 +81,13 @@ const THEMES = [
 
 const THEME_COLOR: Record<string, string> = {
 	dark: "#0a0b0d",
-	ember: "#120d09",
-	jade: "#0a120f",
-	violet: "#100d18",
+	ember: "#140d08",
+	jade: "#0a1410",
+	violet: "#110d1c",
+	ochre: "#191207",
+	midnight: "#0c0e1a",
+	meadow: "#0c1510",
+	copper: "#170f0b",
 	light: "#f6f1e6",
 };
 

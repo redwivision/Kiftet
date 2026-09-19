@@ -36,15 +36,26 @@
 	--ring: #201d18;
 }
 
-/* The default room: near-black, lit by flat ivory. No second colour —
-   everything is measured as light against dark. */
+/* ── Dark rooms ──────────────────────────────────────────────────
+   Every room is the same black architecture: a near-black field lit
+   from above. What changes is the ground colour (--room-bg / --room-top,
+   a few-percent tint of the candle) and the wash, so each room reads
+   clearly the moment you switch — not just the buttons and headlines.
+   The accent (--brand-accent) drives ALL accent utilities (gold/sage), the
+   primary actions, focus rings and card hairlines. */
+
+/* The default room — Ink: black, lit by flat ivory. */
 .dark {
 	--brand-accent: #f2efe9;
 	--brand-accent-soft: #ffffff;
 	--brand-accent-deep: #d6d2cc;
 	--brand-status: #dedbd4;
+	--wash-top: rgba(242, 239, 233, 0.08);
+	--wash-corner: rgba(82, 86, 98, 0.1);
+	--room-top: #0b0c0e;
+	--room-bg: #0a0b0d;
 
-	--background: #0a0b0d;
+	--background: var(--room-bg);
 	--foreground: #f2efe9;
 	--card: rgba(255, 255, 255, 0.045);
 	--card-foreground: #f2efe9;
@@ -64,17 +75,18 @@
 	--ring: #f2efe9;
 }
 
-/* Accent rooms — identical black walls, a different candle. The room never
-   changes, only the light does: each hue is a single muted note so the
-   monochrome calm survives. Ember is the brazier, Jade the lake at night,
-   Violet the dusk before study. */
+/* Ember — the brazier, after dark. */
 .ember {
 	--brand-accent: #e26d2a;
 	--brand-accent-soft: #ff8a45;
 	--brand-accent-deep: #a84c16;
 	--brand-status: #e8cfb4;
+	--wash-top: rgba(226, 109, 42, 0.16);
+	--wash-corner: rgba(226, 109, 42, 0.09);
+	--room-top: #191009;
+	--room-bg: #120d08;
 
-	--background: #0b0b0c;
+	--background: var(--room-bg);
 	--foreground: #f4e7d6;
 	--card: rgba(255, 255, 255, 0.045);
 	--card-foreground: #f4e7d6;
@@ -94,13 +106,18 @@
 	--ring: #e26d2a;
 }
 
+/* Jade — the lake at night. */
 .jade {
 	--brand-accent: #41bf9c;
 	--brand-accent-soft: #5dd6b4;
 	--brand-accent-deep: #1e8a6b;
 	--brand-status: #a8d9c8;
+	--wash-top: rgba(65, 191, 156, 0.16);
+	--wash-corner: rgba(65, 191, 156, 0.09);
+	--room-top: #0d1915;
+	--room-bg: #0a1410;
 
-	--background: #0a0d0c;
+	--background: var(--room-bg);
 	--foreground: #dcf0e8;
 	--card: rgba(255, 255, 255, 0.045);
 	--card-foreground: #dcf0e8;
@@ -120,13 +137,18 @@
 	--ring: #41bf9c;
 }
 
+/* Violet — the dusk before study. */
 .violet {
 	--brand-accent: #8b7cf6;
 	--brand-accent-soft: #a99bff;
 	--brand-accent-deep: #6a57d9;
 	--brand-status: #b9b4ef;
+	--wash-top: rgba(139, 124, 246, 0.16);
+	--wash-corner: rgba(139, 124, 246, 0.09);
+	--room-top: #171226;
+	--room-bg: #110d1c;
 
-	--background: #0b0b0e;
+	--background: var(--room-bg);
 	--foreground: #ebe9f2;
 	--card: rgba(255, 255, 255, 0.045);
 	--card-foreground: #ebe9f2;
@@ -144,6 +166,130 @@
 	--border: rgba(235, 233, 242, 0.1);
 	--input: rgba(235, 233, 242, 0.12);
 	--ring: #8b7cf6;
+}
+
+/* Ochre — sunset saffron, soft and warm. */
+.ochre {
+	--brand-accent: #d9a441;
+	--brand-accent-soft: #eec060;
+	--brand-accent-deep: #a87b25;
+	--brand-status: #e6d4a8;
+	--wash-top: rgba(217, 164, 65, 0.16);
+	--wash-corner: rgba(217, 164, 65, 0.09);
+	--room-top: #1a130a;
+	--room-bg: #131009;
+
+	--background: var(--room-bg);
+	--foreground: #f3ead6;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #f3ead6;
+	--popover: rgba(22, 18, 10, 0.97);
+	--popover-foreground: #f3ead6;
+	--primary: #d9a441;
+	--primary-foreground: #1a1206;
+	--secondary: #2b2112;
+	--secondary-foreground: #f3ead6;
+	--muted: #241c10;
+	--muted-foreground: #b3a47e;
+	--accent: #d9a441;
+	--accent-foreground: #1a1206;
+	--destructive: #c2464c;
+	--border: rgba(243, 234, 214, 0.1);
+	--input: rgba(243, 234, 214, 0.12);
+	--ring: #d9a441;
+}
+
+/* Midnight — deep indigo-blue, dusk focus. */
+.midnight {
+	--brand-accent: #6c78e0;
+	--brand-accent-soft: #8b97f0;
+	--brand-accent-deep: #4b57c0;
+	--brand-status: #b9c0ef;
+	--wash-top: rgba(108, 120, 224, 0.16);
+	--wash-corner: rgba(108, 120, 224, 0.09);
+	--room-top: #12152b;
+	--room-bg: #0b0d18;
+
+	--background: var(--room-bg);
+	--foreground: #e4e7f5;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #e4e7f5;
+	--popover: rgba(10, 12, 22, 0.97);
+	--popover-foreground: #e4e7f5;
+	--primary: #6c78e0;
+	--primary-foreground: #080a18;
+	--secondary: #1a1d33;
+	--secondary-foreground: #e4e7f5;
+	--muted: #171a2c;
+	--muted-foreground: #9aa2c6;
+	--accent: #6c78e0;
+	--accent-foreground: #080a18;
+	--destructive: #c2464c;
+	--border: rgba(228, 231, 245, 0.1);
+	--input: rgba(228, 231, 245, 0.12);
+	--ring: #6c78e0;
+}
+
+/* Meadow — deep leaf green, reborn on black. */
+.meadow {
+	--brand-accent: #6fae7c;
+	--brand-accent-soft: #8cc798;
+	--brand-accent-deep: #4d905d;
+	--brand-status: #b5d6bc;
+	--wash-top: rgba(111, 174, 124, 0.16);
+	--wash-corner: rgba(111, 174, 124, 0.09);
+	--room-top: #101c14;
+	--room-bg: #0b130d;
+
+	--background: var(--room-bg);
+	--foreground: #e3eee0;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #e3eee0;
+	--popover: rgba(9, 16, 11, 0.97);
+	--popover-foreground: #e3eee0;
+	--primary: #6fae7c;
+	--primary-foreground: #0a150d;
+	--secondary: #18261c;
+	--secondary-foreground: #e3eee0;
+	--muted: #15201a;
+	--muted-foreground: #93a79a;
+	--accent: #6fae7c;
+	--accent-foreground: #0a150d;
+	--destructive: #c2464c;
+	--border: rgba(227, 238, 224, 0.1);
+	--input: rgba(227, 238, 224, 0.12);
+	--ring: #6fae7c;
+}
+
+/* Copper — muted ember rust, roastery warmth. */
+.copper {
+	--brand-accent: #cd7652;
+	--brand-accent-soft: #e89772;
+	--brand-accent-deep: #a05a38;
+	--brand-status: #e2c0a8;
+	--wash-top: rgba(205, 118, 82, 0.16);
+	--wash-corner: rgba(205, 118, 82, 0.09);
+	--room-top: #1a100a;
+	--room-bg: #140d0a;
+
+	--background: var(--room-bg);
+	--foreground: #f3e4d9;
+	--card: rgba(255, 255, 255, 0.045);
+	--card-foreground: #f3e4d9;
+	--popover: rgba(20, 13, 10, 0.97);
+	--popover-foreground: #f3e4d9;
+	--primary: #cd7652;
+	--primary-foreground: #170a05;
+	--secondary: #2a1c14;
+	--secondary-foreground: #f3e4d9;
+	--muted: #241811;
+	--muted-foreground: #b09a8a;
+	--accent: #cd7652;
+	--accent-foreground: #170a05;
+	--destructive: #c2464c;
+	--border: rgba(243, 228, 217, 0.1);
+	--input: rgba(243, 228, 217, 0.12);
+	--ring: #cd7652;
 }
 
 @theme inline {
@@ -277,91 +423,36 @@
 		}
 	}
 
-	/* The black room: near-black field, a faint ivory wash rising from the
-	   top, one cool graphite pool off to the right, and a soft vignette so
-	   the edges fall away into ink. Light is the accent. Shared by every
-	   dark room — the accents below only change the colour of that light. */
+	/* Every dark room lays the same ground: a hue-tinted near-black field
+	   (--room-top → --room-bg), a candle-wash rising from the top, a pool
+	   off to the right, and a soft vignette so the edges fall away to ink. */
 	.dark body,
 	.ember body,
 	.jade body,
-	.violet body {
-		background-color: #08090b;
+	.violet body,
+	.ochre body,
+	.midnight body,
+	.meadow body,
+	.copper body {
+		background-color: var(--room-bg);
 		background-image:
 			radial-gradient(
 				1100px 560px at 50% -130px,
-				rgba(242, 239, 233, 0.06),
+				var(--wash-top),
 				transparent 60%
 			),
-			radial-gradient(
-				900px 480px at 92% 8%,
-				rgba(82, 86, 98, 0.08),
-				transparent 55%
-			),
+			radial-gradient(900px 480px at 92% 8%, var(--wash-corner), transparent 55%),
 			radial-gradient(
 				1000px 700px at 50% 115%,
 				rgba(0, 0, 0, 0.42),
 				transparent 60%
 			),
-			linear-gradient(180deg, #0b0c0e 0%, #0a0b0d 55%, #050506 100%);
-	}
-
-	/* Accent rooms keep the same walls — only the candle changes. */
-	.ember body {
-		background-image:
-			radial-gradient(
-				1100px 560px at 50% -130px,
-				rgba(226, 109, 42, 0.1),
-				transparent 60%
-			),
-			radial-gradient(
-				900px 480px at 92% 8%,
-				rgba(226, 109, 42, 0.055),
-				transparent 55%
-			),
-			radial-gradient(
-				1000px 700px at 50% 115%,
-				rgba(0, 0, 0, 0.42),
-				transparent 60%
-			),
-			linear-gradient(180deg, #0d0b09 0%, #0b0b0c 55%, #060505 100%);
-	}
-	.jade body {
-		background-image:
-			radial-gradient(
-				1100px 560px at 50% -130px,
-				rgba(65, 191, 156, 0.1),
-				transparent 60%
-			),
-			radial-gradient(
-				900px 480px at 92% 8%,
-				rgba(65, 191, 156, 0.055),
-				transparent 55%
-			),
-			radial-gradient(
-				1000px 700px at 50% 115%,
-				rgba(0, 0, 0, 0.42),
-				transparent 60%
-			),
-			linear-gradient(180deg, #0a0f0d 0%, #0a0d0c 55%, #040706 100%);
-	}
-	.violet body {
-		background-image:
-			radial-gradient(
-				1100px 560px at 50% -130px,
-				rgba(139, 124, 246, 0.1),
-				transparent 60%
-			),
-			radial-gradient(
-				900px 480px at 92% 8%,
-				rgba(139, 124, 246, 0.055),
-				transparent 55%
-			),
-			radial-gradient(
-				1000px 700px at 50% 115%,
-				rgba(0, 0, 0, 0.42),
-				transparent 60%
-			),
-			linear-gradient(180deg, #0d0c12 0%, #0b0b0e 55%, #060509 100%);
+			linear-gradient(
+				180deg,
+				var(--room-top) 0%,
+				var(--room-bg) 55%,
+				#050506 100%
+			);
 	}
 
 	/* Desktop keeps the glow pinned to the viewport; phones get the smooth
@@ -370,7 +461,11 @@
 		.dark body,
 		.ember body,
 		.jade body,
-		.violet body {
+		.violet body,
+		.ochre body,
+		.midnight body,
+		.meadow body,
+		.copper body {
 			background-attachment: fixed;
 		}
 	}
@@ -409,6 +504,22 @@
 		background: rgba(139, 124, 246, 0.32);
 		color: #0b0a16;
 	}
+	.ochre ::selection {
+		background: rgba(217, 164, 65, 0.32);
+		color: #1a1206;
+	}
+	.midnight ::selection {
+		background: rgba(108, 120, 224, 0.34);
+		color: #080a18;
+	}
+	.meadow ::selection {
+		background: rgba(111, 174, 124, 0.32);
+		color: #0a150d;
+	}
+	.copper ::selection {
+		background: rgba(205, 118, 82, 0.32);
+		color: #170a05;
+	}
 
 	h1,
 	h2,
@@ -434,8 +545,13 @@
 	.dark .surface,
 	.ember .surface,
 	.jade .surface,
-	.violet .surface {
-		@apply border-white/10 bg-[#14151a]/80 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)];
+	.violet .surface,
+	.ochre .surface,
+	.midnight .surface,
+	.meadow .surface,
+	.copper .surface {
+		@apply bg-[#14151a]/80 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)];
+		border-color: color-mix(in srgb, var(--brand-accent) 16%, transparent);
 	}
 
 	/* Nested quiet surface inside a panel. */
@@ -445,8 +561,13 @@
 	.dark .inner-surface,
 	.ember .inner-surface,
 	.jade .inner-surface,
-	.violet .inner-surface {
+	.violet .inner-surface,
+	.ochre .inner-surface,
+	.midnight .inner-surface,
+	.meadow .inner-surface,
+	.copper .inner-surface {
 		@apply border-white/[0.07] bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)];
+		border-color: color-mix(in srgb, var(--brand-accent) 12%, transparent);
 	}
 
 	/* A raised, tactile surface for primary actions / the ring. */
@@ -466,7 +587,11 @@
 	.dark .halo,
 	.ember .halo,
 	.jade .halo,
-	.violet .halo {
+	.violet .halo,
+	.ochre .halo,
+	.midnight .halo,
+	.meadow .halo,
+	.copper .halo {
 		background: radial-gradient(
 			closest-side,
 			color-mix(in srgb, var(--brand-accent) 16%, transparent),
@@ -482,7 +607,11 @@
 	.dark .k-label,
 	.ember .k-label,
 	.jade .k-label,
-	.violet .k-label {
+	.violet .k-label,
+	.ochre .k-label,
+	.midnight .k-label,
+	.meadow .k-label,
+	.copper .k-label {
 		@apply text-fog/80;
 	}
 

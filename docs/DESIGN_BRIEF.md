@@ -28,7 +28,7 @@ Log this decision (name, logo direction, and the reasoning above) as a dated ent
 
 ### Color (named, tested together, not generic defaults)
 
-**Core identity — Black and Ivory, a deliberate monochrome.** The app is a near-black room lit by flat ivory — one colour axis, no rainbow. Accent utilities (`gold` tokens) resolve to the adaptive candle/ink value so the same classes read correctly in both rooms. Confirmed by mockup: ivory reads cleanly against true black, both in the small logo mark and as a full app surface.
+**Core identity — Black and Ivory, a deliberate monochrome.** The app is a near-black room lit by flat ivory — one colour axis, no rainbow. Each **room** keeps the same black architecture and swaps a single muted "candle" hue (Ember, Jade, Violet, Ochre, Midnight, Meadow, Copper) plus its own ground tint, so switching rooms recolours the field itself, not just buttons. Accent utilities (`gold` tokens) resolve to the adaptive candle/ink value so the same classes read correctly in every room. Confirmed by mockup: ivory reads cleanly against true black, both in the small logo mark and as a full app surface.
 
 - **Ink black** `#0A0B0D` — **primary surface**, not just an accent. Used as the main dark background across the app, not only reserved for "focus mode." Study happens under real pressure, often at night — this is the app's default register, not a special state.
 - **Ivory** `#F2EFE9` — **primary accent**, always read against black. Candlelight on a dark room: used for the logo, key actions, and "gap closed" moments. On light surfaces it flips to ink (`#201D18`) so the same mark stays legible on paper.
