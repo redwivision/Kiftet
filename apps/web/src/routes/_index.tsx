@@ -3,7 +3,7 @@ import { cn } from "@kiftet/ui/lib/utils";
 import { Mic, RefreshCcw, ScanSearch, Volume2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { BrandMark, BrandSignature } from "@/components/brand-mark";
+import { BrandMark, BrandSignature, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { apiError } from "@/lib/api";
 import { setDemoUser, startDemo } from "@/lib/demo";
@@ -89,7 +89,6 @@ export default function Home() {
 						>
 							Start closing your gaps
 						</Link>
-						<DemoButton />
 						<a
 							href="#how"
 							className={cn(
@@ -100,6 +99,15 @@ export default function Home() {
 							How the loop works
 						</a>
 					</div>
+					<p className="text-sm text-muted-foreground">
+						No account?{" "}
+						<a
+							href="#demo"
+							className="font-medium text-gold underline underline-offset-4 hover:text-gold-soft"
+						>
+							Jump straight into the live demo
+						</a>
+					</p>
 				</div>
 
 				{/* The product, shown as itself */}
@@ -129,6 +137,59 @@ export default function Home() {
 							before the exam, which specific ideas didn&apos;t stick.
 						</p>
 					</div>
+				</div>
+			</section>
+
+			{/* ── Try it live ──────────────────────────────────────────── */}
+			<section
+				id="demo"
+				className="surface animate-rise-in relative mt-10 scroll-mt-24 overflow-hidden rounded-[2rem] border border-gold/25 px-6 py-14 text-center sm:px-12 sm:py-16"
+			>
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute -top-32 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-gold/15 blur-3xl"
+				/>
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute -bottom-24 -left-16 size-56 rounded-full bg-gold/10 blur-3xl"
+				/>
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute -right-16 -top-10 size-56 rounded-full bg-gold/10 blur-3xl"
+				/>
+
+				<div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6">
+					<div className="relative">
+						<span
+							aria-hidden="true"
+							className="absolute inset-0 animate-pulse rounded-full bg-gold/25 blur-2xl"
+						/>
+						<GapClosingMark size={128} className="relative text-gold" />
+					</div>
+
+					<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.68rem] tracking-wide text-sage uppercase">
+						<span
+							className="size-1.5 animate-pulse rounded-full bg-sage"
+							aria-hidden="true"
+						/>
+						Live demo · no account
+					</span>
+
+					<h2 className="font-display font-semibold text-3xl leading-[1.12] text-foreground tracking-[-0.02em] sm:text-4xl">
+						Feel it for yourself — one round of the loop, right now.
+					</h2>
+
+					<p className="max-w-md text-base text-muted-foreground leading-7">
+						Pick the chapter, speak what you remember, and watch Kiftet find
+						what didn&apos;t stick — then teach only that, and prove it stayed.
+					</p>
+
+					<DemoButton variant="primary" size="lg" />
+
+					<p className="text-[0.72rem] text-muted-foreground">
+						No email, no password, no card. Your demo is private and expires
+						on its own.
+					</p>
 				</div>
 			</section>
 
@@ -381,7 +442,15 @@ function DemoCard() {
 	);
 }
 
-function DemoButton() {
+function DemoButton({
+	variant = "outline",
+	size,
+	className,
+}: {
+	variant?: "primary" | "outline";
+	size?: "lg";
+	className?: string;
+}) {
 	const navigate = useNavigate();
 	const [pending, setPending] = useState(false);
 	const [failure, setFailure] = useState<string | null>(null);
@@ -400,15 +469,19 @@ function DemoButton() {
 	};
 
 	return (
-		<div className="flex w-full flex-col gap-1 sm:w-auto">
+		<div className={cn("flex flex-col gap-1", className)}>
 			<Button
-				variant="outline"
-				size="lg"
+				size={size}
+				variant={variant === "primary" ? "default" : "outline"}
 				onClick={launch}
 				disabled={pending}
 				className="w-full font-medium sm:w-auto"
 			>
-				{pending ? "Setting up your demo…" : "Try a live demo"}
+				{pending
+					? "Setting up your demo…"
+					: variant === "primary"
+						? "Start the live demo →"
+						: "Try a live demo"}
 			</Button>
 			{failure && <p className="text-rust text-xs">{failure}</p>}
 		</div>
