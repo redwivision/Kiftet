@@ -1,16 +1,10 @@
 import { getDemoUser } from "@/lib/demo";
 
 const API = (import.meta.env.VITE_SERVER_URL as string) || "";
-// A missing VITE_SERVER_URL falls back to localhost, which is correct in dev
-// but fatal in production — every API call would 404 against the visitor's
-// own machine. Make that failure loud instead of silent.
-if (!API && import.meta.env.PROD) {
-	console.error(
-		"[config] VITE_SERVER_URL is not set — API calls will fail. " +
-			"Set it at build time (see apps/web/.env.schema).",
-	);
-}
-const resolvedApi = API || "http://localhost:3000/api";
+// In production the API lives in the same process as the web app, so the
+// default is same-origin. A separate VITE_SERVER_URL is only needed for a
+// split deployment. In dev we point at the API-only server's port.
+const resolvedApi = API || (import.meta.env.PROD ? "/api" : "http://localhost:3000/api");
 const serverRoot = resolvedApi.replace(/\/api\/?$/, "").replace(/\/+$/, "");
 export const apiUrl = (path: string) => `${serverRoot}/api${path}`;
 
