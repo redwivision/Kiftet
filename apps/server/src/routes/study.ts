@@ -1,23 +1,51 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, ne } from "drizzle-orm";
 import { chapter, textbook, studySession, attempt, conceptNode } from "@kiftet/db/schema";
 import { getDb } from "../services";
 import { ai, focusScore } from "../ai/gemini";
+import { DEMO_SEED_TITLE } from "./demo";
 
 const router = Router();
 const aiWindows = new Map<string, number[]>();
-const AI_REQUESTS_PER_MINUTE = 30;
+
+// Demo is deliberately stingy: 5 AI calls/minute per visitor, 3 new textbooks
+// per day. Signed-in users get the generous limits once we're live — the caps
+// below are the cue to swap that for real (DB-backed) quotas.
+const AI_REQUESTS_PER_MINUTE = { signedIn: 30, demo: 5 };
+const DEMO_TEXTBOOKS_PER_DAY = 3;
+
+function isDemo(req: Request): boolean {
+  return Boolean(req.get("x-demo-user-id"));
+}
+
+// Non-consuming read of the current-minute budget for an owner.
+function aiBudgetFor(req: Request) {
+  const owner = ownerId(req);
+  const now = Date.now();
+  const recent = (aiWindows.get(owner) ?? []).filter((time) => now - time < 60_000);
+  const limitPerMinute = isDemo(req) ? AI_REQUESTS_PER_MINUTE.demo : AI_REQUESTS_PER_MINUTE.signedIn;
+  return {
+    demo: isDemo(req),
+    limitPerMinute,
+    callsThisMinute: recent.length,
+    remaining: Math.max(0, limitPerMinute - recent.length),
+    textbooksPerDay: DEMO_TEXTBOOKS_PER_DAY,
+  };
+}
 
 function allowAiRequest(req: Request): boolean {
-  const key = ownerId(req);
+  const owner = ownerId(req);
+  const budget = aiBudgetFor(req);
+  if (budget.remaining <= 0) return false;
   const now = Date.now();
-  const recent = (aiWindows.get(key) ?? []).filter((time) => now - time < 60_000);
-  if (recent.length >= AI_REQUESTS_PER_MINUTE) return false;
+  const recent = (aiWindows.get(owner) ?? []).filter((time) => now - time < 60_000);
   recent.push(now);
-  aiWindows.set(key, recent);
+  aiWindows.set(owner, recent);
   return true;
 }
+
+class DailyBookLimitError extends Error {}
 
 function db() {
   return getDb();
@@ -70,13 +98,36 @@ const ingestSchema = z.object({
   rawText: z.string().min(1).max(200_000),
 });
 
-async function textbookIdFor(owner: string, title: string, subject: string, language: string) {
+async function textbookIdFor(owner: string, title: string, subject: string, language: string, demo: boolean) {
   const [existing] = await db()
     .select({ id: textbook.id })
     .from(textbook)
     .where(and(eq(textbook.ownerId, owner), eq(textbook.title, title)))
     .limit(1);
   if (existing) return existing.id;
+
+  // The per-day book cap (demo only) only applies when a *new* textbook row is
+  // about to be created — re-ingesting chunks of an existing book is free. The
+  // curated demo seed (created by /demo/start) doesn't count against it.
+  if (demo) {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const today = await db()
+      .select({ id: textbook.id })
+      .from(textbook)
+      .where(
+        and(
+          eq(textbook.ownerId, owner),
+          gte(textbook.createdAt, dayStart),
+          ne(textbook.title, DEMO_SEED_TITLE),
+        ),
+      );
+    if (today.length >= DEMO_TEXTBOOKS_PER_DAY) {
+      throw new DailyBookLimitError(
+        `Demo keeps ${DEMO_TEXTBOOKS_PER_DAY} new textbooks per day. You've hit today's — come back tomorrow, or sign up to get more.`,
+      );
+    }
+  }
 
   const id = crypto.randomUUID();
   await db().insert(textbook).values({
@@ -95,12 +146,19 @@ router.post("/chapters/ingest", async (req, res) => {
 
   const { textbookTitle, subject, language, title, rawText } = parsed.data;
   const owner = ownerId(req);
+  const demo = isDemo(req);
 
-  // One textbook row per (owner, title) — re-ingesting chapters of the same
+  // One textbook row per (owner, title) — re-ingesting chunks of the same
   // book attaches to the existing row instead of spawning a new textbook.
-  const textbookId = await textbookIdFor(owner, textbookTitle, subject, language);
+  let textbookId: string;
+  try {
+    textbookId = await textbookIdFor(owner, textbookTitle, subject, language, demo);
+  } catch (e) {
+    if (e instanceof DailyBookLimitError) return err(res, e.message, 429);
+    throw e;
+  }
 
-  // Resume-safety: a chapter whose title already exists in this book is
+  // Resume-safety: a chunk whose title already exists in this book is
   // already ingested. Return it without spending an AI call.
   const [existingChapter] = await db()
     .select({ id: chapter.id })
@@ -111,7 +169,13 @@ router.post("/chapters/ingest", async (req, res) => {
     return ok(res, { textbookId, chapterId: existingChapter.id, conceptsExtracted: 0, reused: true });
   }
 
-  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
+  if (!allowAiRequest(req)) {
+    return err(
+      res,
+`You're out of AI budget for this minute. Give it a moment and try again.`,
+      429,
+    );
+  }
 
   const chapterId = crypto.randomUUID();
   await db().insert(chapter).values({
@@ -136,6 +200,12 @@ router.post("/chapters/ingest", async (req, res) => {
   }
 
   ok(res, { textbookId, chapterId, conceptsExtracted: extracted.length, reused: false }, 201);
+});
+
+// What the visitor can still spend this minute — the demo UI paints this as a
+// small "AI calls left" pill so nobody is surprised by a 429 mid-session.
+router.get("/ai/budget", async (_req, res) => {
+  ok(res, aiBudgetFor(_req));
 });
 
 // Each textbook with its chapters, in import order — the library view and the
@@ -378,7 +448,7 @@ const recallSchema = z.object({
 });
 
 router.post("/sessions/:id/recall", async (req, res) => {
-  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
+  if (!allowAiRequest(req)) return err(res, `You're out of AI budget for this minute. Give it a moment and try again.`, 429);
   const parsed = recallSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -418,7 +488,7 @@ const microlessonSchema = z.object({
 });
 
 router.post("/sessions/:id/microlesson", async (req, res) => {
-  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
+  if (!allowAiRequest(req)) return err(res, `You're out of AI budget for this minute. Give it a moment and try again.`, 429);
   const parsed = microlessonSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -448,7 +518,7 @@ const retestSchema = z.object({
 });
 
 router.post("/sessions/:id/retest", async (req, res) => {
-  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
+  if (!allowAiRequest(req)) return err(res, `You're out of AI budget for this minute. Give it a moment and try again.`, 429);
   const parsed = retestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -513,7 +583,7 @@ const answerSchema = z.object({
 });
 
 router.post("/sessions/:id/retest/answer", async (req, res) => {
-  if (!allowAiRequest(req)) return err(res, "AI request limit reached. Try again shortly.", 429);
+  if (!allowAiRequest(req)) return err(res, `You're out of AI budget for this minute. Give it a moment and try again.`, 429);
   const parsed = answerSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 

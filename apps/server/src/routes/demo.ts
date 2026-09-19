@@ -16,8 +16,10 @@ export function demoUserFor(req: Request): string | null {
 	return null;
 }
 
+export const DEMO_SEED_TITLE = "Biology — Cell Biology";
+
 const DEMO_TEXTBOOK = {
-	title: "Biology — Cell Biology",
+	title: DEMO_SEED_TITLE,
 	subject: "Biology",
 	language: "en",
 };

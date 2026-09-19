@@ -31,6 +31,14 @@ type SessionHistory = {
 	durationMs: number | null;
 };
 
+type AiBudget = {
+	demo: boolean;
+	limitPerMinute: number;
+	callsThisMinute: number;
+	remaining: number;
+	textbooksPerDay: number;
+};
+
 export default function Dashboard() {
 	const navigate = useNavigate();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -38,6 +46,20 @@ export default function Dashboard() {
 	const [history, setHistory] = useState<SessionHistory[]>([]);
 	const [starting, setStarting] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [budget, setBudget] = useState<AiBudget | null>(null);
+
+	const demo = Boolean(getDemoUser());
+
+	useEffect(() => {
+		if (!demo) return;
+		const poll = () =>
+			api<AiBudget>("/ai/budget")
+				.then(setBudget)
+				.catch(() => {});
+		poll();
+		const id = setInterval(poll, 15_000);
+		return () => clearInterval(id);
+	}, [demo]);
 
 	useEffect(() => {
 		if (!sessionPending && !session && !getDemoUser()) {
@@ -127,6 +149,28 @@ export default function Dashboard() {
 					>
 						Create a free account
 					</Link>
+				</div>
+			)}
+
+			{budget && (
+				<div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-1 text-muted-foreground text-xs">
+					<span>
+						AI calls this minute:{" "}
+						<strong className="font-medium text-foreground">
+							{budget.remaining} of {budget.limitPerMinute} left
+						</strong>
+						{budget.remaining === 0
+							? " — out. Try again in a moment."
+							: budget.remaining <= 2
+								? " — spend carefully."
+								: ""}
+					</span>
+					<span>
+						New textbooks today:{" "}
+						<strong className="font-medium text-foreground">
+							{budget.textbooksPerDay} max (demo)
+						</strong>
+					</span>
 				</div>
 			)}
 

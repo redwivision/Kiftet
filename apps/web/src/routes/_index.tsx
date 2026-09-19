@@ -417,7 +417,8 @@ export default function Home() {
 					</h2>
 					<p className="text-base text-muted-foreground leading-7">
 						Upload the book you&apos;re actually studying — the one that matches
-						your syllabus — and Kiftet turns each of its chapters into its own
+						your syllabus — and Kiftet reads its table of contents and turns
+						each chunk into its own
 						recall → diagnose → relearn → retest loop.
 					</p>
 					<p className="text-base text-muted-foreground leading-7">
@@ -449,7 +450,7 @@ export default function Home() {
 							</h3>
 						</div>
 						<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
-							7 chapters
+							7 chunks
 						</span>
 					</div>
 					<ul className="divide-y divide-border/60">

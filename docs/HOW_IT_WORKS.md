@@ -199,36 +199,43 @@ Some rules that keep this simple:
 ### 5.2 Chapter ingest — putting content into the system
 
 Before any studying can happen, a chapter must be loaded in. Ingest runs **once
-per chapter** and its result (the concept checklist) is cached and reused by
+per chunk** and its result (the concept checklist) is cached and reused by
 every later session — it is never re-run live during a study loop.
+
+The unit we cut and send to the AI is a **chunk**, not a chapter: one
+table-of-contents section at a time (e.g. "Chapter 1 · 1.2 Reflection"), so
+each Gemini extraction call reads a small, navigable piece of the book.
 
 Two ways content gets in:
 
 - **Seeded/demo content** — the demo (and any seeds) load chapters directly on
   the server (see §13 Part II).
 - **The student's own textbook (Phase 6)** — the student uploads their book
-  (PDF or pasted text) from the app. The file's text is extracted **on the
-  device**, chapter by chapter, and only that cleaner text is POSTed to
-  `/api/chapters/ingest`. The file bytes never leave the phone — the server
-  never sees a PDF.
+  (PDF up to **100 MB**, or pasted text) from the app. The browser reads the
+  PDF's outline (its real table of contents via pdf.js `getOutline()`) and
+  slices the book along it into chunks, on the device. Only cleaned chunk
+  text is POSTed to `/api/chapters/ingest` — the file bytes never leave the
+  phone and the server never sees a PDF. Books without a TOC fall back to
+  heading detection (`Unit 1`, `ምዕራፍ 2`, ...) then to even page runs.
 
 ```mermaid
 flowchart LR
-  A["1 · student's file<br/>(PDF / pasted text)"] --> B["2 · extract text<br/>on the device"]
-  B --> C["3 · POST the chapter's<br/>raw text"]
-  C --> D["4 · save textbook<br/>+ chapter rows"]
-  D --> E["5 · Gemini builds the<br/>concept checklist"]
-  E --> F["6 · save concepts<br/>(5–12 per chapter)"]
+  A["1 · student's file<br/>(PDF / pasted text)"] --> B["2 · read TOC + extract text<br/>on the device"]
+  B --> C["3 · slice into chunks<br/>one per TOC section"]
+  C --> D["4 · POST a chunk's<br/>raw text"]
+  D --> E["5 · save textbook<br/>+ chunk rows"]
+  E --> F["6 · Gemini builds the<br/>concept checklist"]
   F --> G["7 · reply with the ids"]
 ```
 
-> **Trace:** file → device-side text extraction → raw text → saved rows → Gemini
+> **Trace:** file → device reads the TOC + extracts text → chunk per TOC
+> section (heading/part-split fallbacks) → raw text → saved rows → Gemini
 > extracts concepts → concepts saved → ids returned.
 
 ```
 Sending:   { textbookTitle, subject, language, title, rawText }
-Receiving: { textbookId, chapterId, conceptsExtracted }
-Data kept: textbook (1) → chapter (1) → concept_node (5-12)
+Receiving: { textbookId, chapterId, conceptsExtracted, reused }
+Data kept: textbook (1) → chapter/chunk (1) → concept_node (5-12)
 ```
 
 That checklist is the **foundation of everything that follows**: it's what the
@@ -725,6 +732,13 @@ All routes live behind `/api`:
 | `GET /api/sessions/:id/result` | The before/after coverage delta | 0 |
 | `POST /api/sessions/:id/complete` | Mark the session finished | 0 |
 
+Additional routes added for Phase 6 (textbook library + demo quotas):
+
+| Method & path | What it does | Phase |
+|---|---|---|
+| `GET /api/textbooks` | Each textbook with its chunks, in import order | 6 |
+| `GET /api/ai/budget` | Demo/signed-in AI quota remaining this minute + daily book cap | 6 |
+
 In Phase 0, the AI-graded endpoints return **empty placeholders** (empty gaps,
 empty questions). The *shape* of the contract is real — the *brains* arrive in
 Phase 2.
@@ -732,10 +746,11 @@ Phase 2.
 Every route below is mounted behind the `requireAuth` middleware — a request
 without a valid session gets `401` before it ever reaches the route (see §8).
 
-**Phase 6 (textbook import) note:** no new server routes are needed for the
-student's own book. The device extracts text from the file locally and posts
-each chapter through the existing `POST /api/chapters/ingest`; the server API
-surface below is unchanged.
+**Phase 6 (textbook import) note:** the device extracts the book's text and
+TOC locally and posts each **chunk** through `POST /api/chapters/ingest` (the
+server reuses one textbook row per title and skips chunks it already has, so
+re-importing mid-book is a free resume). Two extra routes above support the
+library view and the visible AI budget.
 
 ---
 
@@ -930,21 +945,36 @@ chapters; two separate accounts see nothing of each other.
 ### 10.2 AI rate limiting (in-memory)
 
 Every AI-grading call (`recall`, `microlesson`, `retest`, `retest/answer`) and
-chapter ingest is rate-limited at **30 requests per user per minute**, tracked
-in an in-memory `Map`. When the limit is hit the server returns `429 Too Many
-Requests`.
+chapter ingest is rate-limited per user per minute, tracked in an in-memory
+`Map`:
+
+- **Demo visitors:** **5 requests / minute** — enough to feel the product,
+  stingy enough to protect the Gemini budget. The client shows this as a
+  live "AI calls left this minute" pill (`GET /api/ai/budget`).
+- **Signed-in users:** **30 requests / minute** today; the number exists only
+  as a safety net and gets much larger before launch (see the go-live note in
+  §13).
+
+When the limit is hit the server returns `429 Too Many Requests` with a
+friendly message.
+
+**Demo daily book cap:** demo visitors may create at most **3 new textbooks
+per day** (re-ingesting chunks of an existing book doesn't count). Signed-in
+users are not capped.
 
 This is the *only* rate limiter; plain reads (chapters, sessions, results) are
-unlimited. In-memory means the counter resets on server restart — this is a
+unlimited. In-memory means the counters reset on server restart — this is a
 safety net, not a billing system.
 
 ### 10.3 Request size limits
 
 The server rejects HTTP request bodies larger than **256 KB**
-(`express.json({ limit: '256kb' })`). Transcript submissions are individually
-capped at **20,000 characters** via Zod validation, and concept text is capped
-at **500 characters**. These prevent accidental upload of an entire textbook or
-a pathological prompt.
+(`express.json({ limit: '256kb' })`). On the client, textbook PDFs are capped
+at **100 MB** (a file-size guard before any extraction) and each chunk's text
+is split to stay under the server's **200,000-character** ingest cap.
+Transcript submissions are individually capped at **20,000 characters** via
+Zod validation, and concept text is capped at **500 characters**. These
+prevent accidental upload of an entire textbook or a pathological prompt.
 
 ### 10.4 Idempotency — no phantom duplicates
 
@@ -953,6 +983,11 @@ server calls `INSERT ... ON CONFLICT DO NOTHING` — if a network retry sends th
 same attempt twice, the duplicate is silently dropped and the first score is
 returned. The dedup is scoped to the session, so different sessions can have the
 same `attemptId` without conflict.
+
+Chunk ingest is idempotent a second way: a chunk whose title already exists
+under the same textbook is answered with `reused: true` and its existing
+`chapterId` — **zero** AI spent — which is also what makes a half-finished
+import a free resume.
 
 ### 10.5 Retest ordering
 
@@ -1043,7 +1078,23 @@ wrong.
 | 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ Done |
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
 | 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
-| 6 | Your own textbook — student uploads their book (PDF/paste), device extracts text, per-chapter ingest → study | ⏭️ Next |
+| 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
+
+**Go-live checklist for Phase 6 (when we flip `TEXTBOOK_IMPORT_ENABLED`):**
+- [ ] **DB-backed quotas** — replace the in-memory AI window + daily-book counter
+      with a per-user usage table (e.g. `ai_usage`, `textbook_imports`) so caps
+      survive restarts and multiple server instances, and signed-in users get a
+      much larger budget than demo (30/min → generous).
+- [ ] **Idempotency keys on chunk import** — the server `reused` check already
+      prevents double-spend; add a client `chunkKey` (from the TOC path) so a
+      retry is provably the same chunk even across re-planning.
+- [ ] **Optional server-side Docling pass** — Docling (IBM, MIT) or Marker 2.0
+      (Apache-2.0) are free, on-device/server-side converters that produce
+      layout-aware markdown (tables, formulas, reading order) and are a strict
+      upgrade for scanned or layout-mangled PDFs. Keep the pdf.js-outline path
+      for the school-wifi case; offer Docling as the "high quality" route.
+- [ ] **Usage visibility** — promote the demo budget pill to a real per-user
+      quota screen once quotas are DB-backed.
 
 > **The voice seam, honestly.** The SDK owns the orb + its word-by-word
 > caption (no hide flag in `VoxideAppearance`). We never bet the platform on
@@ -1102,11 +1153,11 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Auth (sign in / sign up / session cookie) | §8 | `packages/auth`, `lib/auth-client.ts`, `components/sign-in-form.tsx`, `sign-up-form.tsx` | Better Auth `/api/auth/*` |
 | CORS / CSRF origin guard | §9 | `apps/server/src/index.ts` (cors), `apps/server/src/auth-middleware.ts` | — |
 | Ownership / tenant isolation | §10.1 | `apps/server/src/routes/study.ts` (every query filtered by userId) | — |
-| AI rate limiting | §10.2 | `apps/server/src/routes/study.ts` (`allowAiRequest`) | — |
+| AI rate limiting + demo quotas | §10.2 | `apps/server/src/routes/study.ts` (`allowAiRequest`, `/ai/budget`) | `GET /ai/budget` |
 | Idempotent submissions | §10.4 | `apps/server/src/routes/study.ts` (`insertAttemptOnce`) | — |
 | Retest resume on reload | §5.13 | `study.$sessionId.tsx`, `study-provider.tsx`, server `/sessions/:id` | — |
-| Chapter ingest — putting content in | §5.2 | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/web/src/lib/textbook.ts` | `POST /chapters/ingest` |
-| Your own textbook (import → library) | §5.2, Phase 6 | `apps/web/src/routes/textbooks.tsx`, `apps/web/src/lib/textbook.ts` | `GET /textbooks`, `POST /chapters/ingest` |
+| Chunk ingest — putting content in (TOC-sliced) | §5.2 | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/web/src/lib/textbook.ts` | `POST /chapters/ingest` |
+| Your own textbook (import → library, gated) | §5.2, Phase 6 | `apps/web/src/routes/textbooks.tsx`, `apps/web/src/lib/textbook.ts` | `GET /textbooks`, `POST /chapters/ingest` |
 | Themes (9 rooms: 8 dark + Sunlight) | §4 | `components/theme-provider.tsx`, `components/theme-switcher.tsx` | — |
 | Offline / installable (PWA) | §4 | `apps/web/vite.config.ts`, `public/offline.html` | — |
 | AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
@@ -1121,7 +1172,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | `react-router` + `@react-router/fs-routes` + `@react-router/node` + `@react-router/serve` | apps/web | URL → screen routing, file-based routes, SSR server, static serving. |
 | `@tanstack/react-form` | apps/web | Typed forms for sign-in and sign-up. |
 | `@voxide/react` | apps/web | The voice session: speech-to-text (hears the student) and the agent's natural text-to-speech. |
-| `pdfjs-dist` | apps/web | On-device PDF text extraction for the textbook import flow — lazy-loaded (dynamic `import()`) so it never ships in the base bundle. |
+| `pdfjs-dist` | apps/web | On-device PDF reading for the textbook import flow: text extraction **and** the outline/TOC tree (via `getOutline()`), which is how chunks are cut. Lazy-loaded (dynamic `import()`) so it never ships in the base bundle. |
 | `better-auth` | apps/web, apps/server, packages/auth | Authentication: credentials, sessions, cookies, and the client hooks. |
 | `isbot` | apps/web | Bot detection for SSR. |
 | `lucide-react` | apps/web, packages/ui | All the icons. |

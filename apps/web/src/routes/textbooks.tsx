@@ -10,7 +10,7 @@ import { setChapter, setSession } from "@/components/assistant";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
-import { type ImportChapter, planChapters } from "@/lib/textbook";
+import { type ImportChunk, MAX_FILE_MB, planChunks } from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
 
 export function meta(_args: Route.MetaArgs) {
@@ -19,7 +19,7 @@ export function meta(_args: Route.MetaArgs) {
 		{
 			name: "description",
 			content:
-				"Bring your own textbook. It's read on your device — the file never uploads — and each chapter becomes a study loop.",
+				"Bring your own textbook. It's read on your device — the file never uploads — and each TOC chunk becomes a study loop.",
 		},
 	];
 }
@@ -63,7 +63,7 @@ export default function Textbooks() {
 	const [pastedText, setPastedText] = useState("");
 
 	const [step, setStep] = useState<ImportStep>("form");
-	const [planned, setPlanned] = useState<ImportChapter[] | null>(null);
+	const [planned, setPlanned] = useState<ImportChunk[] | null>(null);
 	const [stages, setStages] = useState<Stage[]>([]);
 	const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +82,7 @@ export default function Textbooks() {
 		fetchLibrary();
 	}, [auth, sessionPending, navigate, fetchLibrary]);
 
-	// Chapters that already exist under a textbook with this exact title are
+	// Chunks that already exist under a textbook with this exact title are
 	// skipped on import — that's what makes re-entering the flow a resume.
 	const existingChapters = useMemo(() => {
 		const book = textbooks?.find((t) => t.title === bookTitle.trim());
@@ -97,23 +97,23 @@ export default function Textbooks() {
 		setStep("planning");
 		setError(null);
 		try {
-			const chapters =
+			const chunks =
 				mode === "pdf" && pdfFile
-					? await planChapters({
+					? await planChunks({
 							kind: "pdf",
 							name: pdfFile.name,
 							file: pdfFile,
 						})
-					: await planChapters({
+					: await planChunks({
 							kind: "text",
 							name: "pasted",
 							text: pastedText,
 						});
-			if (!chapters.length)
+			if (!chunks.length)
 				throw new Error("Nothing to import — the text looks empty.");
-			setPlanned(chapters);
+			setPlanned(chunks);
 			setStages(
-				chapters.map((c, i) => ({
+				chunks.map((c, i) => ({
 					key: i,
 					title: c.title,
 					state: existingChapters.has(c.title.trim()) ? "skip" : "queued",
@@ -181,7 +181,7 @@ export default function Textbooks() {
 			resetForm();
 		} else {
 			toast.error(
-				`${failed} chapter${failed > 1 ? "s" : ""} didn't land. Retry to finish.`,
+				`${failed} chunk${failed > 1 ? "s" : ""} didn't land. Retry to finish.`,
 			);
 		}
 	};
@@ -246,8 +246,10 @@ export default function Textbooks() {
 					Bring your own book.
 				</h1>
 				<p className="text-muted-foreground text-sm leading-6">
-					Upload a PDF or paste text. It&apos;s read on your device — the file
-					never leaves your phone — and each chapter becomes its own study loop.
+					Upload a PDF (up to {MAX_FILE_MB} MB) or paste text. It&apos;s read on
+					your device — the file never leaves your phone — and the book&apos;s own
+					table of contents is split into chunks, each becoming its own study
+					loop.
 				</p>
 			</header>
 
@@ -294,7 +296,7 @@ export default function Textbooks() {
 								</div>
 								<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
 									{book.chapters.length}{" "}
-									{book.chapters.length === 1 ? "chapter" : "chapters"}
+									{book.chapters.length === 1 ? "chunk" : "chunks"}
 								</span>
 							</div>
 							{book.chapters.length > 0 ? (
@@ -322,7 +324,7 @@ export default function Textbooks() {
 								</ul>
 							) : (
 								<p className="mt-4 text-muted-foreground text-sm">
-									No chapters yet.
+									No chunks yet.
 								</p>
 							)}
 						</div>
@@ -352,6 +354,7 @@ export default function Textbooks() {
 				stages={stages}
 				setStages={setStages}
 				error={error}
+				setError={setError}
 				onImport={runImport}
 				onRetryOne={retryOne}
 				progress={progress}
@@ -385,6 +388,7 @@ function AddTextbook({
 	stages,
 	setStages,
 	error,
+	setError,
 	onImport,
 	onRetryOne,
 	progress,
@@ -408,11 +412,12 @@ function AddTextbook({
 	setPastedText: (v: string) => void;
 	canPlan: boolean;
 	onPlan: () => void;
-	planned: ImportChapter[] | null;
-	setPlanned: (c: ImportChapter[] | null) => void;
+	planned: ImportChunk[] | null;
+	setPlanned: (c: ImportChunk[] | null) => void;
 	stages: Stage[];
 	setStages: (s: Stage[]) => void;
 	error: string | null;
+	setError: (e: string | null) => void;
 	onImport: () => void;
 	onRetryOne: (key: number) => void;
 	progress: number;
@@ -461,7 +466,7 @@ function AddTextbook({
 					<div className="mt-4">
 						<div className="mb-2 flex items-center justify-between text-muted-foreground text-xs">
 							<span>
-								{progress} of {total} chapter{total > 1 ? "s" : ""}
+								{progress} of {total} chunk{total > 1 ? "s" : ""}
 							</span>
 							<span>{Math.round((progress / total) * 100)}%</span>
 						</div>
@@ -503,7 +508,7 @@ function AddTextbook({
 												);
 											}}
 											className="h-9 text-sm"
-											aria-label={`Chapter ${i + 1} title`}
+											aria-label={`Chunk ${i + 1} title`}
 										/>
 									)}
 								</div>
@@ -554,7 +559,7 @@ function AddTextbook({
 				{!importing && (
 					<>
 						<p className="mt-4 text-muted-foreground text-xs leading-5">
-							Chapters import one at a time, and finished ones are skipped if
+							Chunks import one at a time, and finished ones are skipped if
 							you leave and come back. Weak connection? Small text only — never
 							the file.
 						</p>
@@ -564,8 +569,8 @@ function AddTextbook({
 									{newChapters === 0
 										? "Nothing new to import"
 										: failed > 0
-											? `Retry ${failed} failed chapter${failed > 1 ? "s" : ""}`
-											: `Import ${newChapters} chapter${newChapters > 1 ? "s" : ""}`}
+											? `Retry ${failed} failed chunk${failed > 1 ? "s" : ""}`
+											: `Import ${newChapters} chunk${newChapters > 1 ? "s" : ""}`}
 								</Button>
 							) : (
 								<Button disabled title="Preview mode — import is coming soon.">
@@ -661,14 +666,28 @@ function AddTextbook({
 							type="file"
 							accept="application/pdf,application/x-pdf"
 							className="hidden"
-							onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+							onChange={(e) => {
+								const file = e.target.files?.[0] ?? null;
+								if (
+									file &&
+									file.size > MAX_FILE_MB * 1_000_000
+								) {
+									setPdfFile(null);
+									setError(
+										`${file.name} is ${(file.size / 1_000_000).toFixed(1)} MB — Kiftet accepts PDFs up to ${MAX_FILE_MB} MB.`,
+									);
+									return;
+								}
+								setError(null);
+								setPdfFile(file);
+							}}
 						/>
 						{pdfFile ? (
 							<>
 								<span className="font-medium text-sm">{pdfFile.name}</span>
 								<span className="text-muted-foreground text-xs">
 									{(pdfFile.size / 1_000_000).toFixed(1)} MB — read on this
-									device
+									device, up to {MAX_FILE_MB} MB
 								</span>
 							</>
 						) : (
@@ -677,8 +696,8 @@ function AddTextbook({
 									Choose a PDF
 								</span>
 								<span className="max-w-xs text-muted-foreground text-xs leading-5">
-									Or tap again to pick a file. Scanned (image-only) PDFs have no
-									text to study — paste the text instead.
+									PDFs up to {MAX_FILE_MB} MB. Scanned (image-only) PDFs have
+									no text to study — paste the text instead.
 								</span>
 							</>
 						)}
@@ -689,7 +708,7 @@ function AddTextbook({
 							value={pastedText}
 							onChange={(e) => setPastedText(e.target.value)}
 							rows={8}
-							placeholder="Paste a full chapter (or chapters) of the book here. The device will split it into the study loops for you."
+							placeholder="Paste the book's text here (a few chunks' worth at a time). Headings like “Unit 1” or “ምዕራፍ 2” split it into study chunks for you."
 						/>
 						<div className="flex items-center justify-between text-muted-foreground text-xs">
 							<span>
@@ -712,12 +731,16 @@ function AddTextbook({
 
 			<div className="mt-5 flex items-center gap-3">
 				<Button onClick={onPlan} disabled={!canPlan}>
-					Scan into chapters
+					Scan into chunks
 				</Button>
 				<p className="text-muted-foreground text-xs leading-5">
-					You&apos;ll confirm the chapters before anything is imported.
+					You&apos;ll confirm the chunks before anything is imported.
 				</p>
 			</div>
+			<p className="mt-4 border-border/60 border-t pt-3 text-[0.7rem] text-muted-foreground leading-5">
+				Demo quotas: 5 AI calls per minute, and up to 3 new textbooks per
+				day. Signed-in users get more when we open the doors.
+			</p>
 		</section>
 	);
 }

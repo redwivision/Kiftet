@@ -496,25 +496,39 @@ half-finished stream drive what we grade or read back.
 
 ## Phase 6 — Your own textbook (import → study)
 
+> **Status:** UI shipped, import **gated** (preview). The device-side chunk
+> planning, the 100 MB file cap, and the demo quotas (5 AI calls/min,
+> 3 textbooks/day) are all live; the actual ingest + AI extraction is disabled
+> behind `TEXTBOOK_IMPORT_ENABLED` until the go-live checklist in §13 lands.
+
 ### How to test
 
 1. Down a real PDF with a text layer (any textbook excerpt), or just copy-paste
-   chapter text.
+   chapter text. Confirm:
+   - a PDF **over 100 MB** is rejected with a clear message (no extraction runs);
+   - a scanned/image-only PDF (no embedded text) tells you to use paste.
 2. In the app: **Add your textbook** → name it, pick subject + language, attach
    the PDF (or choose "paste text"). The PDF is read **on the device** — the
    file is never uploaded.
-3. Chapter rows appear with extracted titles. Editing → in and out of the flow
-   and back in **resumes** where it stopped (already-done chapters are skipped,
-   not re-ingested).
-4. Each chapter is POSTed one at a time to `/api/chapters/ingest`; a fresh
-   concept checklist is built per chapter. Watch for per-chapter progress, and
-   a clear failure/retry on any single chapter (weak-wifi friendly: small text
+3. **TOC slicing:** chunk boundaries come from the PDF's own outline/bookmarks
+   (`getOutline()`). Chunk titles show the full path (e.g. `Chapter 2 · 2.3
+   Reflection`). For a pasted/text book, chunk starts fall back to heading
+   detection (`Unit 1`, `ምዕራፍ 2`, …), then even page runs.
+4. Review and edit chunk titles → in and out of the flow and back in
+   **resumes** where it stopped (already-done chunks are skipped with
+   `reused: true`, never re-ingested, never re-spending AI).
+5. Each chunk is POSTed one at a time to `/api/chapters/ingest`; a fresh
+   concept checklist is built per chunk. Watch for per-chunk progress, and a
+   clear failure/retry on any single chunk (weak-wifi friendly: small text
    payloads, no giant upload).
-5. Ingested chapters show up in the dashboard's chapter list like the seeded
-   ones — start a study session on your own chapter and run recall → gaps →
-   lesson → retest against **its** checklist.
-6. Wrong-language or scanned/image-only PDF (no embedded text): the app should
-   tell you the file has no readable text and point you at the paste path.
+6. Ingested chunks show up in the dashboard like the seeded chapters — start a
+   study session on your own chunk and run recall → gaps → lesson → retest
+   against **its** checklist.
+7. **Demo quotas:** `GET /api/ai/budget` returns the current-minute AI budget
+   and the daily book cap; the dashboard pill shows it. Firing more than
+   5 AI calls within a minute returns `429` with a friendly message; a demo can
+   only create 3 new textbooks per day (re-ingesting an existing book is free).
+   Signed-in users get the large limits.
 
 ### How you can test
 
@@ -525,5 +539,5 @@ half-finished stream drive what we grade or read back.
    with a real PDF of a few pages (fast) and a long PDF (progress + resume).
 3. With a `GEMINI_API_KEY` absent, ingest must still complete via the
    deterministic fallback (concepts of lower fidelity but never a hard failure).
-4. Kill the wifi mid-import on one chapter → that chapter shows failed/retry and
-   the next tap resumes without re-sending finished chapters.
+4. Kill the wifi mid-import on one chunk → that chunk shows failed/retry and
+   the next tap resumes without re-sending finished chunks.

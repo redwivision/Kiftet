@@ -47,7 +47,7 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 - **Retest with differently-phrased questions.** Reconfirmation uses different wording, so a memorized one-liner can't fake a real understanding.
 - **Resume anywhere.** The study loop persists across sessions and devices; sign out and back in and you're exactly where you left off.
 - **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and network-first navigation that self-heals — built for unreliable connections.
-- **Your own textbook, on the device.** Upload your book (PDF or pasted text); per-chapter text is extracted in the browser — file bytes never leave the phone — and each chapter is ingested into the study flow one at a time, weak-wifi friendly.
+- **Your own textbook, on the device.** Upload your book (PDF up to 100 MB or pasted text); the browser reads the book's table of contents and slices it into chunks — file bytes never leave the phone — and each chunk is ingested into the study flow one at a time, weak-wifi friendly.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
 - **Guardrails built in.** AI rate limiting, idempotent submissions, per-user AI budgets, typed environment variables with dev-safe placeholders.
 
@@ -133,6 +133,6 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Status
 
-Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13. Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). Next up: **Phase 6 — bring your own textbook** (student imports their own book → device-side text extraction → per-chapter ingest → study).
+Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13. Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). Next up: **Phase 6 — bring your own textbook** (student imports their own book → on-device TOC slicing into chunks → per-chunk ingest → study). Demo quotas (5 AI calls/min, 3 textbooks/day) are live; the ingest button stays preview-only until the §13 go-live checklist.
 
 > Kiftet — *close the gap*. 🇪🇹
