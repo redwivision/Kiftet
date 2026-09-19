@@ -15,10 +15,10 @@ export type ImportSource =
 	| { kind: "pdf"; name: string; file: File }
 	| { kind: "text"; name: string; text: string };
 
-// Textbook files are capped by MB, not by AI-relevant size. The number is
-// generous (a Grade 11 physics PDF is usually 10–80 MB) but keeps a laptop
-// from being turned into a potato.
-export const MAX_FILE_MB = 100;
+// Textbook files are capped by MB. 15 MB is deliberately tight for the demo
+// (school PDFs run 10–80 MB) — opens wide when we ship. The number exists so a
+// phone never chokes on a monster PDF, and it is shown to the user in the UI.
+export const MAX_FILE_MB = 15;
 
 // Server enforces a 200k cap per chunk (`ingestSchema.rawText`); stay under
 // it so oversized output is split client-side instead of hitting a 400.
@@ -137,13 +137,21 @@ async function readOutline(doc: PDFDocumentProxy): Promise<OutlineEntry[]> {
 	return entries;
 }
 
+// Single source of truth for the "too big" rejection, shared by the PDF path
+// in this module and the file-picker validation in the textbooks route.
+export function fileSizeError(file: File): string | null {
+	if (file.size > MAX_FILE_MB * 1_000_000) {
+		return `${file.name} is ${(file.size / 1_000_000).toFixed(1)} MB — Kiftet accepts PDFs up to ${MAX_FILE_MB} MB.`;
+	}
+	return null;
+}
+
 async function extractPdfPages(
 	file: File,
 ): Promise<{ pages: string[]; outline: OutlineEntry[] }> {
-	if (file.size > MAX_FILE_MB * 1_000_000) {
-		throw new Error(
-			`This file is ${(file.size / 1_000_000).toFixed(1)} MB — Kiftet accepts PDFs up to ${MAX_FILE_MB} MB.`,
-		);
+	const sizeError = fileSizeError(file);
+	if (sizeError) {
+		throw new Error(sizeError);
 	}
 
 	const pdf = await getPdfLib();
@@ -151,35 +159,40 @@ async function extractPdfPages(
 	const loadingTask = pdf.getDocument({ data });
 	const doc = await loadingTask.promise;
 
-	const pages: string[] = [];
-	for (let i = 1; i <= doc.numPages; i += 1) {
-		const page = await doc.getPage(i);
-		const content = await page.getTextContent();
-		const lines: string[] = [];
-		let line = "";
-		for (const item of content.items) {
-			if (!item || typeof item !== "object" || !("str" in item)) continue;
-			const { str, hasEOL } = item as ExtractedItem;
-			line += str ?? "";
-			if (hasEOL) {
-				if (line.trim()) lines.push(line);
-				line = "";
+	try {
+		const pages: string[] = [];
+		for (let i = 1; i <= doc.numPages; i += 1) {
+			const page = await doc.getPage(i);
+			const content = await page.getTextContent();
+			const lines: string[] = [];
+			let line = "";
+			for (const item of content.items) {
+				if (!item || typeof item !== "object" || !("str" in item)) continue;
+				const { str, hasEOL } = item as ExtractedItem;
+				line += str ?? "";
+				if (hasEOL) {
+					if (line.trim()) lines.push(line);
+					line = "";
+				}
 			}
+			if (line.trim()) lines.push(line);
+			pages.push(lines.join("\n").trim());
 		}
-		if (line.trim()) lines.push(line);
-		pages.push(lines.join("\n").trim());
-	}
 
-	const outline = await readOutline(doc);
-	await loadingTask.destroy();
+		const outline = await readOutline(doc);
 
-	const total = pages.join(" ").replace(/\s+/g, "").length;
-	if (total < 200) {
-		throw new Error(
-			"This PDF has no readable text (it may be scanned images). Try the paste path instead.",
-		);
+		const total = pages.join(" ").replace(/\s+/g, "").length;
+		if (total < 200) {
+			throw new Error(
+				"This PDF has no readable text (it may be scanned images). Try the paste path instead.",
+			);
+		}
+		return { pages, outline };
+	} finally {
+		// Free the PDF worker no matter how far extraction got — a throw mid-page
+		// must not leak the loading task for the rest of the browser session.
+		await loadingTask.destroy();
 	}
-	return { pages, outline };
 }
 
 type PageSegment = { title: string; start: number; end: number };

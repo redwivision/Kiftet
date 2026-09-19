@@ -32,13 +32,17 @@ export default function SignInForm({
 					password: value.password,
 				},
 				{
-onSuccess: () => {
-					clearDemoUser();
-					navigate("/dashboard");
-					toast.success("Welcome back");
-				},
+					onSuccess: () => {
+						clearDemoUser();
+						navigate("/dashboard");
+						toast.success("Welcome back");
+					},
 					onError: (error) => {
-						toast.error(error.error.message || error.error.statusText);
+						toast.error(
+							error.error?.message ||
+								error.error?.statusText ||
+								"Unable to sign in right now. Try again.",
+						);
 					},
 				},
 			);

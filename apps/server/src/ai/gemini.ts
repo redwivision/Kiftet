@@ -165,19 +165,44 @@ function parseJson<T>(raw: string): T | null {
   }
 }
 
-async function askJson(systemPrompt: string, userInput: string): Promise<string> {
-  const response = await genAI.models.generateContent({
-    model: DEFAULT_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: `${systemPrompt}\n\n---\n${userInput}` },
-        ],
+// A stalled Gemini call must never hang a student session: after this the
+// promise rejects, the per-method catch falls back, and the UI keeps moving.
+const GEMINI_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Gemini request timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
       },
-    ],
-    config: { responseMimeType: "application/json", temperature: 0.4 },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
   });
+}
+
+async function askJson(systemPrompt: string, userInput: string): Promise<string> {
+  const response = await withTimeout(
+    genAI.models.generateContent({
+      model: DEFAULT_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: `${systemPrompt}\n\n---\n${userInput}` },
+          ],
+        },
+      ],
+      config: { responseMimeType: "application/json", temperature: 0.4 },
+    }),
+    GEMINI_TIMEOUT_MS,
+  );
   return response.text ?? "";
 }
 

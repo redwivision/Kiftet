@@ -55,7 +55,7 @@ export async function requireAuth(
 				return;
 			}
 		}
-		const demoId = demoUserFor(req);
+		const demoId = await demoUserFor(req);
 		if (demoId) {
 			req.authSession = { user: { id: demoId }, session: { id: "demo" } };
 			next();

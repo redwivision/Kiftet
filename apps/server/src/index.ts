@@ -6,6 +6,11 @@ import cors from "cors";
 import express from "express";
 import { migrateDb } from "@kiftet/db";
 import { logEnvProbe } from "./env-probe";
+import {
+	drainDatabase,
+	errorMiddleware,
+	installProcessGuards,
+} from "./error-handler";
 import { requireAuth } from "./auth-middleware";
 import { env } from "./env.server";
 import studyRouter from "./routes/study";
@@ -13,6 +18,7 @@ import demoRouter from "./routes/demo";
 import { auth } from "./services";
 
 logEnvProbe();
+installProcessGuards();
 try {
 	await migrateDb(env);
 } catch (error) {
@@ -37,7 +43,7 @@ app.use(
 	cors({
 		origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
 		methods: ["GET", "POST", "OPTIONS"],
-		allowedHeaders: ["Content-Type", "Authorization"],
+		allowedHeaders: ["Content-Type", "Authorization", "X-Demo-User-Id"],
 		credentials: true,
 	}),
 );
@@ -92,9 +98,32 @@ if (IS_PROD) {
 	);
 }
 
+// ── Errors ──────────────────────────────────────────────────────
+// Last middleware: every rejection and throw from the API *and* the SSR
+// handler lands here as friendly JSON, never an HTML stack page (see
+// error-handler.ts).
+app.use(errorMiddleware);
+
 // EthioDeploy (and most PaaS) expose a PORT env; use it as the canonical
 // listen address. Falls back to 3000 for local development.
 const PORT = Number(process.env.PORT ?? 3000);
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
 	console.log(`Server is running on http://localhost:${PORT}`);
 });
+// A request that can't finish in a minute is stuck (or hostile) — cap it so a
+// wedged client can't pin a worker forever. The Gemini guard (20s) and DB
+// query timeouts fire well inside this.
+server.requestTimeout = 60_000;
+
+// The platform sends SIGTERM before killing the instance. Let in-flight
+// requests finish, hang up the DB pool, then exit cleanly. If connections
+// won't drain in 10 seconds, force-quit so the redeploy isn't stuck.
+function shutdown(signal: string, code: 0 | 1) {
+	console.log(`[boot] ${signal} received — draining connections…`);
+	server.close(() => {
+		void drainDatabase().finally(() => process.exit(code));
+	});
+	setTimeout(() => process.exit(code), 10_000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM", 0));
+process.on("SIGINT", () => shutdown("SIGINT", 0));

@@ -65,8 +65,28 @@ function err(res: any, message: string, status = 400) {
   res.status(status).json({ error: message });
 }
 
+// Zod's default messages are written for developers ("Invalid input: expected
+// string, received undefined"). Schemas carry their own friendly messages for
+// the fields a student actually touches; this is the last-resort mapper for
+// anything that still slips through.
+function friendlyIssue(issue: z.ZodIssue): string {
+  const message = issue.message ?? "Invalid request";
+  if (
+    /Invalid input|invalid_type|invalid_string|invalid_literal/i.test(message)
+  ) {
+    return "That request doesn't look right. Check the highlighted field and try again.";
+  }
+  if (/too big|too large|more than/i.test(message)) {
+    return "That's too long. Trim it down and try again.";
+  }
+  if (/too small|less than|below minimum/i.test(message)) {
+    return "That's too short. Add a little more and try again.";
+  }
+  return message;
+}
+
 function firstIssue(issues: z.ZodIssue[]): string {
-  return issues[0]?.message ?? "Invalid request";
+  return issues[0] ? friendlyIssue(issues[0]) : "Invalid request";
 }
 
 async function sessionChapterId(sessionId: string, userId: string): Promise<string | null> {
@@ -91,11 +111,23 @@ async function chapterConcepts(chapterId: string) {
 // ────────────────────────────────────────────────────────────────
 
 const ingestSchema = z.object({
-  textbookTitle: z.string().min(1),
-  subject: z.string().min(1),
+  textbookTitle: z
+    .string({ message: "Name the textbook first." })
+    .trim()
+    .min(1, "Name the textbook first."),
+  subject: z
+    .string({ message: "Which subject is it?" })
+    .trim()
+    .min(1, "Which subject is it?"),
   language: z.string().default("en"),
-  title: z.string().min(1),
-  rawText: z.string().min(1).max(200_000),
+  title: z
+    .string({ message: "Name this chunk." })
+    .trim()
+    .min(1, "Name this chunk."),
+  rawText: z
+    .string({ message: "This chunk has no text — the section looks empty." })
+    .min(1, "This chunk has no text — the section looks empty.")
+    .max(200_000, "That chunk is too large. Pick a smaller section."),
 });
 
 async function textbookIdFor(owner: string, title: string, subject: string, language: string, demo: boolean) {
@@ -275,7 +307,9 @@ router.get("/chapters/:id/concepts", async (req, res) => {
 // ────────────────────────────────────────────────────────────────
 
 const startSessionSchema = z.object({
-  chapterId: z.string().min(1),
+  chapterId: z
+    .string({ message: "Choose a chapter to start." })
+    .min(1, "Choose a chapter to start."),
 });
 
 router.post("/sessions/start", async (req, res) => {
@@ -443,7 +477,11 @@ async function insertAttemptOnce(record: AttemptInsert): Promise<boolean> {
 // ────────────────────────────────────────────────────────────────
 
 const recallSchema = z.object({
-  transcriptText: z.string().trim().min(1).max(20_000),
+  transcriptText: z
+    .string({ message: "Say a little something so we can grade your recall." })
+    .trim()
+    .min(1, "Say a little something so we can grade your recall.")
+    .max(20_000, "That answer is too long — try again in shorter chunks."),
   attemptId: z.string().optional(),
 });
 
@@ -540,7 +578,7 @@ router.post("/sessions/:id/retest", async (req, res) => {
   // graded against that idea alone. The model's targetConcept is reconciled
   // against the stored checklist; anything unverifiable falls back to the
   // gap list in order.
-const gapItems = [...parsed.data.missing, ...parsed.data.misconceptions];
+  const gapItems = [...parsed.data.missing, ...parsed.data.misconceptions];
   const byName = (value: string) => value.trim().toLowerCase();
   // Reconcile the gap strings against the stored checklist so the focus a
   // question gets is the canonical conceptText (case/whitespace tolerant).
@@ -577,8 +615,15 @@ const gapItems = [...parsed.data.missing, ...parsed.data.misconceptions];
 });
 
 const answerSchema = z.object({
-  transcriptText: z.string().trim().min(1).max(20_000),
-  questionIndex: z.number().int().min(0),
+  transcriptText: z
+    .string({ message: "Say a little something so we can grade your answer." })
+    .trim()
+    .min(1, "Say a little something so we can grade your answer.")
+    .max(20_000, "That answer is too long — try again in shorter chunks."),
+  questionIndex: z
+    .number({ message: "That retest question can't be found." })
+    .int()
+    .min(0, "That retest question can't be found."),
   attemptId: z.string().optional(),
 });
 
@@ -675,7 +720,12 @@ router.post("/sessions/:id/complete", async (req, res) => {
   await db()
     .update(studySession)
     .set({ status: "completed", completedAt: new Date() })
-    .where(eq(studySession.id, req.params.id));
+    .where(
+      and(
+        eq(studySession.id, req.params.id),
+        eq(studySession.userId, ownerId(req)),
+      ),
+    );
 
   const durationMs = session.startedAt
     ? Math.max(0, Date.now() - session.startedAt.getTime())

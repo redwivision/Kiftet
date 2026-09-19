@@ -1,19 +1,33 @@
 import { randomUUID } from "node:crypto";
 import { Router, type Request } from "express";
+import { and, eq, like } from "drizzle-orm";
 import { chapter, conceptNode, textbook, user } from "@kiftet/db/schema";
 import { getDb } from "../services";
 
 // Demo visitors are anonymous. /demo/start fabricates a throwaway user +
-// chapter owned by that user, then remembers the id in this in-memory set.
-// The set is the only thing that makes an X-Demo-User-Id header valid, so a
-// forged header can impersonate no one — real (better-auth) user ids are never
-// in it. On restart the set (and old demo sessions) expire naturally.
-const DEMO_USER_IDS = new Set<string>();
+// chapter owned by that user; the identity is *DB-backed*, so an
+// X-Demo-User-Id header is trusted only when it resolves to a real user row
+// with a demo email address. Because the check is a row lookup (not an
+// in-memory set), a demo visitor survives server restarts and multi-instance
+// deploys. Real (better-auth) user ids are never demo ids — sign-up rejects
+// nothing, so a forged header must first own a `@demo.kiftet` user row, which
+// only /demo/start creates.
+const DEMO_EMAIL_SUFFIX = "@demo.kiftet";
 
-export function demoUserFor(req: Request): string | null {
+export async function demoUserFor(req: Request): Promise<string | null> {
 	const id = req.get("x-demo-user-id");
-	if (id && DEMO_USER_IDS.has(id)) return id;
-	return null;
+	if (!id) return null;
+	try {
+		const rows = await getDb()
+			.select({ id: user.id })
+			.from(user)
+			.where(and(eq(user.id, id), like(user.email, `%${DEMO_EMAIL_SUFFIX}`)))
+			.limit(1);
+		return rows[0]?.id ?? null;
+	} catch (error) {
+		console.error("[demo] identity lookup failed", error);
+		return null;
+	}
 }
 
 export const DEMO_SEED_TITLE = "Biology — Cell Biology";
@@ -54,9 +68,35 @@ const DEMO_CONCEPTS = [
 	"The cell wall provides structural support and protection in plant cells",
 ];
 
+// /demo/start is the one endpoint an anonymous stranger may call, so it is
+// throttled by IP: at most a few fabricated demo identities per minute, per
+// address. Generous for real visitors, stingy to a script minting accounts.
+const START_WINDOW_MS = 60_000;
+const START_MAX_PER_IP = 5;
+const startRegistry = new Map<string, number[]>();
+
+function allowStart(ip: string): boolean {
+	const now = Date.now();
+	const recent = (startRegistry.get(ip) ?? []).filter(
+		(time) => now - time < START_WINDOW_MS,
+	);
+	if (recent.length >= START_MAX_PER_IP) return false;
+	recent.push(now);
+	startRegistry.set(ip, recent);
+	return true;
+}
+
 const router = Router();
 
-router.post("/start", async (_req, res) => {
+router.post("/start", async (req, res) => {
+	const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+	if (!allowStart(ip)) {
+		res.status(429).json({
+			error: "Too many demo rooms from this connection. Wait a minute and try again.",
+		});
+		return;
+	}
+
 	const db = getDb();
 	const userId = randomUUID();
 	const textbookId = randomUUID();
@@ -95,7 +135,6 @@ router.post("/start", async (_req, res) => {
 		return;
 	}
 
-	DEMO_USER_IDS.add(userId);
 	res.status(201).json({ userId, chapterId });
 });
 

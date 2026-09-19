@@ -10,7 +10,7 @@ import { setChapter, setSession } from "@/components/assistant";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
-import { type ImportChunk, MAX_FILE_MB, planChunks } from "@/lib/textbook";
+import { type ImportChunk, MAX_FILE_MB, fileSizeError, planChunks } from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
 
 export function meta(_args: Route.MetaArgs) {
@@ -668,14 +668,10 @@ function AddTextbook({
 							className="hidden"
 							onChange={(e) => {
 								const file = e.target.files?.[0] ?? null;
-								if (
-									file &&
-									file.size > MAX_FILE_MB * 1_000_000
-								) {
+								const sizeError = file ? fileSizeError(file) : null;
+								if (file && sizeError) {
 									setPdfFile(null);
-									setError(
-										`${file.name} is ${(file.size / 1_000_000).toFixed(1)} MB — Kiftet accepts PDFs up to ${MAX_FILE_MB} MB.`,
-									);
+									setError(sizeError);
 									return;
 								}
 								setError(null);
@@ -738,8 +734,8 @@ function AddTextbook({
 				</p>
 			</div>
 			<p className="mt-4 border-border/60 border-t pt-3 text-[0.7rem] text-muted-foreground leading-5">
-				Demo quotas: 5 AI calls per minute, and up to 3 new textbooks per
-				day. Signed-in users get more when we open the doors.
+				Demo rooms run on a small daily budget — your dashboard shows what&apos;s
+				left. Signed-in users get more when we open the doors.
 			</p>
 		</section>
 	);

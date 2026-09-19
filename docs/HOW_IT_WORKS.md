@@ -211,7 +211,7 @@ Two ways content gets in:
 - **Seeded/demo content** — the demo (and any seeds) load chapters directly on
   the server (see §13 Part II).
 - **The student's own textbook (Phase 6)** — the student uploads their book
-  (PDF up to **100 MB**, or pasted text) from the app. The browser reads the
+  (PDF up to **15 MB**, or pasted text) from the app. The browser reads the
   PDF's outline (its real table of contents via pdf.js `getOutline()`) and
   slices the book along it into chunks, on the device. Only cleaned chunk
   text is POSTed to `/api/chapters/ingest` — the file bytes never leave the
@@ -962,15 +962,32 @@ friendly message.
 per day** (re-ingesting chunks of an existing book doesn't count). Signed-in
 users are not capped.
 
+**Demo identity is DB-backed:** an anonymous visit is authenticated by an
+`X-Demo-User-Id` header, and the header is trusted only when it resolves to a
+real user row with a `@demo.kiftet` email (created by `/demo/start`). Because
+that check is a database lookup rather than a memory set, a demo visitor
+survives server restarts and multi-instance deploys. `/demo/start` — the one
+endpoint a stranger may call — is throttled to **5 identity creations per
+minute per IP**.
+
+**Error handling:** the API answers every failure as JSON `{ error: "…" }` with
+copy written for the student, never an HTML stack page. Express's async
+rejections and sync throws all land in one error middleware
+(`apps/server/src/error-handler.ts`), which also gives oversized bodies a
+friendly `413`. The web client timeouts a hung request at 30s and translates
+offline / abort failures into "Can't reach Kiftet" messages instead of raw
+`TypeError: Failed to fetch`.
+
 This is the *only* rate limiter; plain reads (chapters, sessions, results) are
-unlimited. In-memory means the counters reset on server restart — this is a
-safety net, not a billing system.
+unlimited. The per-minute AI window is in-memory, so the counters reset on
+server restart — this is a safety net, not a billing system (DB-backed quotas
+are the go-live upgrade in §13).
 
 ### 10.3 Request size limits
 
 The server rejects HTTP request bodies larger than **256 KB**
 (`express.json({ limit: '256kb' })`). On the client, textbook PDFs are capped
-at **100 MB** (a file-size guard before any extraction) and each chunk's text
+at **15 MB** (a file-size guard before any extraction) and each chunk's text
 is split to stay under the server's **200,000-character** ingest cap.
 Transcript submissions are individually capped at **20,000 characters** via
 Zod validation, and concept text is capped at **500 characters**. These
@@ -1081,10 +1098,10 @@ wrong.
 | 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
 
 **Go-live checklist for Phase 6 (when we flip `TEXTBOOK_IMPORT_ENABLED`):**
-- [ ] **DB-backed quotas** — replace the in-memory AI window + daily-book counter
-      with a per-user usage table (e.g. `ai_usage`, `textbook_imports`) so caps
-      survive restarts and multiple server instances, and signed-in users get a
-      much larger budget than demo (30/min → generous).
+- [ ] **DB-backed quotas** — replace the in-memory AI window with a per-user
+      usage table (e.g. `ai_usage`) so caps survive restarts and multiple
+      server instances, and signed-in users get a much larger budget than demo
+      (30/min → generous).
 - [ ] **Idempotency keys on chunk import** — the server `reused` check already
       prevents double-spend; add a client `chunkKey` (from the TOC path) so a
       retry is provably the same chunk even across re-planning.
@@ -1095,6 +1112,34 @@ wrong.
       for the school-wifi case; offer Docling as the "high quality" route.
 - [ ] **Usage visibility** — promote the demo budget pill to a real per-user
       quota screen once quotas are DB-backed.
+- [ ] **Session lifetime** — configure Better Auth `expiresIn` (currently the
+      default ~7 days) once product decides on a cadence.
+- [ ] **Cookie hardening** — switch `sameSite: "none"` → `"lax"` if app and
+      API stay same-origin; keep `"none"` only while the split dev/server
+      origins need the cookie to cross.
+- [ ] **DB TLS verification** — enable `rejectUnauthorized` for Neon now that
+      the pooled-cert question is pinned down, so connections can't be
+      intercepted.
+- [ ] **Migration advisory lock** — a rolling deploy runs several instances;
+      take a Postgres advisory lock around `migrate()` so two boots can't race
+      the schema journal.
+- [ ] **`/health` depth** — have `/health` also ping the DB so platform health
+      checks catch a dead database (not just a listening socket).
+- [ ] **Demo janitor** — demo identity rows now persist (that's intentional);
+      add a scheduled job to delete stale demo users + their textbooks so they
+      don't accumulate.
+- [ ] **`/sessions` N+1** — replace the per-row `resultSummary` loop in
+      `GET /sessions` with one grouped query.
+- [ ] **Request IDs + structured logs** — tag each request with an id and log
+      JSON so support can trace a single failing study session.
+
+**Resolved in the hardening pass (no action needed):** centralized JSON error
+middleware with friendly 413/500 copy; Gemini 20s timeout → deterministic
+fallback; DB pool connect/query/idle timeouts; graceful shutdown on SIGTERM;
+client fetch timeout (30s) + friendly offline copy; PDF worker cleaned up in
+`finally`; demo identity made DB-backed (survives restarts) and `/demo/start`
+IP-throttled; quotas shown live from `GET /api/ai/budget` instead of
+hardcoded UI numbers.
 
 > **The voice seam, honestly.** The SDK owns the orb + its word-by-word
 > caption (no hide flag in `VoxideAppearance`). We never bet the platform on
@@ -1125,8 +1170,9 @@ bun run --cwd apps/server dev        # → http://localhost:3000
 bun run --cwd apps/web dev           # → http://localhost:5173
 ```
 
-The server creates `kiftet-dev.db` on first run (that's the whole SQLite
-"database") and applies migrations automatically.
+The server applies pending migrations automatically on boot, then listens. The
+database is Postgres; `DATABASE_URL` / `DATABASE_URL_DIRECT` come from your
+`.env` (a local Postgres in development, Neon in production).
 
 ## 15. Everything we use — the source-of-truth inventory
 
@@ -1154,6 +1200,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | CORS / CSRF origin guard | §9 | `apps/server/src/index.ts` (cors), `apps/server/src/auth-middleware.ts` | — |
 | Ownership / tenant isolation | §10.1 | `apps/server/src/routes/study.ts` (every query filtered by userId) | — |
 | AI rate limiting + demo quotas | §10.2 | `apps/server/src/routes/study.ts` (`allowAiRequest`, `/ai/budget`) | `GET /ai/budget` |
+| Unified JSON error handling + process guards | §10.2 | `apps/server/src/error-handler.ts`, `apps/server/src/index.ts` (error middleware, SIGTERM drain) | — |
 | Idempotent submissions | §10.4 | `apps/server/src/routes/study.ts` (`insertAttemptOnce`) | — |
 | Retest resume on reload | §5.13 | `study.$sessionId.tsx`, `study-provider.tsx`, server `/sessions/:id` | — |
 | Chunk ingest — putting content in (TOC-sliced) | §5.2 | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/web/src/lib/textbook.ts` | `POST /chapters/ingest` |

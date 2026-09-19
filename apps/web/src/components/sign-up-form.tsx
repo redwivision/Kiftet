@@ -34,13 +34,17 @@ export default function SignUpForm({
 					name: value.name,
 				},
 				{
-onSuccess: () => {
-					clearDemoUser();
-					navigate("/dashboard");
-					toast.success("Account created");
-				},
+					onSuccess: () => {
+						clearDemoUser();
+						navigate("/dashboard");
+						toast.success("Account created");
+					},
 					onError: (error) => {
-						toast.error(error.error.message || error.error.statusText);
+						toast.error(
+							error.error?.message ||
+								error.error?.statusText ||
+								"Couldn't create your account right now. Try again.",
+						);
 					},
 				},
 			);

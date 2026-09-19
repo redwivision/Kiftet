@@ -497,7 +497,7 @@ half-finished stream drive what we grade or read back.
 ## Phase 6 — Your own textbook (import → study)
 
 > **Status:** UI shipped, import **gated** (preview). The device-side chunk
-> planning, the 100 MB file cap, and the demo quotas (5 AI calls/min,
+> planning, the 15 MB file cap, and the demo quotas (5 AI calls/min,
 > 3 textbooks/day) are all live; the actual ingest + AI extraction is disabled
 > behind `TEXTBOOK_IMPORT_ENABLED` until the go-live checklist in §13 lands.
 
@@ -505,7 +505,7 @@ half-finished stream drive what we grade or read back.
 
 1. Down a real PDF with a text layer (any textbook excerpt), or just copy-paste
    chapter text. Confirm:
-   - a PDF **over 100 MB** is rejected with a clear message (no extraction runs);
+   - a PDF **over 15 MB** is rejected with a clear message (no extraction runs);
    - a scanned/image-only PDF (no embedded text) tells you to use paste.
 2. In the app: **Add your textbook** → name it, pick subject + language, attach
    the PDF (or choose "paste text"). The PDF is read **on the device** — the
@@ -541,3 +541,22 @@ half-finished stream drive what we grade or read back.
    deterministic fallback (concepts of lower fidelity but never a hard failure).
 4. Kill the wifi mid-import on one chunk → that chunk shows failed/retry and
    the next tap resumes without re-sending finished chunks.
+
+### How to test — error presentation (hardening pass)
+
+1. **Server failures are JSON, not HTML.** With the API up, hit
+   `POST http://localhost:3000/api/sessions/start` with no auth header → you get
+   `{"error": "..."}` (401), never an HTML stack page.
+2. **Offline / abort copy:** open the app, throttle/disable the network, then
+   submit a recall → the UI says "Can't reach Kiftet…" or "That took too long…",
+   not `TypeError: Failed to fetch`.
+3. **Oversized body:** `curl` a >256 KB body to a route with `Content-Type:
+   application/json` → `413` with "That request is too large…".
+4. **Friendly validation:** an empty transcript on recall returns the
+   "Say a little something…" message (not raw Zod text).
+5. **Demo identity survives restart:** start a demo, record the
+   `X-Demo-User-Id`, restart the server, then call `GET /api/ai/budget` with
+   that header → `200` (identity is DB-backed now, it used to 401 after every
+   redeploy).
+6. **/demo/start throttling:** fire `POST /api/demo/start` more than 5 times in
+   a minute from one IP → `429` with the "Too many demo rooms…" message.

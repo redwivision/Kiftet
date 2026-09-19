@@ -47,7 +47,7 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 - **Retest with differently-phrased questions.** Reconfirmation uses different wording, so a memorized one-liner can't fake a real understanding.
 - **Resume anywhere.** The study loop persists across sessions and devices; sign out and back in and you're exactly where you left off.
 - **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and network-first navigation that self-heals — built for unreliable connections.
-- **Your own textbook, on the device.** Upload your book (PDF up to 100 MB or pasted text); the browser reads the book's table of contents and slices it into chunks — file bytes never leave the phone — and each chunk is ingested into the study flow one at a time, weak-wifi friendly.
+- **Your own textbook, on the device.** Upload your book (PDF up to 15 MB or pasted text); the browser reads the book's table of contents and slices it into chunks — file bytes never leave the phone — and each chunk is ingested into the study flow one at a time, weak-wifi friendly.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
 - **Guardrails built in.** AI rate limiting, idempotent submissions, per-user AI budgets, typed environment variables with dev-safe placeholders.
 
