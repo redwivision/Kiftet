@@ -31,7 +31,7 @@ export function logEnvProbe(): void {
 	}
 	console.log(`[env-probe] resolved app env DATABASE_URL = ${safeUrl(env.DATABASE_URL)}`);
 	console.log(`[env-probe] resolved app env DATABASE_URL_DIRECT = ${safeUrl(env.DATABASE_URL_DIRECT)}`);
-	if (env.DATABASE_URL.includes("localhost:5432")) {
+	if (String(env.DATABASE_URL).includes("localhost:5432")) {
 		console.log("[env-probe] WARNING: the app sees the localhost placeholder - no real database URL reached it");
 	} else {
 		console.log("[env-probe] OK: the app sees a real (non-placeholder) DATABASE_URL");
