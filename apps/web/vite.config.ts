@@ -38,7 +38,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
       },
       manifest: {
-        name: "KIFTET — Close the gap",
+        name: "Kiftet — Close the gap",
         short_name: "Kiftet",
         description: "Find what's missing in your studies and close the gap.",
         theme_color: "#0A0B0D",

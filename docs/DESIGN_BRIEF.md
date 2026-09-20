@@ -14,11 +14,11 @@
 
 **Name: Kiftet** (ክፍተት — "gap"), confirmed by native-speaker check. Tagline: **"Close the gap."** The name maps directly onto the core mechanic — find what's missing, close it.
 
-**Logo mark:** a gold open ring — a circle with a 72° segment missing at the top-right — on a Night Indigo field. The ring is a whole that isn't whole, with the missing piece being the gap (ክፍተት) the product exists to close. Same geometry as the `BrandMark` component in `apps/web/src/components/brand-mark.tsx`, so the file, favicon, PWA icons, and on-screen mark never drift. Two versions, both provided as real SVG assets and kept identical to the app's:
+**Logo mark:** an ivory open ring — a circle with a 72° segment missing at the top-right — on a true-black field. The ring is a whole that isn't whole, with the missing piece being the gap (ክፍተት) the product exists to close. The mark is drawn with `currentColor`, so it reads ivory (or a room's candle hue) on dark surfaces and flips to ink on light ones; the shipped SVG/PNG assets sit ivory-on-true-black. Same geometry as the `BrandMark` component in `apps/web/src/components/brand-mark.tsx`, so the file, favicon, PWA icons, and on-screen mark never drift. Two versions, both provided as real SVG assets and kept identical to the app's:
 - `/assets/logo-mark.svg` — circular version, for favicons and small contexts
 - `/assets/app-icon.svg` — rounded-square version, for the PWA home-screen icon
 
-Deliberately gold-on-indigo, not gold-on-light — the two colors are meant to sit together as one combined identity, not appear as separate, independent swatches. See the color system below for why.
+Deliberately ivory-on-black, not ivory-on-light — the two colors are meant to sit together as one combined identity, not appear as separate, independent swatches. See the color system below for why.
 
 Log this decision (name, logo direction, and the reasoning above) as a dated entry in your Scholarxiv collection — you're doing the thinking anyway, this makes it visible proof of ideation for free.
 
