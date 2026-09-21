@@ -375,6 +375,13 @@ Sending:   { missing: [...], misconceptions: [...] }
 Receiving: { questions: [ { question: "...", focus: ["..."] }, ... ] }
 ```
 
+> **Echoes the student, not a canned quiz:** the question writer also receives
+> the student's own recall for this session (the latest `recall` attempt, read
+> server-side) and is instructed to mirror its wording — terms, framing, and
+> examples — so each question reads like a follow-up to what they actually
+> said. The prompt never restates a wrong belief they voiced as if it were
+> correct. (`retestUserPrompt` in `apps/server/src/ai/gemini.ts`.)
+
 **Part B — Answer each question:**
 
 ```mermaid
@@ -567,7 +574,8 @@ different things get asked:
 3. **LESSON** (microlesson) — "Write a short, pronunciation-friendly lesson
    that fixes exactly these gaps" → `{text}`.
 4. **RETEST** (retest questions) — "Write 2–3 spoken-check questions that
-   re-test the missing concepts; tag each with the targetConcept it tests" →
+   re-test the missing concepts; tag each with the targetConcept it tests;
+   if the student's own recall is provided, mirror its wording" →
    `{questions: [{question, targetConcept}]}`.
 5. **FOCUS** (per-question verdict) — a deterministic helper, not a prompt: a
    misconception counts as handled when *not* restated; a real concept counts
@@ -1083,6 +1091,16 @@ wrong.
    grading a *conceptual* explanation vs. grading a *numerical* answer likely
    need different prompts/logic — we test both on real chapter types (Phase 4).
 
+7. **Restraint is the motion system.** Loading is ink settling into place
+   (`component: ink-settling.tsx`), the idle voice ring breathes on a slow ~3s
+   heartbeat, "start listening" earns a single one-shot ripple (never a loop),
+   the "Gap closed." mark draws itself in and settles to sage, and dark rooms
+   carry a faint paper grain. All of it is plain CSS keyframes behind utilities
+   in `index.css` — no animation library — and `prefers-reduced-motion`
+   collapses it to the finished frame. Feedback colours are fixed values
+   (Rust `#B54A2C`, Sage `#5C7A5E`), not per-room, so "gap / solid" means the
+   same thing in every room.
+
 ---
 
 ## 13. Where we are (roadmap)
@@ -1096,6 +1114,11 @@ wrong.
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
 | 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
 | 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
+
+The five product bets that steer the phases after this — EHEEE syllabus
+anchoring, the national misconception map, the offline-first study loop, and
+Ethiopian texture — live in [`STRATEGY.md`](./STRATEGY.md); each phase in this
+table names the bet it advances.
 
 **Go-live checklist for Phase 6 (when we flip `TEXTBOOK_IMPORT_ENABLED`):**
 - [ ] **DB-backed quotas** — replace the in-memory AI window with a per-user
@@ -1140,6 +1163,18 @@ client fetch timeout (30s) + friendly offline copy; PDF worker cleaned up in
 `finally`; demo identity made DB-backed (survives restarts) and `/demo/start`
 IP-throttled; quotas shown live from `GET /api/ai/budget` instead of
 hardcoded UI numbers.
+
+**Resolved in the craft pass (no action needed):** the 10-item motion +
+feedback pass landed — idle voice ring breathes (~3s), spinners became
+ink-settling strokes (`InkSettling`), the "Gap closed." mark draws in and
+settles to sage (`BrandMark closing`), concept-graph empty states, paper grain
+on dark rooms, "Bring your own book" list brightness, a single one-shot
+listening ripple, a breathing demo border, and an ink-page upload animation.
+Retest questions now mirror the student's own recall wording, and feedback
+colours are fixed (Sage `#5C7A5E`, Rust `#B54A2C`) instead of following the
+room candle. All plain CSS keyframes behind utilities in `index.css`, collapsed
+by `prefers-reduced-motion`. See [`STRATEGY.md`](./STRATEGY.md) for the five
+product bets that steer the next phases.
 
 > **The voice seam, honestly.** The SDK owns the orb + its word-by-word
 > caption (no hide flag in `VoxideAppearance`). We never bet the platform on
@@ -1191,6 +1226,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Diagnose (gap chips + bars) | §5.5 | `study.$sessionId.tsx` (DiagnosePhase) | — |
 | Microlesson + read-aloud | §5.6 | `study.$sessionId.tsx` (LessonPhase), `lib/voice.ts` | `POST /sessions/:id/microlesson` |
 | Retest (questions + per-focus grading) | §5.7 | `study.$sessionId.tsx` (RetestPhase) | `POST /sessions/:id/retest`, `POST /sessions/:id/retest/answer` |
+| Retest echoes the student's recall | §5.7 | `apps/server/src/routes/study.ts` (reads latest recall attempt), `apps/server/src/ai/gemini.ts` (`retestUserPrompt`) | (server-side, part of `/retest`) |
 | Result (before/after/delta) | §5.8 | `study.$sessionId.tsx` (ResultPhase) | `GET /sessions/:id/result` |
 | End session (button + voice) | §5.9 | `components/assistant.tsx` (the `completeSession` capability) | `POST /sessions/:id/complete` |
 | Voice chat with the agent | §5.10 | `components/assistant.tsx` | WebSocket via `@voxide/react` |
@@ -1206,6 +1242,10 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Chunk ingest — putting content in (TOC-sliced) | §5.2 | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/web/src/lib/textbook.ts` | `POST /chapters/ingest` |
 | Your own textbook (import → library, gated) | §5.2, Phase 6 | `apps/web/src/routes/textbooks.tsx`, `apps/web/src/lib/textbook.ts` | `GET /textbooks`, `POST /chapters/ingest` |
 | Themes (9 rooms: 8 dark + Sunlight) | §4 | `components/theme-provider.tsx`, `components/theme-switcher.tsx` | — |
+| Ink motion system — one-shot ripple, breathing idle ring, ink-settling loaders, gap-closed settle, paper grain | §5.10, §12 | `components/voxide-ring.tsx`, `components/ink-settling.tsx`, `components/brand-mark.tsx` (`closing`), `index.css` keyframes | — |
+| Concept-graph empty states | §5.3, §5.2 | `components/concept-graph.tsx` (dashboard, textbook "No chunks yet.") | — |
+| Book-ingestion animation (ink page) | §5.2 | `components/ink-page.tsx` (textbook planning state) | — |
+| Feedback colours (fixed sage/rust) | §4, §12 | `index.css` (`--color-sage`, `--color-rust`), `components/gap-list.tsx` | — |
 | Offline / installable (PWA) | §4 | `apps/web/vite.config.ts`, `public/offline.html` | — |
 | AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
 

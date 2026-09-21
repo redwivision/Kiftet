@@ -56,8 +56,8 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 
 ## 6. Non-functional requirements
 
-- Bilingual EN/Amharic voice support — attempt if time allows; do not let this block the English MVP path.
-- Must be usable on low-bandwidth connections where reasonably possible (Ethiopia's mobile connectivity is inconsistent — design UI to degrade gracefully, not require constant high-speed streaming).
+- Amharic support across **every** feature (see [`STRATEGY.md`](STRATEGY.md) bet 4). The goal is to be able to state, confidently, that all surfaces and generated content work in Amharic — bilingual EN/Amharic is a hard requirement, not a "nice if time allows" extra; the English MVP path still ships first, Amharic is never an afterthought.
+- Must be usable on low-bandwidth connections where reasonably possible (Ethiopia's mobile connectivity is inconsistent — design UI to degrade gracefully, not require constant high-speed streaming). The offline-first loop (STRATEGY.md bet 3) is added only where it improves the loop rather than weakens it.
 - Student voice/response data should be handled with the same care implied by Ethiopia's Personal Data Protection Proclamation (No. 1321/2024) — minimize storage, be able to explain what's kept and why if asked.
 
 ## 7. Business model

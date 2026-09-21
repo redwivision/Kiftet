@@ -46,6 +46,8 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 - **Targeted micro-lessons.** After diagnosis, a short spoken lesson covers only the missing and mistaken concepts. No re-reading the whole chapter.
 - **Retest with differently-phrased questions.** Reconfirmation uses different wording, so a memorized one-liner can't fake a real understanding.
 - **Resume anywhere.** The study loop persists across sessions and devices; sign out and back in and you're exactly where you left off.
+- **Calm, inked motion.** Loading is ink settling into place; the idle voice ring breathes; "Gap closed." has the mark draw itself in and settle to sage. Plain CSS keyframes only — no animation library, nothing gamified, and `prefers-reduced-motion` stills it all.
+- **Feedback colours that mean the same everywhere.** Sage `#5C7A5E` = solid/covered, Rust `#B54A2C` = gap/needs work (including what you stated wrong) — the same two fixed colours in diagnosis and retest, every room.
 - **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and network-first navigation that self-heals — built for unreliable connections.
 - **Your own textbook, on the device.** Upload your book (PDF up to 15 MB or pasted text); the browser reads the book's table of contents and slices it into chunks — file bytes never leave the phone — and each chunk is ingested into the study flow one at a time, weak-wifi friendly.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
@@ -126,6 +128,7 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 ## Docs
 
 - **[`HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** — the single source of truth: every feature, library, and the data model (9 tables) explained from zero.
+- **[`STRATEGY.md`](docs/STRATEGY.md)** — the five bets that make Kiftet hard to copy: EHEEE syllabus anchoring, the national misconception map, the offline-first loop, Ethiopian texture, and this doc trail.
 - **[`PRD.md`](docs/PRD.md)** — product requirements, the market case, sponsor integrations.
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
 - **[`DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)** — the visual identity: monochrome — ivory `#F2EFE9` on black `#0A0B0D`, the open-ring mark, type and UI principles.
@@ -133,6 +136,6 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Status
 
-Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13. Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). Next up: **Phase 6 — bring your own textbook** (student imports their own book → on-device TOC slicing into chunks → per-chunk ingest → study). Demo quotas (5 AI calls/min, 3 textbooks/day) are live; the ingest button stays preview-only until the §13 go-live checklist.
+Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13, and the five product bets that steer it live in [`STRATEGY.md`](docs/STRATEGY.md) (EHEEE syllabus anchoring, the national misconception map, the offline-first study loop, Ethiopian texture, the doc trail). Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). Next up: **Phase 6 — bring your own textbook** (student imports their own book → on-device TOC slicing into chunks → per-chunk ingest → study). Demo quotas (5 AI calls/min, 3 textbooks/day) are live; the ingest button stays preview-only until the §13 go-live checklist.
 
 > Kiftet — *close the gap*. 🇪🇹
