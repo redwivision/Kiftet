@@ -632,7 +632,7 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
 | `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON `{covered,missing,misconceptions}`), `score` (int 0–100) |
-| `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` until a teacher verifies the unit list) |
+| `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
 | `misconception_hit` | One time a grader saw a known misconception surface in a real session (bet 2) | `conceptNodeId` → concept_node, `sessionId`, `userId`; unique `(sessionId, conceptNodeId)` so retries never double-count |
 
@@ -730,9 +730,10 @@ the tables are the same names.)
 ### The current migration history
 | Migration | What it changes |
 |---|---|
-| `0000_lethal_jazinda` | Base schema: all domain + auth tables |
-| `0001_retest_resume` | Add `study_session.retest_questions` + `retest_index` |
-| `0002_textbook_ownership` | Add `textbook.owner_id`, backfill one owner, index it |
+| `0000_init` | Base schema: all domain + auth tables |
+| `0001_living_firebrand` | Bet 1: `syllabus` + `syllabus_unit`, `chapter.unit_id` |
+| `0002_outstanding_firedrake` | Bet 2: `misconception_hit` |
+| `0003_white_otto_octavius` | Bet 1: `syllabus.source_note` (provenance behind `source`) |
 
 ---
 
@@ -1128,7 +1129,7 @@ wrong.
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
 | 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
 | 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
-| 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | 🔨 In progress (first slice shipped: `syllabus`/`syllabus_unit` tables + migration, provisional Biology 12 seed, `/syllabus` routes, chapter→unit mapping, `/syllabus` UI) |
+| 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | 🔨 In progress (slice shipped: `syllabus`/`syllabus_unit` tables + migrations, **verified** Biology 12 seed — the 6 MoE New-Curriculum units with provenance in `sourceNote`, `/syllabus` routes, chapter→unit mapping, `/syllabus` UI) |
 | 8 | Misconception events + first aggregate map (bet 2) — count each known misconception surfaced in a session, show only clusters above the k-anonymity floor | 🔨 In progress (first slice shipped: `misconception_hit` table + migration, recorder on recall grading, `GET /misconceptions` with K=5 floor, dashboard panel) |
 
 The five product bets that steer the phases after this — EHEEE syllabus

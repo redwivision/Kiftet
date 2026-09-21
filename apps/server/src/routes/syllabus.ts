@@ -16,9 +16,9 @@ import { getDb } from "../services";
 // Chapters are matched to a syllabus by textbook subject only for now — the
 // textbook table has no grade yet, so a "Biology Grade 12" syllabus picks up
 // every Biology chapter the owner has. When textbooks get a grade column the
-// join narrows. The seeded units are PROVISIONAL until a teacher verifies the
-// real EHEEE list (see packages/db/src/seed.ts) — that flag rides along in the
-// payload so the UI can label it honestly.
+// join narrows. The seeded units are VERIFIED against the MoE New-Curriculum
+// textbook (see packages/db/src/seed.ts) — source + sourceNote ride along in
+// the payload so the UI can label them honestly.
 
 const router = Router();
 

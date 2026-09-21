@@ -36,7 +36,7 @@ Keep the AI-calling layer behind a **provider fallback chain** (multiple LLM pro
 - **User** — id, name, role (student/institution_admin)
 - **Session** — id, user_id, chapter_id, started_at, status
 - **Attempt** — id, session_id, stage (recall / retest), transcript_text, gaps_identified (array of ConceptNode ids), score
-- **Syllabus** (bet 1) — id, subject, grade, source (`provisional` until teacher-verified)
+- **Syllabus** (bet 1) — id, subject, grade, source (`provisional` | `verified`), source_note (provenance/audit trail behind `source`)
 - **SyllabusUnit** (bet 1) — id, syllabus_id, unit_number, title, description, sort_order
 - **MisconceptionHit** (bet 2) — id, concept_node_id, session_id, user_id; unique (session_id, concept_node_id); **aggregate-only, k-anonymity floor 5 on reads**
 - **Institution** — id, name, license_status, links_et_customer_ref

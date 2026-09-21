@@ -50,6 +50,7 @@ type SyllabusDetail = {
 	grade: number;
 	title: string;
 	source: string;
+	sourceNote?: string | null;
 	units: Unit[];
 	unassigned: { id: string; title: string; textbookTitle: string }[];
 };
@@ -255,6 +256,12 @@ export default function Syllabus() {
 							<span className="font-medium text-gold">Provisional units.</span>{" "}
 							The unit list here is a stand-in until it&apos;s verified against the
 							official EHEEE syllabus — the structure is real, the names aren&apos;t final.
+						</p>
+					)}
+					{detail?.source !== "provisional" && detail?.sourceNote && (
+						<p className="mb-6 text-xs text-muted-foreground">
+							<span className="font-medium text-sage">Verified.</span> Unit list
+							compiled from the {detail.sourceNote}
 						</p>
 					)}
 

@@ -24,6 +24,9 @@ export const syllabus = pgTable("syllabus", {
 	// "provisional" until a teacher verifies the unit list (STRATEGY.md bet 1);
 	// flips to "verified" once checked. Never shipped to students as final.
 	source: text("source").notNull().default("provisional"),
+	// The audit trail behind `source` — the textbook/syllabus the unit list was
+	// compiled from, so "verified" can always be checked against its basis.
+	sourceNote: text("source_note"),
 	createdAt: timestamp("created_at")
 		.notNull()
 		.$defaultFn(() => new Date()),

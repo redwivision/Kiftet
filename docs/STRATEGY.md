@@ -61,13 +61,19 @@ Only after that slice proves the unit-coverage view is worth it do we expand to
 more subjects/grades. Blueprint taken as grades 9–12 until evidence says
 otherwise.
 
-**Status — first slice shipped.** `syllabus` + `syllabus_unit` tables (migration
-`0001`), an idempotent boot seed with a **provisional** Biology 12 unit list,
-`GET /syllabus`, `GET /syllabus/:subject/:grade` (units + mapped chapters +
-latest-session coverage), `PATCH /chapters/:id/unit`, and the `/syllabus` browse
-UI (unit cards, coverage pills, chapter mapping). The provisional unit names are
-stand-ins only — replacing them with the teacher-verified EHEEE list and flipping
-`source` to `verified` is the next step before this counts as the syllabus.
+**Status — seed verified, list live.** `syllabus` + `syllabus_unit` tables
+(migrations `0001`, `0003`), an idempotent boot seed holding the **verified**
+Biology 12 unit list — the full six units of the MoE New-Curriculum Grade 12
+Biology student textbook (2023, ISBN 978-99990-0-011-6): Application of Biology,
+Microorganisms, Energy Transformation, Evolution, Human Body System, Climate
+Change — with provenance recorded in `syllabus.sourceNote` and the `source`
+flag flipped to `verified`. `GET /syllabus`, `GET /syllabus/:subject/:grade`
+(units + mapped chapters + latest-session coverage), `PATCH /chapters/:id/unit`,
+and the `/syllabus` browse UI (unit cards, coverage pills, chapter mapping). The
+seed self-upgrades: a pre-existing `provisional` row is reconciled to the
+verified list on boot (unit ids stable so chapter mappings survive, obsolete
+units dropped). A second human pass (a classroom teacher confirming the list
+against the textbook) remains on the go-live checklist.
 
 ---
 

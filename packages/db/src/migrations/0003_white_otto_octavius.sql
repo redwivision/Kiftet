@@ -1,0 +1,1 @@
+ALTER TABLE "syllabus" ADD COLUMN "source_note" text;
