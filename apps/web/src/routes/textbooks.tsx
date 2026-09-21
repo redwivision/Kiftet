@@ -7,6 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { setChapter, setSession } from "@/components/assistant";
+import { ConceptGraph } from "@/components/concept-graph";
+import { InkPage } from "@/components/ink-page";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
@@ -323,9 +325,12 @@ export default function Textbooks() {
 									))}
 								</ul>
 							) : (
-								<p className="mt-4 text-muted-foreground text-sm">
-									No chunks yet.
-								</p>
+								<div className="mt-4 flex items-center gap-3">
+									<ConceptGraph className="h-9 w-16 shrink-0 text-gold" />
+									<p className="text-muted-foreground text-sm">
+										No chunks yet.
+									</p>
+								</div>
 							)}
 						</div>
 					))}
@@ -427,8 +432,8 @@ function AddTextbook({
 }) {
 	if (step === "planning") {
 		return (
-			<section className="surface flex flex-col items-center gap-4 p-10 text-center">
-				<div className="size-8 animate-spin rounded-full border-2 border-gold/30 border-t-gold" />
+			<section className="surface flex flex-col items-center gap-5 p-10 text-center">
+				<InkPage />
 				<p className="text-muted-foreground text-sm">
 					Reading your book on this device…
 				</p>

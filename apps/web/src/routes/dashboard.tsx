@@ -3,7 +3,7 @@ import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
-import { BrandSignature } from "@/components/brand-mark";
+import { ConceptGraph } from "@/components/concept-graph";
 import type { ChapterInfo } from "@/components/study-provider";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -138,7 +138,7 @@ export default function Dashboard() {
 			</header>
 
 			{!session && getDemoUser() && (
-				<div className="surface mb-8 flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+				<div className="surface mb-8 flex flex-wrap items-center justify-between gap-3 border p-4 text-sm animate-border-fade">
 					<p className="text-muted-foreground">
 						<span className="font-medium text-gold">Live demo</span> — this study
 						room isn&apos;t saved to an account. Sign up to keep your progress.
@@ -204,7 +204,7 @@ export default function Dashboard() {
 
 			{chapters && chapters.length === 0 && (
 				<div className="surface flex flex-col items-center gap-5 p-10 text-center">
-					<BrandSignature size={72} />
+					<ConceptGraph className="h-28 w-auto text-gold" />
 					<div className="space-y-1">
 						<h2 className="font-display font-semibold text-xl tracking-tight">
 							Nothing to diagnose yet.

@@ -1,9 +1,10 @@
 import { cn } from "@kiftet/ui/lib/utils";
 
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
-import { Loader2, Mic, Square, Volume2 } from "lucide-react";
+import { Mic, Square, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getVoxideClient } from "@/components/assistant";
+import { InkSettling } from "@/components/ink-settling";
 
 const LABEL: Record<VoxideStatus, string> = {
 	idle: "Tap and speak",
@@ -17,13 +18,6 @@ const LABEL: Record<VoxideStatus, string> = {
 };
 
 const PROCESSING: VoxideStatus[] = ["connecting", "thinking", "executing"];
-const ACTIVE: VoxideStatus[] = [
-	"listening",
-	"speaking",
-	"connecting",
-	"thinking",
-	"executing",
-];
 
 export function VoxideRing({
 	autoArm = false,
@@ -43,6 +37,18 @@ export function VoxideRing({
 	const [initReady, setInitReady] = useState(() =>
 		client ? client.isInitialized : false,
 	);
+
+	// One quick ivory ripple the moment recording actually begins — a tap
+	// confirm, not a loop (no generic pulsing-dot mic). Incrementing the count
+	// re-keys the span so the one-shot animation replays on each start.
+	const [ripples, setRipples] = useState(0);
+	const lastStatus = useRef(status);
+	useEffect(() => {
+		if (status === "listening" && lastStatus.current !== "listening") {
+			setRipples((n) => n + 1);
+		}
+		lastStatus.current = status;
+	}, [status]);
 
 	// Voice-first (planned): the mic would open automatically when autoArm flips
 	// on and the ring is ready — mirroring a tap. Not active yet: the ring is
@@ -73,7 +79,6 @@ export function VoxideRing({
 	}, [client]);
 
 	const isProcessing = PROCESSING.includes(status);
-	const isActive = ACTIVE.includes(status);
 	const isListening = status === "listening";
 	const isSpeaking = status === "speaking";
 
@@ -92,7 +97,17 @@ export function VoxideRing({
 
 	return (
 		<div className="relative grid place-items-center" aria-live="polite">
-			{initReady && isActive && (
+			{/* Resting heartbeat: the quiet ring breathes in flat ivory, ~3s. */}
+			{initReady && (status === "idle" || status === "armed") && (
+				<span className="absolute inset-0 animate-breathe rounded-full bg-gold/10" />
+			)}
+			{initReady && ripples > 0 && (
+				<span
+					key={ripples}
+					className="absolute inset-0 animate-ripple-once rounded-full bg-gold/25"
+				/>
+			)}
+			{initReady && isSpeaking && (
 				<span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/20" />
 			)}
 			<button
@@ -116,11 +131,11 @@ export function VoxideRing({
 				)}
 			>
 				{!initReady ? (
-					<Loader2 className="size-12 animate-spin text-foreground/40" />
+					<InkSettling barClassName="h-1 w-6" className="text-foreground/50" />
 				) : isListening ? (
 					<Square className="size-12 fill-current" />
 				) : isProcessing ? (
-					<Loader2 className="size-12 animate-spin" />
+					<InkSettling barClassName="h-1 w-6" />
 				) : isSpeaking ? (
 					<Volume2 className="size-12" />
 				) : (

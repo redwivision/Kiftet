@@ -1,6 +1,7 @@
-import { Loader2, Mic, Square, Volume2 } from "lucide-react";
+import { Mic, Square, Volume2 } from "lucide-react";
 
 import { cn } from "@kiftet/ui/lib/utils";
+import { InkSettling } from "@/components/ink-settling";
 import type { VoiceState } from "@/lib/voice";
 
 type VoiceRingProps = {
@@ -42,7 +43,7 @@ export function VoiceRing({ state, onStart, onStop, disabled }: VoiceRingProps) 
         {state === "listening" ? (
           <Square className="size-12 fill-current" />
         ) : state === "thinking" ? (
-          <Loader2 className="size-12 animate-spin" />
+          <InkSettling barClassName="h-1 w-6" />
         ) : state === "speaking" ? (
           <Volume2 className="size-12" />
         ) : (

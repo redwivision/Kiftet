@@ -35,7 +35,11 @@ export type AiService = {
   extractConcepts(rawText: string): Promise<ConceptChecklistItem[]>;
   gradeRecall(transcript: string, concepts: ConceptChecklistItem[]): Promise<GapAnalysis>;
   generateMicroLesson(gaps: GapAnalysis, concepts: ConceptChecklistItem[]): Promise<MicroLesson>;
-  generateRetestQuestions(gaps: GapAnalysis, concepts: ConceptChecklistItem[]): Promise<RetestQuestion[]>;
+  generateRetestQuestions(
+    gaps: GapAnalysis,
+    concepts: ConceptChecklistItem[],
+    recallText?: string,
+  ): Promise<RetestQuestion[]>;
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -332,7 +336,21 @@ const RETEST_SYSTEM =
   "Each question must ask the student to speak aloud an explanation, definition, or worked example — not pick an option. " +
   "Each question targets exactly ONE gap item: set targetConcept to the exact conceptText of that item " +
   "(bare conceptText, never the [MISCONCEPTION] marker), so the answer is graded only against that idea. " +
+  "If the student's own recall is provided, mirror their wording — reuse the terms, framing, and examples they actually used " +
+  "so each question reads as a direct follow-up to what they said, not a canned quiz. Never quote their recall back as a statement, " +
+  "and never treat a wrong belief they stated as correct; only echo their phrasing. " +
   'Return STRICT JSON: {"questions":[{"question":"...","targetConcept":"<one exact gap conceptText>"}]}.';
+
+// The retest user prompt. When the student's own recall is available it is
+// appended so the writer can mirror their wording. Exported so the
+// recall-echo behaviour is directly testable without a live model.
+export function retestUserPrompt(gaps: GapAnalysis, recallText?: string): string {
+  const recall = recallText?.trim();
+  const base = `GAP ANALYSIS:\n${gapsSummary(gaps)}`;
+  return recall
+    ? `${base}\n\nSTUDENT'S OWN RECALL (mirror their wording):\n${recall.slice(0, 8000)}`
+    : base;
+}
 
 // Pull a question list out of the model reply, carrying each question's target
 // concept when the model converged on one (it is validated against the stored
@@ -403,11 +421,12 @@ export const ai: AiService = {
   async generateRetestQuestions(
     gaps: GapAnalysis,
     _concepts: ConceptChecklistItem[],
+    recallText?: string,
   ): Promise<RetestQuestion[]> {
     const fallback = () => fallbackQuestions(gaps);
     if (!isAiAvailable()) return fallback();
     try {
-      const raw = await askJson(RETEST_SYSTEM, `GAP ANALYSIS:\n${gapsSummary(gaps)}`);
+      const raw = await askJson(RETEST_SYSTEM, retestUserPrompt(gaps, recallText));
       return extractQuestions(raw) ?? fallback();
     } catch {
       return fallback();

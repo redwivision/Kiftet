@@ -19,9 +19,11 @@ const STROKE = 8;
 export function BrandMark({
 	size = 36,
 	className,
+	closing = false,
 }: {
 	size?: number;
 	className?: string;
+	closing?: boolean;
 }) {
 	return (
 		<svg
@@ -38,6 +40,9 @@ export function BrandMark({
 				stroke="currentColor"
 				strokeWidth={STROKE}
 				strokeLinecap="round"
+				pathLength={closing ? 1 : undefined}
+				strokeDasharray={closing ? 1 : undefined}
+				className={closing ? "animate-mark-close" : undefined}
 			/>
 		</svg>
 	);
@@ -47,15 +52,21 @@ export function BrandMark({
  * The gap, left openly empty. Kept as its own component so call sites that
  * used "the gap closing" read the same intent clearly, but the missing
  * segment is never filled — it stays a pause in the ring.
+ *
+ * Set `closing` for the "Gap closed." moment: the arc resolves (draws in,
+ * fading from ivory) and settles into sage, while the missing segment stays
+ * open. The movement celebrates the result; it never paints over the gap.
  */
 export function GapClosingMark({
 	size = 56,
 	className,
+	closing = false,
 }: {
 	size?: number;
 	className?: string;
+	closing?: boolean;
 }) {
-	return <BrandMark size={size} className={className} />;
+	return <BrandMark size={size} className={className} closing={closing} />;
 }
 
 /**

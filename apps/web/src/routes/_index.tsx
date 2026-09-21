@@ -464,10 +464,24 @@ export default function Home() {
 						].map(([chapter, state], i) => (
 							<li key={chapter} className="flex items-center justify-between gap-3 py-2.5">
 								<div className="flex min-w-0 items-center gap-3">
-<span className="font-medium text-[0.7rem] text-muted-foreground">
-									{String(i + 1).padStart(2, "0")}
-								</span>
-									<p className="truncate text-sm">{chapter}</p>
+									<span
+										className={cn(
+											"font-medium text-[0.7rem]",
+											state === "closed"
+												? "text-muted-foreground"
+												: "text-muted-foreground/40",
+										)}
+									>
+										{String(i + 1).padStart(2, "0")}
+									</span>
+									<p
+										className={cn(
+											"truncate text-sm",
+											state === "closed" ? "text-foreground" : "text-fog/60",
+										)}
+									>
+										{chapter}
+									</p>
 								</div>
 								{state === "closed" ? (
 									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">

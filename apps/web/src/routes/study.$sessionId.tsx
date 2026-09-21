@@ -2,15 +2,7 @@ import { Button } from "@kiftet/ui/components/button";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
-import {
-	Check,
-	CircleAlert,
-	Loader2,
-	MicOff,
-	Square,
-	Volume2,
-	X,
-} from "lucide-react";
+import { Check, CircleAlert, MicOff, Square, Volume2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -22,6 +14,7 @@ import {
 } from "@/components/assistant";
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
+import { InkSettling } from "@/components/ink-settling";
 import {
 	type Gaps,
 	StudyProvider,
@@ -83,7 +76,7 @@ export default function StudyRoute({ params }: Route.ComponentProps) {
 	if (isPending) {
 		return (
 			<main className="mx-auto grid min-h-64 place-items-center px-6 py-24 text-muted-foreground">
-				<Loader2 className="size-6 animate-spin" />
+				<InkSettling />
 			</main>
 		);
 	}
@@ -113,7 +106,7 @@ function StudyScreen() {
 	if (state.chapterLoading) {
 		return (
 			<main className="mx-auto grid w-full max-w-md content-center justify-items-center gap-4 px-6 py-24 text-muted-foreground">
-				<Loader2 className="size-6 animate-spin" />
+				<InkSettling />
 				<p className="text-sm">Opening your study session…</p>
 			</main>
 		);
@@ -1001,7 +994,7 @@ function ResultPhase({
 	if (!result) {
 		return (
 			<div className="grid min-h-40 place-items-center text-muted-foreground">
-				<Loader2 className="size-6 animate-spin" />
+				<InkSettling />
 			</div>
 		);
 	}
@@ -1194,7 +1187,7 @@ function ResultPanel({
 				)}
 				{isGold && (
 					<div className="mb-5 flex justify-center">
-						<GapClosingMark size={64} className="text-foreground" />
+						<GapClosingMark size={64} closing className="text-sage" />
 					</div>
 				)}
 				<p

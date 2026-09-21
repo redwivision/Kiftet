@@ -572,7 +572,21 @@ router.post("/sessions/:id/retest", async (req, res) => {
     score: 0,
   };
 
-  const questions = await ai.generateRetestQuestions(gapAnalysis, concepts);
+  // Echo the student's own recall: hand the question writer their latest
+  // spoken/written recall for this session so it mirrors how they phrased
+  // things, instead of sounding like a canned quiz.
+  const recallRows = await db()
+    .select({ transcriptText: attempt.transcriptText })
+    .from(attempt)
+    .where(and(eq(attempt.sessionId, req.params.id), eq(attempt.stage, "recall")))
+    .orderBy(desc(attempt.createdAt))
+    .limit(1);
+
+  const questions = await ai.generateRetestQuestions(
+    gapAnalysis,
+    concepts,
+    recallRows[0]?.transcriptText ?? undefined,
+  );
 
   // Each question is pinned to exactly one gap item so the answer can be
   // graded against that idea alone. The model's targetConcept is reconciled
