@@ -96,6 +96,14 @@ pedagogical research (Scholarxiv) instead of a generic "is this correct?" prompt
 policy, and k-anonymity so a small school can't be de-anonymized. Do **not** ship
 a map that leaks individual transcripts or voice.
 
+**Status — first slice shipped.** `misconception_hit` rows are written on recall
+grading (free text matched back to the chapter's `is_misconception` concept rows,
+deduped per session), and `GET /misconceptions` returns aggregate counts with a
+**k-anonymity floor of 5**, unit info attached, subject filterable. The dashboard
+shows a "national misconception map" panel once a cluster clears the floor.
+The school/teacher cohort view and richer anonymized attributes are deliberately
+deferred until the student side has volume (decision 2 — exercise the floor).
+
 **Audience — decided.** Both at launch, but **students ship first**. Students are
 the primary target (this includes our own founders studying with it) and the
 source of the data, so aggregate student insights come first. The

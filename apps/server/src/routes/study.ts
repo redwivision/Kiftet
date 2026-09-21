@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
-import { and, desc, eq, gte, ne } from "drizzle-orm";
-import { chapter, textbook, studySession, attempt, conceptNode, syllabusUnit } from "@kiftet/db/schema";
+import { count, and, desc, eq, gte, ne } from "drizzle-orm";
+import { chapter, textbook, studySession, attempt, conceptNode, syllabusUnit, misconceptionHit } from "@kiftet/db/schema";
 import { getDb } from "../services";
 import { ai, focusScore } from "../ai/gemini";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -475,6 +475,94 @@ async function insertAttemptOnce(record: AttemptInsert): Promise<boolean> {
 }
 
 // ────────────────────────────────────────────────────────────────
+// Bet 2: misconception hits (the national misconception map)
+// ────────────────────────────────────────────────────────────────
+
+// Aggregates are only shown when a cluster clears this floor; below it a
+// handful of students could be identified. Aggregate-only, no user ids ever
+// returned, no transcripts anywhere near the response.
+const MISCONCEPTION_K_ANON = 5;
+
+function normalizePhrase(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Graders flag misconceptions as free text ("they think mitochondria make
+// glucose"). The chapter's checklist carries the known misconceptions, so we
+// resolve each flagged phrase to its concept row — exact match first, then a
+// containment match — and write one hit per (session, concept). The unique
+// index makes a retried grading a no-op instead of a double count.
+async function recordMisconceptionHits(
+  chapterId: string,
+  sessionId: string,
+  userId: string,
+  flaggedTexts: string[],
+): Promise<void> {
+  if (flaggedTexts.length === 0) return;
+  const flagged = [...new Set(flaggedTexts.map(normalizePhrase))].filter(Boolean);
+  if (flagged.length === 0) return;
+
+  const candidates = await db()
+    .select({ id: conceptNode.id, conceptText: conceptNode.conceptText })
+    .from(conceptNode)
+    .where(and(eq(conceptNode.chapterId, chapterId), eq(conceptNode.isMisconception, true)));
+
+  const normalized = candidates.map((c) => ({ id: c.id, text: normalizePhrase(c.conceptText) }));
+
+  const matchedIds = new Set<string>();
+  for (const text of flagged) {
+    const hit =
+      normalized.find((c) => c.text === text) ??
+      normalized.find((c) => c.text.includes(text) || text.includes(c.text));
+    if (hit) matchedIds.add(hit.id);
+  }
+  if (matchedIds.size === 0) return;
+
+  await db()
+    .insert(misconceptionHit)
+    .values(
+      [...matchedIds].map((conceptNodeId) => ({
+        id: crypto.randomUUID(),
+        conceptNodeId,
+        sessionId,
+        userId,
+      })),
+    )
+    .onConflictDoNothing();
+}
+
+// The aggregate map. Optional ?subject= Biology filter; otherwise nationwide.
+// Only clusters at or above the k-anonymity floor come back, newest-first by
+// how common they are.
+router.get("/misconceptions", async (req, res) => {
+  const subject = typeof req.query.subject === "string" ? req.query.subject.trim() : null;
+
+  const rows = await db()
+    .select({
+      conceptText: conceptNode.conceptText,
+      count: count(misconceptionHit.id),
+      unitNumber: syllabusUnit.unitNumber,
+      unitTitle: syllabusUnit.title,
+    })
+    .from(misconceptionHit)
+    .innerJoin(conceptNode, eq(misconceptionHit.conceptNodeId, conceptNode.id))
+    .innerJoin(chapter, eq(conceptNode.chapterId, chapter.id))
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .leftJoin(syllabusUnit, eq(chapter.unitId, syllabusUnit.id))
+    .where(and(subject ? eq(textbook.subject, subject) : undefined))
+    .groupBy(conceptNode.conceptText, syllabusUnit.unitNumber, syllabusUnit.title)
+    .having(gte(count(misconceptionHit.id), MISCONCEPTION_K_ANON))
+    .orderBy(desc(count(misconceptionHit.id)))
+    .limit(20);
+
+  ok(res, {
+    threshold: MISCONCEPTION_K_ANON,
+    subject: subject ?? null,
+    rows,
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
 // Recall → gap analysis
 // ────────────────────────────────────────────────────────────────
 
@@ -514,6 +602,11 @@ router.post("/sessions/:id/recall", async (req, res) => {
     },
     score,
   });
+
+  // Bet 2: surface the misconceptions this student showed into the aggregate
+  // map (no-op when nothing matched a known misconception, and deduped by the
+  // unique index so retries don't double-count).
+  await recordMisconceptionHits(chapterId, sessionId, ownerId(req), gaps.misconceptions);
 
   ok(res, { transcriptText: parsed.data.transcriptText, gaps: { ...gaps, score } });
 });

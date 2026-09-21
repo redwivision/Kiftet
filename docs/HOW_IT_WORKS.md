@@ -620,10 +620,10 @@ server doesn't care who sent the request.
 ## 6. The database — our data model
 
 A database's design is basically: *what facts do we need to remember, and how do
-they relate?* Kiftet has **eleven tables** in two families: the seven **study-domain**
+they relate?* Kiftet has **twelve tables** in two families: the eight **study-domain**
 tables (the product) and the four **auth tables** (who is signed in).
 
-### 6.1 The study domain (7 tables)
+### 6.1 The study domain (8 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
@@ -634,11 +634,18 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON `{covered,missing,misconceptions}`), `score` (int 0–100) |
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` until a teacher verifies the unit list) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
+| `misconception_hit` | One time a grader saw a known misconception surface in a real session (bet 2) | `conceptNodeId` → concept_node, `sessionId`, `userId`; unique `(sessionId, conceptNodeId)` so retries never double-count |
 
 A chapter maps to **one** unit in exactly one syllabus via `syllabus_unit` —
 this is the current shape of bet 1 (a chapter is part of a unit). When textbooks
 gain a `grade` column, the syllabus join narrows from subject-only to
 subject + grade.
+
+**Aggregate-only by construction (bet 2):** `misconception_hit` rows are written
+when recall grading flags a known misconception (matched back to the chapter's
+`is_misconception` concept rows). Reads (`GET /misconceptions`) are **count
+group-by only** — no user ids, no transcripts — and a cluster must clear a
+**k-anonymity floor of 5 students** before it's shown. See §10.2.
 
 The `concept_node.isMisconception` flag is the interesting one: the product's
 whole trick is that we don't just grade "right/wrong," we grade *which specific
@@ -1122,6 +1129,7 @@ wrong.
 | 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
 | 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
 | 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | 🔨 In progress (first slice shipped: `syllabus`/`syllabus_unit` tables + migration, provisional Biology 12 seed, `/syllabus` routes, chapter→unit mapping, `/syllabus` UI) |
+| 8 | Misconception events + first aggregate map (bet 2) — count each known misconception surfaced in a session, show only clusters above the k-anonymity floor | 🔨 In progress (first slice shipped: `misconception_hit` table + migration, recorder on recall grading, `GET /misconceptions` with K=5 floor, dashboard panel) |
 
 The five product bets that steer the phases after this — EHEEE syllabus
 anchoring, the national misconception map, the offline-first study loop, and
@@ -1255,6 +1263,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Book-ingestion animation (ink page) | §5.2 | `components/ink-page.tsx` (textbook planning state) | — |
 | Feedback colours (fixed sage/rust) | §4, §12 | `index.css` (`--color-sage`, `--color-rust`), `components/gap-list.tsx` | — |
 | Syllabus anchoring — browse by unit, map chapters, unit coverage (bet 1) | STRATEGY.md bet 1 | `apps/server/src/routes/syllabus.ts` (new router), `apps/web/src/routes/syllabus.tsx`, `packages/db/src/schema/study.ts` (`syllabus`, `syllabus_unit`, `chapter.unit_id`), `packages/db/src/seed.ts` | `GET /syllabus`, `GET /syllabus/:subject/:grade`, `PATCH /chapters/:id/unit` |
+| National misconception map (bet 2) — misconception-hit writes + aggregate read | STRATEGY.md bet 2, §10.2 | `apps/server/src/routes/study.ts` (`recordMisconceptionHits`, `GET /misconceptions`), `apps/web/src/routes/dashboard.tsx`, `packages/db/src/schema/study.ts` (`misconception_hit`, k-floor K=5) | `GET /misconceptions?subject=` |
 | Offline / installable (PWA) | §4 | `apps/web/vite.config.ts`, `public/offline.html` | — |
 | AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
 

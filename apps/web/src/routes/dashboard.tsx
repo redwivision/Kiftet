@@ -39,6 +39,19 @@ type AiBudget = {
 	textbooksPerDay: number;
 };
 
+type MisconceptionRow = {
+	conceptText: string;
+	count: number;
+	unitNumber: number | null;
+	unitTitle: string | null;
+};
+
+type MisconceptionMap = {
+	threshold: number;
+	subject: string | null;
+	rows: MisconceptionRow[];
+};
+
 export default function Dashboard() {
 	const navigate = useNavigate();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -47,6 +60,7 @@ export default function Dashboard() {
 	const [starting, setStarting] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [budget, setBudget] = useState<AiBudget | null>(null);
+	const [misconceptions, setMisconceptions] = useState<MisconceptionMap | null>(null);
 
 	const demo = Boolean(getDemoUser());
 
@@ -68,9 +82,24 @@ export default function Dashboard() {
 		}
 		if (sessionPending || (!session && !getDemoUser())) return;
 		let cancelled = false;
+		// Bet 2: the national misconception map. Show the wrong turns that
+		// cleared the k-anonymity floor for the subject the student reads most
+		// — the panel only renders when other students have actually hit them.
 		api<ChapterInfo[]>("/chapters")
-			.then((rows) => {
-				if (!cancelled) setChapters(rows);
+			.then(async (rows) => {
+				if (cancelled) return;
+				setChapters(rows);
+				if (rows.length === 0) return;
+				const subjects = new Map<string, number>();
+				for (const row of rows) {
+					subjects.set(row.subject, (subjects.get(row.subject) ?? 0) + 1);
+				}
+				const subject = [...subjects.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+				if (!subject) return;
+				const map = await api<MisconceptionMap>(
+					`/misconceptions?subject=${encodeURIComponent(subject)}`,
+				);
+				if (!cancelled && map.rows.length > 0) setMisconceptions(map);
 			})
 			.catch((err) => {
 				if (!cancelled) setError(apiError(err));
@@ -177,6 +206,40 @@ export default function Dashboard() {
 							{budget.textbooksPerDay} max (demo)
 						</strong>
 					</span>
+				</div>
+			)}
+
+			{misconceptions && (
+				<div className="inner-surface mb-8 border p-5">
+					<div className="flex items-start justify-between gap-3">
+						<div className="space-y-1">
+							<p className="k-label">The national misconception map</p>
+							<h2 className="font-display font-semibold text-lg tracking-tight">
+								What students most often get wrong — {misconceptions.subject}
+							</h2>
+							<p className="text-muted-foreground text-sm">
+								Anonymized across every student here. A wrong turn only appears
+								once {misconceptions.threshold} or more students hit it — this
+								stays aggregate, never individual.
+							</p>
+						</div>
+					</div>
+					<ul className="mt-4 flex flex-wrap gap-2">
+						{misconceptions.rows.map((row) => (
+							<li
+								key={row.conceptText}
+								className="rounded-full border border-rust/30 bg-rust/10 px-3 py-1.5 text-sm"
+							>
+								<span className="text-rust">{row.count}×</span>{" "}
+								<span className="text-foreground/90">{row.conceptText}</span>
+								{row.unitTitle && (
+									<span className="ml-1 text-[0.72rem] text-muted-foreground">
+										· Unit {row.unitNumber}
+									</span>
+								)}
+							</li>
+						))}
+					</ul>
 				</div>
 			)}
 

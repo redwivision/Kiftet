@@ -15,6 +15,13 @@
       "when": 1790007042679,
       "tag": "0001_living_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790008848610,
+      "tag": "0002_outstanding_firedrake",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
 
@@ -186,5 +186,52 @@ export const attemptRelations = relations(attempt, ({ one }) => ({
 	session: one(studySession, {
 		fields: [attempt.sessionId],
 		references: [studySession.id],
+	}),
+}));
+
+// ─── Bet 2: the national misconception map (STRATEGY.md) ─────────────
+// One row = one time a grader saw a known misconception surface in a real
+// session. Aggregate-only: never returned with a user, and reads enforce a
+// k-anonymity floor so a small group of students can't be de-anonymized.
+export const misconceptionHit = pgTable(
+	"misconception_hit",
+	{
+		id: text("id").primaryKey(),
+		conceptNodeId: text("concept_node_id")
+			.notNull()
+			.references(() => conceptNode.id, { onDelete: "cascade" }),
+		sessionId: text("session_id")
+			.notNull()
+			.references(() => studySession.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [
+		// The same misconception can only count once per session — a retry or a
+		// replay must never double-count. Different students each add their own.
+		uniqueIndex("misconception_hit_session_concept_uidx").on(
+			table.sessionId,
+			table.conceptNodeId,
+		),
+		index("misconception_hit_userId_idx").on(table.userId),
+	],
+);
+
+export const misconceptionHitRelations = relations(misconceptionHit, ({ one }) => ({
+	conceptNode: one(conceptNode, {
+		fields: [misconceptionHit.conceptNodeId],
+		references: [conceptNode.id],
+	}),
+	session: one(studySession, {
+		fields: [misconceptionHit.sessionId],
+		references: [studySession.id],
+	}),
+	user: one(user, {
+		fields: [misconceptionHit.userId],
+		references: [user.id],
 	}),
 }));

@@ -127,7 +127,7 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Docs
 
-- **[`HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** — the single source of truth: every feature, library, and the data model (11 tables) explained from zero.
+- **[`HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** — the single source of truth: every feature, library, and the data model (12 tables) explained from zero.
 - **[`STRATEGY.md`](docs/STRATEGY.md)** — the five bets that make Kiftet hard to copy: EHEEE syllabus anchoring, the national misconception map, the offline-first loop, Ethiopian texture, and this doc trail.
 - **[`PRD.md`](docs/PRD.md)** — product requirements, the market case, sponsor integrations.
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
@@ -136,6 +136,6 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Status
 
-Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13, and the five product bets that steer it live in [`STRATEGY.md`](docs/STRATEGY.md) (EHEEE syllabus anchoring, the national misconception map, the offline-first study loop, Ethiopian texture, the doc trail). Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). **Phase 7 shipped its first slice — study by syllabus** (browse units, map chapters to them, watch unit coverage grow; provisional Biology 12 seed pending teacher verification), while **Phase 6 — bring your own textbook** remains next up for the ingest gate. Demo quotas (5 AI calls/min, 3 textbooks/day) are live.
+Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13, and the five product bets that steer it live in [`STRATEGY.md`](docs/STRATEGY.md) (EHEEE syllabus anchoring, the national misconception map, the offline-first study loop, Ethiopian texture, the doc trail). Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). **Phase 7 – study by syllabus** shipped its first slice (browse units, map chapters, unit coverage; provisional Biology 12 seed pending teacher verification) and **Phase 8 – the misconception map** did the same (hit-recording on grading, aggregate reads behind a k-anonymity floor of 5, dashboard panel), while **Phase 6 – bring your own textbook** remains next up for the ingest gate. Demo quotas (5 AI calls/min, 3 textbooks/day) are live.
 
 > Kiftet — *close the gap*. 🇪🇹

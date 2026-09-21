@@ -38,9 +38,10 @@ Keep the AI-calling layer behind a **provider fallback chain** (multiple LLM pro
 - **Attempt** — id, session_id, stage (recall / retest), transcript_text, gaps_identified (array of ConceptNode ids), score
 - **Syllabus** (bet 1) — id, subject, grade, source (`provisional` until teacher-verified)
 - **SyllabusUnit** (bet 1) — id, syllabus_id, unit_number, title, description, sort_order
+- **MisconceptionHit** (bet 2) — id, concept_node_id, session_id, user_id; unique (session_id, concept_node_id); **aggregate-only, k-anonymity floor 5 on reads**
 - **Institution** — id, name, license_status, links_et_customer_ref
 
-Full current schema (11 tables): `packages/db/src/schema/` and `HOW_IT_WORKS.md` §6.
+Full current schema (12 tables): `packages/db/src/schema/` and `HOW_IT_WORKS.md` §6.
 
 ## 3. Core pipeline, step by step
 
@@ -65,6 +66,7 @@ GET  /sessions/:id/result      — before/after delta
 GET  /syllabus                 — the seeded syllabus list (bet 1)
 GET  /syllabus/:subject/:grade — units + your chapters + coverage
 PATCH /chapters/:id/unit       — map/unmap a chapter to a syllabus unit
+GET  /misconceptions           — aggregate misconception counts (k-floor 5, bet 2)
 ```
 
 ## 5. Sponsor integration — technical specifics
