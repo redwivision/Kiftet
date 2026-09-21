@@ -446,12 +446,12 @@
 	@keyframes breathe {
 		0%,
 		100% {
-			opacity: 0.3;
+			opacity: 0.45;
 			transform: scale(1);
 		}
 		50% {
-			opacity: 0.65;
-			transform: scale(1.05);
+			opacity: 0.8;
+			transform: scale(1.06);
 		}
 	}
 	@keyframes ink-settle {

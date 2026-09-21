@@ -97,9 +97,10 @@ export function VoxideRing({
 
 	return (
 		<div className="relative grid place-items-center" aria-live="polite">
-			{/* Resting heartbeat: the quiet ring breathes in flat ivory, ~3s. */}
+			{/* Resting heartbeat: the quiet ring breathes in flat ivory, ~3s.
+			    Sits just proud of the ring so the motion reads as a soft halo. */}
 			{initReady && (status === "idle" || status === "armed") && (
-				<span className="absolute inset-0 animate-breathe rounded-full bg-gold/10" />
+				<span className="absolute -inset-2 animate-breathe rounded-full bg-gold/15" />
 			)}
 			{initReady && ripples > 0 && (
 				<span
