@@ -30,13 +30,17 @@ Keep the AI-calling layer behind a **provider fallback chain** (multiple LLM pro
 
 ## 2. Data model (core entities)
 
-- **Textbook** — id, title, subject, language
-- **Chapter** — id, textbook_id, title, raw_text
+- **Textbook** — id, title, subject, language, owner_id
+- **Chapter** — id, textbook_id, unit_id → syllabus_unit (nullable), title, raw_text
 - **ConceptNode** — id, chapter_id, concept_text, is_misconception (bool), weight
 - **User** — id, name, role (student/institution_admin)
 - **Session** — id, user_id, chapter_id, started_at, status
 - **Attempt** — id, session_id, stage (recall / retest), transcript_text, gaps_identified (array of ConceptNode ids), score
+- **Syllabus** (bet 1) — id, subject, grade, source (`provisional` until teacher-verified)
+- **SyllabusUnit** (bet 1) — id, syllabus_id, unit_number, title, description, sort_order
 - **Institution** — id, name, license_status, links_et_customer_ref
+
+Full current schema (11 tables): `packages/db/src/schema/` and `HOW_IT_WORKS.md` §6.
 
 ## 3. Core pipeline, step by step
 
@@ -58,6 +62,9 @@ POST /sessions/:id/microlesson — returns generated audio for the gaps
 POST /sessions/:id/retest      — returns generated question set
 POST /sessions/:id/retest/answer — submit answer(s), returns updated score
 GET  /sessions/:id/result      — before/after delta
+GET  /syllabus                 — the seeded syllabus list (bet 1)
+GET  /syllabus/:subject/:grade — units + your chapters + coverage
+PATCH /chapters/:id/unit       — map/unmap a chapter to a syllabus unit
 ```
 
 ## 5. Sponsor integration — technical specifics
