@@ -5,6 +5,7 @@ import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
 import express from "express";
 import { migrateDb } from "@kiftet/db";
+import { ensureDefaultSyllabus } from "@kiftet/db/seed";
 import { logEnvProbe } from "./env-probe";
 import {
 	drainDatabase,
@@ -14,13 +15,18 @@ import {
 import { requireAuth } from "./auth-middleware";
 import { env } from "./env.server";
 import studyRouter from "./routes/study";
+import syllabusRouter from "./routes/syllabus";
 import demoRouter from "./routes/demo";
-import { auth } from "./services";
+import { auth, getDb } from "./services";
 
 logEnvProbe();
 installProcessGuards();
 try {
 	await migrateDb(env);
+	// Bet 1 (STRATEGY.md): a provisional Biology Grade 12 syllabus so
+	// browse-by-syllabus works end-to-end. Idempotent — no-op once a syllabus
+	// exists. Flip rows to "verified" only after teacher curation.
+	await ensureDefaultSyllabus(getDb());
 } catch (error) {
 	console.error(`[boot] database migration FAILED: ${error instanceof Error ? error.message : String(error)}`);
 	console.error(error);
@@ -42,7 +48,7 @@ const allowedOrigins = String(env.CORS_ORIGIN ?? "")
 app.use(
 	cors({
 		origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
-		methods: ["GET", "POST", "OPTIONS"],
+		methods: ["GET", "POST", "PATCH", "OPTIONS"],
 		allowedHeaders: ["Content-Type", "Authorization", "X-Demo-User-Id"],
 		credentials: true,
 	}),
@@ -57,6 +63,7 @@ app.use(express.json({ limit: "256kb" }));
 app.use("/api/demo", demoRouter);
 
 app.use("/api", requireAuth, studyRouter);
+app.use("/api", requireAuth, syllabusRouter);
 
 // Unknown /api paths should answer JSON, not an HTML page.
 app.use("/api", (_req, res) => {

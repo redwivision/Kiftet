@@ -17,6 +17,7 @@ export type ChapterInfo = {
 	title: string;
 	subject: string;
 	textbookTitle: string;
+	unitId?: string | null;
 };
 
 export type Gaps = {

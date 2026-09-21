@@ -16,6 +16,37 @@ export const textbook = pgTable("textbook", {
 		.$defaultFn(() => new Date()),
 });
 
+export const syllabus = pgTable("syllabus", {
+	id: text("id").primaryKey(),
+	subject: text("subject").notNull(),
+	grade: integer("grade").notNull(),
+	title: text("title").notNull(),
+	// "provisional" until a teacher verifies the unit list (STRATEGY.md bet 1);
+	// flips to "verified" once checked. Never shipped to students as final.
+	source: text("source").notNull().default("provisional"),
+	createdAt: timestamp("created_at")
+		.notNull()
+		.$defaultFn(() => new Date()),
+});
+
+export const syllabusUnit = pgTable(
+	"syllabus_unit",
+	{
+		id: text("id").primaryKey(),
+		syllabusId: text("syllabus_id")
+			.notNull()
+			.references(() => syllabus.id, { onDelete: "cascade" }),
+		unitNumber: integer("unit_number").notNull(),
+		title: text("title").notNull(),
+		description: text("description"),
+		sortOrder: integer("sort_order").default(0).notNull(),
+		createdAt: timestamp("created_at")
+			.notNull()
+			.$defaultFn(() => new Date()),
+	},
+	(table) => [index("syllabus_unit_syllabusId_idx").on(table.syllabusId)],
+);
+
 export const chapter = pgTable(
 	"chapter",
 	{
@@ -23,13 +54,19 @@ export const chapter = pgTable(
 		textbookId: text("textbook_id")
 			.notNull()
 			.references(() => textbook.id, { onDelete: "cascade" }),
+		unitId: text("unit_id").references(() => syllabusUnit.id, {
+			onDelete: "set null",
+		}),
 		title: text("title").notNull(),
 		rawText: text("raw_text").notNull(),
 		createdAt: timestamp("created_at")
 			.notNull()
 			.$defaultFn(() => new Date()),
 	},
-	(table) => [index("chapter_textbookId_idx").on(table.textbookId)],
+	(table) => [
+		index("chapter_textbookId_idx").on(table.textbookId),
+		index("chapter_unitId_idx").on(table.unitId),
+	],
 );
 
 export const conceptNode = pgTable(
@@ -102,10 +139,26 @@ export const textbookRelations = relations(textbook, ({ many }) => ({
 	chapters: many(chapter),
 }));
 
+export const syllabusRelations = relations(syllabus, ({ many }) => ({
+	units: many(syllabusUnit),
+}));
+
+export const syllabusUnitRelations = relations(syllabusUnit, ({ one, many }) => ({
+	syllabus: one(syllabus, {
+		fields: [syllabusUnit.syllabusId],
+		references: [syllabus.id],
+	}),
+	chapters: many(chapter),
+}));
+
 export const chapterRelations = relations(chapter, ({ one, many }) => ({
 	textbook: one(textbook, {
 		fields: [chapter.textbookId],
 		references: [textbook.id],
+	}),
+	unit: one(syllabusUnit, {
+		fields: [chapter.unitId],
+		references: [syllabusUnit.id],
 	}),
 	concepts: many(conceptNode),
 }));

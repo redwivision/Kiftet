@@ -620,18 +620,25 @@ server doesn't care who sent the request.
 ## 6. The database — our data model
 
 A database's design is basically: *what facts do we need to remember, and how do
-they relate?* Kiftet has **nine tables** in two families: the five **study-domain**
+they relate?* Kiftet has **eleven tables** in two families: the seven **study-domain**
 tables (the product) and the four **auth tables** (who is signed in).
 
-### 6.1 The study domain (5 tables)
+### 6.1 The study domain (7 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
 | `textbook` | A real school textbook (e.g. Physics) that a **user owns** | `ownerId` → user, `title`, `subject`, `language` |
-| `chapter` | One chapter in that textbook, with its text | `textbookId`, `title`, `rawText` |
+| `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
 | `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON `{covered,missing,misconceptions}`), `score` (int 0–100) |
+| `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` until a teacher verifies the unit list) |
+| `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
+
+A chapter maps to **one** unit in exactly one syllabus via `syllabus_unit` —
+this is the current shape of bet 1 (a chapter is part of a unit). When textbooks
+gain a `grade` column, the syllabus join narrows from subject-only to
+subject + grade.
 
 The `concept_node.isMisconception` flag is the interesting one: the product's
 whole trick is that we don't just grade "right/wrong," we grade *which specific
@@ -1114,6 +1121,7 @@ wrong.
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
 | 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
 | 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
+| 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | 🔨 In progress (first slice shipped: `syllabus`/`syllabus_unit` tables + migration, provisional Biology 12 seed, `/syllabus` routes, chapter→unit mapping, `/syllabus` UI) |
 
 The five product bets that steer the phases after this — EHEEE syllabus
 anchoring, the national misconception map, the offline-first study loop, and
@@ -1246,6 +1254,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Concept-graph empty states | §5.3, §5.2 | `components/concept-graph.tsx` (dashboard, textbook "No chunks yet.") | — |
 | Book-ingestion animation (ink page) | §5.2 | `components/ink-page.tsx` (textbook planning state) | — |
 | Feedback colours (fixed sage/rust) | §4, §12 | `index.css` (`--color-sage`, `--color-rust`), `components/gap-list.tsx` | — |
+| Syllabus anchoring — browse by unit, map chapters, unit coverage (bet 1) | STRATEGY.md bet 1 | `apps/server/src/routes/syllabus.ts` (new router), `apps/web/src/routes/syllabus.tsx`, `packages/db/src/schema/study.ts` (`syllabus`, `syllabus_unit`, `chapter.unit_id`), `packages/db/src/seed.ts` | `GET /syllabus`, `GET /syllabus/:subject/:grade`, `PATCH /chapters/:id/unit` |
 | Offline / installable (PWA) | §4 | `apps/web/vite.config.ts`, `public/offline.html` | — |
 | AI grading, lessons, questions | §5.4–5.8 | `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts` | (server-side) |
 

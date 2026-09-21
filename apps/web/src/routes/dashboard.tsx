@@ -126,7 +126,13 @@ export default function Dashboard() {
 					</p>
 				</div>
 				{chapters && chapters.length > 0 && (
-					<div className="hidden shrink-0 sm:block">
+					<div className="hidden shrink-0 flex-col items-end gap-2 sm:flex">
+						<Link
+							to="/syllabus"
+							className={buttonVariants({ variant: "outline", size: "sm" })}
+						>
+							Study by syllabus
+						</Link>
 						<Link
 							to="/textbooks"
 							className={buttonVariants({ variant: "outline", size: "sm" })}

@@ -61,6 +61,14 @@ Only after that slice proves the unit-coverage view is worth it do we expand to
 more subjects/grades. Blueprint taken as grades 9–12 until evidence says
 otherwise.
 
+**Status — first slice shipped.** `syllabus` + `syllabus_unit` tables (migration
+`0001`), an idempotent boot seed with a **provisional** Biology 12 unit list,
+`GET /syllabus`, `GET /syllabus/:subject/:grade` (units + mapped chapters +
+latest-session coverage), `PATCH /chapters/:id/unit`, and the `/syllabus` browse
+UI (unit cards, coverage pills, chapter mapping). The provisional unit names are
+stand-ins only — replacing them with the teacher-verified EHEEE list and flipping
+`source` to `verified` is the next step before this counts as the syllabus.
+
 ---
 
 ## 2. Misconception hunting + the national misconception map

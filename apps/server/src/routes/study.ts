@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { and, desc, eq, gte, ne } from "drizzle-orm";
-import { chapter, textbook, studySession, attempt, conceptNode } from "@kiftet/db/schema";
+import { chapter, textbook, studySession, attempt, conceptNode, syllabusUnit } from "@kiftet/db/schema";
 import { getDb } from "../services";
 import { ai, focusScore } from "../ai/gemini";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -279,10 +279,12 @@ router.get("/chapters", async (req, res) => {
       title: chapter.title,
       textbookTitle: textbook.title,
       subject: textbook.subject,
+      unitId: chapter.unitId,
       createdAt: chapter.createdAt,
     })
     .from(chapter)
     .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .leftJoin(syllabusUnit, eq(chapter.unitId, syllabusUnit.id))
     .where(eq(textbook.ownerId, owner))
     .orderBy(desc(chapter.createdAt));
 
