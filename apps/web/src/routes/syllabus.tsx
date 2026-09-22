@@ -3,6 +3,7 @@ import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
+import { useLanguage } from "@/components/language-provider";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
@@ -31,7 +32,11 @@ type UnitChapter = {
 	id: string;
 	title: string;
 	textbookTitle: string;
-	coverage: { before: number | null; after: number | null; delta: number | null } | null;
+	coverage: {
+		before: number | null;
+		after: number | null;
+		delta: number | null;
+	} | null;
 };
 
 type Unit = {
@@ -58,7 +63,7 @@ type SyllabusDetail = {
 export default function Syllabus() {
 	const navigate = useNavigate();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
-	const demo = Boolean(getDemoUser());
+	const { t } = useLanguage();
 
 	const [catalog, setCatalog] = useState<SyllabusRow[] | null>(null);
 	const [detail, setDetail] = useState<SyllabusDetail | null>(null);
@@ -105,7 +110,9 @@ export default function Syllabus() {
 
 	const current = useMemo(
 		() =>
-			catalog?.find((r) => r.subject === detail?.subject && r.grade === detail?.grade) ?? null,
+			catalog?.find(
+				(r) => r.subject === detail?.subject && r.grade === detail?.grade,
+			) ?? null,
 		[catalog, detail],
 	);
 
@@ -129,10 +136,13 @@ export default function Syllabus() {
 		setStarting(chapter.id);
 		setError(null);
 		try {
-			const { sessionId } = await api<{ sessionId: string }>("/sessions/start", {
-				method: "POST",
-				body: JSON.stringify({ chapterId: chapter.id }),
-			});
+			const { sessionId } = await api<{ sessionId: string }>(
+				"/sessions/start",
+				{
+					method: "POST",
+					body: JSON.stringify({ chapterId: chapter.id }),
+				},
+			);
 			setSession(sessionId);
 			setChapter(chapter.id);
 			navigate(`/study/${sessionId}`, { replace: true });
@@ -151,7 +161,7 @@ export default function Syllabus() {
 				method: "PATCH",
 				body: JSON.stringify({ unitId }),
 			});
-			setNotice(unitId ? "Chapter moved to that unit." : "Chapter unassigned.");
+			setNotice(unitId ? t("unit-moved") : t("unit-unassigned"));
 			if (detail) {
 				const fresh = await api<SyllabusDetail>(
 					`/syllabus/${encodeURIComponent(detail.subject)}/${detail.grade}`,
@@ -170,22 +180,17 @@ export default function Syllabus() {
 			<header className="mb-8 space-y-4">
 				<div className="flex items-start justify-between gap-4">
 					<div className="max-w-2xl space-y-2">
-						<p className="k-label">Study by syllabus</p>
+						<p className="k-label">{t("study-by-syllabus")}</p>
 						<h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-							The units, not just the chapters.
+							{t("syllabus-title")}
 						</h1>
 						<p className="text-muted-foreground text-sm leading-6">
-							Match the chapters you have to the national syllabus, then see
-							which units are solid and which still have gaps — one study
-							session at a time.
+							{t("syllabus-text")}
 						</p>
 					</div>
-					<Link
-						to="/"
-						className="hidden shrink-0 sm:block"
-					>
+					<Link to="/" className="hidden shrink-0 sm:block">
 						<Button variant="outline" size="sm">
-							← Dashboard
+							{t("back-dash")}
 						</Button>
 					</Link>
 				</div>
@@ -199,7 +204,7 @@ export default function Syllabus() {
 								onClick={() => selectSyllabus(row.subject, row.grade)}
 								className={
 									row.subject === current.subject && row.grade === current.grade
-										? "rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-[0.72rem] font-medium text-gold"
+										? "rounded-full border border-gold/40 bg-gold/10 px-3 py-1 font-medium text-[0.72rem] text-gold"
 										: "rounded-full border border-border/70 px-3 py-1 text-[0.72rem] text-muted-foreground hover:border-gold/40 hover:text-gold"
 								}
 							>
@@ -212,7 +217,7 @@ export default function Syllabus() {
 
 			{error && (
 				<div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
-					<p className="font-medium text-rust">Couldn&apos;t load the syllabus</p>
+					<p className="font-medium text-rust">{t("syllabus-error")}</p>
 					<p className="mt-1 text-muted-foreground">{error}</p>
 					<Button
 						variant="outline"
@@ -220,13 +225,13 @@ export default function Syllabus() {
 						className="mt-3"
 						onClick={() => window.location.reload()}
 					>
-						Retry
+						{t("retry")}
 					</Button>
 				</div>
 			)}
 
 			{notice && !error && (
-				<p className="inner-surface mb-8 border border-sage/30 p-3 text-sm text-sage">
+				<p className="inner-surface mb-8 border border-sage/30 p-3 text-sage text-sm">
 					{notice}
 				</p>
 			)}
@@ -243,25 +248,27 @@ export default function Syllabus() {
 			)}
 
 			{catalog && catalog.length === 0 && (
-				<div className="surface p-10 text-center text-sm text-muted-foreground">
-					No syllabuses are set up yet. The Biology, Grade 12 seed arrives with
-					the next server deploy.
+				<div className="surface p-10 text-center text-muted-foreground text-sm">
+					{t("syllabus-empty")}
 				</div>
 			)}
 
 			{catalog && catalog.length > 0 && (
 				<>
 					{detail?.source === "provisional" && (
-						<p className="inner-surface mb-6 border border-gold/30 bg-gold/5 p-3 text-xs text-muted-foreground">
-							<span className="font-medium text-gold">Provisional units.</span>{" "}
-							The unit list here is a stand-in until it&apos;s verified against the
-							official EHEEE syllabus — the structure is real, the names aren&apos;t final.
+						<p className="inner-surface mb-6 border border-gold/30 bg-gold/5 p-3 text-muted-foreground text-xs">
+							<span className="font-medium text-gold">
+								{t("unit-provisional")}
+							</span>{" "}
+							{t("unit-provisional-text")}
 						</p>
 					)}
 					{detail?.source !== "provisional" && detail?.sourceNote && (
-						<p className="mb-6 text-xs text-muted-foreground">
-							<span className="font-medium text-sage">Verified.</span> Unit list
-							compiled from the {detail.sourceNote}
+						<p className="mb-6 text-muted-foreground text-xs">
+							<span className="font-medium text-sage">
+								{t("unit-verified")}
+							</span>{" "}
+							{t("unit-verified-text", { source: detail.sourceNote })}
 						</p>
 					)}
 
@@ -277,8 +284,8 @@ export default function Syllabus() {
 					)}
 
 					{!loading && detail && detail.units.length === 0 && (
-						<div className="surface p-10 text-center text-sm text-muted-foreground">
-							This syllabus has no units on the server yet.
+						<div className="surface p-10 text-center text-muted-foreground text-sm">
+							{t("syllabus-no-units")}
 						</div>
 					)}
 
@@ -287,28 +294,27 @@ export default function Syllabus() {
 						detail.units.map((unit, i) => (
 							<section
 								key={unit.id}
-								className="animate-fade-up mb-6"
+								className="mb-6 animate-fade-up"
 								style={{ animationDelay: `${i * 0.05}s` }}
 							>
 								<UnitCard
-								unit={unit}
-								units={detail.units}
-								starting={starting}
-								savingUnit={savingUnit}
-								onStart={start}
-								onAssign={assignUnit}
-							/>
+									unit={unit}
+									units={detail.units}
+									starting={starting}
+									savingUnit={savingUnit}
+									onStart={start}
+									onAssign={assignUnit}
+								/>
 							</section>
 						))}
 
 					{!loading && detail && detail.unassigned.length > 0 && (
-						<section className="animate-fade-up inner-surface border border-dashed border-border/70 p-5">
+						<section className="inner-surface animate-fade-up border border-border/70 border-dashed p-5">
 							<h2 className="font-display font-semibold text-lg tracking-tight">
-								Unassigned chapters
+								{t("unassigned-title")}
 							</h2>
 							<p className="mt-1 text-muted-foreground text-sm">
-								These {detail.subject} chapters aren&apos;t matched to a unit yet.
-								Pick one below to slot them in.
+								{t("unassigned-text", { subject: detail.subject })}
 							</p>
 							<ul className="mt-4 space-y-2">
 								{detail.unassigned.map((ch) => (
@@ -355,14 +361,18 @@ function UnitCard({
 	onStart: (chapter: { id: string; title: string }) => void;
 	onAssign: (chapterId: string, unitId: string | null) => void;
 }) {
-	const pct = unit.total > 0 ? Math.round((unit.covered / unit.total) * 100) : 0;
+	const { t } = useLanguage();
+	const pct =
+		unit.total > 0 ? Math.round((unit.covered / unit.total) * 100) : 0;
 
 	return (
 		<div className="surface overflow-hidden">
-			<div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 p-5">
+			<div className="flex flex-wrap items-start justify-between gap-3 border-border/60 border-b p-5">
 				<div className="space-y-1">
 					<p className="k-label">
-						Unit {String(unit.unitNumber).padStart(2, "0")}
+						{t("unit-of-label", {
+							n: String(unit.unitNumber).padStart(2, "0"),
+						})}
 					</p>
 					<h2 className="font-display font-semibold text-xl tracking-tight">
 						{unit.title}
@@ -378,27 +388,33 @@ function UnitCard({
 						<p className="text-right">
 							<span
 								className={`font-medium text-sm ${
-									pct >= 100 ? "text-sage" : pct > 0 ? "text-gold" : "text-muted-foreground"
+									pct >= 100
+										? "text-sage"
+										: pct > 0
+											? "text-gold"
+											: "text-muted-foreground"
 								}`}
 							>
-								{unit.covered}/{unit.total} chapters covered
+								{t("chapter-covered", {
+									covered: unit.covered,
+									total: unit.total,
+								})}
 							</span>
 							<span className="block text-[0.72rem] text-muted-foreground">
-								{pct}% of this unit
+								{t("pct-unit", { pct })}
 							</span>
 						</p>
 					) : (
 						<p className="text-[0.72rem] text-muted-foreground">
-							No chapters mapped yet
+							{t("no-chapters-mapped")}
 						</p>
 					)}
 				</div>
 			</div>
 
 			{unit.chapters.length === 0 ? (
-				<div className="p-5 text-sm text-muted-foreground">
-					Map a chapter to this unit from the unassigned list below, or study it
-					once it&apos;s in.
+				<div className="p-5 text-muted-foreground text-sm">
+					{t("map-chapter-text")}
 				</div>
 			) : (
 				<ul className="divide-y divide-border/50">
@@ -419,12 +435,12 @@ function UnitCard({
 								</div>
 								<div className="flex items-center gap-2">
 									{covered ? (
-										<span className="rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 text-[0.72rem] font-medium text-sage">
+										<span className="rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 font-medium text-[0.72rem] text-sage">
 											{ch.coverage?.before ?? "—"}% → {ch.coverage?.after}%
 										</span>
 									) : (
 										<span className="px-2.5 py-0.5 text-[0.72rem] text-muted-foreground">
-											not studied yet
+											{t("not-studied")}
 										</span>
 									)}
 									<Button
@@ -433,7 +449,7 @@ function UnitCard({
 										onClick={() => onStart(ch)}
 										disabled={starting === ch.id}
 									>
-										{starting === ch.id ? "Opening…" : "Study"}
+										{starting === ch.id ? t("opening-ellipsis") : t("study")}
 									</Button>
 									<UnitSelect
 										units={units}
@@ -462,18 +478,19 @@ function UnitSelect({
 	saving: boolean;
 	onChange: (unitId: string | null) => void;
 }) {
+	const { t } = useLanguage();
 	return (
 		<select
-			value={saving ? "" : currentUnit ?? ""}
+			value={saving ? "" : (currentUnit ?? "")}
 			disabled={saving}
-			aria-label="Map this chapter to a unit"
+			aria-label={t("map-aria")}
 			onChange={(e) => onChange(e.target.value || null)}
 			className="rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-[0.72rem] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50"
 		>
-			<option value="">No unit</option>
+			<option value="">{t("no-unit")}</option>
 			{units.map((u) => (
 				<option key={u.id} value={u.id}>
-					Unit {u.unitNumber} — {u.title}
+					{t("unit-option", { n: u.unitNumber, title: u.title })}
 				</option>
 			))}
 		</select>

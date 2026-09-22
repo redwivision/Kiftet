@@ -699,3 +699,68 @@ have the study loop in front of you.
    English → every surface reads exactly as before this slice (same wording,
    same layout); the four pills still fit (labels hide on very narrow screens
    exactly as before).
+
+---
+
+## Every shell route flips (bet 4 / phase 10, slice B)
+
+Slice B extends the corpus to the **rest of the app chrome**: the landing page
+and the dashboard, syllabus, textbooks, and voice-test routes now draw every
+fixed string from `t()` in both scripts (~170 new EN/አማ key pairs). Same two
+tiers as slice A — compile gates plus manual checks.
+
+### How I tested (what the gates catch)
+
+- `bun run --cwd apps/web check-types` — the typed `messages.ts` means every
+  new `t()` call is a known `MessageKey` and every key exists in `am`; this
+  caught the textbooks `start-over` duplicate (renamed `start-over-import`)
+  and the voice-test `STATUS_LABEL` values (typed to `MessageKey`, with a
+  `vt-idle` fallback for unknown statuses).
+- `bun run build` — full client + SSR production build renders every wired
+  route with the provider.
+- Biome lint on `messages.ts` and the five route files — clean; the only
+  touched finding was a pre-existing unused `demo` variable in `syllabus.tsx`
+  (removed along with its now-unused import).
+
+### How you can test (manual, in the browser)
+
+Start both dev servers and flip the header toggle to አማርኛ, then walk the
+whole shell:
+
+1. **Landing page flips top to bottom.** On http://localhost:5173 in Amharic:
+   the hero (ክፍተቱን ዝጋ።), the four loop steps (ተናገር / መርምር / እንደገና ተማር /
+   ድጋሚ ፈተና), the voice/rates/BYOB sections, and the CTA all read Amharic.
+   The two stat numbers (563,500 students / 565 schools) still render.
+   Demo-card **data** stays English by design (concept names like "Heat flows
+   hot to cold", subject labels like "Physics · wave mechanics") — that's
+   seed content, part of the generated-content slice.
+2. **Dashboard flips.** Misconception map panel, AI-budget line, chapter-card
+   badge, and history row copy (session open / under a minute / last session)
+   read Amharic. Chapter **titles** and syllabus unit **names** stay English
+   (user/DB data, out of scope).
+3. **Syllabus route flips.** Header, "Unassigned chapters" block, unit
+   coverage ("{covered}/{total} ምዕራፎች ተሸፍነዋል"), the study button, and the
+   unit `<select>` labels all flip. Unit titles remain English; number
+   formatting like "ክፍል 01" uses the Amharic key.
+4. **Textbooks route flips.** Library title, chunk-count pills, "Start
+   review", the Add-a-textbook form (labels, language options, PDF/paste
+   modes, scan button), the chunk-review import panel, and the success/error
+   toasts all flip. Your book's **title** and chapter headings stay as you
+   typed them.
+5. **Voice-test route flips.** DEV handles the ring well: the status line
+   cycles through አማርኛ labels when armed/listening/speaking and the
+   transcript echoes "አንተ" for your turns. (PROD renders the dead-end copy
+   "እዚህ የሚታይ ነገር የለም" — also Amharic.) Requires `VITE_VOXIDE_KEY` in
+   `apps/web/.env` for the live ring.
+6. **Switching back to English restores everything.** No lingering Amharic on
+   any route, no layout drift. Route `<title>`/meta descriptions stay English
+   (no hook access in `meta()`) — accepted and unchanged.
+
+---
+
+## Generated content in both scripts (bet 4 / phase 10, slice C)
+
+*Next slice — not yet shipped.* Lessons, retest questions, and diagnoses
+produced by the AI gain Amharic output (prompt-per-language, honest
+"Fluency: Amharic" on generated text), making the "every feature works in
+Amharic" claim true end-to-end. Manual steps land here when the slice ships.

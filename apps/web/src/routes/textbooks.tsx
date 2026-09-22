@@ -9,10 +9,16 @@ import { toast } from "sonner";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import { InkPage } from "@/components/ink-page";
+import { useLanguage } from "@/components/language-provider";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
-import { type ImportChunk, MAX_FILE_MB, fileSizeError, planChunks } from "@/lib/textbook";
+import {
+	fileSizeError,
+	type ImportChunk,
+	MAX_FILE_MB,
+	planChunks,
+} from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
 
 export function meta(_args: Route.MetaArgs) {
@@ -54,6 +60,7 @@ const TEXTBOOK_IMPORT_ENABLED = false;
 export default function Textbooks() {
 	const navigate = useNavigate();
 	const { data: auth, isPending: sessionPending } = authClient.useSession();
+	const { t } = useLanguage();
 	const [textbooks, setTextbooks] = useState<LibraryTextbook[] | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -111,8 +118,7 @@ export default function Textbooks() {
 							name: "pasted",
 							text: pastedText,
 						});
-			if (!chunks.length)
-				throw new Error("Nothing to import — the text looks empty.");
+			if (!chunks.length) throw new Error(t("nothing-to-import"));
 			setPlanned(chunks);
 			setStages(
 				chunks.map((c, i) => ({
@@ -179,11 +185,13 @@ export default function Textbooks() {
 		}
 		fetchLibrary();
 		if (failed === 0) {
-			toast.success(`"${bookTitle.trim()}" is on the shelf.`);
+			toast.success(t("book-on-shelf", { title: bookTitle.trim() }));
 			resetForm();
 		} else {
 			toast.error(
-				`${failed} chunk${failed > 1 ? "s" : ""} didn't land. Retry to finish.`,
+				failed === 1
+					? t("chunk-failed", { n: failed })
+					: t("chunks-failed", { n: failed }),
 			);
 		}
 	};
@@ -243,23 +251,18 @@ export default function Textbooks() {
 	return (
 		<main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
 			<header className="mb-8 max-w-2xl space-y-2">
-				<p className="k-label">Your textbooks</p>
+				<p className="k-label">{t("your-textbooks")}</p>
 				<h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-					Bring your own book.
+					{t("byob-title-full")}
 				</h1>
 				<p className="text-muted-foreground text-sm leading-6">
-					Upload a PDF (up to {MAX_FILE_MB} MB) or paste text. It&apos;s read on
-					your device — the file never leaves your phone — and the book&apos;s own
-					table of contents is split into chunks, each becoming its own study
-					loop.
+					{t("textbooks-text", { max: MAX_FILE_MB })}
 				</p>
 			</header>
 
 			{loadError && !textbooks && (
 				<div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
-					<p className="font-medium text-rust">
-						Couldn&apos;t reach the study room
-					</p>
+					<p className="font-medium text-rust">{t("room-unreachable")}</p>
 					<p className="mt-1 text-muted-foreground">{loadError}</p>
 					<Button
 						variant="outline"
@@ -267,7 +270,7 @@ export default function Textbooks() {
 						className="mt-3"
 						onClick={fetchLibrary}
 					>
-						Retry
+						{t("retry")}
 					</Button>
 				</div>
 			)}
@@ -297,8 +300,9 @@ export default function Textbooks() {
 									</h2>
 								</div>
 								<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
-									{book.chapters.length}{" "}
-									{book.chapters.length === 1 ? "chunk" : "chunks"}
+									{book.chapters.length === 1
+										? t("chunk", { n: book.chapters.length })
+										: t("chunks", { n: book.chapters.length })}
 								</span>
 							</div>
 							{book.chapters.length > 0 ? (
@@ -319,7 +323,7 @@ export default function Textbooks() {
 												size="xs"
 												onClick={() => startChapter(chapter.id)}
 											>
-												Start review
+												{t("start-review")}
 											</Button>
 										</li>
 									))}
@@ -328,7 +332,7 @@ export default function Textbooks() {
 								<div className="mt-4 flex items-center gap-3">
 									<ConceptGraph className="h-9 w-16 shrink-0 text-gold" />
 									<p className="text-muted-foreground text-sm">
-										No chunks yet.
+										{t("no-chunks")}
 									</p>
 								</div>
 							)}
@@ -430,13 +434,12 @@ function AddTextbook({
 	skipped: Set<string>;
 	onCancel: () => void;
 }) {
+	const { t } = useLanguage();
 	if (step === "planning") {
 		return (
 			<section className="surface flex flex-col items-center gap-5 p-10 text-center">
 				<InkPage />
-				<p className="text-muted-foreground text-sm">
-					Reading your book on this device…
-				</p>
+				<p className="text-muted-foreground text-sm">{t("reading-device")}</p>
 			</section>
 		);
 	}
@@ -454,7 +457,7 @@ function AddTextbook({
 				<div className="flex items-center justify-between gap-3">
 					<div>
 						<p className="k-label">
-							{importing ? "Importing into your study room" : "Ready to import"}
+							{importing ? t("importing-room") : t("ready-import")}
 						</p>
 						<h2 className="font-display font-semibold text-lg tracking-tight">
 							{bookTitle.trim()}
@@ -462,7 +465,7 @@ function AddTextbook({
 					</div>
 					{!importing && (
 						<Button variant="ghost" size="sm" onClick={onCancel}>
-							Cancel
+							{t("cancel")}
 						</Button>
 					)}
 				</div>
@@ -470,9 +473,7 @@ function AddTextbook({
 				{importing && total > 0 && (
 					<div className="mt-4">
 						<div className="mb-2 flex items-center justify-between text-muted-foreground text-xs">
-							<span>
-								{progress} of {total} chunk{total > 1 ? "s" : ""}
-							</span>
+							<span>{t("chunk-progress", { progress, total })}</span>
 							<span>{Math.round((progress / total) * 100)}%</span>
 						</div>
 						<div className="h-1.5 w-full overflow-hidden rounded-full bg-gold/15">
@@ -520,16 +521,16 @@ function AddTextbook({
 
 								{stage === "done" || (!isNew && stage === "skip") ? (
 									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
-										{importing ? "In" : "Already here"}
+										{importing ? t("already-in") : t("already-here")}
 									</span>
 								) : stage === "skip" ? (
 									<span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.7rem] text-muted-foreground">
-										Landed
+										{t("landed")}
 									</span>
 								) : stage === "error" ? (
 									<div className="flex shrink-0 items-center gap-2">
 										<span className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-1 font-medium text-[0.7rem] text-rust">
-											Failed
+											{t("failed")}
 										</span>
 										{!importing && (
 											<Button
@@ -537,17 +538,17 @@ function AddTextbook({
 												size="xs"
 												onClick={() => onRetryOne(i)}
 											>
-												Retry
+												{t("retry")}
 											</Button>
 										)}
 									</div>
 								) : stage === "ingesting" ? (
 									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
-										Building checklist…
+										{t("building-checklist")}
 									</span>
 								) : (
 									<span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.7rem] text-muted-foreground">
-										New
+										{t("new-label")}
 									</span>
 								)}
 							</li>
@@ -564,32 +565,33 @@ function AddTextbook({
 				{!importing && (
 					<>
 						<p className="mt-4 text-muted-foreground text-xs leading-5">
-							Chunks import one at a time, and finished ones are skipped if
-							you leave and come back. Weak connection? Small text only — never
-							the file.
+							{t("import-hint")}
 						</p>
 						<div className="mt-4 flex flex-wrap items-center gap-3">
 							{enabled ? (
 								<Button onClick={onImport} disabled={newChapters === 0}>
 									{newChapters === 0
-										? "Nothing new to import"
+										? t("nothing-new")
 										: failed > 0
-											? `Retry ${failed} failed chunk${failed > 1 ? "s" : ""}`
-											: `Import ${newChapters} chunk${newChapters > 1 ? "s" : ""}`}
+											? failed === 1
+												? t("retry-failed", { n: failed })
+												: t("retry-failed-many", { n: failed })
+											: newChapters === 1
+												? t("import-n", { n: newChapters })
+												: t("import-n-many", { n: newChapters })}
 								</Button>
 							) : (
 								<Button disabled title="Preview mode — import is coming soon.">
-									Preview — import coming soon
+									{t("preview-coming")}
 								</Button>
 							)}
 							<Button variant="ghost" size="sm" onClick={onCancel}>
-								Start over
+								{t("start-over-import")}
 							</Button>
 						</div>
 						{!enabled && (
 							<p className="mt-3 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
-								Preview mode: this split happened on your device and nothing was
-								saved or sent to the AI. Turning the import on is the next step.
+								{t("preview-mode-text")}
 							</p>
 						)}
 					</>
@@ -602,55 +604,54 @@ function AddTextbook({
 		<section className="surface p-5 sm:p-6">
 			{!enabled && (
 				<p className="mb-4 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
-					<strong className="font-medium">Preview mode.</strong> You can try the
-					on-device chapter split below — nothing is saved and nothing is sent.
-					Live import is the next step.
+					<strong className="font-medium">{t("preview-mode")}</strong>{" "}
+					{t("preview-mode-note")}
 				</p>
 			)}
-			<p className="k-label">Add a textbook</p>
+			<p className="k-label">{t("add-textbook-label")}</p>
 			<h2 className="font-display font-semibold text-lg tracking-tight">
-				The next book you study could be yours.
+				{t("next-book")}
 			</h2>
 
 			<div className="mt-5 grid gap-4 sm:grid-cols-2">
 				<div className="space-y-1.5">
-					<Label htmlFor="book-title">Book title</Label>
+					<Label htmlFor="book-title">{t("book-title")}</Label>
 					<Input
 						id="book-title"
 						value={bookTitle}
 						onChange={(e) => setBookTitle(e.target.value)}
-						placeholder="e.g. Grade 9 Physics"
+						placeholder={t("grade-example")}
 					/>
 				</div>
 				<div className="space-y-1.5">
-					<Label htmlFor="book-subject">Subject</Label>
+					<Label htmlFor="book-subject">{t("subject-label")}</Label>
 					<Input
 						id="book-subject"
 						value={subject}
 						onChange={(e) => setSubject(e.target.value)}
-						placeholder="e.g. Physics"
+						placeholder={t("physics-example")}
 					/>
 				</div>
 			</div>
 
 			<div className="mt-4 space-y-1.5">
-				<Label htmlFor="book-language">Chapter language</Label>
+				<Label htmlFor="book-language">{t("chapter-language")}</Label>
 				<select
 					id="book-language"
 					value={language}
 					onChange={(e) => setLanguage(e.target.value)}
 					className="h-9 w-full rounded-none border border-border bg-background px-2 text-sm outline-none focus-visible:border-primary"
 				>
-					<option value="en">English</option>
-					<option value="am">Amharic</option>
-					<option value="om">Afaan Oromoo</option>
-					<option value="other">Other</option>
+					<option value="en">{t("lang-en")}</option>
+					<option value="am">{t("lang-am")}</option>
+					<option value="om">{t("lang-om")}</option>
+					<option value="other">{t("lang-other")}</option>
 				</select>
 			</div>
 
 			<div className="mt-5">
 				<p className="mb-2 font-medium text-muted-foreground text-xs">
-					Where is the content?
+					{t("where-content")}
 				</p>
 				<div className="flex gap-2">
 					{(["pdf", "text"] as const).map((m) => (
@@ -660,7 +661,7 @@ function AddTextbook({
 							size="sm"
 							onClick={() => setMode(m)}
 						>
-							{m === "pdf" ? "PDF file" : "Paste text"}
+							{m === "pdf" ? t("pdf-file") : t("paste-text")}
 						</Button>
 					))}
 				</div>
@@ -687,18 +688,19 @@ function AddTextbook({
 							<>
 								<span className="font-medium text-sm">{pdfFile.name}</span>
 								<span className="text-muted-foreground text-xs">
-									{(pdfFile.size / 1_000_000).toFixed(1)} MB — read on this
-									device, up to {MAX_FILE_MB} MB
+									{t("pdf-chosen", {
+										size: (pdfFile.size / 1_000_000).toFixed(1),
+										max: MAX_FILE_MB,
+									})}
 								</span>
 							</>
 						) : (
 							<>
 								<span className="font-medium text-gold text-sm">
-									Choose a PDF
+									{t("choose-pdf")}
 								</span>
 								<span className="max-w-xs text-muted-foreground text-xs leading-5">
-									PDFs up to {MAX_FILE_MB} MB. Scanned (image-only) PDFs have
-									no text to study — paste the text instead.
+									{t("pdf-scan-note", { max: MAX_FILE_MB })}
 								</span>
 							</>
 						)}
@@ -709,16 +711,15 @@ function AddTextbook({
 							value={pastedText}
 							onChange={(e) => setPastedText(e.target.value)}
 							rows={8}
-							placeholder="Paste the book's text here (a few chunks' worth at a time). Headings like “Unit 1” or “ምዕራፍ 2” split it into study chunks for you."
+							placeholder={t("paste-placeholder")}
 						/>
 						<div className="flex items-center justify-between text-muted-foreground text-xs">
 							<span>
-								{pastedText.trim().length.toLocaleString()} characters
+								{t("characters", {
+									n: pastedText.trim().length.toLocaleString(),
+								})}
 							</span>
-							<span>
-								Chapter headings like “Unit 1” or “ምዕራፍ 2” are detected
-								automatically.
-							</span>
+							<span>{t("headings-detect")}</span>
 						</div>
 					</div>
 				)}
@@ -732,15 +733,14 @@ function AddTextbook({
 
 			<div className="mt-5 flex items-center gap-3">
 				<Button onClick={onPlan} disabled={!canPlan}>
-					Scan into chunks
+					{t("scan-chunks")}
 				</Button>
 				<p className="text-muted-foreground text-xs leading-5">
-					You&apos;ll confirm the chunks before anything is imported.
+					{t("plan-confirm")}
 				</p>
 			</div>
 			<p className="mt-4 border-border/60 border-t pt-3 text-[0.7rem] text-muted-foreground leading-5">
-				Demo rooms run on a small daily budget — your dashboard shows what&apos;s
-				left. Signed-in users get more when we open the doors.
+				{t("demo-budget")}
 			</p>
 		</section>
 	);

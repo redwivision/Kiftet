@@ -9,8 +9,13 @@ import {
 	useState,
 } from "react";
 import { Link, useNavigate } from "react-router";
-import { BrandMark, BrandSignature, GapClosingMark } from "@/components/brand-mark";
+import {
+	BrandMark,
+	BrandSignature,
+	GapClosingMark,
+} from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
+import { useLanguage } from "@/components/language-provider";
 import { apiError } from "@/lib/api";
 import { setDemoUser, startDemo } from "@/lib/demo";
 import { useOnScreen } from "@/lib/on-screen";
@@ -29,27 +34,27 @@ export function meta(_args: Route.MetaArgs) {
 
 const LOOP = [
 	{
-		step: "Speak",
-		title: "Say what you remember",
-		text: "Pick a chapter and explain it out loud, no notes, no prompts. Speaking forces clarity — you know what you know, and what you don't.",
+		stepKey: "step-speak",
+		titleKey: "l-speak-title",
+		textKey: "l-speak-text",
 		icon: Mic,
 	},
 	{
-		step: "Diagnose",
-		title: "See what's missing",
-		text: "The concepts we check are compared against what you said. Solid ideas stay, gaps surface — shown as a picture you can read in one glance.",
+		stepKey: "step-diagnose",
+		titleKey: "l-diagnose-title",
+		textKey: "l-diagnose-text",
 		icon: ScanSearch,
 	},
 	{
-		step: "Relearn",
-		title: "Hear only what you missed",
-		text: "A short, spoken lesson covers just the gaps — not the whole chapter. Each pass targets only what didn't land the first time.",
+		stepKey: "step-relearn",
+		titleKey: "l-relearn-title",
+		textKey: "l-relearn-text",
 		icon: Volume2,
 	},
 	{
-		step: "Retest",
-		title: "Prove it stuck",
-		text: "Freshly worded questions on those same gaps, then a before/after score. You leave with a clear picture of what closed and what's still open.",
+		stepKey: "step-retest",
+		titleKey: "l-retest-title",
+		textKey: "l-retest-text",
 		icon: RefreshCcw,
 	},
 ] as const;
@@ -82,9 +87,7 @@ function Words({
 				<span key={`${i}-${w}`} className="kft-word">
 					<span
 						className={className}
-						style={
-							{ "--kft-i": `${(offset + i) * gap}ms` } as CSSProperties
-						}
+						style={{ "--kft-i": `${(offset + i) * gap}ms` } as CSSProperties}
 					>
 						{w}
 						{i < words.length - 1 ? "\u00A0" : ""}
@@ -101,33 +104,27 @@ export default function Home() {
 	const how = useOnScreen<HTMLElement>();
 	const rates = useOnScreen<HTMLElement>();
 	const cta = useOnScreen<HTMLElement>();
+	const { t } = useLanguage();
 
 	return (
 		<main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
 			{/* ── Hero: the problem, stated plainly ─────────────────── */}
 			<section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
-				<div
-					ref={hero.ref}
-					className={cn("space-y-7", hero.shown && "kft-in")}
-				>
+				<div ref={hero.ref} className={cn("space-y-7", hero.shown && "kft-in")}>
 					<p
 						className="kft-rise font-medium text-muted-foreground text-sm"
 						style={{ "--kft-i": "0ms" } as CSSProperties}
 					>
-						Kiftet · spoken study review for Ethiopian students
+						{t("hero-eyebrow")}
 					</p>
 
 					<h1 className="relative isolate space-y-3 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
 						<span aria-hidden="true" className="halo" />
 						<span className="block">
-							<Words text="Close the gap." className="text-gold" />
+							<Words text={t("hero-gap")} className="text-gold" />
 						</span>
 						<span className="block">
-							<Words
-								text="87 in every 100 students fail the national exam. Trying harder isn't the answer — knowing which gaps are yours is."
-								offset={3}
-								gap={30}
-							/>
+							<Words text={t("hero-87")} offset={3} gap={30} />
 						</span>
 					</h1>
 
@@ -135,10 +132,7 @@ export default function Home() {
 						className="kft-rise max-w-xl text-base text-muted-foreground leading-7 sm:text-lg"
 						style={{ "--kft-i": "300ms" } as CSSProperties}
 					>
-						Kiftet listens to what you remember out loud, finds the specific
-						ideas that didn&apos;t stick, teaches only those in a short spoken
-						lesson — then retests what stayed. Not another question bank. A
-						diagnosis.
+						{t("hero-sub")}
 					</p>
 
 					<div
@@ -152,7 +146,7 @@ export default function Home() {
 								"w-full font-medium sm:w-auto",
 							)}
 						>
-							Start closing your gaps
+							{t("start-closing")}
 						</Link>
 						<a
 							href="#how"
@@ -161,19 +155,19 @@ export default function Home() {
 								"w-full sm:w-auto",
 							)}
 						>
-							How the loop works
+							{t("how-loop-works")}
 						</a>
 					</div>
 					<p
-						className="kft-rise text-sm text-muted-foreground"
+						className="kft-rise text-muted-foreground text-sm"
 						style={{ "--kft-i": "480ms" } as CSSProperties}
 					>
-						No account?{" "}
+						{t("no-account")}{" "}
 						<a
 							href="#demo"
 							className="font-medium text-gold underline underline-offset-4 hover:text-gold-soft"
 						>
-							Jump straight into the live demo
+							{t("demo-jump")}
 						</a>
 					</p>
 				</div>
@@ -206,20 +200,12 @@ export default function Home() {
 						style={{ "--kft-i": "120ms" } as CSSProperties}
 					>
 						<p>
-							of the{" "}
+							{t("stat-87a", { count: "563,500" })}{" "}
 							<span className="font-medium text-foreground">
-								563,500 students
-							</span>{" "}
-							who sat the 2026 national exam were still failed by the system —
-							in the best result the country has recorded.{" "}
-							<span className="font-medium text-foreground">565 schools</span>{" "}
-							had zero students pass.
+								{t("stat-87b", { schools: "565" })}
+							</span>
 						</p>
-						<p>
-							Students weren&apos;t absent. They sat through the classes.
-							What&apos;s missing isn&apos;t exposure — it&apos;s knowing,
-							before the exam, which specific ideas didn&apos;t stick.
-						</p>
+						<p>{t("stat-absent")}</p>
 					</div>
 				</div>
 			</section>
@@ -238,14 +224,13 @@ export default function Home() {
 						className="kft-rise font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl"
 						style={{ "--kft-i": "0ms" } as CSSProperties}
 					>
-						Four steps. One loop. Only the gaps.
+						{t("loop-title")}
 					</h2>
 					<p
 						className="kft-rise text-base text-muted-foreground leading-7"
 						style={{ "--kft-i": "80ms" } as CSSProperties}
 					>
-						The sequence is the whole product — recall, diagnose, relearn,
-						retest. Nothing in Kiftet exists outside it.
+						{t("loop-sub")}
 					</p>
 					<div
 						aria-hidden="true"
@@ -255,9 +240,9 @@ export default function Home() {
 				</div>
 
 				<ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-					{LOOP.map(({ step, title, text, icon: Icon }, i) => (
+					{LOOP.map(({ stepKey, titleKey, textKey, icon: Icon }, i) => (
 						<li
-							key={step}
+							key={stepKey}
 							className="surface kft-rise p-5"
 							style={{ "--kft-i": `${160 + i * 90}ms` } as CSSProperties}
 						>
@@ -272,12 +257,14 @@ export default function Home() {
 									0{i + 1}
 								</span>
 							</div>
-							<p className="font-medium text-[0.72rem] text-gold">{step}</p>
+							<p className="font-medium text-[0.72rem] text-gold">
+								{t(stepKey)}
+							</p>
 							<h3 className="mt-1 font-display font-semibold text-lg tracking-tight">
-								{title}
+								{t(titleKey)}
 							</h3>
 							<p className="mt-2 text-muted-foreground text-sm leading-6">
-								{text}
+								{t(textKey)}
 							</p>
 						</li>
 					))}
@@ -288,18 +275,13 @@ export default function Home() {
 			<section className="mt-20 grid gap-8 lg:grid-cols-2 lg:items-center">
 				<div className="space-y-5">
 					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-						Voice isn&apos;t a feature. It&apos;s the mechanism.
+						{t("voice-title")}
 					</h2>
 					<p className="text-base text-muted-foreground leading-7">
-						Explaining something out loud is how the underlying learning
-						technique actually works. There&apos;s nowhere to hide off-screen —
-						there&apos;s no option, no answer key, just what you can produce.
-						That honesty is the diagnosis.
+						{t("voice-1")}
 					</p>
 					<p className="text-base text-muted-foreground leading-7">
-						So you speak. Kiftet transcribes, compares what you said against the
-						chapter&apos;s concepts, and reads the short lesson back in a calm
-						voice. Talk in, talk out.
+						{t("voice-2")}
 					</p>
 				</div>
 
@@ -312,36 +294,28 @@ export default function Home() {
 						</div>
 					</div>
 					<p className="text-center font-medium text-foreground text-sm">
-						Tap and speak
+						{t("tap-speak")}
 					</p>
 					<p className="max-w-xs text-center text-muted-foreground text-sm leading-6">
-						Says the student. The ring is listening, not judging. What you say
-						out loud is the whole record of what stuck.
+						{t("ring-caption")}
 					</p>
 				</div>
 			</section>
 
 			{/* ── The numbers, honestly ─────────────────────────────── */}
-			<section
-				ref={rates.ref}
-				className={cn("mt-20", rates.shown && "kft-in")}
-			>
+			<section ref={rates.ref} className={cn("mt-20", rates.shown && "kft-in")}>
 				<div className="mb-8 max-w-2xl space-y-3">
 					<h2
 						className="kft-rise font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl"
 						style={{ "--kft-i": "0ms" } as CSSProperties}
 					>
-						The system is improving. That&apos;s not the same as reaching the
-						student.
+						{t("rates-title")}
 					</h2>
 					<p
 						className="kft-rise text-base text-muted-foreground leading-7"
 						style={{ "--kft-i": "100ms" } as CSSProperties}
 					>
-						The national pass rate has climbed every year on record. Each step
-						is real progress — and each one still leaves the overwhelming
-						majority of students outside it. The reform moves at the
-						country&apos;s pace. A student&apos;s exam doesn&apos;t wait.
+						{t("rates-text")}
 					</p>
 				</div>
 
@@ -368,8 +342,8 @@ export default function Home() {
 							</p>
 							<p className="mt-2 text-muted-foreground text-xs leading-5">
 								{i === PASS_RATES.length - 1
-									? "best year on record — and still 87 in 100 failed"
-									: "national pass rate"}
+									? t("pass-rate-best")
+									: t("pass-rate")}
 							</p>
 						</div>
 					))}
@@ -380,77 +354,66 @@ export default function Home() {
 			<section className="mt-20 grid gap-4 md:grid-cols-3">
 				<div className="inner-surface p-5">
 					<h3 className="font-display font-semibold text-lg tracking-tight">
-						A school phone is enough
+						{t("school-phone-title")}
 					</h3>
 					<p className="mt-2 text-muted-foreground text-sm leading-6">
-						A web app, not an app-store install. Made to run on low bandwidth —
-						and if the voice service drops, you keep going by typing.
+						{t("school-phone-text")}
 					</p>
 				</div>
 				<div className="inner-surface p-5">
 					<h3 className="font-display font-semibold text-lg tracking-tight">
-						Made for night study
+						{t("night-study-title")}
 					</h3>
 					<p className="mt-2 text-muted-foreground text-sm leading-6">
-						Review happens when the day finally quietens down. The interface
-						stays a calm black room lit by flat ivory, not a bright quiz app.
+						{t("night-study-text")}
 					</p>
 				</div>
 				<div className="inner-surface p-5">
 					<h3 className="font-display font-semibold text-lg tracking-tight">
-						Honest before/after
+						{t("honest-title")}
 					</h3>
 					<p className="mt-2 text-muted-foreground text-sm leading-6">
-						You see your coverage right after you recall, and again after the
-						lesson closes. If part of it is still open, that answer is as useful
-						as the progress.
+						{t("honest-text")}
 					</p>
 				</div>
 			</section>
 
-{/* ── The bookshelf: your textbook becomes the study room ── */}
+			{/* ── The bookshelf: your textbook becomes the study room ── */}
 			<section className="mt-20 grid gap-8 lg:grid-cols-2 lg:items-center">
 				<div className="space-y-5">
-					<p className="k-label">Bring your own book</p>
+					<p className="k-label">{t("byob-label")}</p>
 					<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-						Your textbook <span className="text-gold">is</span> the study room.
+						{t("byob-a")}
+						<span className="text-gold">{t("byob-gold")}</span>
+						{t("byob-b")}
 					</h2>
 					<p className="text-base text-muted-foreground leading-7">
-						Upload the book you&apos;re actually studying — the one that matches
-						your syllabus — and Kiftet reads its table of contents and turns
-						each chunk into its own
-						recall → diagnose → relearn → retest loop.
+						{t("byob-1")}
 					</p>
 					<p className="text-base text-muted-foreground leading-7">
-						The file is read on your device. Only the text is sent, chapter by
-						chapter, so a whole book never becomes one heavy upload — it works
-						on the school&apos;s wifi.
+						{t("byob-2")}
 					</p>
 					<Link
 						to="/textbooks"
-						className={cn(
-							buttonVariants({ size: "lg" }),
-							"mt-2 font-medium",
-						)}
+						className={cn(buttonVariants({ size: "lg" }), "mt-2 font-medium")}
 					>
-						Preview it on your book
+						{t("preview-on-book")}
 					</Link>
-					<p className="text-muted-foreground text-sm">
-						No PDF? Paste the chapter text instead — the loop doesn&apos;t
-						care where a chapter begins.
-					</p>
+					<p className="text-muted-foreground text-sm">{t("no-pdf")}</p>
 				</div>
 
 				<div className="surface p-6">
 					<div className="mb-4 flex items-center justify-between">
 						<div>
-							<p className="font-medium text-[0.72rem] text-gold">Physics · Grade 11</p>
+							<p className="font-medium text-[0.72rem] text-gold">
+								Physics · Grade 11
+							</p>
 							<h3 className="font-display font-semibold text-xl tracking-tight">
 								Waves and Optics
 							</h3>
 						</div>
 						<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
-							7 chunks
+							{t("chunks", { n: 7 })}
 						</span>
 					</div>
 					<ul className="divide-y divide-border/60">
@@ -462,7 +425,10 @@ export default function Home() {
 							["Optical Instruments", "open"],
 							["Light and Colour", "open"],
 						].map(([chapter, state], i) => (
-							<li key={chapter} className="flex items-center justify-between gap-3 py-2.5">
+							<li
+								key={chapter}
+								className="flex items-center justify-between gap-3 py-2.5"
+							>
 								<div className="flex min-w-0 items-center gap-3">
 									<span
 										className={cn(
@@ -485,11 +451,11 @@ export default function Home() {
 								</div>
 								{state === "closed" ? (
 									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
-										Study loop ready
+										{t("study-loop-ready")}
 									</span>
 								) : (
 									<span className="shrink-0 text-[0.72rem] text-muted-foreground">
-										lines up next
+										{t("lines-up-next")}
 									</span>
 								)}
 							</li>
@@ -508,14 +474,13 @@ export default function Home() {
 			>
 				<BrandSignature size={72} className="kft-rise mx-auto mb-6" />
 				<h2 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-					<Words text="Pick a chapter. Speak. Close the gap." />
+					<Words text={t("cta-title")} />
 				</h2>
 				<p
 					className="kft-rise mx-auto mt-3 max-w-md text-base text-muted-foreground leading-7"
 					style={{ "--kft-i": "160ms" } as CSSProperties}
 				>
-					Pick a chapter, press the ring, and start speaking. The diagnosis
-					comes from your own words.
+					{t("cta-text")}
 				</p>
 				<Link
 					to="/dashboard"
@@ -525,7 +490,7 @@ export default function Home() {
 					)}
 					style={{ "--kft-i": "240ms" } as CSSProperties}
 				>
-					Open the study room
+					{t("open-study-room")}
 				</Link>
 			</section>
 
@@ -533,9 +498,7 @@ export default function Home() {
 				<div className="flex flex-col items-center gap-4 text-center">
 					<BrandMark size={40} className="opacity-60" />
 					<p className="max-w-sm text-muted-foreground text-xs leading-6">
-						Closing the gap between what a class covers and what a student
-						keeps. Built for the national exam — one chapter, one voice, one gap
-						at a time.
+						{t("footer-text")}
 					</p>
 					<p className="text-[0.68rem] text-muted-foreground/60">
 						Kiftet · ክፍተት
@@ -550,6 +513,7 @@ export default function Home() {
    finished a diagnosis. Reuses the real CoverageView so the landing and the
    product can never drift apart visually. */
 function DemoCard() {
+	const { t } = useLanguage();
 	return (
 		<div
 			className="surface animate-rise-in overflow-hidden"
@@ -569,7 +533,7 @@ function DemoCard() {
 							className="size-1.5 rounded-full bg-sage"
 							aria-hidden="true"
 						/>
-						recalled
+						{t("recalled")}
 					</span>
 				</div>
 				<h3 className="font-display font-semibold text-xl tracking-tight">
@@ -597,7 +561,7 @@ function DemoCard() {
 					to="/dashboard"
 					className={cn(buttonVariants(), "w-full justify-center font-medium")}
 				>
-					See it on your own chapter
+					{t("see-your-chapter")}
 				</Link>
 			</div>
 		</div>
@@ -648,9 +612,7 @@ function useScrollReveal<T extends HTMLElement>() {
 				const vh = window.innerHeight;
 				const center = r.top + r.height / 2 - vh / 2;
 				const reach = vh * 0.85;
-				setProximity(
-					Math.max(0, Math.min(1, 1 - Math.abs(center) / reach)),
-				);
+				setProximity(Math.max(0, Math.min(1, 1 - Math.abs(center) / reach)));
 			});
 		};
 		measure();
@@ -669,6 +631,7 @@ function useScrollReveal<T extends HTMLElement>() {
 
 function DemoSection() {
 	const { ref, inView, proximity, cycle } = useScrollReveal<HTMLElement>();
+	const { t } = useLanguage();
 
 	const spring =
 		"transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none";
@@ -679,7 +642,9 @@ function DemoSection() {
 				spring,
 				inView ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
 			)}
-			style={{ transitionDelay: inView ? `${i * 90}ms` : "0ms" } as CSSProperties}
+			style={
+				{ transitionDelay: inView ? `${i * 90}ms` : "0ms" } as CSSProperties
+			}
 		>
 			{child}
 		</div>
@@ -705,7 +670,7 @@ function DemoSection() {
 			/>
 			<div
 				aria-hidden="true"
-				className="pointer-events-none absolute -right-16 -top-10 size-56 rounded-full bg-gold/10 blur-3xl"
+				className="pointer-events-none absolute -top-10 -right-16 size-56 rounded-full bg-gold/10 blur-3xl"
 				style={{ opacity: glowIntensity * 0.6 }}
 			/>
 
@@ -735,7 +700,7 @@ function DemoSection() {
 
 				{stagger(
 					0,
-					<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.68rem] tracking-wide text-sage uppercase">
+					<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.68rem] text-sage uppercase tracking-wide">
 						<span
 							className={cn(
 								"size-1.5 rounded-full bg-sage transition-opacity duration-500",
@@ -743,37 +708,32 @@ function DemoSection() {
 							)}
 							aria-hidden="true"
 						/>
-						Live demo · no account
+						{t("demo-chip")}
 					</span>,
 				)}
 
 				<h2
 					className={cn(
-						"font-display font-semibold text-3xl leading-[1.12] text-foreground tracking-[-0.02em] sm:text-4xl",
+						"font-display font-semibold text-3xl text-foreground leading-[1.12] tracking-[-0.02em] sm:text-4xl",
 						inView && "kft-in",
 					)}
 				>
-					<Words
-						text="Feel it for yourself — one round of the loop, right now."
-						gap={40}
-					/>
+					<Words text={t("demo-title")} gap={40} />
 				</h2>
 
 				{stagger(
 					2,
 					<p className="max-w-md text-base text-muted-foreground leading-7">
-						Pick the chapter, speak what you remember, and watch Kiftet find
-						what didn&apos;t stick — then teach only that, and prove it stayed.
+						{t("demo-text")}
 					</p>,
 				)}
 
-				{stagger(3, <DemoButton variant="primary" size="lg" />,)}
+				{stagger(3, <DemoButton variant="primary" size="lg" />)}
 
 				{stagger(
 					4,
 					<p className="text-[0.72rem] text-muted-foreground">
-						No email, no password, no card. Your demo is private and expires
-						on its own.
+						{t("demo-foot")}
 					</p>,
 				)}
 			</div>
@@ -793,6 +753,7 @@ function DemoButton({
 	const navigate = useNavigate();
 	const [pending, setPending] = useState(false);
 	const [failure, setFailure] = useState<string | null>(null);
+	const { t } = useLanguage();
 
 	const launch = async () => {
 		setPending(true);
@@ -817,10 +778,10 @@ function DemoButton({
 				className="w-full font-medium sm:w-auto"
 			>
 				{pending
-					? "Setting up your demo…"
+					? t("demo-setting-up")
 					: variant === "primary"
-						? "Start the live demo →"
-						: "Try a live demo"}
+						? t("demo-start")
+						: t("demo-try")}
 			</Button>
 			{failure && <p className="text-rust text-xs">{failure}</p>}
 		</div>

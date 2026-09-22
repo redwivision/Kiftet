@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
+import { useLanguage } from "@/components/language-provider";
 import type { ChapterInfo } from "@/components/study-provider";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
-import { type CachedChapter, cacheChapters, getCachedChapters } from "@/lib/store";
+import {
+	type CachedChapter,
+	cacheChapters,
+	getCachedChapters,
+} from "@/lib/store";
 import type { Route } from "./+types/dashboard";
 
 export function meta(_args: Route.MetaArgs) {
@@ -56,6 +61,7 @@ type MisconceptionMap = {
 export default function Dashboard() {
 	const navigate = useNavigate();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
+	const { t } = useLanguage();
 	const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
 	// Bet 3: the chapter list came from the phone's cache, not the server — flag
 	// it so the room never pretends a saved list is live data.
@@ -64,7 +70,9 @@ export default function Dashboard() {
 	const [starting, setStarting] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [budget, setBudget] = useState<AiBudget | null>(null);
-	const [misconceptions, setMisconceptions] = useState<MisconceptionMap | null>(null);
+	const [misconceptions, setMisconceptions] = useState<MisconceptionMap | null>(
+		null,
+	);
 
 	const demo = Boolean(getDemoUser());
 
@@ -111,7 +119,9 @@ export default function Dashboard() {
 				for (const row of rows) {
 					subjects.set(row.subject, (subjects.get(row.subject) ?? 0) + 1);
 				}
-				const subject = [...subjects.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+				const subject = [...subjects.entries()].sort(
+					(a, b) => b[1] - a[1],
+				)[0]?.[0];
 				if (!subject) return;
 				const map = await api<MisconceptionMap>(
 					`/misconceptions?subject=${encodeURIComponent(subject)}`,
@@ -178,13 +188,12 @@ export default function Dashboard() {
 		<main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
 			<header className="mb-8 flex items-start justify-between gap-4">
 				<div className="max-w-2xl space-y-2">
-					<p className="k-label">The study room</p>
+					<p className="k-label">{t("study-room")}</p>
 					<h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-						Pick a chapter, then speak.
+						{t("dash-title")}
 					</h1>
 					<p className="text-muted-foreground text-sm leading-6">
-						Each chapter runs the same loop — recall, diagnose, relearn, retest.
-						You&apos;ll see your coverage after each recall, and again at the end.
+						{t("dash-text")}
 					</p>
 				</div>
 				{chapters && chapters.length > 0 && (
@@ -193,29 +202,29 @@ export default function Dashboard() {
 							to="/syllabus"
 							className={buttonVariants({ variant: "outline", size: "sm" })}
 						>
-							Study by syllabus
+							{t("study-by-syllabus")}
 						</Link>
 						<Link
 							to="/textbooks"
 							className={buttonVariants({ variant: "outline", size: "sm" })}
 						>
-							Add your textbook
+							{t("add-textbook")}
 						</Link>
 					</div>
 				)}
 			</header>
 
 			{!session && getDemoUser() && (
-				<div className="surface mb-8 flex flex-wrap items-center justify-between gap-3 border p-4 text-sm animate-border-fade">
+				<div className="surface mb-8 flex animate-border-fade flex-wrap items-center justify-between gap-3 border p-4 text-sm">
 					<p className="text-muted-foreground">
-						<span className="font-medium text-gold">Live demo</span> — this study
-						room isn&apos;t saved to an account. Sign up to keep your progress.
+						<span className="font-medium text-gold">{t("demo-label")}</span>
+						{t("demo-banner")}
 					</p>
 					<Link
 						to="/login"
 						className="font-medium text-gold text-xs underline underline-offset-4 hover:text-gold-soft"
 					>
-						Create a free account
+						{t("create-free-account")}
 					</Link>
 				</div>
 			)}
@@ -223,20 +232,23 @@ export default function Dashboard() {
 			{budget && (
 				<div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-1 text-muted-foreground text-xs">
 					<span>
-						AI calls this minute:{" "}
+						{t("ai-calls-minute")}{" "}
 						<strong className="font-medium text-foreground">
-							{budget.remaining} of {budget.limitPerMinute} left
+							{t("of-left", {
+								remaining: budget.remaining,
+								limitPerMinute: budget.limitPerMinute,
+							})}
 						</strong>
 						{budget.remaining === 0
-							? " — out. Try again in a moment."
+							? t("budget-out")
 							: budget.remaining <= 2
-								? " — spend carefully."
+								? t("budget-careful")
 								: ""}
 					</span>
 					<span>
-						New textbooks today:{" "}
+						{t("new-textbooks-today")}{" "}
 						<strong className="font-medium text-foreground">
-							{budget.textbooksPerDay} max (demo)
+							{t("textbooks-max", { n: budget.textbooksPerDay })}
 						</strong>
 					</span>
 				</div>
@@ -246,14 +258,16 @@ export default function Dashboard() {
 				<div className="inner-surface mb-8 border p-5">
 					<div className="flex items-start justify-between gap-3">
 						<div className="space-y-1">
-							<p className="k-label">The national misconception map</p>
+							<p className="k-label">{t("misconception-map")}</p>
 							<h2 className="font-display font-semibold text-lg tracking-tight">
-								What students most often get wrong — {misconceptions.subject}
+								{t("misconception-title", {
+									subject: misconceptions.subject ?? "",
+								})}
 							</h2>
 							<p className="text-muted-foreground text-sm">
-								Anonymized across every student here. A wrong turn only appears
-								once {misconceptions.threshold} or more students hit it — this
-								stays aggregate, never individual.
+								{t("misconception-text", {
+									threshold: misconceptions.threshold,
+								})}
 							</p>
 						</div>
 					</div>
@@ -267,7 +281,7 @@ export default function Dashboard() {
 								<span className="text-foreground/90">{row.conceptText}</span>
 								{row.unitTitle && (
 									<span className="ml-1 text-[0.72rem] text-muted-foreground">
-										· Unit {row.unitNumber}
+										{t("unit-of", { n: row.unitNumber ?? "-" })}
 									</span>
 								)}
 							</li>
@@ -278,9 +292,7 @@ export default function Dashboard() {
 
 			{error && (
 				<div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
-					<p className="font-medium text-rust">
-						Couldn&apos;t reach the study room
-					</p>
+					<p className="font-medium text-rust">{t("room-unreachable")}</p>
 					<p className="mt-1 text-muted-foreground">{error}</p>
 					<Button
 						variant="outline"
@@ -288,7 +300,7 @@ export default function Dashboard() {
 						className="mt-3"
 						onClick={() => window.location.reload()}
 					>
-						Retry
+						{t("retry")}
 					</Button>
 				</div>
 			)}
@@ -306,10 +318,9 @@ export default function Dashboard() {
 
 			{offlineList && (
 				<div className="inner-surface mb-6 border border-rust/40 px-4 py-3 text-sm">
-					<p className="font-medium text-rust">Offline — saved chapters</p>
+					<p className="font-medium text-rust">{t("offline-saved")}</p>
 					<p className="mt-0.5 text-muted-foreground leading-6">
-						This list was loaded from this phone. Starting fresh work needs a
-						connection — anything graded earlier stays saved.
+						{t("offline-saved-text")}
 					</p>
 				</div>
 			)}
@@ -319,19 +330,14 @@ export default function Dashboard() {
 					<ConceptGraph className="h-28 w-auto text-gold" />
 					<div className="space-y-1">
 						<h2 className="font-display font-semibold text-xl tracking-tight">
-							Nothing to diagnose yet.
+							{t("empty-none")}
 						</h2>
 						<p className="mx-auto max-w-sm text-muted-foreground text-sm leading-6">
-							The study room is empty. Chapters appear here the moment
-							they&apos;re loaded in — then this room runs the recall loop on
-							them.
+							{t("empty-none-text")}
 						</p>
 					</div>
-					<Link
-						to="/textbooks"
-						className={buttonVariants({ size: "sm" })}
-					>
-						Add your textbook — it&apos;s on your device, not ours
+					<Link to="/textbooks" className={buttonVariants({ size: "sm" })}>
+						{t("add-book-device")}
 					</Link>
 				</div>
 			)}
@@ -372,6 +378,7 @@ function ChapterCard({
 	starting: boolean;
 	onStart: () => void;
 }) {
+	const { t } = useLanguage();
 	return (
 		<button
 			type="button"
@@ -389,7 +396,7 @@ function ChapterCard({
 					</h2>
 				</div>
 				<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
-					{starting ? "Opening…" : "Start review"}
+					{starting ? t("opening-ellipsis") : t("start-review")}
 				</span>
 			</div>
 
@@ -398,13 +405,14 @@ function ChapterCard({
 			</p>
 
 			<p className="mt-5 font-medium text-foreground/90 text-xs">
-				Speak what you remember, see what&apos;s missing, close it.
+				{t("card-promise")}
 			</p>
 		</button>
 	);
 }
 
 function ChapterHistory({ last }: { last?: SessionHistory }) {
+	const { t } = useLanguage();
 	if (!last) return null;
 	const minutes =
 		typeof last.durationMs === "number"
@@ -414,18 +422,20 @@ function ChapterHistory({ last }: { last?: SessionHistory }) {
 		minutes == null
 			? ""
 			: minutes < 1
-				? "under a minute"
-				: `${minutes} min`;
+				? t("under-a-minute")
+				: minutes === 1
+					? t("minute", { n: minutes })
+					: t("minutes", { n: minutes });
 
 	if (last.status === "in_progress") {
 		return (
 			<div className="flex items-center justify-between px-1 text-[0.72rem] text-muted-foreground">
-				<span>A study session is open</span>
+				<span>{t("session-open")}</span>
 				<Link
 					to={`/study/${last.id}`}
 					className="font-medium text-gold underline underline-offset-4 hover:text-gold-soft"
 				>
-					Resume
+					{t("resume")}
 				</Link>
 			</div>
 		);
@@ -434,13 +444,17 @@ function ChapterHistory({ last }: { last?: SessionHistory }) {
 	const deltaText =
 		last.before != null && last.after != null && last.delta != null
 			? `${last.before}% → ${last.after}%${
-					last.delta > 0 ? ` · +${last.delta}%` : last.delta < 0 ? ` · ${last.delta}%` : ""
+					last.delta > 0
+						? ` · +${last.delta}%`
+						: last.delta < 0
+							? ` · ${last.delta}%`
+							: ""
 				}`
-			: "completed";
+			: t("completed");
 
 	return (
 		<p className="px-1 text-[0.72rem] text-muted-foreground">
-			Last session: {deltaText}
+			{t("last-session", { delta: deltaText })}
 			{duration ? ` · ${duration}` : ""}
 		</p>
 	);
