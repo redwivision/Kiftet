@@ -10,7 +10,7 @@ let activeChapterId: string | null = null;
 
 // Grounding for the voice agent: the current study context is re-read on every
 // tool call and surfaced to the model, so it stops answering mid-recall with
-// generic filler and keeps to the study loop (see docs/HOW_IT_WORKS.md §5).
+// generic filler and keeps to the study loop (see docs/howItWorks/dataflow.md §5).
 let studyContext: Record<string, unknown> | null = null;
 
 // True while a recall/answer capture is in progress on screen. While it is,
@@ -173,7 +173,7 @@ function registerCapabilities(ai: VoxideClient): void {
 	// by the on-screen UI, which grades directly against the API. The agent
 	// intentionally does NOT re-implement any of it — a second master of the
 	// same endpoints would produce duplicate attempts and out-of-sync phases
-	// (see docs/HOW_IT_WORKS.md §5). The single capability the agent keeps is
+	// (see docs/howItWorks/dataflow.md §5). The single capability the agent keeps is
 	// closing the session, so a spoken "I'm done" ends the whole loop.
 	ai.register({
 		completeSession: {

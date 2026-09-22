@@ -41,7 +41,7 @@ Keep the AI-calling layer behind a **provider fallback chain** (multiple LLM pro
 - **MisconceptionHit** (bet 2) — id, concept_node_id, session_id, user_id; unique (session_id, concept_node_id); **aggregate-only, k-anonymity floor 5 on reads**
 - **Institution** — id, name, license_status, links_et_customer_ref
 
-Full current schema (12 tables): `packages/db/src/schema/` and `HOW_IT_WORKS.md` §6.
+Full current schema (12 tables): `packages/db/src/schema/` and [`howItWorks/database.md`](howItWorks/database.md).
 
 ## 3. Core pipeline, step by step
 

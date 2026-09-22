@@ -2,7 +2,7 @@
 
 **Tagline:** Close the gap.
 **Status:** Draft v1 — the five bets that turn a working study loop into a product nobody else can copy by pasting in a question bank.
-**Read with:** `PRD.md` (why), `DESIGN_BRIEF.md` (how it should feel), `HOW_IT_WORKS.md` §13 (where we are, phase-by-phase).
+**Read with:** `PRD.md` (why), `DESIGN_BRIEF.md` (how it should feel), the [roadmap](../docs/howItWorks/roadmap.md) (where we are, phase-by-phase).
 
 ---
 
@@ -15,7 +15,7 @@ Kiftet hard to copy and *specifically* built for an Ethiopian student under exam
 pressure, rather than a generic study tool that was localized after the fact.
 
 Each bet is independent (any one ships value on its own) but compounding (each
-makes the next cheaper). The rule from `HOW_IT_WORKS.md` still holds: **one phase
+makes the next cheaper). The rule from the [how-it-works docs](howItWorks/README.md) still holds: **one phase
 at a time — build, test, write the guide, then the next.**
 
 | # | Bet | One line | Status |
@@ -23,7 +23,7 @@ at a time — build, test, write the guide, then the next.**
 | 1 | **EHEEE syllabus anchoring** | Study against the exam's own unit map, not just one book | Planned |
 | 2 | **Misconception hunting + the national map** | Turn per-student misconceptions into a data moat | Partly built (per-chapter extraction) |
 | 3 | **Offline-first study loop** | The loop works in a classroom with no signal | Offline slice shipped (outbox + banner + checklist cache) |
-| 4 | **Ethiopian texture** | Feels made *for* an Ethiopian student, not translated | In progress (brand + Ethiopic type live; both-script chrome shipped phase 10 slices A–B; generated content now follows the pref — slice C) |
+| 4 | **Ethiopian texture** | Feels made *for* an Ethiopian student, not translated | ✅ Done — phase 10 complete (brand + Ethiopic type verified, both-script chrome everywhere, generated content follows the language pref, SVG/icon parity, docs split into `docs/howItWorks/`) |
 | 5 | **Consolidate strategy into docs** | Every phase traces to a bet | This doc |
 
 ---
@@ -131,7 +131,7 @@ keep a local lesson/question cache, and **queue submissions to sync when online.
 **Why it's ours.** `PRD.md` §6 requires graceful degradation on weak connections;
 a working offline loop is the difference between "works on my desk" and "works in
 a classroom in Bahir Dar." It also pairs naturally with the deterministic
-fallback chain (`HOW_IT_WORKS.md` §4): the product already degrades without the
+fallback chain (see [the stack](howItWorks/stack.md)): the product already degrades without the
 model, so an offline path is an extension of a seam we already trust.
 
 **What it takes.**
@@ -206,8 +206,7 @@ every test traces back to a bet. Documentation is a product surface here — the
 repo is part of the pitch.
 
 **What it takes.**
-- This `docs/STRATEGY.md`, linked from `README.md` and the `HOW_IT_WORKS.md` §13
-  roadmap.
+- This `docs/STRATEGY.md`, linked from `README.md` and the [roadmap](howItWorks/roadmap.md).
 - A mapping from phase → bet (below), so "next up" always names the bet it advances.
 
 **Depends on / risks.** Keeping it honest as things change — a stale strategy doc
@@ -224,7 +223,7 @@ fix the row.
 | 7 | EHEEE syllabus anchoring — data model + browse-by-syllabus + unit coverage | **1** |
 | 8 | Misconception events + first aggregate map | **2** |
 | 9 | Offline outbox + cached checklists | **3** — shipped (outbox, banner, checklist cache, reconnect sync) |
-| 10 | Amharic everywhere — both-script chrome + generated content, Ethiopic type verified | **4** — slices A–C shipped (language pref + toggle, loop chrome and every shell route wired, and generated content in the student's language via `language` on the microlesson/retest calls with a typed bilingual corpus; Ethiopic type verification + fill doc gaps is the remaining slice) |
+| 10 | Amharic everywhere — both-script chrome + generated content, Ethiopic type verified | **4** — done (slices A–D shipped: language pref + toggle, loop chrome and every shell route wired, generated content in the student's language via `language` on the microlesson/retest calls with a typed bilingual corpus, Ethiopic type + icon geometry verified, and the docs finalized — `HOW_IT_WORKS.md` split into `docs/howItWorks/`) |
 
 Ethiopian texture (#4) is cross-cutting and lands *inside* each phase rather than
 only at the end — a bit of it ships every time. Bet 5 is continuous.

@@ -39,7 +39,7 @@ export function stopReadingAloud(): void {
 }
 
 // The product's voice contract. Everything in the app talks through this
-// seam and never to a vendor directly — see docs/HOW_IT_WORKS.md §5 "sep of
+// seam and never to a vendor directly — see docs/howItWorks/dataflow.md §5 "sep of
 // concerns". speakAloud is the last-resort read-back, kept as an explicit
 // option: the natural voice path is Voxide's agent (see speakViaVoxide), and
 // the browser's speechSynthesis is only the fallback for "Read it to me".

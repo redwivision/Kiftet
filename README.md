@@ -77,12 +77,13 @@ kiftet/
 │   ├── auth/       ← Better Auth configuration
 │   ├── ui/         ← shared components
 │   └── config/     ← shared TypeScript/Biome settings
-├── docs/           ← PRD, system design, design brief, HOW_IT_WORKS, testing guide
+├── docs/           ← PRD, system design, design brief, how-it-works, testing guide
 └── RUNBOOK.md      ← ops: deploying, envs, verification, incident playbook
 ```
-The data model is **9 tables** in two families — study domain (textbook,
-chapter, concept, session, attempt) and auth (user, session, account,
-verification). See `HOW_IT_WORKS.md` §6.
+The data model is **12 tables** in two families — study domain (textbook,
+chapter, concept, session, attempt, syllabus, syllabus_unit, misconception_hit)
+and auth (user, session, account, verification). See
+[`docs/howItWorks/database.md`](docs/howItWorks/database.md).
 
 ## Getting started
 
@@ -127,7 +128,7 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Docs
 
-- **[`HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** — the single source of truth: every feature, library, and the data model (12 tables) explained from zero.
+- **[`docs/howItWorks/`](docs/howItWorks/README.md)** — the single source of truth, split by concern: product, stack, data flow, database, API, auth, security, env, decisions, roadmap, running, inventory, glossary.
 - **[`STRATEGY.md`](docs/STRATEGY.md)** — the five bets that make Kiftet hard to copy: EHEEE syllabus anchoring, the national misconception map, the offline-first loop, Ethiopian texture, and this doc trail.
 - **[`PRD.md`](docs/PRD.md)** — product requirements, the market case, sponsor integrations.
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
@@ -136,6 +137,6 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Status
 
-Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in `HOW_IT_WORKS.md` §13, and the five product bets that steer it live in [`STRATEGY.md`](docs/STRATEGY.md) (EHEEE syllabus anchoring, the national misconception map, the offline-first study loop, Ethiopian texture, the doc trail). Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). **Phase 7 – study by syllabus** shipped its syllabus-anchoring slice (browse units, map chapters, unit coverage; the Biology 12 seed now holds the **verified** six-unit list from the MoE New-Curriculum textbook with provenance in `sourceNote`) and **Phase 8 – the misconception map** did the same (hit-recording on grading, aggregate reads behind a k-anonymity floor of 5, dashboard panel), while **Phase 6 – bring your own textbook** remains next up for the ingest gate. Demo quotas (5 AI calls/min, 3 textbooks/day) are live.
+Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in [`docs/howItWorks/roadmap.md`](docs/howItWorks/roadmap.md), and the five product bets that steer it live in [`STRATEGY.md`](docs/STRATEGY.md) (EHEEE syllabus anchoring, the national misconception map, the offline-first study loop, Ethiopian texture, the doc trail). Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). **Phase 7 – study by syllabus** shipped its syllabus-anchoring slice (browse units, map chapters, unit coverage; the Biology 12 seed now holds the **verified** six-unit list from the MoE New-Curriculum textbook with provenance in `sourceNote`) and **Phase 8 – the misconception map** did the same (hit-recording on grading, aggregate reads behind a k-anonymity floor of 5, dashboard panel). **Phase 10 – Amharic everywhere (bet 4)** is done: both-script chrome, generated content following the language pref, and Ethiopic type verified. **Phase 6 – bring your own textbook** remains next up for the ingest gate. Demo quotas (5 AI calls/min, 3 textbooks/day) are live.
 
 > Kiftet — *close the gap*. 🇪🇹

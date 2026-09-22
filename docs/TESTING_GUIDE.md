@@ -796,3 +796,40 @@ header to አርት 'አማርኛ' — Kiftet shows አማርኛ from the toggle
 
 Acceptance: generated text (student-facing) is Amharic when the pref is
 Amharic; caching never lies about what language content was written in.
+
+---
+
+## Ethiopic type + icon geometry (bet 4 / phase 10, slice D)
+
+Shipped (verification slice). The Ethiopic writing system renders correctly and
+the brand mark can't drift between the file assets and the on-screen component.
+
+**Type.** Noto Sans Ethiopic (400–700) is loaded via the Google Fonts sheet in
+`apps/web/src/root.tsx` and sits first in every font stack in
+`apps/web/src/index.css`, so every surface (headings ↔ body ↔ buttons ↔ badge)
+renders Ge'ez characters consistently. `<html lang>` is synced pre-hydration
+from the `kiftet-language` pref.
+
+Manual steps (`bun dev`, pref on አማርኛ):
+
+1. Walk every route (landing, dashboard, syllabus, textbooks/new book, a study
+   session's four steps, result) and check every Amharic block renders fully in
+   Ge'ez script — no tofu (□), no fallback to a Latin-styled box, no letters
+   clipped by line-height.
+2. Flip the toggle and confirm `<html lang>` flips synchronously before paint
+   (view-source on a hard reload shows the `lang` script in `<head>`).
+3. Amharic body text on top of a lesson/queue screen: confirm Ethiopic line
+   heights don't collide (the taller ፩–፻ digits and በሆኑ stacked forms included).
+
+**Icon geometry.** One shipped SVG — `apps/web/public/logo-mark.svg` — carries
+the same `OPEN_ARC` path as `BrandMark` (`apps/web/src/components/brand-mark.tsx`),
+and the favicon + PWA PNG set is generated from the same geometry.
+
+1. Open `public/logo-mark.svg` and `brand-mark.tsx` side by side; confirm the
+   arc path and 72° gap orientation match (gap at top-right).
+2. Confirm the favicon and PWA icons look crisp and centered in the browser tab
+   and the installed app's home-screen icon — no cropping, no leftover black
+   padding on the rounded-square `maskable-icon-512x512.png`.
+
+Acceptance: no tofu anywhere in Ge'ez; the file mark and the component mark use
+the same geometry; icon set sharp at 16–512 px.

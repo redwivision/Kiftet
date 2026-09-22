@@ -216,7 +216,7 @@ function speak(text: string) {
 	// Chrome's speechSynthesis truncates long utterances and drops a bulk-queued
 	// batch partway — so we always go through the sentence-chunked, end-chained
 	// queue in lib/voice.ts speakAloud. The read-back never cuts off without
-	// finishing. See docs/HOW_IT_WORKS.md §5 sep of concerns.
+	// finishing. See docs/howItWorks/dataflow.md §5 sep of concerns.
 	speakAloud(text);
 }
 

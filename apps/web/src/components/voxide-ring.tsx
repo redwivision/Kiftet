@@ -27,7 +27,7 @@ export function VoxideRing({
 	 *  the ring always waits for an explicit tap, which also keeps the browser
 	 *  mic-permission prompt from appearing unannounced. The prop is threaded
 	 *  through already so enabling the flow is a one-line change. See
-	 *  docs/HOW_IT_WORKS.md §5. */
+	 *  docs/howItWorks/dataflow.md §5. */
 	autoArm?: boolean;
 }) {
 	const client = getVoxideClient();

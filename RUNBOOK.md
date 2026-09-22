@@ -5,7 +5,7 @@ commands, the release path, environment variables, deployment, verification,
 rollback, and the incident playbook.
 
 This is the *operations* document. For *how the code works* read
-[`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md); for the manual test script read
+[`docs/howItWorks/`](docs/howItWorks/README.md); for the manual test script read
 [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md).
 
 ---
@@ -333,13 +333,14 @@ When you take corrective action, update this table, then re-run §9.
 - Keep Neon under its free-tier limits (connections, storage) — the server
   pool is capped at 5 connections already.
 - Re-audit the dependency tree (`bun audit`) — dependency health is in
-  `docs/HOW_IT_WORKS.md` §15.
+  [`docs/howItWorks/inventory.md`](docs/howItWorks/inventory.md) (§15.2).
 
 ---
 
 ## 13. Where to look when something is confusing
 
-- **How the code works** — `docs/HOW_IT_WORKS.md` (auth, CORS, DB, policies,
-  env, glossary; 15 sections).
+- **How the code works** — [`docs/howItWorks/`](docs/howItWorks/README.md), split
+  by concern: product, stack, data flow, database, API, auth, security, env,
+  decisions, glossary.
 - **What to test by hand** — `docs/TESTING_GUIDE.md`.
 - **Humans and environments** — this runbook.
