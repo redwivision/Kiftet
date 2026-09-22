@@ -59,6 +59,14 @@ How to read it:
   `errno: -111` and the health check rolls the container back.
 - Passwords are never printed — the probe redacts credentials and keys.
 
+If `DATABASE_URL` is missing or is the localhost placeholder in production, the
+app no longer crashes with a raw `connect ECONNREFUSED 127.0.0.1:5432` stack
+(node-postgres's silent default). Instead it fails fast at boot with a
+self-explanatory error — `[kiftet:db] DATABASE_URL is NOT set in this process
+…` or `… resolves to the localhost placeholder (localhost) in production…` —
+so the boot log names the real cause (a missing runtime variable) rather than
+a fake network problem. Source: `packages/db/src/index.ts` (`requireDbUrl`).
+
 The probe emits every line to **both stdout and stderr**. Some platforms
 surface only one stream in the boot log (often the stderr side where Node's
 crash drill prints), so the dual write guarantees the block shows up no matter
