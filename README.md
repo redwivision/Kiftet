@@ -6,7 +6,7 @@
 
 **ክፍተት** · the Amharic word for "gap"
 
-Turn any textbook chapter into a **spoken, adaptive review** that closes exactly the gaps you have — not the ones you don't.
+Turn any textbook chapter into a **spoken, adaptive review** that closes exactly the gaps/misunderstandings you have.
 
 **Live preview** → [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com)
 
