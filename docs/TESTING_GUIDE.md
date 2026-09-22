@@ -760,7 +760,39 @@ whole shell:
 
 ## Generated content in both scripts (bet 4 / phase 10, slice C)
 
-*Next slice — not yet shipped.* Lessons, retest questions, and diagnoses
-produced by the AI gain Amharic output (prompt-per-language, honest
-"Fluency: Amharic" on generated text), making the "every feature works in
-Amharic" claim true end-to-end. Manual steps land here when the slice ships.
+Shipped. Micro-lessons and retest questions follow the app's language pref:
+the study loop sends `language: "am"`, the AI (`apps/server/src/ai/gemini.ts`)
+writes student-facing text in Amharic (Ge'ez script) via the `AMHARIC_OUTPUT`
+instruction — with concept/idea names kept verbatim in their source script as
+data — and the offline fallback lesson/questions are Amharic too. Cached reads
+stay honest about their language, and generated content is marked as such.
+
+Manual steps (`bun dev`, demo user, one chapter; flip the language toggle in the
+header to አርት 'አማርኛ' — Kiftet shows አማርኛ from the toggle down):
+
+1. Speak a short recall. On the gaps screen confirm the labels flipped (they
+   were wired in slice A).
+2. Offline → cached lesson honesty: kill the connection, re-enter a session,
+   and confirm the notice reads
+   "This lesson was saved on this phone from earlier — it covers the same gaps."
+   (English) or its Amharic equivalent. Re-do it with the toggle flipped before
+   the lesson was cached and confirm the message names the *mismatched*
+   language (e.g. "…from earlier in English —…") rather than pretending it's the
+   current pref.
+3. "Fluency: Amharic" — with the pref on Amharic, on the lesson screen and the
+   retest screen you see a gold "በአማርኛ" / badge *next to the generated
+   content*, not on static chrome.
+4. Offline → cached questions: with the connection killed, start a retest and
+   confirm the "these questions were saved…" notice (Amharic when the pref is
+   Amharic; names the earlier language if it differs).
+5. Queued recall/answer, retest-restore, and the voice-guide notices
+   ("Still listening…", "I didn't catch that…") all read in the current
+   language. Switch prefs mid-session and confirm fresh notices follow the flip
+   while the session itself resumes (its questions stay in whatever language
+   they were generated in — that's the honest behavior).
+6. Reconnect and confirm queued recall grading and retest grading still work
+   (the language field is optional server-side; nothing about the verdict
+   changed).
+
+Acceptance: generated text (student-facing) is Amharic when the pref is
+Amharic; caching never lies about what language content was written in.

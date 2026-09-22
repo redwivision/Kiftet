@@ -111,6 +111,43 @@ export const en = {
 	"queued-answer":
 		"Your answer is saved on this phone — it will be graded the moment you're back online. Nothing here is final until then.",
 
+	// ── Generated-content notices + fluency (bet 4, slice C) ────
+	"retest-restored": "Your retest progress was restored.",
+	"lesson-cached-same":
+		"This lesson was saved on this phone from earlier — it covers the same gaps.",
+	"lesson-cached-changed":
+		"This lesson was saved on this phone from an earlier pass — your gaps have changed a little since.",
+	"lesson-cached-lang":
+		"This lesson was saved on this phone from earlier in {lang} — it still covers the same gaps, but was written before you switched languages.",
+	"questions-cached":
+		"These questions were saved on this phone from earlier — your answers still get graded once you're back online.",
+	"questions-cached-lang":
+		"These questions were saved on this phone from earlier in {lang} — your answers still get graded once you're back online.",
+	"fluency-am": "In Amharic",
+
+	// ── Study loop chrome (phase 10) ────────────────────────────
+	submit: "Submit",
+	"type-your-answer": "Type your answer…",
+	"type-answer-out-loud": "Type your answer out loud in your own words…",
+	"recall-aria":
+		"Type how much of the chapter you remember — this is graded exactly like a spoken recall",
+	"voice-service-busy":
+		"The voice service is out of sessions right now — the typed version still works.",
+	"what-you-said": "What you said",
+	"read-it-back": "Read it back",
+	"try-voice-instead": "Try voice instead",
+	"prefer-typing": "Prefer typing?",
+	"gap-closed": "gap closed",
+	"gap-covered": "gap covered",
+	"all-solid": "all solid",
+	"another-pass": "another pass",
+	"previously-answered": "Previously answered retest question",
+	"voice-still-listening": "Still listening — take your time.",
+	"voice-catch-none":
+		"I didn't catch any words yet — tap the ring or type whenever you're ready.",
+	"voice-catch-deferred":
+		"I didn't catch that — no rush. Tap the ring and try again whenever you're ready.",
+
 	// ── Dashboard chrome ─────────────────────────────────────────
 	"study-room": "The study room",
 	"dash-title": "Pick a chapter, then speak.",
@@ -448,6 +485,38 @@ export const am: Record<MessageKey, string> = {
 		"ቃላቶችህ በዚህ ስልክ ተቀምጠዋል — እንደገና ሲገናኝ በቅጽበት ይስተካከላሉ። እስከዚያ ድረስ ምንም የመጨረሻ አይደለም።",
 	"queued-answer":
 		"መልስህ በዚህ ስልክ ተቀምጧል — እንደገና ሲገናኝ በቅጽበት ይስተካከላል። እስከዚያ ድረስ ምንም የመጨረሻ አይደለም።",
+
+	// ── Generated-content notices + fluency (bet 4, slice C) ────
+	"retest-restored": "የድጋሚ ፈተና እድገትህ ተመልሷል።",
+	"lesson-cached-same": "ይህ ትምህርት ከዚህ ቀደም በዚህ ስልክ ተቀምጧል — ተመሳሳይ ክፍተቶችን ይሸፍናል።",
+	"lesson-cached-changed":
+		"ይህ ትምህርት ከዚህ ቀደም በዚህ ስልክ ተቀምጧል — ክፍተቶችህ ትንሽ ተቀይረዋል።",
+	"lesson-cached-lang":
+		"ይህ ትምህርት ከዚህ ቀደም በ{lang} በዚህ ስልክ ተቀምጧል — ተመሳሳይ ክፍተቶችን ይሸፍናል፣ ነገር ግን ከቋንቋው በመቀየር ቀድሞ ተጽፏል።",
+	"questions-cached":
+		"እነዚህ ጥያቄዎች ከዚህ ቀደም በዚህ ስልክ ተቀምጠዋል — መልሶችህ እንደገና ሲገናኝ አሁንም ይመዘገባሉ።",
+	"questions-cached-lang":
+		"እነዚህ ጥያቄዎች ከዚህ ቀደም በ{lang} በዚህ ስልክ ተቀምጠዋል — መልሶችህ እንደገና ሲገናኝ አሁንም ይመዘገባሉ።",
+	"fluency-am": "በአማርኛ",
+
+	// ── Study loop chrome (phase 10) ────────────────────────────
+	submit: "አስገባ",
+	"type-your-answer": "መልስህን ጻፍ…",
+	"type-answer-out-loud": "መልስህን በራስህ ቃላት ጮክ ብለህ ጻፍ…",
+	"recall-aria": "ያስታወስከውን ምዕራፍ ጻፉ — ይህ በአንደበት እንደተናገርክ በትክክል ይመዘገባል።",
+	"voice-service-busy": "የድምጽ አገልግሎቱ አሁን ሙሉ ነው — የፅሁፍ መግለጫ አሁንም ይሰራል።",
+	"what-you-said": "የተናገርከው",
+	"read-it-back": "እንደገና አንብብ",
+	"try-voice-instead": "በድምጽ ሞክር",
+	"prefer-typing": "በፅሁፍ መሞከርን ትመርጣለህ?",
+	"gap-closed": "ክፍተቱ ተዘግቷል",
+	"gap-covered": "ክፍተቱ ተሸፍኗል",
+	"all-solid": "ሁሉም ጠንካራ",
+	"another-pass": "ሌላ ሙከራ",
+	"previously-answered": "ቀድሞ የተመለሰ የድጋሚ ፈተና ጥያቄ",
+	"voice-still-listening": "አሁንም እያዳመጥኩ ነው — ጊዜ ውሰድ።",
+	"voice-catch-none": "ገና ቃላት አልያዝኩም — ሲዘጋጁ ቀለበቱን ንካ ወይም ጻፍ።",
+	"voice-catch-deferred": "ያንን አልያዝኩም — አትቸኩል። ቀለበቱን ንካ፣ ሲዘጋጁ እንደገና ሞክር።",
 
 	// ── Dashboard chrome ─────────────────────────────────────────
 	"study-room": "የጥናት ክፍሉ",

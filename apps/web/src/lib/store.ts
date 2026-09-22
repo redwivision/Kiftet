@@ -175,6 +175,9 @@ export async function getCachedChecklist(
 export type CachedLessonRow = {
 	sessionId: string;
 	text: string;
+	/** The script/register the lesson was generated in (bet 4 slice C). Older
+	 *  cached rows predating slice C omit it and read as "en". */
+	language: "en" | "am";
 	/** The gap set the lesson was generated for (used to stay honest about
 	 *  whether a cached lesson still matches the student's current gaps). */
 	missing: string[];
@@ -185,6 +188,8 @@ export type CachedLessonRow = {
 export type CachedQuestionsRow = {
 	sessionId: string;
 	questions: CachedQuestion[];
+	/** See CachedLessonRow.language. */
+	language: "en" | "am";
 	cachedAt: number;
 };
 
@@ -193,11 +198,19 @@ export async function cacheLesson(
 	text: string,
 	missing: string[],
 	misconceptions: string[],
+	language: "en" | "am" = "en",
 ): Promise<void> {
 	if (!dbAvailable()) return;
 	await putStore(
 		"lesson",
-		{ sessionId, text, missing, misconceptions, cachedAt: Date.now() },
+		{
+			sessionId,
+			text,
+			missing,
+			misconceptions,
+			language,
+			cachedAt: Date.now(),
+		},
 		sessionId,
 	);
 }
@@ -216,11 +229,12 @@ export async function getCachedLesson(
 export async function cacheQuestions(
 	sessionId: string,
 	questions: CachedQuestion[],
+	language: "en" | "am" = "en",
 ): Promise<void> {
 	if (!dbAvailable()) return;
 	await putStore(
 		"questions",
-		{ sessionId, questions, cachedAt: Date.now() },
+		{ sessionId, questions, language, cachedAt: Date.now() },
 		sessionId,
 	);
 }

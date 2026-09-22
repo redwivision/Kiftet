@@ -12,6 +12,7 @@ import {
 	setSession,
 	setStudyContext,
 } from "@/components/assistant";
+import { useLanguage } from "@/components/language-provider";
 import { useOnline } from "@/hooks/use-online";
 import { ApiError, api, apiError } from "@/lib/api";
 import { enqueueOutbox, flushOutbox, hasQueuedForSession } from "@/lib/outbox";
@@ -174,6 +175,15 @@ function sameConceptSet(a: string[], b: string[]): boolean {
 	);
 }
 
+// Maps a stored cache language to its readable label in the current script.
+// Runs inside the provider (needs `t`), so it's a small hook-local helper.
+function languageLabel(
+	code: "en" | "am",
+	t: (key: "lang-en" | "lang-am") => string,
+): string {
+	return code === "am" ? t("lang-am") : t("lang-en");
+}
+
 function reducer(state: StudyState, action: StudyAction): StudyState {
 	switch (action.type) {
 		case "LOAD_START":
@@ -249,7 +259,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				currentQuestion: action.answered.length,
 				answered: action.answered,
 				error: null,
-				notice: "Your retest progress was restored.",
+				notice: null,
 				queued: null,
 			};
 		case "ANSWER":
@@ -338,6 +348,10 @@ export function StudyProvider({
 	// reload the session onto its graded position.
 	const offlineHitRef = useRef(false);
 	const online = useOnline();
+	// Bet 4 / slice C: generated lessons and retest questions follow the app's
+	// language pref; cached (offline) reads stay honest about which language
+	// they were written in.
+	const { t, lang } = useLanguage();
 
 	const run = useCallback(
 		async (op: () => Promise<void>, onReplay?: () => Promise<void>) => {
@@ -453,8 +467,7 @@ export function StudyProvider({
 								dispatch({ type: "QUEUED", queued: { kind: "recall" } });
 								dispatch({
 									type: "NOTICE",
-									message:
-										"Your recall is saved on this phone — it will be graded as soon as you're back online.",
+									message: t("queued-recall"),
 								});
 								return;
 							}
@@ -465,7 +478,7 @@ export function StudyProvider({
 				submittingRef.current = false;
 			});
 		},
-		[run, sessionId],
+		[run, sessionId, t],
 	);
 
 	const fetchLesson = useCallback(() => {
@@ -478,6 +491,7 @@ export function StudyProvider({
 					body: JSON.stringify({
 						missing: gaps.missing,
 						misconceptions: gaps.misconceptions,
+						language: lang,
 					}),
 				})
 					.then((lesson) => {
@@ -489,6 +503,7 @@ export function StudyProvider({
 							lesson.text,
 							gaps.missing,
 							gaps.misconceptions,
+							lang,
 						);
 						dispatch({ type: "LESSON", text: lesson.text });
 					})
@@ -501,21 +516,26 @@ export function StudyProvider({
 							const cached = await getCachedLesson(sessionId);
 							if (!cached?.text) throw err;
 							dispatch({ type: "LESSON", text: cached.text });
-							dispatch({
-								type: "NOTICE",
-								message:
-									sameConceptSet(cached.missing, gaps.missing) &&
-									sameConceptSet(cached.misconceptions, gaps.misconceptions)
-										? "This lesson was saved on this phone from earlier — it covers the same gaps."
-										: "This lesson was saved on this phone from an earlier pass — your gaps have changed a little since.",
-							});
+							const language = cached.language ?? "en";
+							const sameGaps =
+								sameConceptSet(cached.missing, gaps.missing) &&
+								sameConceptSet(cached.misconceptions, gaps.misconceptions);
+							const message =
+								language !== lang
+									? t("lesson-cached-lang", {
+											lang: languageLabel(language, t),
+										})
+									: sameGaps
+										? t("lesson-cached-same")
+										: t("lesson-cached-changed");
+							dispatch({ type: "NOTICE", message });
 							return;
 						}
 						throw err;
 					}),
 			undefined,
 		);
-	}, [run, sessionId]);
+	}, [run, sessionId, lang, t]);
 
 	const goLesson = useCallback(() => {
 		// Back into the lesson without a fresh API call when it's already loaded.
@@ -536,6 +556,7 @@ export function StudyProvider({
 					body: JSON.stringify({
 						missing: gaps.missing,
 						misconceptions: gaps.misconceptions,
+						language: lang,
 					}),
 				})
 					.then(({ questions }) => {
@@ -546,7 +567,7 @@ export function StudyProvider({
 						// Bet 3: keep the questions on the phone — a student who loses
 						// the connection mid-retest can still answer them, and the
 						// answers queue in the outbox to be graded on reconnect.
-						void cacheQuestions(sessionId, normalized);
+						void cacheQuestions(sessionId, normalized, lang);
 						dispatch({ type: "QUESTIONS", questions: normalized });
 					})
 					.catch(async (err: unknown) => {
@@ -560,10 +581,15 @@ export function StudyProvider({
 								type: "QUESTIONS",
 								questions: cached.questions,
 							});
+							const language = cached.language ?? "en";
 							dispatch({
 								type: "NOTICE",
 								message:
-									"These questions were saved on this phone from earlier — your answers still get graded once you're back online.",
+									language !== lang
+										? t("questions-cached-lang", {
+												lang: languageLabel(language, t),
+											})
+										: t("questions-cached"),
 							});
 							return;
 						}
@@ -571,7 +597,7 @@ export function StudyProvider({
 					}),
 			undefined,
 		);
-	}, [run, sessionId]);
+	}, [run, sessionId, lang, t]);
 
 	const submitAnswer = useCallback(
 		(text: string) => {
@@ -629,8 +655,7 @@ export function StudyProvider({
 								});
 								dispatch({
 									type: "NOTICE",
-									message:
-										"Your answer is saved on this phone — it will be graded as soon as you're back online.",
+									message: t("queued-answer"),
 								});
 								return;
 							}
@@ -641,7 +666,7 @@ export function StudyProvider({
 				submittingRef.current = false;
 			});
 		},
-		[run, sessionId],
+		[run, sessionId, t],
 	);
 
 	const fetchResult = useCallback(
@@ -713,7 +738,7 @@ export function StudyProvider({
 							return {
 								question:
 									session.retestQuestions?.[index]?.question ??
-									"Previously answered retest question",
+									t("previously-answered"),
 								answer: attempt.transcriptText ?? "",
 								correct: (attempt.score ?? 0) >= 50,
 								score: attempt.score ?? 0,
@@ -726,6 +751,7 @@ export function StudyProvider({
 						questions: session.retestQuestions,
 						answered: restored,
 					});
+					dispatch({ type: "NOTICE", message: t("retest-restored") });
 				} else if (retests.length && session.status === "completed") {
 					if (token === loadTokenRef.current) void fetchResult();
 				} else if (recalls.length) {
@@ -756,7 +782,7 @@ export function StudyProvider({
 				}
 			}
 		})();
-	}, [sessionId, fetchResult]);
+	}, [sessionId, fetchResult, t]);
 
 	const loadTokenRef = useRef(0);
 

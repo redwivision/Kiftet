@@ -23,7 +23,7 @@ at a time — build, test, write the guide, then the next.**
 | 1 | **EHEEE syllabus anchoring** | Study against the exam's own unit map, not just one book | Planned |
 | 2 | **Misconception hunting + the national map** | Turn per-student misconceptions into a data moat | Partly built (per-chapter extraction) |
 | 3 | **Offline-first study loop** | The loop works in a classroom with no signal | Offline slice shipped (outbox + banner + checklist cache) |
-| 4 | **Ethiopian texture** | Feels made *for* an Ethiopian student, not translated | In progress (brand + Ethiopic type live; both-script chrome shipped via phase 10 slices A–B) |
+| 4 | **Ethiopian texture** | Feels made *for* an Ethiopian student, not translated | In progress (brand + Ethiopic type live; both-script chrome shipped phase 10 slices A–B; generated content now follows the pref — slice C) |
 | 5 | **Consolidate strategy into docs** | Every phase traces to a bet | This doc |
 
 ---
@@ -224,7 +224,7 @@ fix the row.
 | 7 | EHEEE syllabus anchoring — data model + browse-by-syllabus + unit coverage | **1** |
 | 8 | Misconception events + first aggregate map | **2** |
 | 9 | Offline outbox + cached checklists | **3** — shipped (outbox, banner, checklist cache, reconnect sync) |
-| 10 | Amharic everywhere — both-script chrome + generated content, Ethiopic type verified | **4** — slices A–B shipped (language pref + toggle, loop chrome and every shell route wired; generated content pending) |
+| 10 | Amharic everywhere — both-script chrome + generated content, Ethiopic type verified | **4** — slices A–C shipped (language pref + toggle, loop chrome and every shell route wired, and generated content in the student's language via `language` on the microlesson/retest calls with a typed bilingual corpus; Ethiopic type verification + fill doc gaps is the remaining slice) |
 
 Ethiopian texture (#4) is cross-cutting and lands *inside* each phase rather than
 only at the end — a bit of it ships every time. Bet 5 is continuous.

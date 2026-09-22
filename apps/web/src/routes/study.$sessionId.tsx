@@ -326,6 +326,7 @@ function VoiceCapture({
 	placeholder?: string;
 }) {
 	const { state, setNotice, clearNotice } = useStudy();
+	const { t } = useLanguage();
 	const voice = useVoxideVoice(hasVoxideKey() ? getVoxideClient() : null);
 	const [showText, setShowText] = useState(textDefault);
 
@@ -418,9 +419,7 @@ function VoiceCapture({
 		if (finished) {
 			void submit(finished);
 		} else {
-			setNotice(
-				"I didn't catch any words yet — tap the ring or type whenever you're ready.",
-			);
+			setNotice(t("voice-catch-none"));
 		}
 		void voice.disconnect();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -439,9 +438,7 @@ function VoiceCapture({
 		if (spoken) {
 			void submit(spoken);
 		} else if (voice.status !== "error") {
-			setNotice(
-				"I didn't catch that — no rush. Tap the ring and try again whenever you're ready.",
-			);
+			setNotice(t("voice-catch-deferred"));
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [voice.status]);
@@ -460,7 +457,7 @@ function VoiceCapture({
 				return;
 			}
 			if (Date.now() - lastChangedAt >= 7000) {
-				setNotice("Still listening — take your time.");
+				setNotice(t("voice-still-listening"));
 			}
 		}, 1000);
 		return () => clearInterval(timer);
@@ -503,8 +500,7 @@ function VoiceCapture({
 
 				{voice.errorCode === "usage_limit" && (
 					<p className="max-w-md rounded-lg border border-rust/30 bg-rust/10 px-3 py-2 text-muted-foreground text-xs leading-5">
-						The voice service is out of sessions right now — the typed version
-						still works.
+						{t("voice-service-busy")}
 					</p>
 				)}
 			</div>
@@ -513,7 +509,7 @@ function VoiceCapture({
 			{lastJustSaid && (
 				<div className="mx-auto max-w-md rounded-2xl border border-sage/25 bg-sage/[0.06] px-4 py-3 text-sm">
 					<p className="mb-1 font-medium text-[0.72rem] text-sage">
-						What you said
+						{t("what-you-said")}
 					</p>
 					<p className="text-foreground/90 leading-6">{lastJustSaid}</p>
 					<button
@@ -522,7 +518,7 @@ function VoiceCapture({
 						className="mt-2 inline-flex items-center gap-1.5 font-medium text-sage text-xs underline underline-offset-4 hover:text-sage-soft"
 					>
 						<Volume2 className="size-3.5" aria-hidden="true" />
-						Read it back
+						{t("read-it-back")}
 					</button>
 				</div>
 			)}
@@ -538,7 +534,7 @@ function VoiceCapture({
 						className="text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
 						onClick={() => setShowText((v) => !v)}
 					>
-						{showText ? "Try voice instead" : "Prefer typing?"}
+						{showText ? t("try-voice-instead") : t("prefer-typing")}
 					</button>
 				</div>
 			)}
@@ -562,6 +558,7 @@ function TextRecorder({
 	placeholder?: string;
 	buttonLabel?: string;
 }) {
+	const { t } = useLanguage();
 	const [text, setText] = useState("");
 
 	const doSubmit = async () => {
@@ -575,11 +572,11 @@ function TextRecorder({
 		<div className="mx-auto max-w-md space-y-2">
 			<Textarea
 				name="recall"
-				aria-label="Type how much of the chapter you remember — this is graded exactly like a spoken recall"
+				aria-label={t("recall-aria")}
 				autoComplete="off"
 				value={text}
 				onChange={(e) => setText(e.target.value)}
-				placeholder={placeholder ?? "Type your answer…"}
+				placeholder={placeholder ?? t("type-your-answer")}
 				onKeyDown={(e) => {
 					if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void doSubmit();
 				}}
@@ -590,7 +587,7 @@ function TextRecorder({
 				onClick={() => void doSubmit()}
 				disabled={!text.trim() || busy}
 			>
-				{buttonLabel ?? "Submit"}
+				{buttonLabel ?? t("submit")}
 			</Button>
 		</div>
 	);
@@ -720,7 +717,7 @@ function GapsPhase() {
 
 function LessonPhase() {
 	const { state, startRetest, viewGaps } = useStudy();
-	const { t } = useLanguage();
+	const { t, lang } = useLanguage();
 	const narratedRef = useRef<string | null>(null);
 	// A single acknowledged "something is being read aloud" state for both
 	// engines: the agent's natural voice and the browser-TTS fallback.
@@ -800,6 +797,11 @@ function LessonPhase() {
 	return (
 		<div className="space-y-6">
 			<PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
+			{lang === "am" && (
+				<p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.7rem] text-gold tracking-wide">
+					{t("fluency-am")}
+				</p>
+			)}
 			<div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
 				{sentences.length > 1
 					? sentences.map((sentence, i) => (
@@ -858,7 +860,7 @@ function LessonPhase() {
 
 function RetestPhase() {
 	const { state, submitAnswer, fetchResult } = useStudy();
-	const { t } = useLanguage();
+	const { t, lang } = useLanguage();
 	const { questions, currentQuestion, answered } = state;
 	const done = currentQuestion >= questions.length;
 
@@ -868,6 +870,11 @@ function RetestPhase() {
 				title={t("retest-title")}
 				text={done ? t("retest-done-text") : t("retest-text")}
 			/>
+			{lang === "am" && !done && (
+				<p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.7rem] text-gold tracking-wide">
+					{t("fluency-am")}
+				</p>
+			)}
 
 			<div className="flex items-center justify-between gap-3">
 				<p className="k-label">
@@ -914,7 +921,7 @@ function RetestPhase() {
 								submit={(text) => submitAnswer(text)}
 								textDefault={!hasVoxideKey()}
 								busy={state.busy}
-								placeholder="Type your answer out loud in your own words…"
+								placeholder={t("type-answer-out-loud")}
 							/>
 						)}
 					</div>
@@ -1199,6 +1206,7 @@ function ResultPanel({
 	delta?: number;
 }) {
 	const isGold = tone === "gold";
+	const { t } = useLanguage();
 
 	return (
 		<div className="space-y-6">
@@ -1242,12 +1250,12 @@ function ResultPanel({
 						<X className="size-3.5" />
 					)}
 					{isGold
-						? "gap closed"
+						? t("gap-closed")
 						: tone === "sage"
 							? after !== undefined
-								? "gap covered"
-								: "all solid"
-							: "another pass"}
+								? t("gap-covered")
+								: t("all-solid")
+							: t("another-pass")}
 				</p>
 				<h2
 					className={cn(
