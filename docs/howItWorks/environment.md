@@ -59,10 +59,12 @@ How to read it:
   `errno: -111` and the health check rolls the container back.
 - Passwords are never printed — the probe redacts credentials and keys.
 
-The probe prints to **stdout** while boot failures print to **stderr**, so a
-platform's "last N lines / error tail" view can hide it. Look at the **full**
-log stream; if the block is missing entirely the deployed image was built from
-a commit older than `cf68afe` and must be rebuilt from the latest source.
+The probe emits every line to **both stdout and stderr**. Some platforms
+surface only one stream in the boot log (often the stderr side where Node's
+crash drill prints), so the dual write guarantees the block shows up no matter
+which one is captured. If the block is missing entirely the deployed image was
+built from a commit older than `cf68afe` and must be rebuilt from the latest
+source.
 
 ---
 
