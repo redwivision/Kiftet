@@ -28,5 +28,41 @@ wrong.
 - **Production (hosting platform):** set the same variable names as environment
   secrets — Varlock reads them at build and runtime automatically.
 
+## The boot-time env probe
+
+On every server start the app prints a short diagnostic block **before** it
+contacts the database, so a wrong or missing URL is visible in the logs instead
+of a cryptic crash. Source: `apps/server/src/env-probe.ts`.
+
+```
+[env-probe] ==================== start
+[env-probe] database-related env keys in the container: DATABASE_URL, DATABASE_URL_DIRECT
+[env-probe] process.env.DATABASE_URL = postgresql://***@ep-silent-dream-...neon.tech/neondb
+[env-probe] resolved app env DATABASE_URL = postgresql://***@ep-silent-dream-...neon.tech/neondb
+[env-probe] resolved app env DATABASE_URL_DIRECT = postgresql://***@ep-silent-dream...neon.tech/neondb
+[env-probe] OK: the app sees a real (non-placeholder) DATABASE_URL
+[env-probe] ==================== end
+```
+
+How to read it:
+
+- `process.env.DATABASE_URL` shows what the **platform actually injected**; the
+  `resolved app env …` lines show what the app will use after its proxy
+  (`apps/server/src/env.server.ts`) applies defaults — they can differ.
+- `no database-related variables in the container env at all` means the
+  platform's variables never reached the container (wrong service, not
+  redeployed after setting, or overwritten by a platform database add-on).
+- `WARNING: the app sees the localhost placeholder` means `DATABASE_URL` came
+  through **empty**, so the app fell back to the `.env.schema` default
+  (`postgresql://postgres:postgres@localhost:5432/kiftet`). Inside a container
+  nothing listens on `localhost:5432`, so boot fails with `ECONNREFUSED` /
+  `errno: -111` and the health check rolls the container back.
+- Passwords are never printed — the probe redacts credentials and keys.
+
+The probe prints to **stdout** while boot failures print to **stderr**, so a
+platform's "last N lines / error tail" view can hide it. Look at the **full**
+log stream; if the block is missing entirely the deployed image was built from
+a commit older than `cf68afe` and must be rebuilt from the latest source.
+
 ---
 
