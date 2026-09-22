@@ -22,7 +22,7 @@ at a time — build, test, write the guide, then the next.**
 |---|---|---|---|
 | 1 | **EHEEE syllabus anchoring** | Study against the exam's own unit map, not just one book | Planned |
 | 2 | **Misconception hunting + the national map** | Turn per-student misconceptions into a data moat | Partly built (per-chapter extraction) |
-| 3 | **Offline-first study loop** | The loop works in a classroom with no signal | Planned (PWA shell exists) |
+| 3 | **Offline-first study loop** | The loop works in a classroom with no signal | Offline slice shipped (outbox + banner + checklist cache) |
 | 4 | **Ethiopian texture** | Feels made *for* an Ethiopian student, not translated | In progress (brand + Ethiopic type) |
 | 5 | **Consolidate strategy into docs** | Every phase traces to a bet | This doc |
 
@@ -142,17 +142,20 @@ model, so an offline path is an extension of a seam we already trust.
 - Sync that reuses the existing idempotency (`attemptId`, `insertAttemptOnce`) so
   a replay after reconnect lands exactly once.
 
-**Depends on / risks.** Conflict/idempotency (already solved for attempts), cache
-invalidation when a chapter changes, and honest UI — never imply a score is final
-while it's still queued.
-
-**Depth — decided (add it only where it doesn't make things worse).** The offline
-path ships as: cached checklists/chapters + lesson/question cache, an IndexedDB
-outbox with optimistic UI and an honest **"saved — will grade when you're back
-online"** state, syncing through the existing idempotency. Grading stays **online**
-(accuracy first); offline heuristic grading is only added later if a prototype
-proves it doesn't degrade results or UX. Pre-cache conservatively on a metered
-connection — default to the current chapter, not the whole library.
+**Status — offline slice shipped.** `lib/store.ts` (a small promise IndexedDB
+store, SSR-safe: `chapters`, `checklist`, `outbox`), `lib/outbox.ts` (a submission
+outbox that replays with the **original** `attemptId` so the existing
+`insertAttemptOnce` idempotency lands each replay exactly once — retries never
+double-grade), `hooks/use-online.ts`, an honest **offline banner** (three states:
+offline / queued / back-online-syncing; it never shows a score for a queued item),
+and the study loop wired for it: a submission that can't reach the server is
+parked in the outbox with a "saved — will be graded when you're back online"
+state, a reconnect flushes the queue then reloads the session onto its graded
+position, and the current chapter's checklist is pre-cached. Pre-caching stays
+conservative (current chapter only, per decision 3); lesson/question caching is
+a later slice. Grading remains online. Client-side IndexedDB can't be exercised
+from a CLI — verified by typecheck + build + SSR smoke plus the manual steps in
+`TESTING_GUIDE.md` §offline.
 
 ---
 
@@ -217,7 +220,7 @@ fix the row.
 | 6 (now) | Bring your own textbook — on-device TOC → chunks → ingest | 1 (a book covers a unit), 3 (on-device, weak-wifi) |
 | 7 | EHEEE syllabus anchoring — data model + browse-by-syllabus + unit coverage | **1** |
 | 8 | Misconception events + first aggregate map | **2** |
-| 9 | Offline outbox + cached checklists | **3** |
+| 9 | Offline outbox + cached checklists | **3** — shipped (outbox, banner, checklist cache, reconnect sync) |
 | 10 | Amharic everywhere — both-script chrome + generated content, Ethiopic type verified | **4** |
 
 Ethiopian texture (#4) is cross-cutting and lands *inside* each phase rather than

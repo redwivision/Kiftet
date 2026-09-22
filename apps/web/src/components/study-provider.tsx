@@ -8,7 +8,14 @@ import {
 } from "react";
 
 import { setChapter, setSession, setStudyContext } from "@/components/assistant";
-import { api, apiError, ApiError } from "@/lib/api";
+import { useOnline } from "@/hooks/use-online";
+import { ApiError, api, apiError } from "@/lib/api";
+import { enqueueOutbox, flushOutbox, hasQueuedForSession } from "@/lib/outbox";
+import {
+	type ChecklistRow,
+	cacheChapters,
+	cacheChecklist,
+} from "@/lib/store";
 
 export type Phase = "recall" | "gaps" | "lesson" | "retest" | "result";
 
@@ -66,6 +73,10 @@ export type StudyState = {
 	busy: boolean;
 	error: string | null;
 	notice: string | null;
+	// One submission is parked in the outbox awaiting a connection. The study
+	// UI shows this state honestly — never a score — until a reconnect syncs
+	// it and the session reloads to its graded position.
+	queued: { kind: "recall" } | { kind: "answer"; questionIndex: number } | null;
 };
 
 export type StudyAction =
@@ -87,7 +98,8 @@ export type StudyAction =
 	| { type: "ANSWER"; record: AnswerRecord }
 	| { type: "RESULT"; result: SessionResult }
 	| { type: "RETRY_CYCLE" }
-	| { type: "GO_PHASE"; phase: Phase };
+	| { type: "GO_PHASE"; phase: Phase }
+	| { type: "QUEUED"; queued: StudyState["queued"] };
 
 type SessionAttemptRow = {
 	id: string;
@@ -117,6 +129,7 @@ function initialState(sessionId: string): StudyState {
 		busy: false,
 		error: null,
 		notice: null,
+		queued: null,
 	};
 }
 
@@ -143,7 +156,12 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 		case "LOAD_START":
 			return { ...state, chapterLoading: true, sessionNotFound: false };
 		case "LOAD_OK":
-			return { ...state, chapterLoading: false, chapter: action.chapter };
+			return {
+				...state,
+				chapterLoading: false,
+				chapter: action.chapter,
+				queued: null,
+			};
 		case "LOAD_NOT_FOUND":
 			return { ...state, chapterLoading: false, sessionNotFound: true };
 		case "BUSY":
@@ -163,6 +181,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				result: null,
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		case "RECALL_FULL":
 			return {
@@ -177,6 +196,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				},
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		case "LESSON":
 			return {
@@ -185,6 +205,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				lessonText: action.text,
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		case "QUESTIONS":
 			return {
@@ -195,6 +216,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				answered: [],
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		case "RESTORE_RETEST":
 			return {
@@ -205,6 +227,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				answered: action.answered,
 				error: null,
 				notice: "Your retest progress was restored.",
+				queued: null,
 			};
 		case "ANSWER":
 			return {
@@ -213,6 +236,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				currentQuestion: state.currentQuestion + 1,
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		case "RESULT": {
 			// A repeating another-pass result increments the retry counter so the
@@ -226,6 +250,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				attempts: anotherPass ? state.attempts + 1 : 0,
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		}
 		case "RETRY_CYCLE":
@@ -241,9 +266,12 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
 				result: null,
 				error: null,
 				notice: null,
+				queued: null,
 			};
 		case "GO_PHASE":
 			return { ...state, phase: action.phase, error: null, notice: null };
+		case "QUEUED":
+			return { ...state, queued: action.queued, error: null };
 		default:
 			return state;
 	}
@@ -282,6 +310,11 @@ export function StudyProvider({
 	const replayRef = useRef<(() => Promise<void>) | null>(null);
 	// Guards against two submissions racing to grade the same recall/answer.
 	const submittingRef = useRef(false);
+	// Set the first time a submission (or the initial load) can't reach the
+	// server. A reconnect uses it to decide whether to flush the outbox and
+	// reload the session onto its graded position.
+	const offlineHitRef = useRef(false);
+	const online = useOnline();
 
 	const run = useCallback(
 		async (op: () => Promise<void>, onReplay?: () => Promise<void>) => {
@@ -299,90 +332,9 @@ export function StudyProvider({
 		[],
 	);
 
-	useEffect(() => {
-		let cancelled = false;
-		dispatch({ type: "LOAD_START" });
-		setSession(sessionId);
-		(async () => {
-			try {
-				const session = await api<{
-					chapterId: string;
-					status: string;
-					attempts: SessionAttemptRow[];
-					retestQuestions: SessionQuestion[] | null;
-					retestIndex: number;
-				}>(`/sessions/${sessionId}`);
-				const chapters = await api<ChapterInfo[]>("/chapters");
-				if (cancelled) return;
-				const chapter =
-					chapters.find((c) => c.id === session.chapterId) ?? null;
-				if (!chapter) {
-					dispatch({ type: "LOAD_NOT_FOUND" });
-					return;
-				}
-				setChapter(chapter.id);
-				dispatch({ type: "LOAD_OK", chapter });
-
-				// Restore where the loop left off from the attempt history instead
-				// of silently restarting at "Speak" (a refresh mid-loop used to
-				// dump the student back into a second cold recall).
-				const recalls = session.attempts.filter((a) => a.stage === "recall");
-				const retests = session.attempts.filter((a) => a.stage === "retest");
-				if (
-					retests.length &&
-					session.status === "in_progress" &&
-					session.retestQuestions?.length
-				) {
-					const restored = retests
-						.slice(0, session.retestIndex)
-						.map((attempt, index) => {
-							const gaps = attemptGaps(attempt.gapsIdentified);
-							return {
-								question:
-									session.retestQuestions?.[index]?.question ??
-									"Previously answered retest question",
-								answer: attempt.transcriptText ?? "",
-								correct: (attempt.score ?? 0) >= 50,
-								score: attempt.score ?? 0,
-								gaps,
-							};
-						});
-					dispatch({
-						type: "RESTORE_RETEST",
-						questions: session.retestQuestions,
-						answered: restored,
-					});
-				} else if (retests.length && session.status === "completed") {
-					if (!cancelled) void fetchResult();
-				} else if (recalls.length) {
-					const last = recalls[recalls.length - 1];
-					const stored = attemptGaps(last.gapsIdentified);
-					const gaps: Gaps = {
-						covered: stored.covered,
-						missing: stored.missing,
-						misconceptions: stored.misconceptions,
-						score: last.score ?? 0,
-					};
-					if (cancelled) return;
-					if (gaps.missing.length) {
-						dispatch({ type: "RECALL", gaps });
-					} else {
-						dispatch({ type: "RECALL_FULL", gaps });
-					}
-				}
-			} catch (err) {
-				if (cancelled) return;
-				if (err instanceof ApiError && err.status === 404) {
-					dispatch({ type: "LOAD_NOT_FOUND" });
-				} else {
-					dispatch({ type: "ERROR", message: apiError(err) });
-				}
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [sessionId]);
+	// loadSession (below, after fetchResult) opens the session, caches the
+	// chapter list + current checklist, and restores where the loop left off.
+	// The mount + reconnect effects that drive it live with it.
 
 	// Keep the voice agent grounded in WHAT the student is studying (topic
 	// only — never the lesson content or score breakdown, that's the Gemini
@@ -451,13 +403,38 @@ export function StudyProvider({
 					api<{ gaps: Gaps }>(`/sessions/${sessionId}/recall`, {
 						method: "POST",
 						body: JSON.stringify({ transcriptText: text, attemptId }),
-					}).then(({ gaps }) => {
-						if (gaps.missing.length === 0) {
-							dispatch({ type: "RECALL_FULL", gaps });
-						} else {
-							dispatch({ type: "RECALL", gaps });
-						}
-					}),
+					})
+						.then(({ gaps }) => {
+							if (gaps.missing.length === 0) {
+								dispatch({ type: "RECALL_FULL", gaps });
+							} else {
+								dispatch({ type: "RECALL", gaps });
+							}
+						})
+						.catch((err: unknown) => {
+							// A network failure parks the recall in the outbox — honest
+							// "saved, will be graded" — instead of dropping the words a
+							// student just said. Grading still happens online, on sync.
+							if (err instanceof ApiError && err.status === 0) {
+								offlineHitRef.current = true;
+								void enqueueOutbox({
+									id: attemptId,
+									kind: "recall",
+									sessionId,
+									attemptId,
+									payload: { transcriptText: text },
+									createdAt: Date.now(),
+								});
+								dispatch({ type: "QUEUED", queued: { kind: "recall" } });
+								dispatch({
+									type: "NOTICE",
+									message:
+										"Your recall is saved on this phone — it will be graded as soon as you're back online.",
+								});
+								return;
+							}
+							throw err;
+						}),
 				undefined,
 			).finally(() => {
 				submittingRef.current = false;
@@ -538,18 +515,49 @@ export function StudyProvider({
 								attemptId,
 							}),
 						},
-					).then(({ score, gaps: answerGaps }) =>
-						dispatch({
-							type: "ANSWER",
-							record: {
-								question: question.question,
-								answer: text,
-								correct: score >= 50,
-								score,
-								gaps: answerGaps,
-							},
+					)
+						.then(({ score, gaps: answerGaps }) =>
+							dispatch({
+								type: "ANSWER",
+								record: {
+									question: question.question,
+									answer: text,
+									correct: score >= 50,
+									score,
+									gaps: answerGaps,
+								},
+							}),
+						)
+						.catch((err: unknown) => {
+							// Same park-and-sync as the recall: a dropped connection
+							// must not lose the answer, and nothing gets graded while
+							// it's still queued (no score is shown for it).
+							if (err instanceof ApiError && err.status === 0) {
+								offlineHitRef.current = true;
+								void enqueueOutbox({
+									id: attemptId,
+									kind: "answer",
+									sessionId,
+									attemptId,
+									payload: {
+										transcriptText: text,
+										questionIndex: currentQuestion,
+									},
+									createdAt: Date.now(),
+								});
+								dispatch({
+									type: "QUEUED",
+									queued: { kind: "answer", questionIndex: currentQuestion },
+								});
+								dispatch({
+									type: "NOTICE",
+									message:
+										"Your answer is saved on this phone — it will be graded as soon as you're back online.",
+								});
+								return;
+							}
+							throw err;
 						}),
-					),
 				undefined,
 			).finally(() => {
 				submittingRef.current = false;
@@ -569,6 +577,133 @@ export function StudyProvider({
 			),
 		[run, sessionId],
 	);
+
+	// Opens the session: loads it + the chapter list (caching both), pre-caches
+	// the current chapter's checklist (bet 3 — conservatively, one chapter, not
+	// the whole library), then restores where the loop left off from the attempt
+	// history instead of silently restarting at "Speak".
+	const loadSession = useCallback(() => {
+		const token = ++loadTokenRef.current;
+		dispatch({ type: "LOAD_START" });
+		setSession(sessionId);
+		(async () => {
+			try {
+				const session = await api<{
+					chapterId: string;
+					status: string;
+					attempts: SessionAttemptRow[];
+					retestQuestions: SessionQuestion[] | null;
+					retestIndex: number;
+				}>(`/sessions/${sessionId}`);
+				const chapters = await api<ChapterInfo[]>("/chapters");
+				if (token !== loadTokenRef.current) return;
+				void cacheChapters(
+					chapters.map(({ id, title, subject, textbookTitle, unitId }) => ({
+						id,
+						title,
+						subject,
+						textbookTitle,
+						unitId,
+						cachedAt: Date.now(),
+					})),
+				);
+				const chapter =
+					chapters.find((c) => c.id === session.chapterId) ?? null;
+				if (!chapter) {
+					dispatch({ type: "LOAD_NOT_FOUND" });
+					return;
+				}
+				setChapter(chapter.id);
+				dispatch({ type: "LOAD_OK", chapter });
+				// Pre-cache this chapter's checklist for offline study. Non-fatal:
+				// the gaps view re-fetches and caches it too.
+				void api<ChecklistRow[]>(`/chapters/${chapter.id}/concepts`)
+					.then((rows) => void cacheChecklist(chapter.id, rows))
+					.catch(() => {});
+
+				const recalls = session.attempts.filter((a) => a.stage === "recall");
+				const retests = session.attempts.filter((a) => a.stage === "retest");
+				if (
+					retests.length &&
+					session.status === "in_progress" &&
+					session.retestQuestions?.length
+				) {
+					const restored = retests
+						.slice(0, session.retestIndex)
+						.map((attempt, index) => {
+							const gaps = attemptGaps(attempt.gapsIdentified);
+							return {
+								question:
+									session.retestQuestions?.[index]?.question ??
+									"Previously answered retest question",
+								answer: attempt.transcriptText ?? "",
+								correct: (attempt.score ?? 0) >= 50,
+								score: attempt.score ?? 0,
+								gaps,
+							};
+						});
+					if (token !== loadTokenRef.current) return;
+					dispatch({
+						type: "RESTORE_RETEST",
+						questions: session.retestQuestions,
+						answered: restored,
+					});
+				} else if (retests.length && session.status === "completed") {
+					if (token === loadTokenRef.current) void fetchResult();
+				} else if (recalls.length) {
+					const last = recalls[recalls.length - 1];
+					const stored = attemptGaps(last.gapsIdentified);
+					const gaps: Gaps = {
+						covered: stored.covered,
+						missing: stored.missing,
+						misconceptions: stored.misconceptions,
+						score: last.score ?? 0,
+					};
+					if (token !== loadTokenRef.current) return;
+					if (gaps.missing.length) {
+						dispatch({ type: "RECALL", gaps });
+					} else {
+						dispatch({ type: "RECALL_FULL", gaps });
+					}
+				}
+			} catch (err) {
+				if (token !== loadTokenRef.current) return;
+				if (err instanceof ApiError && err.status === 404) {
+					dispatch({ type: "LOAD_NOT_FOUND" });
+				} else {
+					if (err instanceof ApiError && err.status === 0) {
+						offlineHitRef.current = true;
+					}
+					dispatch({ type: "ERROR", message: apiError(err) });
+				}
+			}
+		})();
+	}, [sessionId, fetchResult]);
+
+	const loadTokenRef = useRef(0);
+
+	// Open the session on mount.
+	useEffect(() => {
+		loadSession();
+		return () => {
+			loadTokenRef.current++;
+		};
+	}, [loadSession]);
+
+	// Reconnect: if a submission (or the load itself) couldn't reach the server,
+	// flush the outbox now (idempotent — each item reuses its original
+	// attemptId, so a replay lands exactly once) and reload the session onto
+	// its just-graded position.
+	useEffect(() => {
+		if (!online) return;
+		if (!offlineHitRef.current) return;
+		offlineHitRef.current = false;
+		void (async () => {
+			await flushOutbox();
+			const stillQueued = await hasQueuedForSession(sessionId);
+			if (!stillQueued) loadSession();
+		})();
+	}, [online, sessionId, loadSession]);
 
 	const retryAgain = useCallback(() => dispatch({ type: "RETRY_CYCLE" }), []);
 	const retryLast = useCallback(() => {

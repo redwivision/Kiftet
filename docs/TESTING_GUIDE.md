@@ -548,8 +548,11 @@ half-finished stream drive what we grade or read back.
    `POST http://localhost:3000/api/sessions/start` with no auth header → you get
    `{"error": "..."}` (401), never an HTML stack page.
 2. **Offline / abort copy:** open the app, throttle/disable the network, then
-   submit a recall → the UI says "Can't reach Kiftet…" or "That took too long…",
-   not `TypeError: Failed to fetch`.
+   submit a recall → with the bet-3 outbox in, the recall is **parked**, not
+   dropped: the phase shows the "Saved — waiting on a connection" panel and the
+   banner a queued count (see §offline below). For requests that *do* fail —
+   an initial session load, a fetch with no cache — the UI says "Can't reach
+   Kiftet…" or "That took too long…", never `TypeError: Failed to fetch`.
 3. **Oversized body:** `curl` a >256 KB body to a route with `Content-Type:
    application/json` → `413` with "That request is too large…".
 4. **Friendly validation:** an empty transcript on recall returns the
@@ -560,3 +563,60 @@ half-finished stream drive what we grade or read back.
    redeploy).
 6. **/demo/start throttling:** fire `POST /api/demo/start` more than 5 times in
    a minute from one IP → `429` with the "Too many demo rooms…" message.
+
+---
+
+## Offline-first study loop (bet 3 / phase 9)
+
+This is a browser-only feature — the offline data lives in **IndexedDB**, which
+no CLI can touch. So there are two verification tiers: the **compile gates**
+(typecheck + build + SSR smoke — all below should pass with zero manual steps)
+prove the `lib/store.ts`/`lib/outbox.ts` code never breaks a server render, and
+the **manual steps** prove the loop itself survives a dead connection.
+
+### How I tested (what the gates catch)
+
+- `bun run --cwd apps/web check-types` — the new store/outbox/hook/types
+  compile against the study provider and routes.
+- `bun run build` — the Vite/SSR build resolves the new modules and renders
+  (the SSR entry imports `useOnline`/`store` paths, which must no-op without
+  `indexedDB` instead of throwing).
+- Biome lint on the new files + the offline-slice edits.
+
+### How you can test (manual, in the browser)
+
+Everything below starts from: server dev (`bun run --cwd apps/server dev`),
+web dev (`bun run --cwd apps/web dev`), open http://localhost:5173, open a
+chapter and complete a recall so a checklist is cached.
+
+1. **Chapters + checklist cache.** DevTools → Application → IndexedDB →
+   `kiftet-store`: the `chapters` store has your chapter rows, the `checklist`
+   store has one entry keyed by the chapter id. (Cache is written when the
+   dashboard loads the list and when the gaps screen fetches the checklist.)
+2. **Offline recall queues, never errors.** DevTools → Network, tick
+   *Offline*. Submit a recall (speak or type, then end it). You should **not**
+   see "Can't reach Kiftet" — instead the recall phase shows the rust
+   **"Saved — waiting on a connection"** panel, the notice says it will be
+   graded when you're back online, and the site-wide banner appears with
+   **"1 saved answer … will be graded when you're back online."** No score, no
+   right/wrong is shown anywhere — honesty is the point.
+3. **Outbox row exists.** Application → IndexedDB → `outbox`: one item, with
+   the **same `attemptId`** the live request would have used (check the
+   network tab before going offline — the value is the same).
+4. **Reconnect grades exactly once and resumes.** Un-tick *Offline*. The
+   banner flips to **"Back online — grading 1 saved answer…"**, the outbox
+   row disappears, and the study screen reloads the session onto its
+   **graded** position (the diagnose/gaps view), never a second cold recall.
+   Replaying the same `attemptId` goes through `insertAttemptOnce`, so a
+   dropped/retried flush can never double-grade.
+5. **Offline mid-retest.** Start a retest, go offline, answer a question →
+   the *same* queued panel appears on that question (you can't advance past a
+   queued answer). Reconnect → flush → session reloads at the next question.
+6. **Dashboard offline fallback.** On the dashboard, go offline and reload.
+   The chapter list renders from the cache with the **"Offline — saved
+   chapters"** panel; without any cache (fresh browser) it shows the normal
+   network error copy.
+7. **Rate-limit / auth failures don't wedge the queue** (optional): force a
+   `429`/`401` during a flush — the item stays queued for a later pass (`Try
+   again` on the banner) instead of being deleted; only permanent failures
+   (`404` session, `400` body) drop an item so the queue can't wedge forever.

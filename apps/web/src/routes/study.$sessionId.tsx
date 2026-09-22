@@ -21,10 +21,11 @@ import {
 	useStudy,
 } from "@/components/study-provider";
 import { VoxideRing } from "@/components/voxide-ring";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
 import { findBoundaryEnd, leadingText } from "@/lib/intent";
+import { type ChecklistRow, cacheChecklist, getCachedChecklist } from "@/lib/store";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
 
@@ -604,13 +605,32 @@ function PhaseHeading({ title, text }: { title: string; text: string }) {
 	);
 }
 
+// Bet 3: the honest "parked" state. A queued submission is NOT a score — it
+// just means the words are safely on the phone and will be graded once a
+// connection comes back. No progress number, no right/wrong, no result.
+function QueuedPanel({ text }: { text: string }) {
+	return (
+		<div className="inner-surface border border-rust/30 bg-rust/[0.07] px-4 py-3 text-sm">
+			<p className="mb-1 font-medium text-rust">Saved — waiting on a connection</p>
+			<p className="text-foreground/85 leading-6">{text}</p>
+		</div>
+	);
+}
+
 function RecallPhase() {
 	const { state, submitRecall } = useStudy();
 
-	// Recall → gaps: once the short analysis lands, the phase flips to the
-	// diagnose/gaps view on its own and the ring turns itself off (autoArm
-	// flips off when phase becomes "gaps"). No robotic read-back — the voice
-	// layer only speaks from explicit buttons.
+	if (state.queued?.kind === "recall") {
+		return (
+			<div className="space-y-6">
+				<PhaseHeading
+					title="Remember it out loud"
+					text="This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
+				/>
+				<QueuedPanel text="Your words are saved on this phone — they'll be graded the moment you're back online. Nothing here is final until then." />
+			</div>
+		);
+	}
 
 	return (
 		<div className="space-y-6">
@@ -633,22 +653,33 @@ function GapsPhase() {
 	const [weights, setWeights] = useState<Record<string, number>>({});
 
 	// Concept importance (1-5) lives on the chapter's checklist; pull it once
-	// so the coverage bars can reflect what actually matters.
+	// so the coverage bars can reflect what actually matters. The same rows are
+	// cached (bet 3) so a lost connection still lets the bars render from what
+	// was saved.
 	useEffect(() => {
 		let cancelled = false;
 		const chapterId = state.chapter?.id;
 		if (!chapterId) return;
-		api<{ conceptText: string; weight: number }[]>(
-			`/chapters/${chapterId}/concepts`,
-		)
+		api<ChecklistRow[]>(`/chapters/${chapterId}/concepts`)
 			.then((rows) => {
 				if (cancelled) return;
 				const map: Record<string, number> = {};
 				for (const row of rows) map[row.conceptText] = row.weight;
 				setWeights(map);
+				void cacheChecklist(chapterId, rows);
 			})
-			.catch(() => {
-				// Non-fatal: bars just fall back to flat heights.
+			.catch(async (err) => {
+				if (cancelled) return;
+				// Offline: fall back to the cached checklist instead of hiding the
+				// bars (weights are structural — the gap copy stays authoritative
+				// from the grading that already ran).
+				if (err instanceof ApiError && err.status === 0) {
+					const cached = await getCachedChecklist(chapterId);
+					if (cancelled || !cached) return;
+					const map: Record<string, number> = {};
+					for (const row of cached.rows) map[row.conceptText] = row.weight;
+					setWeights(map);
+				}
 			});
 		return () => {
 			cancelled = true;
@@ -881,12 +912,17 @@ function RetestPhase() {
 						{questions[currentQuestion]?.question ?? ""}
 					</p>
 					<div className="mt-5 border-border/60 border-t pt-5 dark:border-white/10">
-						<VoiceCapture
-							submit={(text) => submitAnswer(text)}
-							textDefault={!hasVoxideKey()}
-							busy={state.busy}
-							placeholder="Type your answer out loud in your own words…"
-						/>
+						{state.queued?.kind === "answer" &&
+						state.queued.questionIndex === currentQuestion ? (
+							<QueuedPanel text="Your answer is saved on this phone — it will be graded the moment you're back online. Nothing here is final until then." />
+						) : (
+							<VoiceCapture
+								submit={(text) => submitAnswer(text)}
+								textDefault={!hasVoxideKey()}
+								busy={state.busy}
+								placeholder="Type your answer out loud in your own words…"
+							/>
+						)}
 					</div>
 				</div>
 			) : (

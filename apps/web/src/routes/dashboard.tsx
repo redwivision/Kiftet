@@ -5,9 +5,10 @@ import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import type { ChapterInfo } from "@/components/study-provider";
-import { api, apiError } from "@/lib/api";
+import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
+import { type CachedChapter, cacheChapters, getCachedChapters } from "@/lib/store";
 import type { Route } from "./+types/dashboard";
 
 export function meta(_args: Route.MetaArgs) {
@@ -56,6 +57,9 @@ export default function Dashboard() {
 	const navigate = useNavigate();
 	const { data: session, isPending: sessionPending } = authClient.useSession();
 	const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
+	// Bet 3: the chapter list came from the phone's cache, not the server — flag
+	// it so the room never pretends a saved list is live data.
+	const [offlineList, setOfflineList] = useState(false);
 	const [history, setHistory] = useState<SessionHistory[]>([]);
 	const [starting, setStarting] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -89,6 +93,19 @@ export default function Dashboard() {
 			.then(async (rows) => {
 				if (cancelled) return;
 				setChapters(rows);
+				setOfflineList(false);
+				// Bet 3: keep the last known chapter list on the phone so the study
+				// room still renders (honestly flagged) without a connection.
+				void cacheChapters(
+					rows.map(({ id, title, subject, textbookTitle, unitId }) => ({
+						id,
+						title,
+						subject,
+						textbookTitle,
+						unitId,
+						cachedAt: Date.now(),
+					})),
+				);
 				if (rows.length === 0) return;
 				const subjects = new Map<string, number>();
 				for (const row of rows) {
@@ -101,7 +118,23 @@ export default function Dashboard() {
 				);
 				if (!cancelled && map.rows.length > 0) setMisconceptions(map);
 			})
-			.catch((err) => {
+			.catch(async (err) => {
+				if (!cancelled && err instanceof ApiError && err.status === 0) {
+					const cached: CachedChapter[] | null = await getCachedChapters();
+					if (!cancelled && cached?.length) {
+						setChapters(
+							cached.map(({ id, title, subject, textbookTitle, unitId }) => ({
+								id,
+								title,
+								subject,
+								textbookTitle,
+								unitId,
+							})),
+						);
+						setOfflineList(true);
+						return;
+					}
+				}
 				if (!cancelled) setError(apiError(err));
 			});
 		// Most recent study sessions (server returns newest first) so each
@@ -268,6 +301,16 @@ export default function Dashboard() {
 							className="h-44 w-full rounded-3xl bg-muted/60 dark:bg-white/[0.05]"
 						/>
 					))}
+				</div>
+			)}
+
+			{offlineList && (
+				<div className="inner-surface mb-6 border border-rust/40 px-4 py-3 text-sm">
+					<p className="font-medium text-rust">Offline — saved chapters</p>
+					<p className="mt-0.5 text-muted-foreground leading-6">
+						This list was loaded from this phone. Starting fresh work needs a
+						connection — anything graded earlier stays saved.
+					</p>
 				</div>
 			)}
 

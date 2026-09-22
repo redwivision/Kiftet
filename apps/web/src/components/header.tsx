@@ -1,6 +1,7 @@
 import { NavLink } from "react-router";
 
 import { BrandMark } from "./brand-mark";
+import { OfflineBanner } from "./offline-banner";
 import { ThemeSwitcher } from "./theme-switcher";
 import UserMenu from "./user-menu";
 
@@ -61,6 +62,7 @@ export default function Header() {
 					<UserMenu />
 				</div>
 			</div>
+			<OfflineBanner />
 		</header>
 	);
 }
