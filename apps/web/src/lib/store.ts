@@ -1,9 +1,13 @@
 // Bet 3 (STRATEGY.md): the offline-first loop's local data layer — a tiny
-// promise IndexedDB store, no dependencies. Three object stores:
+// promise IndexedDB store, no dependencies. Five object stores:
 //
-//   chapters  — the owned-chapter list, keyed by chapter id
-//   checklist — a chapter's concept checklist, keyed by chapter id
-//   outbox    — graded submissions awaiting a connection (see lib/outbox.ts)
+//   chapters   — the owned-chapter list, keyed by chapter id
+//   checklist  — a chapter's concept checklist, keyed by chapter id
+//   outbox     — graded submissions awaiting a connection (see lib/outbox.ts)
+//   lesson     — the last microlesson generated for a session, keyed by
+//                session id (see lib/study-cache.ts)
+//   questions  — the last retest questions generated for a session, keyed by
+//                session id (see lib/study-cache.ts)
 //
 // Everything is SSR-safe: in a server build (or a browser without IndexedDB)
 // every call resolves to a no-op/empty result instead of throwing.
@@ -17,9 +21,20 @@ export type ChecklistRow = {
 	sortOrder: number;
 };
 
+export type CachedQuestion = {
+	question: string;
+	focus: string[];
+};
+
 const DB_NAME = "kiftet-store";
-const DB_VERSION = 1;
-const STORES = ["chapters", "checklist", "outbox"] as const;
+const DB_VERSION = 2;
+const STORES = [
+	"chapters",
+	"checklist",
+	"outbox",
+	"lesson",
+	"questions",
+] as const;
 
 type StoreName = (typeof STORES)[number];
 
@@ -152,5 +167,71 @@ export async function getCachedChecklist(
 		"checklist",
 		"readonly",
 		(s) => s.get(chapterId) as IDBRequest<CachedChecklist | undefined>,
+	).then((v) => v ?? null);
+}
+
+// ── Lesson + retest questions (per session) ─────────────────────
+
+export type CachedLessonRow = {
+	sessionId: string;
+	text: string;
+	/** The gap set the lesson was generated for (used to stay honest about
+	 *  whether a cached lesson still matches the student's current gaps). */
+	missing: string[];
+	misconceptions: string[];
+	cachedAt: number;
+};
+
+export type CachedQuestionsRow = {
+	sessionId: string;
+	questions: CachedQuestion[];
+	cachedAt: number;
+};
+
+export async function cacheLesson(
+	sessionId: string,
+	text: string,
+	missing: string[],
+	misconceptions: string[],
+): Promise<void> {
+	if (!dbAvailable()) return;
+	await putStore(
+		"lesson",
+		{ sessionId, text, missing, misconceptions, cachedAt: Date.now() },
+		sessionId,
+	);
+}
+
+export async function getCachedLesson(
+	sessionId: string,
+): Promise<CachedLessonRow | null> {
+	if (!dbAvailable()) return null;
+	return tx(
+		"lesson",
+		"readonly",
+		(s) => s.get(sessionId) as IDBRequest<CachedLessonRow | undefined>,
+	).then((v) => v ?? null);
+}
+
+export async function cacheQuestions(
+	sessionId: string,
+	questions: CachedQuestion[],
+): Promise<void> {
+	if (!dbAvailable()) return;
+	await putStore(
+		"questions",
+		{ sessionId, questions, cachedAt: Date.now() },
+		sessionId,
+	);
+}
+
+export async function getCachedQuestions(
+	sessionId: string,
+): Promise<CachedQuestionsRow | null> {
+	if (!dbAvailable()) return null;
+	return tx(
+		"questions",
+		"readonly",
+		(s) => s.get(sessionId) as IDBRequest<CachedQuestionsRow | undefined>,
 	).then((v) => v ?? null);
 }

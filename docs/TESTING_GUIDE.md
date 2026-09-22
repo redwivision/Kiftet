@@ -620,3 +620,24 @@ chapter and complete a recall so a checklist is cached.
    `429`/`401` during a flush — the item stays queued for a later pass (`Try
    again` on the banner) instead of being deleted; only permanent failures
    (`404` session, `400` body) drop an item so the queue can't wedge forever.
+
+### Lesson + retest-question cache (the later slice, now in)
+
+8. **Lesson cache.** Online, on the gaps screen tap "Hear the short version"
+   → the lesson renders and the `lesson` store in IndexedDB now has a row
+   keyed by the session id. Go offline, open a fresh gaps view (or drop the
+   connection then re-tap) → the lesson still renders from the phone, with a
+   notice that it was saved earlier, and it covers the same gaps. Never a
+   queued/score state — a lesson is content, not a verdict.
+9. **Honest gap-mismatch copy.** Force a mismatch (recall again online with a
+   *different* gap set, then go offline and open the lesson) → the notice says
+   the gaps have changed since it was saved, not that it covers them.
+10. **Questions cache → offline retest answers.** Online, generate the retest
+    (so questions render and the `questions` store has the row). Go offline
+    and answer a question → it does **not** vanish; it parks in the outbox
+    with its `questionIndex` and the queued panel appears on that question.
+    Reconnect → it grades against the server's persisted `retestQuestions`
+    for that index and the session reloads at the next question.
+11. **No-cache honesty.** In a fresh browser with no stored lesson/questions,
+    going offline and tapping either still shows the normal "Can't reach
+    Kiftet" error with a Retry — never a fake lesson or fabricated question.

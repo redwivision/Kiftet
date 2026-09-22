@@ -7,7 +7,11 @@ import {
 	useRef,
 } from "react";
 
-import { setChapter, setSession, setStudyContext } from "@/components/assistant";
+import {
+	setChapter,
+	setSession,
+	setStudyContext,
+} from "@/components/assistant";
 import { useOnline } from "@/hooks/use-online";
 import { ApiError, api, apiError } from "@/lib/api";
 import { enqueueOutbox, flushOutbox, hasQueuedForSession } from "@/lib/outbox";
@@ -15,6 +19,10 @@ import {
 	type ChecklistRow,
 	cacheChapters,
 	cacheChecklist,
+	cacheLesson,
+	cacheQuestions,
+	getCachedLesson,
+	getCachedQuestions,
 } from "@/lib/store";
 
 export type Phase = "recall" | "gaps" | "lesson" | "retest" | "result";
@@ -138,7 +146,9 @@ function initialState(sessionId: string): StudyState {
 // refresh mid-loop on an older session still restores correctly.
 function attemptGaps(raw: unknown): Gaps {
 	const stringList = (value: unknown): string[] =>
-		Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+		Array.isArray(value)
+			? value.filter((v): v is string => typeof v === "string")
+			: [];
 	if (raw && typeof raw === "object" && !Array.isArray(raw)) {
 		const o = raw as Record<string, unknown>;
 		return {
@@ -148,7 +158,20 @@ function attemptGaps(raw: unknown): Gaps {
 			score: 0,
 		};
 	}
-	return { covered: [], missing: stringList(raw), misconceptions: [], score: 0 };
+	return {
+		covered: [],
+		missing: stringList(raw),
+		misconceptions: [],
+		score: 0,
+	};
+}
+
+// Order-insensitive concept-set comparison, used to decide how honest the copy
+// on a cached lesson can be ("covers the same gaps" vs "gaps have changed").
+function sameConceptSet(a: string[], b: string[]): boolean {
+	return (
+		a.length === b.length && [...a].every((concept) => b.includes(concept))
+	);
 }
 
 function reducer(state: StudyState, action: StudyAction): StudyState {
@@ -347,13 +370,15 @@ export function StudyProvider({
 			return;
 		}
 		const step: Record<Phase, string> = {
-			recall: "listen as the student speaks what they remember about the chapter",
+			recall:
+				"listen as the student speaks what they remember about the chapter",
 			gaps: "look at the gap analysis the student is seeing on screen",
 			lesson: "read back the short lesson that fixes the student's gaps",
 			retest: state.questions.length
-				? `wait for the student to answer retest question ${
-						Math.min(state.currentQuestion + 1, state.questions.length)
-					} of ${state.questions.length}`
+				? `wait for the student to answer retest question ${Math.min(
+						state.currentQuestion + 1,
+						state.questions.length,
+					)} of ${state.questions.length}`
 				: "prepare the retest questions",
 			result: "review the student's before/after score",
 		};
@@ -454,7 +479,40 @@ export function StudyProvider({
 						missing: gaps.missing,
 						misconceptions: gaps.misconceptions,
 					}),
-				}).then((lesson) => dispatch({ type: "LESSON", text: lesson.text })),
+				})
+					.then((lesson) => {
+						// Bet 3: keep the freshly generated lesson on the phone so it
+						// can be re-read (honestly flagged) if the connection drops
+						// later in the loop.
+						void cacheLesson(
+							sessionId,
+							lesson.text,
+							gaps.missing,
+							gaps.misconceptions,
+						);
+						dispatch({ type: "LESSON", text: lesson.text });
+					})
+					.catch(async (err: unknown) => {
+						// Offline: fall back to the lesson saved on this phone — it
+						// covers the same gaps unless the grading changed since. A
+						// cached lesson is content, not a score, so this needs no
+						// reconnect reload.
+						if (err instanceof ApiError && err.status === 0) {
+							const cached = await getCachedLesson(sessionId);
+							if (!cached?.text) throw err;
+							dispatch({ type: "LESSON", text: cached.text });
+							dispatch({
+								type: "NOTICE",
+								message:
+									sameConceptSet(cached.missing, gaps.missing) &&
+									sameConceptSet(cached.misconceptions, gaps.misconceptions)
+										? "This lesson was saved on this phone from earlier — it covers the same gaps."
+										: "This lesson was saved on this phone from an earlier pass — your gaps have changed a little since.",
+							});
+							return;
+						}
+						throw err;
+					}),
 			undefined,
 		);
 	}, [run, sessionId]);
@@ -473,24 +531,44 @@ export function StudyProvider({
 		if (!gaps) return Promise.resolve();
 		return run(
 			() =>
-				api<{ questions: SessionQuestion[] }>(
-					`/sessions/${sessionId}/retest`,
-					{
-						method: "POST",
-						body: JSON.stringify({
-							missing: gaps.missing,
-							misconceptions: gaps.misconceptions,
-						}),
-					},
-				).then(({ questions }) =>
-					dispatch({
-						type: "QUESTIONS",
-						questions: questions.map((q) => ({
+				api<{ questions: SessionQuestion[] }>(`/sessions/${sessionId}/retest`, {
+					method: "POST",
+					body: JSON.stringify({
+						missing: gaps.missing,
+						misconceptions: gaps.misconceptions,
+					}),
+				})
+					.then(({ questions }) => {
+						const normalized = questions.map((q) => ({
 							question: q.question,
 							focus: q.focus,
-						})),
+						}));
+						// Bet 3: keep the questions on the phone — a student who loses
+						// the connection mid-retest can still answer them, and the
+						// answers queue in the outbox to be graded on reconnect.
+						void cacheQuestions(sessionId, normalized);
+						dispatch({ type: "QUESTIONS", questions: normalized });
+					})
+					.catch(async (err: unknown) => {
+						// Offline: reuse the questions saved earlier for this session.
+						// Answering them still grades server-side once the outbox
+						// flushes, so nothing about the verdict is implied locally.
+						if (err instanceof ApiError && err.status === 0) {
+							const cached = await getCachedQuestions(sessionId);
+							if (!cached?.questions.length) throw err;
+							dispatch({
+								type: "QUESTIONS",
+								questions: cached.questions,
+							});
+							dispatch({
+								type: "NOTICE",
+								message:
+									"These questions were saved on this phone from earlier — your answers still get graded once you're back online.",
+							});
+							return;
+						}
+						throw err;
 					}),
-				),
 			undefined,
 		);
 	}, [run, sessionId]);

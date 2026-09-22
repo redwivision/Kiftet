@@ -151,11 +151,14 @@ offline / queued / back-online-syncing; it never shows a score for a queued item
 and the study loop wired for it: a submission that can't reach the server is
 parked in the outbox with a "saved — will be graded when you're back online"
 state, a reconnect flushes the queue then reloads the session onto its graded
-position, and the current chapter's checklist is pre-cached. Pre-caching stays
-conservative (current chapter only, per decision 3); lesson/question caching is
-a later slice. Grading remains online. Client-side IndexedDB can't be exercised
-from a CLI — verified by typecheck + build + SSR smoke plus the manual steps in
-`TESTING_GUIDE.md` §offline.
+position, and the current chapter's checklist is pre-cached. The generated
+**lesson and retest questions** are cached per session too — a student who
+loses the connection mid-loop can still re-read the lesson they were given (honestly
+flagged if it no longer matches their gaps) and answer the saved retest
+questions, which queue in the outbox and grade on reconnect. Pre-caching stays
+conservative (current chapter only, per decision 3). Grading remains online.
+Client-side IndexedDB can't be exercised from a CLI — verified by typecheck +
+build + SSR smoke plus the manual steps in `TESTING_GUIDE.md` §offline.
 
 ---
 
