@@ -48,8 +48,9 @@ each phase in this table names the bet it advances.
 - [ ] **Migration advisory lock** — a rolling deploy runs several instances;
       take a Postgres advisory lock around `migrate()` so two boots can't race
       the schema journal.
-- [ ] **`/health` depth** — have `/health` also ping the DB so platform health
-      checks catch a dead database (not just a listening socket).
+- [x] **`/health` depth** — `/health` also pings the DB (a real `SELECT 1`
+      through the pool, 503 + `database_unreachable` on failure) so platform
+      health checks catch a dead database, not just a listening socket.
 - [ ] **Demo janitor** — demo identity rows now persist (that's intentional);
       add a scheduled job to delete stale demo users + their textbooks so they
       don't accumulate.

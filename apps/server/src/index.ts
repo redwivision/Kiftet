@@ -1,22 +1,23 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { migrateDb } from "@kiftet/db";
+import { ensureDefaultSyllabus } from "@kiftet/db/seed";
 import { createRequestListener } from "@react-router/node";
 import { toNodeHandler } from "better-auth/node";
 import cors from "cors";
+import { sql } from "drizzle-orm";
 import express from "express";
-import { migrateDb } from "@kiftet/db";
-import { ensureDefaultSyllabus } from "@kiftet/db/seed";
+import { requireAuth } from "./auth-middleware";
+import { env } from "./env.server";
 import { logEnvProbe } from "./env-probe";
 import {
 	drainDatabase,
 	errorMiddleware,
 	installProcessGuards,
 } from "./error-handler";
-import { requireAuth } from "./auth-middleware";
-import { env } from "./env.server";
+import demoRouter from "./routes/demo";
 import studyRouter from "./routes/study";
 import syllabusRouter from "./routes/syllabus";
-import demoRouter from "./routes/demo";
 import { auth, getDb } from "./services";
 
 logEnvProbe();
@@ -28,7 +29,9 @@ try {
 	// so browse-by-syllabus works end-to-end. Idempotent — no-op once present.
 	await ensureDefaultSyllabus(getDb());
 } catch (error) {
-	console.error(`[boot] database migration FAILED: ${error instanceof Error ? error.message : String(error)}`);
+	console.error(
+		`[boot] database migration FAILED: ${error instanceof Error ? error.message : String(error)}`,
+	);
 	console.error(error);
 	process.exit(1);
 }
@@ -73,9 +76,21 @@ app.use("/api", (_req, res) => {
 // ── Health ────────────────────────────────────────────────────────────
 // In development "/" returns "OK" so the API-only server is quick to
 // probe. In production "/" belongs to the web app, so monitoring uses
-// `/health` instead.
-app.get("/health", (_req, res) => {
-	res.status(200).send("OK");
+// `/health` instead. The probe does a real `SELECT 1` against the pool so a
+// dead database (a platform pause, a revoked URL, a network break) shows up
+// as a failing health check instead of a 200 while the app is quietly
+// broken. A POOL-less boot already exits before the listener is up, and a
+// pool that can't reach the DB answers 503 within the 5s connect timeout.
+app.get("/health", async (_req, res) => {
+	try {
+		await getDb().execute(sql`select 1`);
+		res.status(200).send("OK");
+	} catch (error) {
+		console.error(
+			`[health] database ping failed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		res.status(503).json({ error: "database_unreachable" });
+	}
 });
 
 if (!IS_PROD) {
@@ -100,9 +115,7 @@ if (IS_PROD) {
 	app.use(express.static(webClientDir));
 
 	const webBuild = await import(pathToFileURL(webServerEntry).href);
-	app.use(
-		createRequestListener({ build: webBuild, mode: env.NODE_ENV }),
-	);
+	app.use(createRequestListener({ build: webBuild, mode: env.NODE_ENV }));
 }
 
 // ── Errors ──────────────────────────────────────────────────────
