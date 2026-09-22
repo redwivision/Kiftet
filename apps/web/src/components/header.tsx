@@ -1,11 +1,14 @@
 import { NavLink } from "react-router";
 
 import { BrandMark } from "./brand-mark";
+import { useLanguage } from "./language-provider";
+import { LanguageSwitcher } from "./language-switcher";
 import { OfflineBanner } from "./offline-banner";
 import { ThemeSwitcher } from "./theme-switcher";
 import UserMenu from "./user-menu";
 
 function Brand() {
+	const { t } = useLanguage();
 	return (
 		<div className="flex items-center gap-3">
 			<BrandMark size={36} className="rounded-full ring-1 ring-gold/40" />
@@ -14,7 +17,7 @@ function Brand() {
 					Kiftet
 				</div>
 				<div className="font-medium text-[0.72rem] text-muted-foreground">
-					Close the gap
+					{t("tagline")}
 				</div>
 			</div>
 		</div>
@@ -22,9 +25,10 @@ function Brand() {
 }
 
 export default function Header() {
+	const { t } = useLanguage();
 	const links = [
-		{ to: "/", label: "Home" },
-		{ to: "/dashboard", label: "Study" },
+		{ to: "/", label: t("nav-home") },
+		{ to: "/dashboard", label: t("nav-study") },
 	] as const;
 
 	return (
@@ -58,6 +62,7 @@ export default function Header() {
 				</div>
 
 				<div className="flex items-center gap-2">
+					<LanguageSwitcher />
 					<ThemeSwitcher />
 					<UserMenu />
 				</div>

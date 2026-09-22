@@ -15,6 +15,7 @@ import {
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { InkSettling } from "@/components/ink-settling";
+import { useLanguage } from "@/components/language-provider";
 import {
 	type Gaps,
 	StudyProvider,
@@ -25,7 +26,12 @@ import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
 import { findBoundaryEnd, leadingText } from "@/lib/intent";
-import { type ChecklistRow, cacheChecklist, getCachedChecklist } from "@/lib/store";
+import type { MessageKey } from "@/lib/messages";
+import {
+	type ChecklistRow,
+	cacheChecklist,
+	getCachedChecklist,
+} from "@/lib/store";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
 
@@ -70,7 +76,14 @@ const ANSWER_CAPTION: Record<string, string> = {
 	error: "Couldn't reach the voice service. Tap to retry, or type below.",
 };
 
-const STEPS = ["Speak", "Diagnose", "Relearn", "Retest"] as const;
+// The four loop pills, keyed by phase so the label can follow the language
+// pref while the ordering (and the "Step a of b" math) stays structural.
+const STEPS = [
+	{ phase: "recall", labelKey: "step-speak" },
+	{ phase: "gaps", labelKey: "step-diagnose" },
+	{ phase: "lesson", labelKey: "step-relearn" },
+	{ phase: "retest", labelKey: "step-retest" },
+] as const;
 
 export default function StudyRoute({ params }: Route.ComponentProps) {
 	const { data: session, isPending } = authClient.useSession();
@@ -101,6 +114,7 @@ function NavigateToLogin() {
 
 function StudyScreen() {
 	const navigate = useNavigate();
+	const { t } = useLanguage();
 	const { state, retryAgain, retryLast, completeSession, clearError } =
 		useStudy();
 
@@ -108,7 +122,7 @@ function StudyScreen() {
 		return (
 			<main className="mx-auto grid w-full max-w-md content-center justify-items-center gap-4 px-6 py-24 text-muted-foreground">
 				<InkSettling />
-				<p className="text-sm">Opening your study session…</p>
+				<p className="text-sm">{t("opening")}</p>
 			</main>
 		);
 	}
@@ -117,13 +131,13 @@ function StudyScreen() {
 		return (
 			<main className="mx-auto grid w-full max-w-md content-center gap-4 px-6 py-24 text-center">
 				<h1 className="font-display font-semibold text-2xl text-foreground tracking-tight">
-					This session isn&apos;t here
+					{t("session-missing")}
 				</h1>
 				<p className="text-muted-foreground text-sm">
-					It may have been created in another browser, or the link has a typo.
+					{t("session-missing-body")}
 				</p>
 				<Button variant="outline" onClick={() => navigate("/dashboard")}>
-					Back to chapters
+					{t("back-to-chapters")}
 				</Button>
 			</main>
 		);
@@ -147,16 +161,18 @@ function StudyScreen() {
 					{state.notice && (
 						<div className="mb-5 flex items-start justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/[0.07] px-4 py-3 text-sm">
 							<p className="text-foreground/90 leading-6">
-								<span className="mr-1.5 font-medium text-gold">Notice:</span>
+								<span className="mr-1.5 font-medium text-gold">
+									{t("notice")}
+								</span>
 								{state.notice}
 							</p>
 							<button
 								type="button"
 								onClick={() => {
-									const t = state.notice;
-									if (t) void speak(t);
+									const text = state.notice;
+									if (text) void speak(text);
 								}}
-								aria-label="Read this notice out loud"
+								aria-label={t("read-notice")}
 								className="mt-0.5 shrink-0 rounded-full border border-gold/30 bg-gold/10 p-1.5 text-gold hover:bg-gold/20"
 							>
 								<Volume2 className="size-4" aria-hidden="true" />
@@ -166,14 +182,16 @@ function StudyScreen() {
 
 					{state.error && (
 						<div className="mb-5 rounded-2xl border border-rust/40 bg-rust/10 px-4 py-3 text-sm">
-							<p className="mb-1 font-medium text-rust">Something went wrong</p>
+							<p className="mb-1 font-medium text-rust">
+								{t("something-went-wrong")}
+							</p>
 							<p className="text-muted-foreground">{state.error}</p>
 							<div className="mt-2 flex gap-2">
 								<Button size="sm" onClick={() => void retryLast()}>
-									Retry
+									{t("retry")}
 								</Button>
 								<Button size="sm" variant="ghost" onClick={clearError}>
-									Dismiss
+									{t("dismiss")}
 								</Button>
 							</div>
 						</div>
@@ -211,10 +229,11 @@ function SessionHeader({
 	title: string;
 	phase: string;
 }) {
+	const { t } = useLanguage();
 	const current =
 		phase === "result"
 			? STEPS.length
-			: STEPS.indexOf(labelOf(phase) as (typeof STEPS)[number]) + 1;
+			: Math.max(1, STEPS.findIndex((s) => s.phase === phase) + 1);
 
 	return (
 		<header className="border-border/60 border-b px-6 pt-6 pb-5 dark:border-white/10">
@@ -231,17 +250,17 @@ function SessionHeader({
 					</div>
 				</div>
 				<p className="font-medium text-[0.72rem] text-muted-foreground">
-					Step {Math.max(1, current)} of {STEPS.length}
+					{t("step-of", { a: current, b: STEPS.length })}
 				</p>
 			</div>
 
-			<ol className="flex items-center gap-1" aria-label="Study loop">
+			<ol className="flex items-center gap-1" aria-label={t("loop-aria")}>
 				{STEPS.map((step, i) => {
 					const done =
 						i + 1 < current || (phase === "result" && i + 1 === current);
 					const active = i + 1 === current && phase !== "result";
 					return (
-						<li key={step} className="flex flex-1 items-center gap-1">
+						<li key={step.phase} className="flex flex-1 items-center gap-1">
 							<span
 								aria-current={active ? "step" : undefined}
 								className={cn(
@@ -268,7 +287,7 @@ function SessionHeader({
 								{/* Label text hides on very narrow screens — the four pills
 								    then fit 320px without wrapping. Names stay in the DOM for
 								    screen readers (aria-label on the list + aria-current here). */}
-								<span className="hidden sm:inline">{step}</span>
+								<span className="hidden sm:inline">{t(step.labelKey)}</span>
 							</span>
 							{i < STEPS.length - 1 && (
 								<span
@@ -291,21 +310,6 @@ function SessionHeader({
 			</ol>
 		</header>
 	);
-}
-
-function labelOf(phase: string): string {
-	switch (phase) {
-		case "recall":
-			return "Speak";
-		case "gaps":
-			return "Diagnose";
-		case "lesson":
-			return "Relearn";
-		case "retest":
-			return "Retest";
-		default:
-			return "Retest";
-	}
 }
 
 // ── Voice capture ───────────────────────────────────────────────
@@ -609,9 +613,10 @@ function PhaseHeading({ title, text }: { title: string; text: string }) {
 // just means the words are safely on the phone and will be graded once a
 // connection comes back. No progress number, no right/wrong, no result.
 function QueuedPanel({ text }: { text: string }) {
+	const { t } = useLanguage();
 	return (
 		<div className="inner-surface border border-rust/30 bg-rust/[0.07] px-4 py-3 text-sm">
-			<p className="mb-1 font-medium text-rust">Saved — waiting on a connection</p>
+			<p className="mb-1 font-medium text-rust">{t("saved-waiting")}</p>
 			<p className="text-foreground/85 leading-6">{text}</p>
 		</div>
 	);
@@ -619,25 +624,20 @@ function QueuedPanel({ text }: { text: string }) {
 
 function RecallPhase() {
 	const { state, submitRecall } = useStudy();
+	const { t } = useLanguage();
 
 	if (state.queued?.kind === "recall") {
 		return (
 			<div className="space-y-6">
-				<PhaseHeading
-					title="Remember it out loud"
-					text="This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
-				/>
-				<QueuedPanel text="Your words are saved on this phone — they'll be graded the moment you're back online. Nothing here is final until then." />
+				<PhaseHeading title={t("recall-title")} text={t("recall-text")} />
+				<QueuedPanel text={t("queued-recall")} />
 			</div>
 		);
 	}
 
 	return (
 		<div className="space-y-6">
-			<PhaseHeading
-				title="Remember it out loud"
-				text="This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold."
-			/>
+			<PhaseHeading title={t("recall-title")} text={t("recall-text")} />
 			<VoiceCapture
 				submit={(text) => submitRecall(text)}
 				textDefault={!hasVoxideKey()}
@@ -649,6 +649,7 @@ function RecallPhase() {
 
 function GapsPhase() {
 	const { state, fetchLesson, startRetest } = useStudy();
+	const { t } = useLanguage();
 	const gaps = state.gaps;
 	const [weights, setWeights] = useState<Record<string, number>>({});
 
@@ -690,10 +691,7 @@ function GapsPhase() {
 
 	return (
 		<div className="space-y-6">
-			<PhaseHeading
-				title="Your starting picture"
-				text="The solid ideas stay. The open ones are what the short version will fix. Bars that sit taller matter more."
-			/>
+			<PhaseHeading title={t("gaps-title")} text={t("gaps-text")} />
 			<CoverageView
 				covered={gaps.covered}
 				missing={gaps.missing}
@@ -706,16 +704,14 @@ function GapsPhase() {
 					disabled={state.busy}
 					onClick={() => void fetchLesson()}
 				>
-					{state.busy
-						? "Preparing the short version…"
-						: "Hear the short version"}
+					{state.busy ? t("preparing") : t("hear-short-version")}
 				</Button>
 				<button
 					type="button"
 					className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
 					onClick={() => void startRetest()}
 				>
-					Skip the lesson, take the test
+					{t("skip-lesson")}
 				</button>
 			</div>
 		</div>
@@ -724,6 +720,7 @@ function GapsPhase() {
 
 function LessonPhase() {
 	const { state, startRetest, viewGaps } = useStudy();
+	const { t } = useLanguage();
 	const narratedRef = useRef<string | null>(null);
 	// A single acknowledged "something is being read aloud" state for both
 	// engines: the agent's natural voice and the browser-TTS fallback.
@@ -802,10 +799,7 @@ function LessonPhase() {
 
 	return (
 		<div className="space-y-6">
-			<PhaseHeading
-				title="The short version"
-				text="Just what you missed — nothing more. Read it now, or hear it spoken back to you."
-			/>
+			<PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
 			<div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
 				{sentences.length > 1
 					? sentences.map((sentence, i) => (
@@ -827,7 +821,7 @@ function LessonPhase() {
 					{reading ? (
 						<Button variant="outline" size="sm" onClick={stopReading}>
 							<Square className="size-3.5" aria-hidden="true" />
-							Stop reading
+							{t("stop-reading")}
 						</Button>
 					) : (
 						<Button
@@ -836,7 +830,7 @@ function LessonPhase() {
 							onClick={() => void narrate(state.lessonText ?? "")}
 						>
 							<Volume2 className="size-4" aria-hidden="true" />
-							Read it to me
+							{t("read-it-to-me")}
 						</Button>
 					)}
 				</div>
@@ -848,14 +842,14 @@ function LessonPhase() {
 					disabled={state.busy}
 					onClick={() => void startRetest()}
 				>
-					I&apos;m ready to be tested
+					{t("ready-to-be-tested")}
 				</Button>
 				<button
 					type="button"
 					className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
 					onClick={viewGaps}
 				>
-					Back to my gaps
+					{t("back-to-gaps")}
 				</button>
 			</div>
 		</div>
@@ -864,25 +858,25 @@ function LessonPhase() {
 
 function RetestPhase() {
 	const { state, submitAnswer, fetchResult } = useStudy();
+	const { t } = useLanguage();
 	const { questions, currentQuestion, answered } = state;
 	const done = currentQuestion >= questions.length;
 
 	return (
 		<div className="space-y-6">
 			<PhaseHeading
-				title="A short retest"
-				text={
-					done
-						? "You made it through the set. See whether the short version closed the gaps."
-						: "These questions come after the lesson, so they test what stuck — not what you just heard."
-				}
+				title={t("retest-title")}
+				text={done ? t("retest-done-text") : t("retest-text")}
 			/>
 
 			<div className="flex items-center justify-between gap-3">
 				<p className="k-label">
 					{done
-						? "All answered"
-						: `Question ${currentQuestion + 1} of ${questions.length}`}
+						? t("all-answered")
+						: t("question-of", {
+								a: currentQuestion + 1,
+								b: questions.length,
+							})}
 				</p>
 				<div className="flex items-center gap-1.5" aria-hidden="true">
 					{questions.map((q, i) => {
@@ -914,7 +908,7 @@ function RetestPhase() {
 					<div className="mt-5 border-border/60 border-t pt-5 dark:border-white/10">
 						{state.queued?.kind === "answer" &&
 						state.queued.questionIndex === currentQuestion ? (
-							<QueuedPanel text="Your answer is saved on this phone — it will be graded the moment you're back online. Nothing here is final until then." />
+							<QueuedPanel text={t("queued-answer")} />
 						) : (
 							<VoiceCapture
 								submit={(text) => submitAnswer(text)}
@@ -954,22 +948,23 @@ function RetestPhase() {
 									</span>
 									<div className="min-w-0 flex-1">
 										<p className="font-medium text-[0.72rem] text-muted-foreground">
-											Question {i + 1} · {a.correct ? "right" : "still open"}
+											{t("question-i", { n: i + 1 })} ·{" "}
+											{a.correct ? t("right") : t("still-open")}
 										</p>
 										<p className="mt-0.5 text-foreground/85 text-sm leading-6">
 											{a.question}
 										</p>
 										<p className="mt-2 text-foreground/70 text-xs leading-5">
 											<span className="font-medium text-muted-foreground">
-												You said:{" "}
+												{t("you-said")}{" "}
 											</span>
-											{a.answer || "— recorded by voice —"}
+											{a.answer || t("recorded-by-voice")}
 										</p>
 										{(a.gaps.missing.length > 0 ||
 											a.gaps.misconceptions.length > 0) && (
 											<p className="mt-2 flex flex-wrap items-center gap-1.5">
 												<span className="font-medium text-[0.68rem] text-muted-foreground">
-													Still open
+													{t("still-open")}
 												</span>
 												{[...a.gaps.missing, ...a.gaps.misconceptions].map(
 													(concept, gi) => (
@@ -986,7 +981,7 @@ function RetestPhase() {
 										{a.gaps.covered.length > 0 && (
 											<p className="mt-2 flex flex-wrap items-center gap-1.5">
 												<span className="font-medium text-[0.68rem] text-muted-foreground">
-													Landed
+													{t("landed")}
 												</span>
 												{a.gaps.covered.map((concept, gi) => (
 													<span
@@ -1008,7 +1003,7 @@ function RetestPhase() {
 						disabled={state.busy}
 						onClick={() => void fetchResult()}
 					>
-						{state.busy ? "Grading…" : "See your result"}
+						{state.busy ? t("grading") : t("see-result")}
 					</Button>
 				</div>
 			)}
@@ -1024,6 +1019,7 @@ function ResultPhase({
 	onTryAgain: () => void;
 }) {
 	const { state, startRetest, goLesson } = useStudy();
+	const { t } = useLanguage();
 	const result = state.result;
 	const busy = state.busy;
 
@@ -1041,16 +1037,16 @@ function ResultPhase({
 		return (
 			<ResultPanel
 				tone="sage"
-				headline="Nothing came up missing."
-				body="Every concept this chapter is checked against came out solid — cold, no notes. That's exactly the outcome this loop is built for."
-				metric={durationMetric(result)}
+				headline={t("result-none-title")}
+				body={t("result-none-body")}
+				metric={durationMetric(result, t)}
 				actions={
 					<Button
 						className="w-full justify-center"
 						disabled={busy}
 						onClick={() => void onDone()}
 					>
-						Done for now
+						{t("done-for-now")}
 					</Button>
 				}
 				before={result.before ?? 0}
@@ -1062,16 +1058,16 @@ function ResultPhase({
 		return (
 			<ResultPanel
 				tone="gold"
-				headline="Gap closed."
-				body="The short version filled what was missing, and the retest shows it — the score climbed. That's the whole point of Kiftet."
-				metric={durationMetric(result)}
+				headline={t("result-gap-title")}
+				body={t("result-gap-body")}
+				metric={durationMetric(result, t)}
 				actions={
 					<Button
 						className="w-full justify-center"
 						disabled={busy}
 						onClick={() => void onDone()}
 					>
-						Done for now
+						{t("done-for-now")}
 					</Button>
 				}
 				before={result.before ?? 0}
@@ -1085,8 +1081,8 @@ function ResultPhase({
 		<div className="space-y-6">
 			<ResultPanel
 				tone="rust"
-				headline="A gap is still open."
-				body="Not everything sticks on the first pass — now you know which ideas are still open, so the next pass is faster than the first."
+				headline={t("result-open-title")}
+				body={t("result-open-body")}
 				actions={
 					<div className="space-y-3">
 						<Button
@@ -1094,7 +1090,7 @@ function ResultPhase({
 							disabled={busy}
 							onClick={() => void startRetest()}
 						>
-							Retest the gaps
+							{t("retest-the-gaps")}
 						</Button>
 						<Button
 							className="w-full justify-center"
@@ -1102,14 +1098,14 @@ function ResultPhase({
 							disabled={busy}
 							onClick={goLesson}
 						>
-							Relearn the short version
+							{t("relearn-short-version")}
 						</Button>
 						<button
 							type="button"
 							className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
 							onClick={onTryAgain}
 						>
-							Start over with a cold recall
+							{t("start-over")}
 						</button>
 						{state.attempts >= 2 && (
 							<button
@@ -1117,7 +1113,7 @@ function ResultPhase({
 								className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
 								onClick={() => void onDone()}
 							>
-								Come back to this later
+								{t("come-back-later")}
 							</button>
 						)}
 					</div>
@@ -1133,16 +1129,19 @@ function ResultPhase({
 
 function durationMetric(
 	result: { durationMs?: number | null } | null,
+	t: (key: MessageKey, params?: Record<string, string | number>) => string,
 ): { label: string; value: string }[] {
 	if (!result?.durationMs) return [];
 	const mins = Math.round(result.durationMs / 60000);
 	return [
 		{
-			label: "Session time",
+			label: t("session-time"),
 			value:
 				mins < 1
-					? "under a minute"
-					: `${mins} ${mins === 1 ? "minute" : "minutes"}`,
+					? t("under-a-minute")
+					: mins === 1
+						? t("minute", { n: mins })
+						: t("minutes", { n: mins }),
 		},
 	];
 }
@@ -1152,6 +1151,7 @@ function durationMetric(
 // bare delta hides. Every open item maps back to the gaps view the loop just
 // ran.
 function StillOpen({ gaps }: { gaps: Gaps | null }) {
+	const { t } = useLanguage();
 	if (!gaps) return null;
 	const items = [...gaps.missing, ...gaps.misconceptions];
 	if (!items.length) return null;
@@ -1159,7 +1159,7 @@ function StillOpen({ gaps }: { gaps: Gaps | null }) {
 		<div className="inner-surface border-rust/25 p-5 dark:border-rust/30">
 			<p className="k-label mb-3 flex items-center gap-2 text-rust">
 				<CircleAlert className="size-3.5" aria-hidden="true" />
-				Still open for exam day
+				{t("still-open-exam")}
 			</p>
 			<ul className="space-y-2">
 				{items.map((concept) => (

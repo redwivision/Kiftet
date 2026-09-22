@@ -11,6 +11,7 @@ import {
 import "./index.css";
 import type { Route } from "./+types/root";
 import Header from "./components/header";
+import { LanguageProvider } from "./components/language-provider";
 import { ThemeProvider } from "./components/theme-provider";
 
 export const links: Route.LinksFunction = () => [
@@ -109,10 +110,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				    dark status bar instead of the page title. */}
 				<meta name="mobile-web-app-capable" content="yes" />
 				<meta name="apple-mobile-web-app-capable" content="yes" />
-				<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+				<meta
+					name="apple-mobile-web-app-status-bar-style"
+					content="black-translucent"
+				/>
 				<script
 					dangerouslySetInnerHTML={{
 						__html: `(function(){try{var t=localStorage.getItem("kiftet-theme")||"dark";var c=["dark","ember","jade","violet","ochre","midnight","meadow","copper","light"];if(c.indexOf(t)<0)t="dark";document.documentElement.className=t;}catch(e){document.documentElement.className="dark"}})()`,
+					}}
+				/>
+				<script
+					dangerouslySetInnerHTML={{
+						// Bet 4: the document language follows the saved pref before
+						// first paint (like the theme) so Amharic pages announce
+						// correctly and need no flash of the English <html lang>.
+						__html: `(function(){try{var l=localStorage.getItem("kiftet-language");document.documentElement.lang=l==="am"?"am":"en";}catch(e){document.documentElement.lang="en";}})()`,
 					}}
 				/>
 				<Meta />
@@ -140,15 +152,27 @@ export default function App() {
 			defaultTheme="dark"
 			disableTransitionOnChange
 			storageKey="kiftet-theme"
-			themes={["dark", "ember", "jade", "violet", "ochre", "midnight", "meadow", "copper", "light"]}
+			themes={[
+				"dark",
+				"ember",
+				"jade",
+				"violet",
+				"ochre",
+				"midnight",
+				"meadow",
+				"copper",
+				"light",
+			]}
 		>
-			<div className="flex min-h-dvh flex-col">
-				<Header />
-				<div id="main-content" className="flex-1" tabIndex={-1}>
-					<Outlet />
+			<LanguageProvider>
+				<div className="flex min-h-dvh flex-col">
+					<Header />
+					<div id="main-content" className="flex-1" tabIndex={-1}>
+						<Outlet />
+					</div>
 				</div>
-			</div>
-			<Toaster richColors />
+				<Toaster richColors />
+			</LanguageProvider>
 		</ThemeProvider>
 	);
 }

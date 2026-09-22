@@ -641,3 +641,61 @@ chapter and complete a recall so a checklist is cached.
 11. **No-cache honesty.** In a fresh browser with no stored lesson/questions,
     going offline and tapping either still shows the normal "Can't reach
     Kiftet" error with a Retry — never a fake lesson or fabricated question.
+
+---
+
+## Both-script loop chrome (bet 4 / phase 10, slice A)
+
+This slice ships the **language system** (not full Amharic coverage): the pref,
+the toggle, and the study loop's load-bearing chrome in both scripts. Two
+verification tiers again — compile gates prove the corpus/provider never breaks
+a server render, manual steps prove both scripts actually render and flow.
+
+### How I tested (what the gates catch)
+
+- `bun run --cwd apps/web check-types` — `messages.ts` is typed so an English
+  key **must** have an Amharic value (`am: Record<MessageKey, string>`), and
+  every `t()` call is a known key.
+- `bun run build` — the SSR build renders with the provider (client-only
+  storage reads fall back to `en` on the server, so there's no hydration
+  break).
+- Biome lint on the new files (`messages.ts`, `language-provider.tsx`,
+  `language-switcher.tsx`, `header.tsx`, `offline-banner.tsx`, root + study
+  route edits). Remaining baseline warnings are pre-existing (`initialState`
+  unused param, the unused `q` in the retest progress dots).
+
+### How you can test (manual, in the browser)
+
+Start both dev servers, open http://localhost:5173, and open a chapter so you
+have the study loop in front of you.
+
+1. **The toggle exists and persists.** In the header, the language button (the
+   globe, next to the palette) opens English / አማርኛ. Pick አማርኛ → every
+   wired surface switches instantly, `localStorage["kiftet-language"]` is
+   `"am"`, and the `<html lang="am">` attribute updates (view page source /
+   el.classList in DevTools). Reload → the app comes back in Amharic (no
+   English flash — the pre-hydration `<script>` set `lang` before paint).
+2. **Ethiopic type renders, not a fallback.** In Amharic, the step pills
+   (ተናገር / መርምር / እንደገና ተማር / ድጋሚ ፈተና) and headings render in **Noto
+   Sans Ethiopic**: DevTools → Elements → inspect the text, confirm
+   `font-family` resolves to a stack containing `Noto Sans Ethiopic`, and the
+   Network tab loaded an Ethiopic WOFF2 (the Google sheet's `unicode-range`
+   fetches it only because Amharic glyphs are on screen now). If glyphs showed
+   in a system fallback, that's a failed gate — the strategy requires real
+   Ethiopic coverage, not assumed.
+3. **Every loop surface flips.** Go through the loop in Amharic: recall
+   heading + "Step 1 of 4", gaps heading + "Hear the short version"
+   (አጭሩ ማብራሪያ ስማ) + skip link, the short version + "Read it to me"
+   (አንብብልኝ), retest counter "Question 1 of 3" + "See your result"
+   (ውጤትህን ተመልከት), and every result panel wording (ክፍተቱ ተዘግቷል። etc.).
+   Nothing on those screens stays English; the question/lesson *content* stays
+   whatever the AI generated (English for now — generated Amharic is the next
+   slice and out of scope here).
+4. **The offline banner follows the pref.** Go offline with a saved answer →
+   in Amharic the banner reads the ግንኙነት የለም… copy with "እንደገና ሞክር" on the
+   button. Reconnect → the "እንደገና ተያይዟል…" flush copy. Never an English
+   string, never a score.
+5. **Amharic never invents hard-coded English beside it.** Switch back to
+   English → every surface reads exactly as before this slice (same wording,
+   same layout); the four pills still fit (labels hide on very narrow screens
+   exactly as before).

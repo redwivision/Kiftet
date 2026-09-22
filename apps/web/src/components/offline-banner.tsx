@@ -1,6 +1,7 @@
 import { Button } from "@kiftet/ui/components/button";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { useOnline } from "@/hooks/use-online";
 import { flushOutbox, subscribeOutbox } from "@/lib/outbox";
 
@@ -16,10 +17,8 @@ import { flushOutbox, subscribeOutbox } from "@/lib/outbox";
 // It deliberately NEVER shows a score: a queued submission is not graded yet.
 // The banner disappears on its own when the last item flushes.
 
-const OFFLINE_COPY =
-	"No connection — the chapters and checklists you saved are still here, but grading needs to reach Kiftet.";
-
 export function OfflineBanner() {
+	const { t } = useLanguage();
 	const online = useOnline();
 	const [pending, setPending] = useState(0);
 	const [syncing, setSyncing] = useState(false);
@@ -66,8 +65,20 @@ export function OfflineBanner() {
 
 	if (online && pending === 0) return null;
 
-	const queuedText =
-		pending === 1 ? "1 saved answer" : `${pending} saved answers`;
+	const copy =
+		pending === 1
+			? online
+				? syncing
+					? t("back-grading", { n: 1 })
+					: t("back-applied-one")
+				: t("offline-queued-one")
+			: online
+				? syncing
+					? t("back-grading", { n: pending })
+					: t("back-applied-many", { n: pending })
+				: pending > 0
+					? t("offline-queued-many", { n: pending })
+					: t("cl-offline");
 
 	return (
 		<div
@@ -91,15 +102,7 @@ export function OfflineBanner() {
 							aria-hidden="true"
 						/>
 					)}
-					<p className="text-foreground/85 text-xs leading-5">
-						{online
-							? syncing
-								? `Back online — grading ${queuedText}…`
-								: `Back online — ${queuedText} ${pending === 1 ? "is" : "are"} having their results applied.`
-							: pending > 0
-								? `No connection — ${queuedText} ${pending === 1 ? "is" : "are"} saved and will be graded when you're back online.`
-								: OFFLINE_COPY}
-					</p>
+					<p className="text-foreground/85 text-xs leading-5">{copy}</p>
 				</div>
 				{!online && pending > 0 && (
 					<Button
@@ -109,7 +112,7 @@ export function OfflineBanner() {
 						onClick={() => void retry()}
 						disabled={syncing}
 					>
-						Try again
+						{t("try-again")}
 					</Button>
 				)}
 			</div>
