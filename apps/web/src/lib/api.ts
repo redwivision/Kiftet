@@ -10,8 +10,9 @@ const REQUEST_TIMEOUT_MS = 30_000;
 function resolveServerRoot(): string {
 	if (typeof window === "undefined") return API || "/api";
 	const envRoot = API.replace(/\/api\/?$/, "").replace(/\/+$/, "");
-	const isLocalOverride =
-		/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(envRoot);
+	const isLocalOverride = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
+		envRoot,
+	);
 	const onLocalHost =
 		window.location.hostname === "localhost" ||
 		window.location.hostname === "127.0.0.1";
@@ -23,6 +24,10 @@ function resolveServerRoot(): string {
 
 const serverRoot = resolveServerRoot();
 export const apiUrl = (path: string) => `${serverRoot}/api${path}`;
+// Platform-health probe target for connectivity. `/health` (not `/healthz`)
+// does a real `SELECT 1` on the server, so "offline" genuinely means "Kiftet's
+// grading platform can't be reached" — not just "the browser lost its signal".
+export const healthUrl = () => `${serverRoot}/health`;
 
 // Carries the HTTP status (0 = never reached the server) so callers can tell a
 // real 404 ("this session isn't here") apart from a transient network failure
@@ -65,7 +70,11 @@ function describeNetworkError(error: unknown): string {
 		return "That took too long. Check your connection and try again.";
 	}
 	const message = error instanceof Error ? error.message : String(error);
-	if (/failed to fetch|networkerror|load failed|network request failed/i.test(message)) {
+	if (
+		/failed to fetch|networkerror|load failed|network request failed/i.test(
+			message,
+		)
+	) {
 		return "Can't reach Kiftet. Check your connection and try again.";
 	}
 	return message || "Something went wrong on our side. Please try again.";
