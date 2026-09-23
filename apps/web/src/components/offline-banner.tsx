@@ -11,8 +11,8 @@ import { flushOutbox, subscribeOutbox } from "@/lib/outbox";
 //  - offline, nothing queued   → study data is local; grading needs a signal
 //  - offline, items queued      → "N saved — will be graded when you're online"
 //  - online, items queued       → "back online — grading N saved…", auto-flush
-//                                 (plus a manual Retry, for a connection that
-//                                 browser events under-report)
+//                                 (plus a manual Retry, for a connection the
+//                                 probe cadence hasn't caught yet)
 //
 // It deliberately NEVER shows a score: a queued submission is not graded yet.
 // The banner disappears on its own when the last item flushes.
