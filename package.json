@@ -33,7 +33,7 @@
     "check-types": "turbo run check-types",
     "dev:web": "turbo run dev -F web --",
     "dev:server": "turbo run dev -F server --",
-    "serve": "node apps/server/dist/index.mjs",
+    "serve": "NODE_ENV=production node apps/server/dist/index.mjs",
     "start:prod": "bun run build && bun run serve",
     "start": "bun run serve",
     "db:push": "turbo run db:push -F @kiftet/db --",
