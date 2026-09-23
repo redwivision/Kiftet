@@ -39,6 +39,31 @@ try {
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";
 
+// Request log: every hit (method, path, status, ms) goes to stderr so the
+// platform's health-check probe is visible in the boot log — if the platform
+// pings a path and gets anything but 200, the log shows exactly which one and
+// the code that answered it. This is how we see what the paas is probing.
+// Mounted first so it also wraps the health handlers below.
+app.use((req, res, next) => {
+	const start = performance.now();
+	res.on("finish", () => {
+		console.error(
+			`[http] ${req.method} ${req.originalUrl} ${res.statusCode} ${Math.round(performance.now() - start)}ms`,
+		);
+	});
+	next();
+});
+
+// Health-check tolerance: platforms ping different readiness paths, and a 404
+// on an unknown probe path reads as a failed check even when the app is fine.
+// Answer 200 OK on the common ones (and "/" below), plus the deeper /health
+// DB probe.
+for (const path of ["/healthz", "/ready", "/live", "/ping", "/status"]) {
+	app.get(path, (_req, res) => {
+		res.status(200).send("OK");
+	});
+}
+
 // Normalize the configured origin(s): trim whitespace, strip trailing slashes,
 // and accept a comma-separated list. Browsers send a slash-less origin, so a
 // config value like "https://app.example.com/" would otherwise echo a header
