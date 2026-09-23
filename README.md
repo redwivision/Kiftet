@@ -48,7 +48,7 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 - **Resume anywhere.** The study loop persists across sessions and devices; sign out and back in and you're exactly where you left off.
 - **Calm, inked motion.** Loading is ink settling into place; the idle voice ring breathes; "Gap closed." has the mark draw itself in and settle to sage. Plain CSS keyframes only — no animation library, nothing gamified, and `prefers-reduced-motion` stills it all.
 - **Feedback colours that mean the same everywhere.** Sage `#5C7A5E` = solid/covered, Rust `#B54A2C` = gap/needs work (including what you stated wrong) — the same two fixed colours in diagnosis and retest, every room.
-- **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and network-first navigation that self-heals — built for unreliable connections.
+- **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and work queued on the phone when the signal drops. Connectivity is judged **against our own platform, never the browser's `navigator.onLine`** — the app probes the server's `/health` (a real Postgres ping), so a "No connection" message is always literally true, and the signed work re-flushes the moment the platform answers again.
 - **Your own textbook, on the device.** Upload your book (PDF up to 15 MB or pasted text); the browser reads the book's table of contents and slices it into chunks — file bytes never leave the phone — and each chunk is ingested into the study flow one at a time, weak-wifi friendly.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
 - **Guardrails built in.** AI rate limiting, idempotent submissions, per-user AI budgets, typed environment variables with dev-safe placeholders.
@@ -121,7 +121,7 @@ built web app (SSR + static), so there is a single origin and a single host.
 1. **Database (Neon):** grab `DATABASE_URL` (pooled, `-pooler`) and
    `DATABASE_URL_DIRECT` from the Neon console.
 2. **Host (EthioDeploy or any Bun/Node PaaS):** build `bun install && bun run build`, start `bun run start`, expose `PORT`.
-3. **Env vars:** `NODE_ENV`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGIN` (both the site origin in same-origin mode), `DATABASE_URL`, `DATABASE_URL_DIRECT`, `GEMINI_API_KEY`.
+3. **Env vars:** `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGIN` (must include the public site origin), `DATABASE_URL` (pooled, `-pooler`), `DATABASE_URL_DIRECT` (unpooled), `GEMINI_API_KEY`. `NODE_ENV` is optional — `serve.js` forces production mode at boot.
 4. Migrations apply automatically at boot over the direct connection — redeploys are safe and stateless.
 
 Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.md`](RUNBOOK.md)**.
@@ -137,6 +137,39 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Status
 
-Built from scratch from the official **STARK Hackathon 2026** kickoff. Design and research trail is documented in the repo; roadmap and phase status live in [`docs/howItWorks/roadmap.md`](docs/howItWorks/roadmap.md), and the five product bets that steer it live in [`STRATEGY.md`](docs/STRATEGY.md) (EHEEE syllabus anchoring, the national misconception map, the offline-first study loop, Ethiopian texture, the doc trail). Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com). **Phase 7 – study by syllabus** shipped its syllabus-anchoring slice (browse units, map chapters, unit coverage; the Biology 12 seed now holds the **verified** six-unit list from the MoE New-Curriculum textbook with provenance in `sourceNote`) and **Phase 8 – the misconception map** did the same (hit-recording on grading, aggregate reads behind a k-anonymity floor of 5, dashboard panel). **Phase 10 – Amharic everywhere (bet 4)** is done: both-script chrome, generated content following the language pref, and Ethiopic type verified. **Phase 6 – bring your own textbook** remains next up for the ingest gate. Demo quotas (5 AI calls/min, 3 textbooks/day) are live.
+**What Kiftet is actually building:** a spoken study *diagnosis* for Ethiopian
+students — not another question bank. A student picks a chapter and explains
+out loud what they remember; Kiftet compares that explanation against the
+chapter's concept checklist (anchored to the national syllabus), surfaces
+exactly which concepts didn't stick, teaches a short lesson that covers *only*
+those gaps, then retests with differently-worded questions and shows a
+before/after picture. It is deliberately sparse, calm, night-study-friendly,
+and built to work on a school phone's connection: when Kiftet's platform is
+unreachable, work queues on the device and is graded when the platform answers
+again.
+
+What is shipped and live right now:
+
+- **Live at [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com)** — one
+  production process serves the web app and the API from a single origin;
+  `serve.js` boots it in production mode so the built site is actually served.
+- **Phase 10 — Amharic everywhere — done.** Every user-facing string ships in
+  both scripts (TypeScript enforces that no key is left untranslated), and
+  generated lessons, retests and misconception summaries follow the student's
+  language preference.
+- **Phase 7 — study by syllabus — done.** Browse the Biology-12 unit list
+  compiled and verified against the MoE new-curriculum textbook, map chapters,
+  and see per-unit coverage.
+- **Phase 8 — the misconception map — done.** Wrong turns are recorded on
+  grading and surfaced in the aggregate (never individual, k-anonymity floor)
+  on the dashboard.
+- **Phase 6 — bring your own textbook — in preview.** The on-device PDF/text
+  chapter split works end-to-end on the phone (file bytes never leave the
+  device); the live import gate into the study flow is the next step.
+- **Connectivity is platform-measured.** Offline detection probes the server's
+  `/health`, never `navigator.onLine`; demo quotas (5 AI calls/min,
+  3 textbooks/day) are live.
+
+Full roadmap and phase tracking: [`docs/howItWorks/roadmap.md`](docs/howItWorks/roadmap.md); the five product bets that steer it: [`STRATEGY.md`](docs/STRATEGY.md). Built from scratch for the **STARK Hackathon 2026** kickoff.
 
 > Kiftet — *close the gap*. 🇪🇹
