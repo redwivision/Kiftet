@@ -222,7 +222,7 @@ export default function Dashboard() {
 					</p>
 					<Link
 						to="/login"
-						className="font-medium text-gold text-xs underline underline-offset-4 hover:text-gold-soft"
+						className="font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
 					>
 						{t("create-free-account")}
 					</Link>
@@ -280,7 +280,7 @@ export default function Dashboard() {
 								<span className="text-rust">{row.count}×</span>{" "}
 								<span className="text-foreground/90">{row.conceptText}</span>
 								{row.unitTitle && (
-									<span className="ml-1 text-[0.72rem] text-muted-foreground">
+									<span className="ml-1 text-[0.78rem] text-muted-foreground">
 										{t("unit-of", { n: row.unitNumber ?? "-" })}
 									</span>
 								)}
@@ -384,18 +384,18 @@ function ChapterCard({
 			type="button"
 			onClick={onStart}
 			disabled={starting}
-			className="group w-full rounded-3xl border border-border/70 bg-card/70 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(242,239,233,0.18)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 dark:bg-[#14151a]/80"
+			className="group w-full rounded-3xl border border-border/70 bg-panel/80 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(242,239,233,0.18)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10"
 		>
 			<div className="flex items-start justify-between gap-3">
 				<div className="space-y-1.5">
-					<p className="font-medium text-[0.72rem] text-gold">
+					<p className="font-medium text-[0.78rem] text-gold">
 						{chapter.subject}
 					</p>
 					<h2 className="font-display font-semibold text-foreground text-xl tracking-tight sm:text-2xl">
 						{chapter.title}
 					</h2>
 				</div>
-				<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
+				<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
 					{starting ? t("opening-ellipsis") : t("start-review")}
 				</span>
 			</div>
@@ -429,11 +429,11 @@ function ChapterHistory({ last }: { last?: SessionHistory }) {
 
 	if (last.status === "in_progress") {
 		return (
-			<div className="flex items-center justify-between px-1 text-[0.72rem] text-muted-foreground">
+			<div className="flex items-center justify-between px-1 text-[0.78rem] text-muted-foreground">
 				<span>{t("session-open")}</span>
 				<Link
 					to={`/study/${last.id}`}
-					className="font-medium text-gold underline underline-offset-4 hover:text-gold-soft"
+					className="font-medium text-gold underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
 				>
 					{t("resume")}
 				</Link>
@@ -453,7 +453,7 @@ function ChapterHistory({ last }: { last?: SessionHistory }) {
 			: t("completed");
 
 	return (
-		<p className="px-1 text-[0.72rem] text-muted-foreground">
+		<p className="px-1 text-[0.78rem] text-muted-foreground">
 			{t("last-session", { delta: deltaText })}
 			{duration ? ` · ${duration}` : ""}
 		</p>

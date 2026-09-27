@@ -42,7 +42,7 @@ export default function VoiceTest() {
 				<p className="text-muted-foreground text-sm">{t("vt-nothing-text")}</p>
 				<Link
 					to="/dashboard"
-					className="font-medium text-gold text-sm underline underline-offset-4 hover:text-gold-soft"
+					className="font-medium text-gold text-sm underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
 				>
 					{t("go-to-chapters")}
 				</Link>

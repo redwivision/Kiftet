@@ -89,6 +89,11 @@ and auth (user, session, account, verification). See
 
 Prereqs: **Node ≥ 22.22** (`.nvmrc` pins 22.23.2) and **Bun ≥ 1.4.2**.
 
+> **The Node floor is not advisory.** On an older Node, `react-router` prints
+> "Oops, Node vX detected" and `turbo` *skips* the `web` typecheck rather than
+> failing — so `bun run check-types` reports success while the entire web app went
+> unverified. If you see that warning, upgrade Node before trusting a green run.
+
 ```bash
 bun install                # installs everything + regenerates typed envs
 bun run dev:server         # terminal 1 — API on http://localhost:3000

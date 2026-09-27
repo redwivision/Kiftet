@@ -386,6 +386,80 @@ export const en = {
 	"demo-try": "Try a live demo",
 	recalled: "recalled",
 	"see-your-chapter": "See it on your own chapter",
+
+	// ── Coverage view (the flagship gap visualization) ───────────
+	"cov-checked": "of the concepts we checked came out solid",
+	"cov-solid": "solid",
+	"cov-gap": "gap",
+	"cov-wrong": "stated wrong",
+	"cov-aria": "{covered} of {total} concepts covered, {missing} still gaps",
+	"cov-aria-wrong": ", {n} stated incorrectly",
+	"cov-importance": "importance {n}/5",
+	"cov-already-solid": "Already solid",
+	"cov-needs-work": "Needs work",
+	"cov-none-yet": "Nothing landed yet — that's the starting point.",
+	"cov-all-solid": "Nothing. Every concept we checked is solid.",
+	"cov-wrong-title": "Watch out — stated wrong",
+	"cov-wrong-text":
+		"These aren't ideas you skipped; you said them the wrong way. The short lesson will fix them first.",
+
+	// ── Chrome + failure states ─────────────────────────────────
+	"nav-primary": "Main",
+	"skip-to-content": "Skip to content",
+	"go-home": "Back to the start",
+	"err-404-title": "This page isn't here.",
+	"err-404-body":
+		"The link may be old, or the page may have moved. Nothing you saved is gone.",
+	"err-500-title": "Something broke on our side.",
+	"err-500-body":
+		"This isn't your fault, and nothing you saved is lost. Try again, or head back to the study room.",
+	"err-offline-title": "No connection.",
+	"err-offline-body":
+		"Kiftet couldn't reach the network. Anything saved on this phone is still here.",
+	"technical-details": "Technical details",
+	"close-details": "Hide details",
+	"sign-in": "Sign In",
+	"auth-welcome-back": "Welcome back",
+	"auth-signin-subtitle":
+		"Sign in to keep closing the gaps the exam will look for.",
+	"auth-signin-cta": "Sign in",
+	"auth-signin-error": "Unable to sign in right now. Try again.",
+	"auth-open-room": "Open your study room",
+	"auth-signup-subtitle":
+		"One account, every chapter. Your first recall takes two minutes.",
+	"auth-signup-cta": "Create account",
+	"auth-account-created": "Account created",
+	"auth-name-label": "Name",
+	"auth-email-label": "Email",
+	"auth-password-label": "Password",
+	"auth-invalid-email": "Invalid email address",
+	"auth-password-too-short": "Password must be at least 8 characters",
+	// The study ring pushes to talk, so its captions can't reuse the `vt-*`
+	// strings: those describe an always-on agent that you interrupt, this one
+	// describes a held recording that you finish. Same states, other verbs.
+	"st-recall-idle":
+		"Tap the ring, then say what you remember about this chapter out loud. No notes — rough and honest is perfect. Tap again when you're done.",
+	"st-answer-idle":
+		"Say your answer out loud in your own words — teaching it back is what proves it. Tap the ring when you're done.",
+	"st-armed": "Ready — tap to start.",
+	"st-connecting": "Connecting…",
+	"st-listening": "Listening… tap the ring when you're done.",
+	"st-thinking": "Thinking…",
+	"st-speaking": "Speaking…",
+	"st-executing": "Working…",
+	"st-error": "Couldn't reach the voice service. Tap to retry, or type below.",
+	"my-account": "My Account",
+	"sign-out": "Sign Out",
+	"need-account": "Need an account?",
+	"have-account": "Already have an account?",
+	"sign-up": "Sign up",
+	"ink-for-the-room": "Ink for the room",
+	"auth-eyebrow": "Close the gap",
+	"auth-promise":
+		"Speak a chapter out loud, see exactly which ideas didn't land.",
+	"auth-quote": "Say what you remember. The gaps do the rest.",
+	"auth-foot": "Ethiopian students · National exam",
+	"choose-theme": "Choose a theme",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -750,6 +824,73 @@ export const am: Record<MessageKey, string> = {
 	"demo-try": "የቀጥታ ማሳያ ሞክር",
 	recalled: "አስታውሷል",
 	"see-your-chapter": "በራስህ ምዕራፍ ላይ ተመልከት",
+
+	// ── Coverage view (the flagship gap visualization) ───────────
+	"cov-checked": "ከምርመራቸው ሃሳቦች የተረጋገጡት በዕጉም",
+	"cov-solid": "ጠንካራ",
+	"cov-gap": "ክፍተት",
+	"cov-wrong": "በተሳሳተኝ መልክት",
+	"cov-aria": "ከ{total} ሃሳቦች {covered} ተሸፍነዋል፣ {missing} ክፍተቶች አሁንም ክፍት ናቸው",
+	"cov-aria-wrong": "፣ {n} በተሳሳተኝ ተገልጸዋል",
+	"cov-importance": "አስፈላጊነት {n}/5",
+	"cov-already-solid": "አስቀድሞ የጠኑ",
+	"cov-needs-work": "ስራ ይፈልጋል",
+	"cov-none-yet": "ገና ምንም አልተረጋገጠም — ይህም መጀመሪያው ነው።",
+	"cov-all-solid": "ምንም የለም። ከምርመራቸው የጠኑ ሁሉም ሃሳቦች ናቸው።",
+	"cov-wrong-title": "አንቀታ — በተሳሳተኝ ተገልጿል",
+	"cov-wrong-text":
+		"እነዚህ ያልዘለስት ሃሳቦች አይደሉም፤ በተሳሳተኝ መናገር ተገልጸዋል። አጭሩ ትምህርቱ እነዚህን ቀድሞ ያስተካክላል።",
+
+	// ── Chrome + failure states ─────────────────────────────────
+	"nav-primary": "ዋና ይዘት",
+	"skip-to-content": "ወደ ይዘቱ ዝለል",
+	"go-home": "ወደ መጀመሪያው ተመለስ",
+	"err-404-title": "ይህ ገጹ አልተገኘም።",
+	"err-404-body": "ሊንኩ ራንት የወረደ ይሆናል ወይም ገጹ ተዛውቷል። ያስቀመጥከው ምንም አልጠፋም።",
+	"err-500-title": "አንድ ነገር በእኛ ወገን ተሳስቷል።",
+	"err-500-body":
+		"ይህ ምርካህ ጥላት አይደለም፣ ያስቀመጥካቸውም ምንም አልጠፋም። እንደገና ሞክር፣ ወይም ወደ የጥናት ክፍሉ ተመለስ።",
+	"err-offline-title": "ግንኙነት የለም።",
+	"err-offline-body": "ኪፍተት ለአነባ አልተደረሰም። በዚህ ስልክ ላይ ያስቀመጥከው ሁሉም አሁንም አለ።",
+	"technical-details": "የቴክኒክ ዝርዝር",
+	"close-details": "ዝርዝሩን ደብቅ",
+	"sign-in": "ግባ",
+	"auth-welcome-back": "እንኳን ደህና መጡ",
+	"auth-signin-subtitle": "ፈተናው የሚፈልገውን ክፍተቶች ለመዘጋጀት ግባ።",
+	"auth-signin-cta": "ግባ",
+	"auth-signin-error": "አሁን መግባት አልተቻለም። እንደገና ሞክር።",
+	"auth-open-room": "የትማሪያዎን ክፍል ክፈት",
+	"auth-signup-subtitle":
+		"አንድ መለያ፣ ሁሉም ምዕራፎች። የመጀመሪያዎን ማስታወስክ ሁለት ደቂቃዎች ይወስዳል።",
+	"auth-signup-cta": "መለያ ፍጠር",
+	"auth-account-created": "መለያው ተፈጥሯል",
+	"auth-name-label": "ስም",
+	"auth-email-label": "ኢሜይል",
+	"auth-password-label": "የይለፍ ቃል",
+	"auth-invalid-email": "የተሳሳተ የኢሜይል አድራሻ",
+	"auth-password-too-short": "የይለፍ ቃል ቢያንስ 8 ፊደል ማድረግ አለበት",
+	"st-recall-idle":
+		"ቀለበቱን ንካ ከዚያ ስለዚህ ምዕራፍ የሚስታውስክህን ነገር በአፍት ተናገር። ማንኛውንም ማስታወሻ የለም — ተንብርና ሐቅሓት ያላቸው ለሚፈለግ ነው። ሲቻልቱ በድጋሚ ንካ።",
+	"st-answer-idle":
+		"መልስህን በራስህ በራስህ ቃላት በአፍት ተናገር — በመረዳት ስለመረዳት መልስህን ማስታወስክ የሚያሳረጋገጥ ነው። ሲቻልቱ ቀለበቱን ንካ።",
+	"st-armed": "ዝግጁ። — ለመጀመር ንካ።",
+	"st-connecting": "በመገናኘት ላይ…",
+	"st-listening": "በማዳመጥ ላይ… ሲቻልቱ ቀለበቱን ንካ።",
+	"st-thinking": "በማሰብ ላይ…",
+	"st-speaking": "በመናገር ላይ…",
+	"st-executing": "በመሥራት ላይ…",
+	"st-error": "የድምጽ አገልግሎቱን መድረስ አልተቻለም። ለመድገም ንካ ወይም ከታች ተይት።",
+	"my-account": "መለያዬ",
+	"sign-out": "ውጣ",
+	"need-account": "መለያ የለህም?",
+	"have-account": "መለያ አለህ?",
+	"sign-up": "ተመዝገብ",
+	"ink-for-the-room": "ለዚህ ክፍል ተስማሚ ቀለም",
+	"auth-eyebrow": "ክፍተቱን ዝጋ",
+	"auth-promise": "ምዕራፍ በድምጽ ስለርህ፣ የትኞቹ ሃሳቦች አላጨቡበትም በግልጽ እይታ።",
+	"auth-quote": "ያስታውስክትን ተናገር። ክፍተቶቹ ሌላውን ያደርጋሉ።",
+	"auth-foot": "የኢትዮጵያ ተማሪዎች · ብሔራዊ ፈተና",
+	"choose-theme": "ገምት ምረጥ",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

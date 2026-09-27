@@ -165,7 +165,7 @@ export default function Home() {
 						{t("no-account")}{" "}
 						<a
 							href="#demo"
-							className="font-medium text-gold underline underline-offset-4 hover:text-gold-soft"
+							className="font-medium text-gold underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
 						>
 							{t("demo-jump")}
 						</a>
@@ -257,7 +257,7 @@ export default function Home() {
 									0{i + 1}
 								</span>
 							</div>
-							<p className="font-medium text-[0.72rem] text-gold">
+							<p className="font-medium text-[0.78rem] text-gold">
 								{t(stepKey)}
 							</p>
 							<h3 className="mt-1 font-display font-semibold text-lg tracking-tight">
@@ -405,14 +405,14 @@ export default function Home() {
 				<div className="surface p-6">
 					<div className="mb-4 flex items-center justify-between">
 						<div>
-							<p className="font-medium text-[0.72rem] text-gold">
+							<p className="font-medium text-[0.78rem] text-gold">
 								Physics · Grade 11
 							</p>
 							<h3 className="font-display font-semibold text-xl tracking-tight">
 								Waves and Optics
 							</h3>
 						</div>
-						<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
+						<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
 							{t("chunks", { n: 7 })}
 						</span>
 					</div>
@@ -432,7 +432,7 @@ export default function Home() {
 								<div className="flex min-w-0 items-center gap-3">
 									<span
 										className={cn(
-											"font-medium text-[0.7rem]",
+											"font-medium text-[0.78rem]",
 											state === "closed"
 												? "text-muted-foreground"
 												: "text-muted-foreground/40",
@@ -450,11 +450,11 @@ export default function Home() {
 									</p>
 								</div>
 								{state === "closed" ? (
-									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
+									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
 										{t("study-loop-ready")}
 									</span>
 								) : (
-									<span className="shrink-0 text-[0.72rem] text-muted-foreground">
+									<span className="shrink-0 text-[0.78rem] text-muted-foreground">
 										{t("lines-up-next")}
 									</span>
 								)}
@@ -500,7 +500,7 @@ export default function Home() {
 					<p className="max-w-sm text-muted-foreground text-xs leading-6">
 						{t("footer-text")}
 					</p>
-					<p className="text-[0.68rem] text-muted-foreground/60">
+					<p className="text-[0.78rem] text-muted-foreground/60">
 						Kiftet · ክፍተት
 					</p>
 				</div>
@@ -522,13 +522,13 @@ function DemoCard() {
 			<div className="border-border/60 border-b px-6 py-4 dark:border-white/10">
 				<div className="mb-2 flex items-center gap-2.5">
 					<BrandMark size={22} className="rounded-full" />
-					<p className="font-medium text-[0.68rem] text-muted-foreground">
+					<p className="font-medium text-[0.78rem] text-muted-foreground">
 						Kiftet
 					</p>
 				</div>
 				<div className="mb-1 flex items-center justify-between gap-3">
 					<p className="k-label">Physics · wave mechanics</p>
-					<span className="inline-flex items-center gap-1.5 font-medium text-[0.72rem] text-sage">
+					<span className="inline-flex items-center gap-1.5 font-medium text-[0.78rem] text-sage">
 						<span
 							className="size-1.5 rounded-full bg-sage"
 							aria-hidden="true"
@@ -700,7 +700,7 @@ function DemoSection() {
 
 				{stagger(
 					0,
-					<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.68rem] text-sage uppercase tracking-wide">
+					<span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.78rem] text-sage uppercase tracking-wide">
 						<span
 							className={cn(
 								"size-1.5 rounded-full bg-sage transition-opacity duration-500",
@@ -732,7 +732,7 @@ function DemoSection() {
 
 				{stagger(
 					4,
-					<p className="text-[0.72rem] text-muted-foreground">
+					<p className="text-[0.78rem] text-muted-foreground">
 						{t("demo-foot")}
 					</p>,
 				)}

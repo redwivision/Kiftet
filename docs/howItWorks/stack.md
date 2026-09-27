@@ -61,7 +61,7 @@ dependency and dev-dependency, audited line-by-line — is in [the inventory](in
 | AI | **Google Gemini** (`@google/genai`) | Chosen for cost + speed. Encapsulated in one service so we can swap providers later. |
 | Voice | **Voxide** (`@voxide/react`) | The sponsor product — the signature mechanic (STT + TTS). The official React SDK drives the voice session in the browser and is integrated now. |
 | Env / secrets | **Varlock** | Typesafe `.env` values, generated TS bindings, and plugin integration for Vite. |
-| PWA / offline | **vite-plugin-pwa** | Makes the app installable and usable offline (exam halls have no signal). |
+| PWA / offline | **vite-plugin-pwa** | Makes the app installable and usable offline (exam halls have no signal). The cache strategy is deliberate: navigations are `NetworkOnly` with an `offline.html` precache fallback, so an offline cold load never serves a document from a previous deploy; the Google font sheet `StaleWhileRevalidate` and font files `CacheFirst`, so the brand still renders offline. See [decisions §10](decisions.md). |
 | Lint + format | **Biome** | One fast tool for both; replaces ESLint + Prettier. |
 | Bundling the server | **tsdown** | Compiles `apps/server` to a standalone `dist` for `bun start`. |
 

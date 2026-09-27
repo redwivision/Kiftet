@@ -3,6 +3,7 @@ import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { Textarea } from "@kiftet/ui/components/textarea";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -292,14 +293,14 @@ export default function Textbooks() {
 						<div key={book.id} className="surface p-5 sm:p-6">
 							<div className="flex items-start justify-between gap-3">
 								<div>
-									<p className="font-medium text-[0.72rem] text-gold">
+									<p className="font-medium text-[0.78rem] text-gold">
 										{book.subject}
 									</p>
 									<h2 className="font-display font-semibold text-xl tracking-tight">
 										{book.title}
 									</h2>
 								</div>
-								<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold opacity-90">
+								<span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
 									{book.chapters.length === 1
 										? t("chunk", { n: book.chapters.length })
 										: t("chunks", { n: book.chapters.length })}
@@ -313,7 +314,7 @@ export default function Textbooks() {
 											className="flex items-center justify-between gap-3 py-2.5"
 										>
 											<div className="min-w-0">
-												<p className="font-medium text-[0.7rem] text-muted-foreground">
+												<p className="font-medium text-[0.78rem] text-muted-foreground">
 													{String(i + 1).padStart(2, "0")}
 												</p>
 												<p className="truncate text-sm">{chapter.title}</p>
@@ -520,16 +521,16 @@ function AddTextbook({
 								</div>
 
 								{stage === "done" || (!isNew && stage === "skip") ? (
-									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
+									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
 										{importing ? t("already-in") : t("already-here")}
 									</span>
 								) : stage === "skip" ? (
-									<span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.7rem] text-muted-foreground">
+									<span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
 										{t("landed")}
 									</span>
 								) : stage === "error" ? (
 									<div className="flex shrink-0 items-center gap-2">
-										<span className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-1 font-medium text-[0.7rem] text-rust">
+										<span className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-1 font-medium text-[0.78rem] text-rust">
 											{t("failed")}
 										</span>
 										{!importing && (
@@ -543,11 +544,11 @@ function AddTextbook({
 										)}
 									</div>
 								) : stage === "ingesting" ? (
-									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.7rem] text-gold">
+									<span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
 										{t("building-checklist")}
 									</span>
 								) : (
-									<span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.7rem] text-muted-foreground">
+									<span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
 										{t("new-label")}
 									</span>
 								)}
@@ -636,17 +637,28 @@ function AddTextbook({
 
 			<div className="mt-4 space-y-1.5">
 				<Label htmlFor="book-language">{t("chapter-language")}</Label>
-				<select
-					id="book-language"
-					value={language}
-					onChange={(e) => setLanguage(e.target.value)}
-					className="h-9 w-full rounded-none border border-border bg-background px-2 text-sm outline-none focus-visible:border-primary"
-				>
-					<option value="en">{t("lang-en")}</option>
-					<option value="am">{t("lang-am")}</option>
-					<option value="om">{t("lang-om")}</option>
-					<option value="other">{t("lang-other")}</option>
-				</select>
+				{/* Native <select> kept — it gives the OS picker, which is the
+				    right call on the low-end phones this is built for — but it now
+				    wears the control layer's shape language. It was `rounded-none`
+				    with `focus-visible:border-primary`, which in every dark room
+				    put a candle-coloured border on a candle-coloured field. */}
+				<div className="relative">
+					<select
+						id="book-language"
+						value={language}
+						onChange={(e) => setLanguage(e.target.value)}
+						className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30"
+					>
+						<option value="en">{t("lang-en")}</option>
+						<option value="am">{t("lang-am")}</option>
+						<option value="om">{t("lang-om")}</option>
+						<option value="other">{t("lang-other")}</option>
+					</select>
+					<ChevronDown
+						aria-hidden="true"
+						className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
+					/>
+				</div>
 			</div>
 
 			<div className="mt-5">
@@ -739,7 +751,7 @@ function AddTextbook({
 					{t("plan-confirm")}
 				</p>
 			</div>
-			<p className="mt-4 border-border/60 border-t pt-3 text-[0.7rem] text-muted-foreground leading-5">
+			<p className="mt-4 border-border/60 border-t pt-3 text-[0.78rem] text-muted-foreground leading-5">
 				{t("demo-budget")}
 			</p>
 		</section>
