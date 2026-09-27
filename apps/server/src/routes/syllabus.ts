@@ -177,6 +177,12 @@ router.get("/syllabus/:subject/:grade", async (req, res) => {
       unitNumber: u.unitNumber,
       title: u.title,
       description: u.description,
+      // The official MoE period allocation, when transcribed. `null` means the
+      // document didn't state one — deliberately NOT defaulted to 0 or a
+      // guess, so the UI can tell the student which units have authoritative
+      // weighting and which don't (docs/SYLLABUS.md §4).
+      periods: u.periods,
+      periodsSource: u.periodsSource,
       chapters: cs.map((c) => ({
         id: c.id,
         title: c.title,

@@ -127,6 +127,35 @@ model opinion and becomes a fact from the state.
 This is a small schema change with an outsized effect on the one thing users
 actually judge us by: *did this tell me what to study first?*
 
+**Shipped (schema + plumbing), the data is the remaining work.** Migration
+`0004` adds `syllabus_unit.periods` (integer, **nullable, no default**) and
+`syllabus_unit.periods_source` for provenance, and the syllabus API + `/syllabus`
+UI surface a unit's allocation when one exists. Deliberate design points:
+
+- **The column lives on `syllabus_unit`, not `concept_node`.** MoE allocates
+  periods per unit and sub-unit; there is no official *per-concept* figure, and
+  our concepts are AI-extracted phrases that don't correspond to sub-units
+  anyway. Putting a number on a concept would manufacture authority we don't
+  have — the exact failure this whole section exists to prevent.
+- **Nullable with no default, and never coerced to 0.** "The document didn't
+  state one" is a real, different state from "zero periods", and only the
+  former is true today. A fabricated 0 would silently drive prioritisation.
+- **The seed refuses to invent figures.** All six Biology 12 units carry
+  `periods: undefined`, with a comment saying why. `seedSyllabus` writes the
+  columns *only* when a unit actually declares a figure — and on conflict it
+  omits them from the `SET`, so a teacher's transcription is never blanked by
+  a boot. (Verified against a scratch Postgres: declared figures are written,
+  undeclared units stay `NULL`, and a stored `24` + provenance survived a seed
+  replay that overwrote the unit's title and description.)
+- **The UI only shows an allocation when one exists**, so a student is never
+  shown a weighting we can't back.
+
+**So the honest status: the mechanism is in, the Biology 12 figures are not.**
+Someone needs the official MoE Grade 12 Biology syllabus document and must
+transcribe the period count per unit with a page reference. That is a small,
+bounded, human task — and it is the highest-leverage data work available,
+because it is what lets us say "start here" instead of "here are 40 concepts."
+
 ---
 
 ## 5. The subject boundary — what we are deliberately not claiming

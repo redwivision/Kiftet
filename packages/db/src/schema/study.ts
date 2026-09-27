@@ -51,7 +51,19 @@ export const syllabusUnit = pgTable(
     unitNumber: integer("unit_number").notNull(),
     title: text("title").notNull(),
     description: text("description"),
-    sortOrder: integer("sort_order").default(0).notNull(),
+    // Teaching periods the official MoE document allots to this unit. This is
+    // the state's own weighting, transcribed from the syllabus — the single
+    // most copy-resistant datum we can hold, because nobody can guess it (see
+    // docs/SYLLABUS.md §4). NULL means "the document did not state one for this
+    // unit", which is meaningfully different from 0 and must never be
+    // defaulted: a fabricated allocation would silently drive prioritisation.
+    periods: integer("periods"),
+    // Provenance for `periods` specifically, same discipline as
+    // `syllabus.sourceNote`: which document and page the figure came from, so
+    // it can always be checked. Kept separate from the unit-level source
+    // because a period count is a narrower claim than a unit list.
+    periodsSource: text("periods_source"),
+    sortOrder: integer("sort_order").default(0),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),
