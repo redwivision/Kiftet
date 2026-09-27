@@ -204,6 +204,7 @@ export const en = {
   "unassigned-text":
     "These {subject} chapters aren't matched to a unit yet. Pick one below to slot them in.",
   "unit-of-label": "Unit {n}",
+  "unit-periods": "{n} periods in the syllabus",
   "chapter-covered": "{covered}/{total} chapters covered",
   "pct-unit": "{pct}% of this unit",
   "no-chapters-mapped": "No chapters mapped yet",
@@ -647,6 +648,7 @@ export const am: Record<MessageKey, string> = {
   "unassigned-text":
     "እነዚህ {subject} ምዕራፎች ገና ከክፍል ጋር አልተገናኙም። ከታች አንዱን መርጠህ አስገባ።",
   "unit-of-label": "ክፍል {n}",
+  "unit-periods": "{n} የክፍል ሰዓት በሳርባስ ውስጥ",
   "chapter-covered": "{covered}/{total} ምዕራፎች ተሸፍነዋል",
   "pct-unit": "{pct}% የዚህ ክፍል",
   "no-chapters-mapped": "ገና ምዕራፎች አልተመደቡም",

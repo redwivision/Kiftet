@@ -44,6 +44,11 @@ type Unit = {
   unitNumber: number;
   title: string;
   description: string | null;
+  /** The official MoE teaching-period allocation for this unit, when it has
+   *  been transcribed from the syllabus document. `null` means "not stated in
+   *  the source" — it is NOT zero, and the UI must not imply otherwise. */
+  periods: number | null;
+  periodsSource: string | null;
   chapters: UnitChapter[];
   covered: number;
   total: number;
@@ -383,6 +388,19 @@ function UnitCard({
           {unit.description && (
             <p className="max-w-lg text-muted-foreground text-sm">
               {unit.description}
+            </p>
+          )}
+          {/* Official weighting, when we have it. This is the state's own
+              allocation transcribed from the syllabus document — the reason we
+              can tell a student what to study first instead of guessing.
+              Rendered only when a figure exists, so an untranscribed unit never
+              implies a weighting we don't actually have. */}
+          {unit.periods != null && (
+            <p
+              className="text-muted-foreground text-xs"
+              title={unit.periodsSource ?? undefined}
+            >
+              {t("unit-periods", { n: unit.periods })}
             </p>
           )}
         </div>

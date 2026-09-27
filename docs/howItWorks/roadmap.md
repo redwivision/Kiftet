@@ -10,6 +10,7 @@ table can't tell you.
 
 | When | What landed | Notes |
 |---|---|---|
+| 2026-09-27 | **Official period allocations — the schema, and the discipline around it** | `syllabus_unit.periods` + `periods_source` (migration `0004`), surfaced by the syllabus API and rendered on `/syllabus` only when a figure exists. Two deliberate refusals: the column lives on the **unit**, not the concept (MoE allocates per unit/sub-unit; there is no official per-concept number, and a number there would manufacture authority we don't have), and all six Biology 12 units ship as `NULL` because the verified source — the textbook's table of contents — does not state allocations. Guessing them would be exactly the fabricated ground truth the bet exists to prevent. The seed writes a figure only when a unit declares one and omits the columns from its `ON CONFLICT` SET, so a teacher's transcription can't be blanked by a boot — verified on a scratch Postgres (declared written, undeclared `NULL`, stored `24` survived a seed replay that overwrote the title). **Remaining: transcribe the real numbers from the official MoE Grade 12 Biology syllabus.** See [`SYLLABUS.md`](../SYLLABUS.md) §4. |
 | 2026-09-27 | **Fixed: we were serving fallbacks to rate-limited students and never saying so** | Our per-user AI allowance (30/min) was 3× the Gemini free tier's *per-project* ceiling (~10/min), so 429s were being manufactured by our own limit. Each one hit `catch { return fallback(); }` with **no log and no counter** — a student on a fallback was indistinguishable from a successful student. Now: allowance lowered to 8/min (demo 3), `askJson` retries 429/5xx with jittered backoff inside one 24s budget (under the 30s client timeout), 400/404 fail fast instead of burning quota, and every degraded path logs a reason to `[ai]` plus a counter, exposed at `GET /api/ai/telemetry`. Retrying also means fewer fallbacks overall. Verified the retry/classification branches with a throwaway harness (13 cases) before deleting it — it is not a lasting test, because it duplicates the private logic. |
 | 2026-09-27 | **The smart study guide was designed** (not built) | Agreed on scope: the student picks the chapter(s) and/or topic(s), the guide prioritises weak concepts, and retest becomes an *optional* tool usable **before** studying to diagnose and **after** to verify. Kiftet was explicitly reframed as one instrument in a larger kit that routes the student out to the textbook, NotebookLM, FutureX etc. — that dissolved the "walled garden" objection to a written guide, and it is why the guide needs real **source anchors**. Hard constraint recorded: the Gemini free tier is per _project_ and shared by all users, so the guide **must** be cached per concept, not generated per session. Full design, free-tier budget and sequencing in [Phase 11 below](#phase-11--the-smart-study-guide); two forks still need a decision. |
 | 2026-09-27 | `09bd00d` — rebuilt the control layer, failure states and PWA caching | `error-screen.tsx`, `navigation-progress.tsx`, the typed `messages.ts` corpus, the rebuilt `root.tsx`/auth shell, and a PWA caching pass. Shipped **without** being recorded here, which is why this section now exists. |
@@ -50,7 +51,7 @@ Not cosmetic — both were live in the study loop:
 | 10 | Amharic everywhere (bet 4) — bilingual EN/🇪🇹 both-script chrome, generated content in both scripts, Ethiopic type verified | ✅ Done (slices A–D shipped: `Language` pref at `kiftet-language` + persisted through the `LanguageProvider`, pre-hydration `lang` script, `LanguageSwitcher` in the header, typed `messages.ts` corpus where `am` must cover every key, and the study loop's load-bearing chrome wired → `t()`: the four step pills, phase headings/bodies, every primary CTA, session/error/queued/result/voice-guide copy, and the offline banner), plus the landing page and the dashboard, syllabus, textbooks, and voice-test routes. Slice C makes generated content follow the pref: the loop sends `language: "am"`, gemini.ts writes lessons/retest questions in Amharic (Ge'ez) via the `AMHARIC_OUTPUT` instruction with concept names kept verbatim as data, offline fallback content is Amharic too, cached reads honestly flag their language, and a "በአማርኛ / In Amharic" badge marks generated text. Slice D verified the SVG/icon set (same `OPEN_ARC` geometry as the brand mark) and the Ethiopic type stack (Noto Sans Ethiopic loaded at 400–700, Ethiopic-first font stacks, pre-hydration `lang`), and closed the doc gaps — including this doc being split into `docs/howItWorks/` |
 
 | 11 | The smart study guide — scope the student picks (chapter(s) and/or topic(s)), per-concept mastery, a structured guide cached per concept, retest as an optional pre/post tool | 🔨 In progress (**design settled, nothing built** — [see below](#phase-11--the-smart-study-guide); the micro-lesson it replaces is still what ships) |
-| 12 | Syllabus depth — `periods_allocation` from the official document, then Biology 9/10/11 | ⏭️ Queued ([`SYLLABUS.md`](../SYLLABUS.md) §6) |
+| 12 | Syllabus depth — official `periods` per unit, then Biology 9/10/11 | 🔨 Schema landed (migration `0004`: nullable `periods` + `periods_source` on `syllabus_unit`, exposed via the syllabus API and shown on `/syllabus`; the seed writes figures only when a unit declares one, and never blanks a teacher's transcription on boot). **The data is the remaining work** — Biology 12's six units are deliberately `NULL` until transcribed from the official syllabus document ([`SYLLABUS.md`](../SYLLABUS.md) §4, §6) |
 
 The five product bets that steer the phases after this — syllabus
 anchoring, the national misconception map, the offline-first study loop, Amharic
@@ -223,12 +224,15 @@ per-concept rubric, targeting the same concepts.
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
 6. **Tests.** All of the above is currently verifiable by hand only.
 
-**Cheap and high-leverage, do it early:** add `periods_allocation` to
-`conceptNode`, sourced from the official syllabus document, and let it
-**override** the model's 1–5 weight guess when present. Today `clampWeight` in
-`gemini.ts` is the model's opinion of what matters; the periods are the state's
-actual allocation. This turns prioritisation — the thing users judge us by —
-from a model guess into a fact. Details in [`SYLLABUS.md`](../SYLLABUS.md) §4.
+**Cheap and high-leverage, done:** `syllabus_unit.periods` (migration `0004`)
+carries the official period allocation from the MoE document, with
+`periods_source` provenance, and `/syllabus` shows it when present. This turns
+prioritisation from the model's 1–5 guess into a fact from the state — but
+**only once the figures are transcribed**; all six Biology 12 units are `NULL`
+on purpose, because inventing them would be the fabricated authority this
+exists to prevent. Still to do: transcribe the real numbers, and let a unit's
+allocation drive concept ordering in the Phase 11 guide. Details in
+[`SYLLABUS.md`](../SYLLABUS.md) §4.
 
 ### Open forks — decisions needed before step 4
 

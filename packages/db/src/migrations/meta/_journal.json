@@ -29,6 +29,13 @@
       "when": 1790011080907,
       "tag": "0003_white_otto_octavius",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790012345678,
+      "tag": "0004_quiet_heron",
+      "breakpoints": true
     }
   ]
 }
