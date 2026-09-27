@@ -46,6 +46,8 @@
     "docker:logs": "docker compose logs -f",
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
     "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./packages/db/",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "check": "biome check --write ."
   },
   "dependencies": {
