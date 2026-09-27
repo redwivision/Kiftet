@@ -8,11 +8,11 @@ import type { DatabaseConfig } from "./config";
 import * as schema from "./schema";
 
 function hostOf(url: string): string | null {
-	try {
-		return new URL(url).hostname;
-	} catch {
-		return null;
-	}
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
 }
 
 // Fails loudly instead of letting node-postgres fall back to its defaults
@@ -22,30 +22,30 @@ function hostOf(url: string): string | null {
 // problem — this names the real cause (the variable never reached the
 // process) and prints it to stderr, the stream container boot logs show.
 export function requireDbUrl(
-	url: string | undefined,
-	name: string,
-	runtime: string,
+  url: string | undefined,
+  name: string,
+  runtime: string,
 ): string {
-	if (!url || url.trim().length === 0) {
-		throw new Error(
-			`[kiftet:db] ${name} is NOT set in this process. In ${runtime} it must come from a runtime environment variable — .env files are not loaded. Set ${name} (e.g. a Neon pooled URL) on the platform's server service and redeploy.`,
-		);
-	}
-	const host = hostOf(url);
-	if (!host) {
-		throw new Error(
-			`[kiftet:db] ${name} is not a valid URL: got ${JSON.stringify(url)}.`,
-		);
-	}
-	if (
-		runtime === "production" &&
-		["localhost", "127.0.0.1", "::1"].includes(host)
-	) {
-		throw new Error(
-			`[kiftet:db] ${name} resolves to the localhost placeholder (${host}) in production — that's the .env.schema fallback, not a real database. Set the real ${name} on the platform.`,
-		);
-	}
-	return url;
+  if (!url || url.trim().length === 0) {
+    throw new Error(
+      `[kiftet:db] ${name} is NOT set in this process. In ${runtime} it must come from a runtime environment variable — .env files are not loaded. Set ${name} (e.g. a Neon pooled URL) on the platform's server service and redeploy.`,
+    );
+  }
+  const host = hostOf(url);
+  if (!host) {
+    throw new Error(
+      `[kiftet:db] ${name} is not a valid URL: got ${JSON.stringify(url)}.`,
+    );
+  }
+  if (
+    runtime === "production" &&
+    ["localhost", "127.0.0.1", "::1"].includes(host)
+  ) {
+    throw new Error(
+      `[kiftet:db] ${name} resolves to the localhost placeholder (${host}) in production — that's the .env.schema fallback, not a real database. Set the real ${name} on the platform.`,
+    );
+  }
+  return url;
 }
 
 // kiftet runs on Neon Postgres. The pooled (-pooler) hostname is the app's
@@ -54,13 +54,13 @@ export function requireDbUrl(
 // TLS for every endpoint, so any non-local host connects over SSL regardless
 // of whether the URL carries an explicit sslmode query param.
 function sslFor(url: string) {
-	try {
-		const host = new URL(url).hostname;
-		if (host === "localhost" || host === "127.0.0.1") return false;
-	} catch {
-		return false;
-	}
-	return { rejectUnauthorized: false };
+  try {
+    const host = new URL(url).hostname;
+    if (host === "localhost" || host === "127.0.0.1") return false;
+  } catch {
+    return false;
+  }
+  return { rejectUnauthorized: false };
 }
 
 // The migrations folder lives in this package's source. When the API is
@@ -68,21 +68,21 @@ function sslFor(url: string) {
 // "next to the module" no longer points at the SQL files — walk back to
 // the repo root and resolve the source path instead.
 function findMigrationsDir(): string {
-	const candidates = [
-		join(import.meta.dirname, "migrations"),
-		join(import.meta.dirname, "../../../packages/db/src/migrations"),
-		join(import.meta.dirname, "../../packages/db/src/migrations"),
-	];
-	const found = candidates.find(
-		(dir) =>
-			existsSync(dir) && readdirSync(dir).some((file) => file.endsWith(".sql")),
-	);
-	if (!found) {
-		throw new Error(
-			`Migrations folder not found. Tried: ${candidates.join(", ")}`,
-		);
-	}
-	return found;
+  const candidates = [
+    join(import.meta.dirname, "migrations"),
+    join(import.meta.dirname, "../../../packages/db/src/migrations"),
+    join(import.meta.dirname, "../../packages/db/src/migrations"),
+  ];
+  const found = candidates.find(
+    (dir) =>
+      existsSync(dir) && readdirSync(dir).some((file) => file.endsWith(".sql")),
+  );
+  if (!found) {
+    throw new Error(
+      `Migrations folder not found. Tried: ${candidates.join(", ")}`,
+    );
+  }
+  return found;
 }
 
 // The application handle: a warm node-postgres pool (small because Neon caps
@@ -91,46 +91,71 @@ function findMigrationsDir(): string {
 // the pool gives up on a slow connect/query instead of blocking the worker.
 // This stays synchronous to build — no I/O happens until a query runs.
 export function createDb(env: DatabaseConfig) {
-	const pool = new pg.Pool({
-		connectionString: requireDbUrl(
-			env.DATABASE_URL,
-			"DATABASE_URL",
-			env.NODE_ENV ?? "development",
-		),
-		max: 5,
-		ssl: sslFor(env.DATABASE_URL),
-		connectionTimeoutMillis: 5_000,
-		idleTimeoutMillis: 30_000,
-		query_timeout: 15_000,
-	});
-	return drizzle(pool, { schema });
+  const pool = new pg.Pool({
+    connectionString: requireDbUrl(
+      env.DATABASE_URL,
+      "DATABASE_URL",
+      env.NODE_ENV ?? "development",
+    ),
+    max: 5,
+    ssl: sslFor(env.DATABASE_URL),
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 30_000,
+    query_timeout: 15_000,
+  });
+  return drizzle(pool, { schema });
 }
+
+// Arbitrary but stable across deploys — every instance must contend for the
+// same key. Derived from "kiftet" so it can't collide with another app's lock.
+const MIGRATION_LOCK_KEY = 1_295_664_799;
 
 // Apply pending migrations on a dedicated, unpooled connection. node-postgres
 // runs the whole migration file inside a transaction, so a crash mid-migrate
 // leaves no half-applied schema and no stale journal entry. Awaited at server
 // boot before anything listens.
+//
+// A rolling deploy runs several instances at once, and two boots racing the
+// migration journal is the one way this can go wrong in production. A Postgres
+// advisory lock serializes them: the loser waits, then finds the schema already
+// applied and no-ops. The lock lives on its own connection so the single pooled
+// connection stays free for the migration itself.
 export async function migrateDb(env: DatabaseConfig): Promise<void> {
-	const url = requireDbUrl(
-		env.DATABASE_URL_DIRECT || env.DATABASE_URL,
-		"DATABASE_URL_DIRECT || DATABASE_URL",
-		env.NODE_ENV ?? "development",
-	);
-	const pool = new pg.Pool({
-		connectionString: url,
-		max: 1,
-		ssl: sslFor(url),
-		connectionTimeoutMillis: 5_000,
-	});
-	try {
-		const db = drizzle(pool, { schema });
-		const migrationsDir = findMigrationsDir();
-		if (readdirSync(migrationsDir).some((file) => file.endsWith(".sql"))) {
-			await migrate(db, { migrationsFolder: migrationsDir });
-		}
-	} finally {
-		await pool.end();
-	}
+  const url = requireDbUrl(
+    env.DATABASE_URL_DIRECT || env.DATABASE_URL,
+    "DATABASE_URL_DIRECT || DATABASE_URL",
+    env.NODE_ENV ?? "development",
+  );
+  const poolOptions = {
+    connectionString: url,
+    max: 1,
+    ssl: sslFor(url),
+    connectionTimeoutMillis: 5_000,
+  };
+  const pool = new pg.Pool(poolOptions);
+  const lockPool = new pg.Pool(poolOptions);
+  let held: pg.PoolClient | null = null;
+  try {
+    held = await lockPool.connect();
+    await held.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    const db = drizzle(pool, { schema });
+    const migrationsDir = findMigrationsDir();
+    if (readdirSync(migrationsDir).some((file) => file.endsWith(".sql"))) {
+      await migrate(db, { migrationsFolder: migrationsDir });
+    }
+  } finally {
+    if (held) {
+      // Released explicitly so the lock frees as soon as we're done rather than
+      // lingering until the pool drains. If the process dies outright, Postgres
+      // drops the lock with the session, so there is nothing to leak.
+      await held
+        .query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY])
+        .catch(() => {});
+      held.release();
+    }
+    await lockPool.end();
+    await pool.end();
+  }
 }
 
 export type Database = ReturnType<typeof createDb>;
