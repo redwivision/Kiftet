@@ -1,6 +1,3 @@
-import { Router, type Request, type Response } from "express";
-import { z } from "zod";
-import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   attempt,
   chapter,
@@ -9,6 +6,9 @@ import {
   syllabusUnit,
   textbook,
 } from "@kiftet/db/schema";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { type Request, type Response, Router } from "express";
+import { z } from "zod";
 import { getDb } from "../services";
 
 // Bet 1 (STRATEGY.md): browse-by-syllabus, smallest proof.
@@ -56,7 +56,11 @@ router.get("/syllabus", async (_req, res) => {
   ok(res, rows);
 });
 
-type ChapterCoverage = { before: number | null; after: number | null; delta: number | null };
+type ChapterCoverage = {
+  before: number | null;
+  after: number | null;
+  delta: number | null;
+};
 
 async function coverageForSessions(
   sessionIds: string[],
@@ -65,13 +69,18 @@ async function coverageForSessions(
   if (sessionIds.length === 0) return out;
 
   const attemptsRows = await db()
-    .select({ sessionId: attempt.sessionId, stage: attempt.stage, score: attempt.score })
+    .select({
+      sessionId: attempt.sessionId,
+      stage: attempt.stage,
+      score: attempt.score,
+    })
     .from(attempt)
     .where(inArray(attempt.sessionId, sessionIds));
 
   for (const sessionId of sessionIds) {
     const own = attemptsRows.filter((a) => a.sessionId === sessionId);
-    const recall = own.find((a) => a.stage === "recall" && a.score !== null)?.score ?? null;
+    const recall =
+      own.find((a) => a.stage === "recall" && a.score !== null)?.score ?? null;
     const retestScores = own
       .filter(
         (a): a is { sessionId: string; stage: "retest"; score: number } =>
@@ -79,7 +88,9 @@ async function coverageForSessions(
       )
       .map((a) => a.score);
     const after = retestScores.length
-      ? Math.round(retestScores.reduce((sum, s) => sum + s, 0) / retestScores.length)
+      ? Math.round(
+          retestScores.reduce((sum, s) => sum + s, 0) / retestScores.length,
+        )
       : null;
     out.set(sessionId, {
       before: recall,
@@ -123,7 +134,11 @@ router.get("/syllabus/:subject/:grade", async (req, res) => {
     .where(and(eq(textbook.ownerId, owner), eq(textbook.subject, subject)))
     .orderBy(chapter.createdAt);
 
-  const mapped = ownerChapters.filter((c) => c.unitId !== null);
+  // A type predicate, so `unitId` is genuinely non-null downstream instead of
+  // being re-asserted at every use.
+  const mapped = ownerChapters.filter(
+    (c): c is typeof c & { unitId: string } => c.unitId !== null,
+  );
   const chapterIds = mapped.map((c) => c.id);
 
   // Latest session per chapter (startedAt desc gives newest first).
@@ -131,21 +146,25 @@ router.get("/syllabus/:subject/:grade", async (req, res) => {
     .select({ id: studySession.id, chapterId: studySession.chapterId })
     .from(studySession)
     .where(
-      and(eq(studySession.userId, owner), inArray(studySession.chapterId, chapterIds)),
+      and(
+        eq(studySession.userId, owner),
+        inArray(studySession.chapterId, chapterIds),
+      ),
     )
     .orderBy(desc(studySession.startedAt));
 
   const latestByChapter = new Map<string, string>();
   for (const s of sessions) {
-    if (!latestByChapter.has(s.chapterId)) latestByChapter.set(s.chapterId, s.id);
+    if (!latestByChapter.has(s.chapterId))
+      latestByChapter.set(s.chapterId, s.id);
   }
   const coverage = await coverageForSessions([...latestByChapter.values()]);
 
   const chaptersByUnit = new Map<string, typeof mapped>();
   for (const c of mapped) {
-    const list = chaptersByUnit.get(c.unitId!) ?? [];
+    const list = chaptersByUnit.get(c.unitId) ?? [];
     list.push(c);
-    chaptersByUnit.set(c.unitId!, list);
+    chaptersByUnit.set(c.unitId, list);
   }
 
   const unitRows = units.map((u) => {
@@ -188,7 +207,8 @@ const mapChapterSchema = z.object({
 
 router.patch("/chapters/:id/unit", async (req, res) => {
   const parsed = mapChapterSchema.safeParse(req.body);
-  if (!parsed.success) return err(res, "Pick a unit to move the chapter to.", 400);
+  if (!parsed.success)
+    return err(res, "Pick a unit to move the chapter to.", 400);
 
   const owner = ownerId(req);
   const { unitId } = parsed.data;
@@ -210,7 +230,10 @@ router.patch("/chapters/:id/unit", async (req, res) => {
     if (!unit[0]) return err(res, "That unit doesn't exist.", 404);
   }
 
-  await db().update(chapter).set({ unitId }).where(eq(chapter.id, req.params.id));
+  await db()
+    .update(chapter)
+    .set({ unitId })
+    .where(eq(chapter.id, req.params.id));
   ok(res, { id: req.params.id, unitId });
 });
 
