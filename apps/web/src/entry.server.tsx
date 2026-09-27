@@ -1,11 +1,10 @@
 import { PassThrough } from "node:stream";
-
-import type { EntryContext, RouterContextProvider } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
-import { ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import type { RenderToPipeableStreamOptions } from "react-dom/server";
 import { renderToPipeableStream } from "react-dom/server";
+import type { EntryContext, RouterContextProvider } from "react-router";
+import { ServerRouter } from "react-router";
 
 export const streamTimeout = 5_000;
 
@@ -14,7 +13,7 @@ export default function handleRequest(
   responseStatusCode: number,
   responseHeaders: Headers,
   routerContext: EntryContext,
-  loadContext: RouterContextProvider,
+  _loadContext: RouterContextProvider,
 ) {
   if (request.method.toUpperCase() === "HEAD") {
     return new Response(null, {
@@ -25,9 +24,13 @@ export default function handleRequest(
 
   return new Promise((resolve, reject) => {
     let shellRendered = false;
-    let userAgent = request.headers.get("user-agent");
+    const userAgent = request.headers.get("user-agent");
+    // A render error found after the shell started still has to be reported as
+    // a 500. Held in a local rather than reassigning the parameter, so the
+    // signature stays exactly what React Router expects.
+    let status = responseStatusCode;
 
-    let readyOption: keyof RenderToPipeableStreamOptions =
+    const readyOption: keyof RenderToPipeableStreamOptions =
       (userAgent && isbot(userAgent)) || routerContext.isSpaMode
         ? "onAllReady"
         : "onShellReady";
@@ -58,7 +61,7 @@ export default function handleRequest(
           resolve(
             new Response(stream, {
               headers: responseHeaders,
-              status: responseStatusCode,
+              status,
             }),
           );
         },
@@ -66,7 +69,7 @@ export default function handleRequest(
           reject(error);
         },
         onError(error: unknown) {
-          responseStatusCode = 500;
+          status = 500;
           if (shellRendered) {
             console.error(error);
           }
