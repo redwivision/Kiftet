@@ -2,6 +2,36 @@
 
 > Part of the [how-it-works index](README.md). Phase-by-phase status and the go-live checklist.
 
+## The current thread
+
+**Read this first when picking the work back up.** The table below tracks
+*phases*; this tracks *what was actually in flight*, which is the thing a phase
+table can't tell you.
+
+| When | What landed | Notes |
+|---|---|---|
+| 2026-09-27 | `09bd00d` — rebuilt the control layer, failure states and PWA caching | `error-screen.tsx`, `navigation-progress.tsx`, the typed `messages.ts` corpus, the rebuilt `root.tsx`/auth shell, and a PWA caching pass. Shipped **without** being recorded here, which is why this section now exists. |
+| 2026-09-27 | The repo's quality baseline, settled | The formatting debt is gone and `bun run lint` exits 0 for the first time. See [the gates](../RUNBOOK.md#4-the-quality-gates). Two real bugs fell out of it — see below. |
+| 2026-09-27 | `migrateDb()` takes a Postgres advisory lock | Was an unchecked go-live item; two instances of a rolling deploy could race the migration journal. |
+| 2026-09-27 | CI: `.github/workflows/ci.yml`, blocking `main` | Lint + typecheck + build on every push and PR to `main`. **There are still no automated tests** — CI proves it builds and typechecks, not that it works. |
+
+### Bugs the lint pass actually found
+
+Not cosmetic — both were live in the study loop:
+
+- **Stale closure in the "still listening" grace timer.** It read the message
+  count from its own closure, which React had frozen at mount. While the student
+  spoke, the count never appeared to change, so the timer fired a false
+  "still listening?" nudge seven seconds into a perfectly healthy answer. It now
+  reads through a ref, and a timer whose window has moved on retires itself.
+- **`useExhaustiveDependencies` was suppressed, not satisfied.** Every effect in
+  `VoiceCapture` carried a dead `eslint-disable` comment from a previous lint
+  setup. The rule is now `error` and all of them pass honestly — the unstable
+  inline `submit` props became `useCallback`s, and the values that are
+  deliberately read "as of right now" go through refs. No behaviour change
+  intended; the study loop is the one place to watch on the next manual pass.
+
+## Phases
 
 | Phase | Name | Status |
 |---|---|---|
@@ -45,9 +75,10 @@ each phase in this table names the bet it advances.
 - [ ] **DB TLS verification** — enable `rejectUnauthorized` for Neon now that
       the pooled-cert question is pinned down, so connections can't be
       intercepted.
-- [ ] **Migration advisory lock** — a rolling deploy runs several instances;
-      take a Postgres advisory lock around `migrate()` so two boots can't race
-      the schema journal.
+- [x] **Migration advisory lock** — `migrateDb()` takes a Postgres advisory
+      lock on its own connection before touching the journal, so the several
+      instances of a rolling deploy serialize instead of racing. The loser waits,
+      then finds the schema applied and no-ops.
 - [x] **`/health` depth** — `/health` also pings the DB (a real `SELECT 1`
       through the pool, 503 + `database_unreachable` on failure) so platform
       health checks catch a dead database, not just a listening socket.
@@ -58,6 +89,10 @@ each phase in this table names the bet it advances.
       `GET /sessions` with one grouped query.
 - [ ] **Request IDs + structured logs** — tag each request with an id and log
       JSON so support can trace a single failing study session.
+- [ ] **Surface the no-voice reason** — `NoopVoiceClient` used to collect a
+      "speech isn't supported" string and drop it. It's now honestly silent;
+      wiring it to `onError` on tap is a product call (it would also change
+      when the study loop falls back to text), not a plumbing one.
 
 **Resolved in the hardening pass (no action needed):** centralized JSON error
 middleware with friendly 413/500 copy; Gemini 20s timeout → deterministic
