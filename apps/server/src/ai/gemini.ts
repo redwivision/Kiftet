@@ -224,6 +224,38 @@ function parseJson<T>(raw: string): T | null {
 // promise rejects, the per-method catch falls back, and the UI keeps moving.
 const GEMINI_TIMEOUT_MS = 20_000;
 
+// Retries share ONE wall-clock budget rather than getting a fresh full timeout
+// each. Three 20s attempts would be 60s+ of hanging, which blows past the 30s
+// client fetch timeout in `api.ts` and turns a transient blip into a hard error
+// page. Each attempt gets whatever is left of the budget, so the retry path
+// stays inside the client window (24s of calls + backoff vs 30s) with a little
+// headroom. Raise GEMINI_TOTAL_BUDGET_MS only if that client timeout moves.
+const GEMINI_TOTAL_BUDGET_MS = 24_000;
+const GEMINI_MAX_ATTEMPTS = 3;
+
+// Only transient conditions are retried. A 400 (malformed request) or 404 will
+// fail identically every time, and retrying it just burns quota we have per
+// project, not per user.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const RETRY_BASE_DELAY_MS = 500;
+
+/** The Gemini SDK surfaces the HTTP status on `ApiError.status`; be defensive
+ *  because a timeout rejection from `withTimeout` is a plain `Error`. */
+function statusOf(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function isRetryable(error: unknown): boolean {
+  const status = statusOf(error);
+  return status !== undefined && RETRYABLE_STATUS.has(status);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -242,24 +274,77 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+// Why the product is currently degraded to deterministic fallbacks. A 429 is
+// the failure to expect: the Gemini free tier is per *project* (~10 req/min,
+// ~1-1.5k/day) and we are explicitly not paying until real users prove the
+// case, so our own per-user allowance is deliberately set below it.
+const aiTelemetry = {
+  attempts: 0,
+  retries: 0,
+  rateLimited: 0,
+  timeouts: 0,
+  malformed: 0,
+  failed: 0,
+};
+
+export function aiTelemetrySnapshot() {
+  return { ...aiTelemetry };
+}
+
 async function askJson(
   systemPrompt: string,
   userInput: string,
 ): Promise<string> {
-  const response = await withTimeout(
-    genAI.models.generateContent({
-      model: DEFAULT_MODEL,
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
-        },
-      ],
-      config: { responseMimeType: "application/json", temperature: 0.4 },
-    }),
-    GEMINI_TIMEOUT_MS,
-  );
-  return response.text ?? "";
+  const deadline = Date.now() + GEMINI_TOTAL_BUDGET_MS;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+    const remaining = deadline - Date.now();
+    // Out of wall clock: a timeout, not a provider fault. Fall back rather
+    // than starting an attempt that cannot finish inside the client window.
+    if (remaining <= 0) {
+      lastError = new Error("Gemini retry budget exhausted");
+      break;
+    }
+    aiTelemetry.attempts += 1;
+    try {
+      const response = await withTimeout(
+        genAI.models.generateContent({
+          model: DEFAULT_MODEL,
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
+            },
+          ],
+          config: { responseMimeType: "application/json", temperature: 0.4 },
+        }),
+        Math.min(GEMINI_TIMEOUT_MS, remaining),
+      );
+      return response.text ?? "";
+    } catch (error) {
+      lastError = error;
+      if (!isRetryable(error) || attempt === GEMINI_MAX_ATTEMPTS) break;
+      // Jitter matters here: many students hit the same per-project ceiling at
+      // the same moment, and fixed backoff would have them all retry in
+      // lockstep and re-trip the 429 immediately.
+      const delay =
+        RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250;
+      aiTelemetry.retries += 1;
+      await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
+    }
+  }
+
+  const status = statusOf(lastError);
+  if (status === 429) aiTelemetry.rateLimited += 1;
+  else if (
+    lastError instanceof Error &&
+    lastError.message.includes("timed out")
+  )
+    aiTelemetry.timeouts += 1;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Gemini request failed");
 }
 
 function extractItems(raw: string): ConceptChecklistItem[] | null {
@@ -460,6 +545,35 @@ function extractQuestions(raw: string): RetestQuestion[] | null {
   return out.length ? out : null;
 }
 
+/** The model answered, but the answer was unusable (not JSON, or JSON that
+ *  failed validation). Distinct from a transport failure: this one is worth
+ *  watching as a quality signal, not just an availability one. */
+function malformed<T>(operation: string, fallback: () => T): T {
+  aiTelemetry.malformed += 1;
+  console.error(`[ai] ${operation} got an unusable response, using fallback`);
+  return fallback();
+}
+
+/** Every degraded path funnels through here so a fallback is never silent.
+ *  Previously each method did `catch { return fallback(); }` with no logging
+ *  and no counter, which meant a student being served the deterministic
+ *  fallback — and us paying for nothing — looked identical to success. */
+function degraded<T>(operation: string, error: unknown, fallback: () => T): T {
+  const status = statusOf(error);
+  const reason =
+    status === 429
+      ? "rate_limited (429)"
+      : status !== undefined
+        ? `upstream_status_${status}`
+        : "timeout_or_network";
+  aiTelemetry.failed += 1;
+  console.error(
+    `[ai] ${operation} degraded to deterministic fallback: ${reason}`,
+    error instanceof Error ? error.message : error,
+  );
+  return fallback();
+}
+
 export const ai: AiService = {
   async extractConcepts(rawText: string): Promise<ConceptChecklistItem[]> {
     const fallback = () => fallbackExtract(rawText);
@@ -469,9 +583,9 @@ export const ai: AiService = {
         EXTRACT_SYSTEM,
         `CHAPTER TEXT:\n${rawText.slice(0, 24000)}`,
       );
-      return extractItems(raw) ?? fallback();
-    } catch {
-      return fallback();
+      return extractItems(raw) ?? malformed("extractConcepts", fallback);
+    } catch (error) {
+      return degraded("extractConcepts", error, fallback);
     }
   },
 
@@ -486,9 +600,9 @@ export const ai: AiService = {
         GRADE_SYSTEM,
         `CONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}\n\nSTUDENT RECALL:\n${transcript}`,
       );
-      return parseGaps(raw, concepts) ?? fallback();
-    } catch {
-      return fallback();
+      return parseGaps(raw, concepts) ?? malformed("gradeRecall", fallback);
+    } catch (error) {
+      return degraded("gradeRecall", error, fallback);
     }
   },
 
@@ -507,9 +621,9 @@ export const ai: AiService = {
       const data = parseJson<Partial<MicroLesson>>(raw);
       if (data && typeof data.text === "string" && data.text.trim())
         return { text: data.text.trim() };
-      return fallback();
-    } catch {
-      return fallback();
+      return malformed("generateMicroLesson", fallback);
+    } catch (error) {
+      return degraded("generateMicroLesson", error, fallback);
     }
   },
 
@@ -526,9 +640,11 @@ export const ai: AiService = {
         RETEST_SYSTEM + outputInstruction(language),
         retestUserPrompt(gaps, recallText),
       );
-      return extractQuestions(raw) ?? fallback();
-    } catch {
-      return fallback();
+      return (
+        extractQuestions(raw) ?? malformed("generateRetestQuestions", fallback)
+      );
+    } catch (error) {
+      return degraded("generateRetestQuestions", error, fallback);
     }
   },
 };
