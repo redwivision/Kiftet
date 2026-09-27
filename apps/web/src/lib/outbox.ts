@@ -16,35 +16,35 @@ import { allStore, dbAvailable, putStore, removeStore } from "@/lib/store";
 export type OutboxKind = "recall" | "answer";
 
 export type OutboxItem = {
-	id: string;
-	kind: OutboxKind;
-	sessionId: string;
-	/** The server-side idempotency key — reused verbatim on replay. */
-	attemptId: string;
-	/** Endpoint body minus attemptId; replay re-adds it. */
-	payload: {
-		transcriptText: string;
-		questionIndex?: number;
-	};
-	createdAt: number;
+  id: string;
+  kind: OutboxKind;
+  sessionId: string;
+  /** The server-side idempotency key — reused verbatim on replay. */
+  attemptId: string;
+  /** Endpoint body minus attemptId; replay re-adds it. */
+  payload: {
+    transcriptText: string;
+    questionIndex?: number;
+  };
+  createdAt: number;
 };
 
 export async function listOutbox(): Promise<OutboxItem[]> {
-	if (!dbAvailable()) return [];
-	const items = await allStore<OutboxItem>("outbox");
-	return items.sort((a, b) => a.createdAt - b.createdAt);
+  if (!dbAvailable()) return [];
+  const items = await allStore<OutboxItem>("outbox");
+  return items.sort((a, b) => a.createdAt - b.createdAt);
 }
 
 export async function enqueueOutbox(item: OutboxItem): Promise<void> {
-	if (!dbAvailable()) return;
-	await putStore("outbox", item, item.id);
-	notifyChange();
+  if (!dbAvailable()) return;
+  await putStore("outbox", item, item.id);
+  notifyChange();
 }
 
 export async function removeOutbox(id: string): Promise<void> {
-	if (!dbAvailable()) return;
-	await removeStore("outbox", id);
-	notifyChange();
+  if (!dbAvailable()) return;
+  await removeStore("outbox", id);
+  notifyChange();
 }
 
 // ── Reactive count (the offline banner subscribes so a flushed queue
@@ -55,19 +55,19 @@ type Listener = (count: number) => void;
 const listeners = new Set<Listener>();
 
 function notifyChange(): void {
-	// Fire-and-forget: a count badge is never worth blocking a submit on.
-	void listOutbox().then((items) => {
-		const count = items.length;
-		for (const listener of listeners) listener(count);
-	});
+  // Fire-and-forget: a count badge is never worth blocking a submit on.
+  void listOutbox().then((items) => {
+    const count = items.length;
+    for (const listener of listeners) listener(count);
+  });
 }
 
 export function subscribeOutbox(listener: Listener): () => void {
-	listeners.add(listener);
-	void listOutbox().then((items) => listener(items.length));
-	return () => {
-		listeners.delete(listener);
-	};
+  listeners.add(listener);
+  void listOutbox().then((items) => listener(items.length));
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 /**
@@ -79,32 +79,32 @@ export function subscribeOutbox(listener: Listener): () => void {
  * (session gone, invalid body) so the queue can't wedge forever.
  */
 export async function flushOutbox(): Promise<number> {
-	if (!dbAvailable()) return 0;
-	const items = await listOutbox();
-	for (const item of items) {
-		try {
-			const path =
-				item.kind === "recall"
-					? `/sessions/${item.sessionId}/recall`
-					: `/sessions/${item.sessionId}/retest/answer`;
-			await api(path, {
-				method: "POST",
-				body: JSON.stringify({ ...item.payload, attemptId: item.attemptId }),
-			});
-			await removeOutbox(item.id);
-		} catch (error) {
-			const status = error instanceof ApiError ? error.status : 0;
-			if (status === 0) break; // still offline — keep everything
-			if (status === 429 || status === 401 || status === 403) continue; // retry later
-			await removeOutbox(item.id); // 400/404/410… it can never grade
-		}
-	}
-	notifyChange();
-	return (await listOutbox()).length;
+  if (!dbAvailable()) return 0;
+  const items = await listOutbox();
+  for (const item of items) {
+    try {
+      const path =
+        item.kind === "recall"
+          ? `/sessions/${item.sessionId}/recall`
+          : `/sessions/${item.sessionId}/retest/answer`;
+      await api(path, {
+        method: "POST",
+        body: JSON.stringify({ ...item.payload, attemptId: item.attemptId }),
+      });
+      await removeOutbox(item.id);
+    } catch (error) {
+      const status = error instanceof ApiError ? error.status : 0;
+      if (status === 0) break; // still offline — keep everything
+      if (status === 429 || status === 401 || status === 403) continue; // retry later
+      await removeOutbox(item.id); // 400/404/410… it can never grade
+    }
+  }
+  notifyChange();
+  return (await listOutbox()).length;
 }
 
 /** Does any queued item belong to this session? */
 export async function hasQueuedForSession(sessionId: string): Promise<boolean> {
-	const items = await listOutbox();
-	return items.some((i) => i.sessionId === sessionId);
+  const items = await listOutbox();
+  return items.some((i) => i.sessionId === sessionId);
 }

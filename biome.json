@@ -17,7 +17,11 @@
       "!**/dev-dist",
       "!**/.zed",
       "!**/.vscode",
+      "!**/.agents",
+      "!**/.claude",
+      "!**/.react-router",
       "!**/routeTree.gen.ts",
+      "!**/src/env.ts",
       "!**/src-tauri",
       "!**/.nuxt",
       "!bts.jsonc",
@@ -32,7 +36,9 @@
   },
   "formatter": {
     "enabled": true,
-    "indentStyle": "tab"
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80
   },
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
@@ -40,7 +46,7 @@
     "rules": {
       "preset": "recommended",
       "correctness": {
-        "useExhaustiveDependencies": "info"
+        "useExhaustiveDependencies": "error"
       },
       "nursery": {
         "useSortedClasses": {
@@ -74,5 +80,29 @@
     "parser": {
       "tailwindDirectives": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.svg"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noSvgWithoutTitle": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "useKeyWithClickEvents": "off",
+            "noLabelWithoutControl": "off"
+          }
+        }
+      }
+    }
+  ]
 }

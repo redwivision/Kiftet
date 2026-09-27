@@ -15,21 +15,21 @@ import { useNavigation } from "react-router";
  * reader user already gets the new page's own heading.
  */
 export function NavigationProgress() {
-	const navigation = useNavigation();
-	const busy = navigation.state !== "idle";
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
 
-	return (
-		<div
-			aria-hidden="true"
-			className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[2px]"
-		>
-			<div
-				data-busy={busy || undefined}
-				className={cn(
-					"h-full w-full origin-left bg-gold/80 transition-opacity duration-300 ease-out",
-					busy ? "animate-ink-sweep opacity-100" : "opacity-0",
-				)}
-			/>
-		</div>
-	);
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[2px]"
+    >
+      <div
+        data-busy={busy || undefined}
+        className={cn(
+          "h-full w-full origin-left bg-gold/80 transition-opacity duration-300 ease-out",
+          busy ? "animate-ink-sweep opacity-100" : "opacity-0",
+        )}
+      />
+    </div>
+  );
 }
