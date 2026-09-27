@@ -50,8 +50,9 @@ Not cosmetic — both were live in the study loop:
 | 10 | Amharic everywhere (bet 4) — bilingual EN/🇪🇹 both-script chrome, generated content in both scripts, Ethiopic type verified | ✅ Done (slices A–D shipped: `Language` pref at `kiftet-language` + persisted through the `LanguageProvider`, pre-hydration `lang` script, `LanguageSwitcher` in the header, typed `messages.ts` corpus where `am` must cover every key, and the study loop's load-bearing chrome wired → `t()`: the four step pills, phase headings/bodies, every primary CTA, session/error/queued/result/voice-guide copy, and the offline banner), plus the landing page and the dashboard, syllabus, textbooks, and voice-test routes. Slice C makes generated content follow the pref: the loop sends `language: "am"`, gemini.ts writes lessons/retest questions in Amharic (Ge'ez) via the `AMHARIC_OUTPUT` instruction with concept names kept verbatim as data, offline fallback content is Amharic too, cached reads honestly flag their language, and a "በአማርኛ / In Amharic" badge marks generated text. Slice D verified the SVG/icon set (same `OPEN_ARC` geometry as the brand mark) and the Ethiopic type stack (Noto Sans Ethiopic loaded at 400–700, Ethiopic-first font stacks, pre-hydration `lang`), and closed the doc gaps — including this doc being split into `docs/howItWorks/` |
 
 | 11 | The smart study guide — scope the student picks (chapter(s) and/or topic(s)), per-concept mastery, a structured guide cached per concept, retest as an optional pre/post tool | 🔨 In progress (**design settled, nothing built** — [see below](#phase-11--the-smart-study-guide); the micro-lesson it replaces is still what ships) |
+| 12 | Syllabus depth — `periods_allocation` from the official document, then Biology 9/10/11 | ⏭️ Queued ([`SYLLABUS.md`](../SYLLABUS.md) §6) |
 
-The five product bets that steer the phases after this — EHEEE syllabus
+The five product bets that steer the phases after this — syllabus
 anchoring, the national misconception map, the offline-first study loop, Amharic
 in everything, and Ethiopian texture — live in [`STRATEGY.md`](../STRATEGY.md);
 each phase in this table names the bet it advances. Phase 11 is the exception:
@@ -59,6 +60,14 @@ it is a bet of its own, but it *serves* three of the others — per-concept
 mastery is what finally makes the misconception map per-concept, its cached
 sections are a hard requirement of the offline bet, and Amharic parity applies
 to every section it generates.
+
+**The bets were reframed in `STRATEGY.md` v2** around one rule: *content is
+delivery, diagnosis is the product.* Syllabus anchoring is now the **core
+defensible asset** rather than one bet among several, and a **subject boundary**
+was drawn — conceptual subjects only, explicitly, until the assessment instrument
+supports computation. Both are argued in [`STRATEGY.md`](../STRATEGY.md) and
+[`SYLLABUS.md`](../SYLLABUS.md); the subject boundary is a marketing
+commitment, not only an engineering one.
 
 ## Phase 11 — the smart study guide
 
@@ -204,7 +213,8 @@ per-concept rubric, targeting the same concepts.
 ### Sequencing
 
 1. **Instrument first.** Per-user AI call / 429 / fallback counters, plus a
-   429-aware `askJson`. Nothing else can be reasoned about without it.
+   429-aware `askJson`. *(Partly landed: the counters and the 429-aware retry
+   are in; `GET /api/ai/telemetry` is the read side.)*
 2. **Per-concept mastery.** Replace the scalar with the 0–3 map; stop
    hardcoding `covered: []`.
 3. **Guide sections + cache.** New table keyed by (chapter, concept, language);
@@ -212,6 +222,13 @@ per-concept rubric, targeting the same concepts.
 4. **Scope selection** — chapters and/or topics, the student's choice.
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
 6. **Tests.** All of the above is currently verifiable by hand only.
+
+**Cheap and high-leverage, do it early:** add `periods_allocation` to
+`conceptNode`, sourced from the official syllabus document, and let it
+**override** the model's 1–5 weight guess when present. Today `clampWeight` in
+`gemini.ts` is the model's opinion of what matters; the periods are the state's
+actual allocation. This turns prioritisation — the thing users judge us by —
+from a model guess into a fact. Details in [`SYLLABUS.md`](../SYLLABUS.md) §4.
 
 ### Open forks — decisions needed before step 4
 
