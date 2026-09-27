@@ -130,12 +130,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -221,12 +217,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -236,9 +228,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -300,9 +290,7 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -443,12 +431,8 @@
           "name": "attempt_session_id_study_session_id_fk",
           "tableFrom": "attempt",
           "tableTo": "study_session",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -537,12 +521,8 @@
           "name": "chapter_textbook_id_textbook_id_fk",
           "tableFrom": "chapter",
           "tableTo": "textbook",
-          "columnsFrom": [
-            "textbook_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["textbook_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -550,12 +530,8 @@
           "name": "chapter_unit_id_syllabus_unit_id_fk",
           "tableFrom": "chapter",
           "tableTo": "syllabus_unit",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["unit_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -638,12 +614,8 @@
           "name": "concept_node_chapter_id_chapter_id_fk",
           "tableFrom": "concept_node",
           "tableTo": "chapter",
-          "columnsFrom": [
-            "chapter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chapter_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -732,12 +704,8 @@
           "name": "misconception_hit_concept_node_id_concept_node_id_fk",
           "tableFrom": "misconception_hit",
           "tableTo": "concept_node",
-          "columnsFrom": [
-            "concept_node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["concept_node_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -745,12 +713,8 @@
           "name": "misconception_hit_session_id_study_session_id_fk",
           "tableFrom": "misconception_hit",
           "tableTo": "study_session",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -758,12 +722,8 @@
           "name": "misconception_hit_user_id_user_id_fk",
           "tableFrom": "misconception_hit",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -866,12 +826,8 @@
           "name": "study_session_user_id_user_id_fk",
           "tableFrom": "study_session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -879,12 +835,8 @@
           "name": "study_session_chapter_id_chapter_id_fk",
           "tableFrom": "study_session",
           "tableTo": "chapter",
-          "columnsFrom": [
-            "chapter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chapter_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1021,12 +973,8 @@
           "name": "syllabus_unit_syllabus_id_syllabus_id_fk",
           "tableFrom": "syllabus_unit",
           "tableTo": "syllabus",
-          "columnsFrom": [
-            "syllabus_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["syllabus_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1085,12 +1033,8 @@
           "name": "textbook_owner_id_user_id_fk",
           "tableFrom": "textbook",
           "tableTo": "user",
-          "columnsFrom": [
-            "owner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["owner_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

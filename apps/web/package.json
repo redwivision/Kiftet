@@ -45,7 +45,9 @@
   },
   "turbo": {
     "build": {
-      "outputs": ["build/**"]
+      "outputs": [
+        "build/**"
+      ]
     }
   }
 }

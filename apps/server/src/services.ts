@@ -1,5 +1,5 @@
 import { createAuth as createConfiguredAuth } from "@kiftet/auth";
-import { type Database, createDb } from "@kiftet/db";
+import { createDb, type Database } from "@kiftet/db";
 
 import { env } from "./env.server";
 

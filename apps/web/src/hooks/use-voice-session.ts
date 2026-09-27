@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 
-import { createVoiceClient, type VoiceClient, type VoiceState } from "@/lib/voice";
+import {
+  createVoiceClient,
+  type VoiceClient,
+  type VoiceState,
+} from "@/lib/voice";
 
 export function useVoiceSession() {
   const [client] = useState<VoiceClient>(() =>

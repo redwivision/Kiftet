@@ -17,35 +17,35 @@ const OPEN_ARC = "M 93.46 43.12 A 44 44 0 1 1 56.88 6.54";
 const STROKE = 8;
 
 export function BrandMark({
-	size = 36,
-	className,
-	closing = false,
+  size = 36,
+  className,
+  closing = false,
 }: {
-	size?: number;
-	className?: string;
-	closing?: boolean;
+  size?: number;
+  className?: string;
+  closing?: boolean;
 }) {
-	return (
-		<svg
-			width={size}
-			height={size}
-			viewBox="0 0 100 100"
-			fill="none"
-			xmlns="http://www.w3.org/2000/svg"
-			className={className}
-			aria-hidden="true"
-		>
-			<path
-				d={OPEN_ARC}
-				stroke="currentColor"
-				strokeWidth={STROKE}
-				strokeLinecap="round"
-				pathLength={closing ? 1 : undefined}
-				strokeDasharray={closing ? 1 : undefined}
-				className={closing ? "animate-mark-close" : undefined}
-			/>
-		</svg>
-	);
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d={OPEN_ARC}
+        stroke="currentColor"
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+        pathLength={closing ? 1 : undefined}
+        strokeDasharray={closing ? 1 : undefined}
+        className={closing ? "animate-mark-close" : undefined}
+      />
+    </svg>
+  );
 }
 
 /**
@@ -58,15 +58,15 @@ export function BrandMark({
  * open. The movement celebrates the result; it never paints over the gap.
  */
 export function GapClosingMark({
-	size = 56,
-	className,
-	closing = false,
+  size = 56,
+  className,
+  closing = false,
 }: {
-	size?: number;
-	className?: string;
-	closing?: boolean;
+  size?: number;
+  className?: string;
+  closing?: boolean;
 }) {
-	return <BrandMark size={size} className={className} closing={closing} />;
+  return <BrandMark size={size} className={className} closing={closing} />;
 }
 
 /**
@@ -76,25 +76,25 @@ export function GapClosingMark({
  * shadow in the light one.
  */
 export function BrandSignature({
-	size = 96,
-	className,
+  size = 96,
+  className,
 }: {
-	size?: number;
-	className?: string;
+  size?: number;
+  className?: string;
 }) {
-	return (
-		<div
-			className={`relative inline-flex items-center justify-center ${className ?? ""}`}
-		>
-			<span
-				className="absolute inset-0 rounded-full"
-				style={{
-					background:
-						"radial-gradient(circle, rgba(242,239,233,0.16) 0%, transparent 65%)",
-					filter: "blur(20px)",
-				}}
-			/>
-			<BrandMark size={size} className="relative" />
-		</div>
-	);
+  return (
+    <div
+      className={`relative inline-flex items-center justify-center ${className ?? ""}`}
+    >
+      <span
+        className="absolute inset-0 rounded-full"
+        style={{
+          background:
+            "radial-gradient(circle, rgba(242,239,233,0.16) 0%, transparent 65%)",
+          filter: "blur(20px)",
+        }}
+      />
+      <BrandMark size={size} className="relative" />
+    </div>
+  );
 }

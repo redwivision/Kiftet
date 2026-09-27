@@ -12,45 +12,45 @@ import { healthUrl } from "@/lib/api";
 // whenever the tab comes back to view or the window regains focus so a
 // reconnect is noticed quickly (it self-heals, outbox included).
 export function useOnline(): boolean {
-	const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(true);
 
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		let cancelled = false;
-		let timer: ReturnType<typeof setInterval> | undefined;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
 
-		const probe = async () => {
-			const controller = new AbortController();
-			const timeout = setTimeout(() => controller.abort(), 5_000);
-			try {
-				const res = await fetch(healthUrl(), {
-					headers: { accept: "text/plain" },
-					cache: "no-store",
-					signal: controller.signal,
-				});
-				if (!cancelled) setOnline(res.ok);
-			} catch {
-				if (!cancelled) setOnline(false);
-			} finally {
-				clearTimeout(timeout);
-			}
-		};
+    const probe = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5_000);
+      try {
+        const res = await fetch(healthUrl(), {
+          headers: { accept: "text/plain" },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!cancelled) setOnline(res.ok);
+      } catch {
+        if (!cancelled) setOnline(false);
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
 
-		void probe();
-		timer = setInterval(() => void probe(), 15_000);
-		const onVisible = () => {
-			if (document.visibilityState === "visible") void probe();
-		};
-		const onFocus = () => void probe();
-		document.addEventListener("visibilitychange", onVisible);
-		window.addEventListener("focus", onFocus);
-		return () => {
-			cancelled = true;
-			if (timer) clearInterval(timer);
-			document.removeEventListener("visibilitychange", onVisible);
-			window.removeEventListener("focus", onFocus);
-		};
-	}, []);
+    void probe();
+    timer = setInterval(() => void probe(), 15_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void probe();
+    };
+    const onFocus = () => void probe();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
-	return online;
+  return online;
 }
