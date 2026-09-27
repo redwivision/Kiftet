@@ -34,6 +34,19 @@
 	--border: rgba(32, 29, 24, 0.14);
 	--input: rgba(32, 29, 24, 0.1);
 	--ring: #201d18;
+	/* Focus gets its own token. In every DARK room --ring had been set equal to
+	   --primary, so keyboard focus on a primary CTA rendered an accent ring on
+	   an accent button — invisible. --focus is a light-shifted accent drawn
+	   OUTSIDE the control (see the outline-offset in the base layer), so it
+	   always lands on the room ground and always contrasts. Never collapse the
+	   two back together in a dark room.
+	   Here in the paper room they are legitimately the same value: --focus is
+	   dark ink on a light control, which is maximum contrast, not a collision.
+	   The values diverge as soon as the room goes dark. */
+	--focus: #201d18;
+	/* Panel fill: the room ground lifted toward its own candle, so a card
+	   belongs to the room instead of sitting on it as grey. */
+	--panel: color-mix(in srgb, #f6f1e6 88%, #201d18 12%);
 }
 
 /* ── Dark rooms ──────────────────────────────────────────────────
@@ -73,6 +86,8 @@
 	--border: rgba(242, 239, 233, 0.1);
 	--input: rgba(242, 239, 233, 0.12);
 	--ring: #f2efe9;
+	--focus: #ffffff;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Ember — the brazier, after dark. */
@@ -104,6 +119,8 @@
 	--border: rgba(244, 231, 214, 0.1);
 	--input: rgba(244, 231, 214, 0.12);
 	--ring: #e26d2a;
+	--focus: #ff8a45;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Jade — the lake at night. */
@@ -135,6 +152,8 @@
 	--border: rgba(220, 240, 232, 0.1);
 	--input: rgba(220, 240, 232, 0.12);
 	--ring: #41bf9c;
+	--focus: #5dd6b4;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Violet — the dusk before study. */
@@ -166,6 +185,8 @@
 	--border: rgba(235, 233, 242, 0.1);
 	--input: rgba(235, 233, 242, 0.12);
 	--ring: #8b7cf6;
+	--focus: #a99bff;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Ochre — sunset saffron, soft and warm. */
@@ -197,6 +218,8 @@
 	--border: rgba(243, 234, 214, 0.1);
 	--input: rgba(243, 234, 214, 0.12);
 	--ring: #d9a441;
+	--focus: #eec060;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Midnight — deep indigo-blue, dusk focus. */
@@ -228,6 +251,8 @@
 	--border: rgba(228, 231, 245, 0.1);
 	--input: rgba(228, 231, 245, 0.12);
 	--ring: #6c78e0;
+	--focus: #8b97f0;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Meadow — deep leaf green, reborn on black. */
@@ -259,6 +284,8 @@
 	--border: rgba(227, 238, 224, 0.1);
 	--input: rgba(227, 238, 224, 0.12);
 	--ring: #6fae7c;
+	--focus: #8cc798;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 /* Copper — muted ember rust, roastery warmth. */
@@ -290,6 +317,8 @@
 	--border: rgba(243, 228, 217, 0.1);
 	--input: rgba(243, 228, 217, 0.12);
 	--ring: #cd7652;
+	--focus: #e89772;
+	--panel: color-mix(in srgb, var(--room-bg) 88%, var(--brand-accent) 12%);
 }
 
 @theme inline {
@@ -310,6 +339,11 @@
 	--color-sage: #5c7a5e;
 	--color-sage-soft: color-mix(in srgb, var(--color-sage) 68%, white);
 	--color-fog: #8b8f98;
+	/* Room-aware panel fill + the focus token. Registered here so components
+	   say `bg-panel/80` and `outline-focus` instead of hardcoding a hex that
+	   only looks right in one room. */
+	--color-panel: var(--panel);
+	--color-focus: var(--focus);
 
 	/* Type */
 	--font-display:
@@ -341,6 +375,16 @@
 	/* The mark resolving on "Gap closed." — the arc draws in and settles sage,
 	   leaving the missing segment honestly open. */
 	--animate-mark-close: mark-close 1.1s ease-out both;
+	/* Skeletons: the page settling into place. Same ink metaphor as the
+	   loader but slow and shallow — a skeleton should read as "arriving",
+	   never as "urgent", so it never drops toward invisible the way the
+	   stock opacity blink does. */
+	--animate-ink-rise: ink-rise 2.4s ease-in-out infinite;
+	/* Route transitions: a line of ink drawn across the top, holding, then
+	   dissolving when the route lands. Indeterminate on purpose — a real
+	   progress bar would need to know a chunk's size, and guessing wrong
+	   reads worse than admitting we don't. */
+	--animate-ink-sweep: ink-sweep 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 
 	@keyframes fade-up {
 		from {
@@ -465,6 +509,26 @@
 			transform: scaleX(1);
 		}
 	}
+	@keyframes ink-rise {
+		0%,
+		100% {
+			opacity: 0.3;
+		}
+		50% {
+			opacity: 0.6;
+		}
+	}
+	@keyframes ink-sweep {
+		0% {
+			transform: scaleX(0);
+		}
+		60% {
+			transform: scaleX(0.72);
+		}
+		100% {
+			transform: scaleX(0.96);
+		}
+	}
 	@keyframes mark-close {
 		from {
 			stroke-dashoffset: 1;
@@ -482,6 +546,18 @@
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
+	}
+
+	/* One visible focus treatment for the entire app.
+	   `outline` + `outline-offset` is native CSS, so it composites on top of
+	   any fill without needing a matched ring-offset colour, and because
+	   --focus is a light-shifted accent drawn *outside* the control it stays
+	   legible on every surface — including a primary CTA whose fill is that
+	   same accent. This is the safety net: the hand-rolled <button>s that
+	   carry no focus class of their own are covered here. */
+	:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
 	}
 
 	html {
@@ -526,7 +602,11 @@
 				var(--wash-top),
 				transparent 60%
 			),
-			radial-gradient(900px 480px at 92% 8%, var(--wash-corner), transparent 55%),
+			radial-gradient(
+				900px 480px at 92% 8%,
+				var(--wash-corner),
+				transparent 55%
+			),
 			radial-gradient(
 				1000px 700px at 50% 115%,
 				rgba(0, 0, 0, 0.42),
@@ -650,7 +730,8 @@
 @layer components {
 	/* Quiet hairline panel — the default stage surface. */
 	.surface {
-		@apply rounded-3xl border border-border/70 bg-card/70 shadow-[0_20px_60px_-24px_rgba(10,16,32,0.55)];
+		@apply rounded-3xl border border-border/70 shadow-[0_20px_60px_-24px_rgba(10,16,32,0.55)];
+		background-color: color-mix(in srgb, var(--panel) 70%, transparent);
 	}
 	/* backdrop-filter is the expensive part on low-end phones. Apply it only
 	   where the browser can actually composite it — and even then keep it
@@ -668,7 +749,12 @@
 	.midnight .surface,
 	.meadow .surface,
 	.copper .surface {
-		@apply bg-[#14151a]/80 shadow-[0_20px_60px_-24px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)];
+		@apply shadow-[0_20px_60px_-24px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)];
+		/* Room-aware fill. This used to be a fixed #14151a charcoal, which in a
+		   warm room (Ember, Copper) read as a slightly-off grey rectangle pasted
+		   onto the tinted field. It now derives from --room-bg + the room's own
+		   candle, so a card belongs to the room instead of sitting on it. */
+		background-color: color-mix(in srgb, var(--panel) 82%, transparent);
 		border-color: color-mix(in srgb, var(--brand-accent) 16%, transparent);
 	}
 
@@ -718,9 +804,12 @@
 		filter: blur(14px);
 	}
 
-	/* Calm, sentence-case label. */
+	/* Calm, sentence-case label. 0.78rem is the product's type floor — the app
+	   used to carry labels at 0.62rem (9.9px), which is below the practical
+	   minimum before any zoom and hard to read in Ethiopic, whose glyphs carry
+	   more detail per stroke than Latin at the same size. */
 	.k-label {
-		@apply text-[0.72rem] font-medium tracking-[0.01em] text-muted-foreground;
+		@apply text-[0.78rem] font-medium tracking-[0.01em] text-muted-foreground;
 	}
 	.dark .k-label,
 	.ember .k-label,
@@ -740,5 +829,19 @@
 		border: 1px solid rgba(32, 29, 24, 0.14);
 		background: #f2efe9;
 		color: #16151a;
+	}
+
+	/* Toasts are the app's only global feedback channel and they carry every
+	   auth, offline and sync error, so they get the same surface language as
+	   the rest of the product rather than a stock panel. */
+	.k-toast {
+		border: 1px solid color-mix(in srgb, var(--brand-accent) 18%, transparent);
+		box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.7);
+		font-family: var(--font-sans);
+	}
+	@supports (backdrop-filter: blur(4px)) {
+		.k-toast {
+			backdrop-filter: blur(8px);
+		}
 	}
 }

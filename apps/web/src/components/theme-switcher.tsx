@@ -11,6 +11,7 @@ import {
 import { cn } from "@kiftet/ui/lib/utils";
 import { Check, Palette } from "lucide-react";
 import { useEffect } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { useTheme } from "@/components/theme-provider";
 
 const THEMES = [
@@ -93,6 +94,7 @@ const THEME_COLOR: Record<string, string> = {
 
 export function ThemeSwitcher() {
 	const { theme, setTheme } = useTheme();
+	const { t } = useLanguage();
 
 	useEffect(() => {
 		document
@@ -109,8 +111,8 @@ export function ThemeSwitcher() {
 				render={
 					<Button
 						variant="outline"
-						size="icon"
-						aria-label="Choose a theme"
+						size="icon-sm"
+						aria-label={t("choose-theme")}
 						className="relative"
 					/>
 				}
@@ -120,7 +122,7 @@ export function ThemeSwitcher() {
 			<DropdownMenuContent align="end" className="w-52">
 				<DropdownMenuGroup>
 					<DropdownMenuLabel className="px-3 py-2">
-						Ink for the room
+						{t("ink-for-the-room")}
 					</DropdownMenuLabel>
 				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
@@ -140,7 +142,7 @@ export function ThemeSwitcher() {
 								/>
 								<span className="flex flex-col leading-tight">
 									<span className="font-medium">{t.label}</span>
-									<span className="text-[0.65rem] text-muted-foreground">
+									<span className="text-[0.78rem] text-muted-foreground">
 										{t.note}
 									</span>
 								</span>

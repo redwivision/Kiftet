@@ -10,6 +10,7 @@ import { authClient } from "@/lib/auth-client";
 import { clearDemoUser } from "@/lib/demo";
 
 import AuthShell from "./auth-shell";
+import { useLanguage } from "./language-provider";
 import Loader from "./loader";
 
 export default function SignInForm({
@@ -18,6 +19,7 @@ export default function SignInForm({
 	onSwitchToSignUp: () => void;
 }) {
 	const navigate = useNavigate();
+	const { t } = useLanguage();
 	const { isPending } = authClient.useSession();
 
 	const form = useForm({
@@ -35,13 +37,13 @@ export default function SignInForm({
 					onSuccess: () => {
 						clearDemoUser();
 						navigate("/dashboard");
-						toast.success("Welcome back");
+						toast.success(t("auth-welcome-back"));
 					},
 					onError: (error) => {
 						toast.error(
 							error.error?.message ||
 								error.error?.statusText ||
-								"Unable to sign in right now. Try again.",
+								t("auth-signin-error"),
 						);
 					},
 				},
@@ -49,8 +51,8 @@ export default function SignInForm({
 		},
 		validators: {
 			onSubmit: z.object({
-				email: z.email("Invalid email address"),
-				password: z.string().min(8, "Password must be at least 8 characters"),
+				email: z.email(t("auth-invalid-email")),
+				password: z.string().min(8, t("auth-password-too-short")),
 			}),
 		},
 	});
@@ -61,15 +63,15 @@ export default function SignInForm({
 
 	return (
 		<AuthShell
-			title="Welcome back"
-			subtitle="Sign in to keep closing the gaps the exam will look for."
+			title={t("auth-welcome-back")}
+			subtitle={t("auth-signin-subtitle")}
 			footer={
 				<Button
 					variant="link"
 					onClick={onSwitchToSignUp}
-					className="text-gold hover:text-gold-soft"
+					className="text-gold transition-colors duration-200 hover:text-gold-soft"
 				>
-					Need an account? Sign up
+					{t("need-account")} {t("sign-up")}
 				</Button>
 			}
 		>
@@ -85,7 +87,7 @@ export default function SignInForm({
 					<form.Field name="email">
 						{(field) => (
 							<div className="space-y-2">
-								<Label htmlFor={field.name}>Email</Label>
+								<Label htmlFor={field.name}>{t("auth-email-label")}</Label>
 								<Input
 									id={field.name}
 									name={field.name}
@@ -110,7 +112,7 @@ export default function SignInForm({
 					<form.Field name="password">
 						{(field) => (
 							<div className="space-y-2">
-								<Label htmlFor={field.name}>Password</Label>
+								<Label htmlFor={field.name}>{t("auth-password-label")}</Label>
 								<Input
 									id={field.name}
 									name={field.name}
@@ -140,9 +142,10 @@ export default function SignInForm({
 						<Button
 							type="submit"
 							className="w-full justify-center"
-							disabled={!canSubmit || isSubmitting}
+							disabled={!canSubmit}
+							loading={isSubmitting}
 						>
-							{isSubmitting ? "Signing in…" : "Sign in"}
+							{t("auth-signin-cta")}
 						</Button>
 					)}
 				</form.Subscribe>

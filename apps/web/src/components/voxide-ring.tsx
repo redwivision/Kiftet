@@ -5,16 +5,21 @@ import { Mic, Square, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getVoxideClient } from "@/components/assistant";
 import { InkSettling } from "@/components/ink-settling";
+import { useLanguage } from "@/components/language-provider";
+import type { MessageKey } from "@/lib/messages";
 
-const LABEL: Record<VoxideStatus, string> = {
-	idle: "Tap and speak",
-	armed: "Ready — tap to start",
-	connecting: "Connecting…",
-	listening: "Listening…",
-	thinking: "Thinking…",
-	speaking: "Speaking…",
-	executing: "Running…",
-	error: "Tap to retry",
+/* The voice state captions. These keys have been bilingual since bet 4 — the
+   ring was simply never wired to them, so an Amharic reader was told
+   "Listening…" in English at the exact moment they were speaking. */
+const LABEL_KEY: Record<VoxideStatus, MessageKey> = {
+	idle: "vt-idle",
+	armed: "vt-armed",
+	connecting: "vt-connecting",
+	listening: "vt-listening",
+	thinking: "vt-thinking",
+	speaking: "vt-speaking",
+	executing: "vt-executing",
+	error: "vt-error",
 };
 
 const PROCESSING: VoxideStatus[] = ["connecting", "thinking", "executing"];
@@ -33,6 +38,7 @@ export function VoxideRing({
 	const client = getVoxideClient();
 	const voice = useVoxideVoice(client);
 	const { status } = voice;
+	const { t } = useLanguage();
 
 	const [initReady, setInitReady] = useState(() =>
 		client ? client.isInitialized : false,
@@ -93,7 +99,7 @@ export function VoxideRing({
 		}
 	};
 
-	const label = initReady ? LABEL[status] : "Starting…";
+	const label = initReady ? t(LABEL_KEY[status]) : t("loading");
 
 	return (
 		<div className="relative grid place-items-center" aria-live="polite">

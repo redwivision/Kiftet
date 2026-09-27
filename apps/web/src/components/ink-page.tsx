@@ -17,7 +17,7 @@ export function InkPage({ className }: { className?: string }) {
 	return (
 		<div
 			className={cn(
-				"w-44 rounded-xl border border-white/10 bg-[#0a0b0d] p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.9)]",
+				"w-44 rounded-xl border border-white/10 bg-panel p-4 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.9)]",
 				className,
 			)}
 			aria-hidden="true"

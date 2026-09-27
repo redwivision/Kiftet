@@ -54,28 +54,6 @@ export function meta(_args: Route.MetaArgs) {
 	];
 }
 
-const RECALL_CAPTION: Record<string, string> = {
-	idle: "Tap the ring, then say what you remember about this chapter out loud. No notes — rough and honest is perfect. Tap again when you're done.",
-	armed: "Ready — tap to start.",
-	connecting: "Connecting…",
-	listening: "Listening… tap the ring when you're done.",
-	thinking: "Thinking…",
-	speaking: "Speaking…",
-	executing: "Working…",
-	error: "Couldn't reach the voice service. Tap to retry, or type below.",
-};
-
-const ANSWER_CAPTION: Record<string, string> = {
-	idle: "Say your answer out loud in your own words — teaching it back is what proves it. Tap the ring when you're done.",
-	armed: "Ready — tap to start.",
-	connecting: "Connecting…",
-	listening: "Listening… tap the ring when you're done.",
-	thinking: "Thinking…",
-	speaking: "Speaking…",
-	executing: "Working…",
-	error: "Couldn't reach the voice service. Tap to retry, or type below.",
-};
-
 // The four loop pills, keyed by phase so the label can follow the language
 // pref while the ordering (and the "Step a of b" math) stays structural.
 const STEPS = [
@@ -173,7 +151,7 @@ function StudyScreen() {
 									if (text) void speak(text);
 								}}
 								aria-label={t("read-notice")}
-								className="mt-0.5 shrink-0 rounded-full border border-gold/30 bg-gold/10 p-1.5 text-gold hover:bg-gold/20"
+								className="mt-0.5 shrink-0 rounded-full border border-gold/30 bg-gold/10 p-2 text-gold transition-colors duration-200 hover:bg-gold/20"
 							>
 								<Volume2 className="size-4" aria-hidden="true" />
 							</button>
@@ -249,7 +227,7 @@ function SessionHeader({
 						<BrandMark size={36} className="rounded-full" />
 					</div>
 				</div>
-				<p className="font-medium text-[0.72rem] text-muted-foreground">
+				<p className="font-medium text-[0.78rem] text-muted-foreground">
 					{t("step-of", { a: current, b: STEPS.length })}
 				</p>
 			</div>
@@ -264,7 +242,7 @@ function SessionHeader({
 							<span
 								aria-current={active ? "step" : undefined}
 								className={cn(
-									"flex items-center gap-1.5 rounded-full py-1 pr-3 pl-2 font-medium text-[0.72rem] transition-colors",
+									"flex items-center gap-1.5 rounded-full py-1 pr-3 pl-2 font-medium text-[0.78rem] transition-colors",
 									active && "border border-gold/40 bg-gold/10 text-gold",
 									done && "text-sage",
 									!active && !done && "text-muted-foreground/70",
@@ -279,7 +257,7 @@ function SessionHeader({
 									{done ? (
 										<Check className="size-2.5" aria-hidden="true" />
 									) : (
-										<span className="font-display font-semibold text-[0.62rem]">
+										<span className="font-display font-semibold text-[0.78rem]">
 											{i + 1}
 										</span>
 									)}
@@ -494,7 +472,7 @@ function VoiceCapture({
 						className="max-w-md text-center font-medium text-foreground/80 text-sm leading-6"
 						aria-live="polite"
 					>
-						{captureCaption(voice.status, state.phase)}
+						{captureCaption(voice.status, state.phase, t)}
 					</p>
 				)}
 
@@ -508,14 +486,14 @@ function VoiceCapture({
 			{/* What you said, read back — rendered exactly once. */}
 			{lastJustSaid && (
 				<div className="mx-auto max-w-md rounded-2xl border border-sage/25 bg-sage/[0.06] px-4 py-3 text-sm">
-					<p className="mb-1 font-medium text-[0.72rem] text-sage">
+					<p className="mb-1 font-medium text-[0.78rem] text-sage">
 						{t("what-you-said")}
 					</p>
 					<p className="text-foreground/90 leading-6">{lastJustSaid}</p>
 					<button
 						type="button"
 						onClick={() => speak(lastJustSaid)}
-						className="mt-2 inline-flex items-center gap-1.5 font-medium text-sage text-xs underline underline-offset-4 hover:text-sage-soft"
+						className="mt-2 inline-flex items-center gap-1.5 font-medium text-sage text-xs underline underline-offset-4 transition-colors duration-200 hover:text-sage-soft"
 					>
 						<Volume2 className="size-3.5" aria-hidden="true" />
 						{t("read-it-back")}
@@ -531,7 +509,7 @@ function VoiceCapture({
 				<div className="text-center">
 					<button
 						type="button"
-						className="text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+						className="text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
 						onClick={() => setShowText((v) => !v)}
 					>
 						{showText ? t("try-voice-instead") : t("prefer-typing")}
@@ -542,9 +520,42 @@ function VoiceCapture({
 	);
 }
 
-function captureCaption(status: VoxideStatus, phase: string): string {
-	const table = phase === "retest" ? ANSWER_CAPTION : RECALL_CAPTION;
-	return table[status] ?? RECALL_CAPTION.idle;
+type Translate = ReturnType<typeof useLanguage>["t"];
+
+// The ring is push-to-talk, so these captions can't reuse the `vt-*` strings
+// the always-on Voxide ring uses — same states, but the verbs differ ("tap the
+// ring when you're done" vs "tap again to stop me"). The idle line also swaps
+// on the retest pass, because recalling and answering want different prompts.
+const CAPTION_KEYS: Record<string, Record<string, MessageKey>> = {
+	recall: {
+		idle: "st-recall-idle",
+		armed: "st-armed",
+		connecting: "st-connecting",
+		listening: "st-listening",
+		thinking: "st-thinking",
+		speaking: "st-speaking",
+		executing: "st-executing",
+		error: "st-error",
+	},
+	answer: {
+		idle: "st-answer-idle",
+		armed: "st-armed",
+		connecting: "st-connecting",
+		listening: "st-listening",
+		thinking: "st-thinking",
+		speaking: "st-speaking",
+		executing: "st-executing",
+		error: "st-error",
+	},
+};
+
+function captureCaption(
+	status: VoxideStatus,
+	phase: string,
+	t: Translate,
+): string {
+	const table = phase === "retest" ? CAPTION_KEYS.answer : CAPTION_KEYS.recall;
+	return t(table[status] ?? table.idle);
 }
 
 function TextRecorder({
@@ -705,7 +716,7 @@ function GapsPhase() {
 				</Button>
 				<button
 					type="button"
-					className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+					className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
 					onClick={() => void startRetest()}
 				>
 					{t("skip-lesson")}
@@ -798,7 +809,7 @@ function LessonPhase() {
 		<div className="space-y-6">
 			<PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
 			{lang === "am" && (
-				<p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.7rem] text-gold tracking-wide">
+				<p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
 					{t("fluency-am")}
 				</p>
 			)}
@@ -848,7 +859,7 @@ function LessonPhase() {
 				</Button>
 				<button
 					type="button"
-					className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+					className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
 					onClick={viewGaps}
 				>
 					{t("back-to-gaps")}
@@ -871,7 +882,7 @@ function RetestPhase() {
 				text={done ? t("retest-done-text") : t("retest-text")}
 			/>
 			{lang === "am" && !done && (
-				<p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.7rem] text-gold tracking-wide">
+				<p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
 					{t("fluency-am")}
 				</p>
 			)}
@@ -954,7 +965,7 @@ function RetestPhase() {
 										)}
 									</span>
 									<div className="min-w-0 flex-1">
-										<p className="font-medium text-[0.72rem] text-muted-foreground">
+										<p className="font-medium text-[0.78rem] text-muted-foreground">
 											{t("question-i", { n: i + 1 })} ·{" "}
 											{a.correct ? t("right") : t("still-open")}
 										</p>
@@ -970,14 +981,14 @@ function RetestPhase() {
 										{(a.gaps.missing.length > 0 ||
 											a.gaps.misconceptions.length > 0) && (
 											<p className="mt-2 flex flex-wrap items-center gap-1.5">
-												<span className="font-medium text-[0.68rem] text-muted-foreground">
+												<span className="font-medium text-[0.78rem] text-muted-foreground">
 													{t("still-open")}
 												</span>
 												{[...a.gaps.missing, ...a.gaps.misconceptions].map(
 													(concept, gi) => (
 														<span
 															key={`${gi}-${concept}`}
-															className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.68rem] text-rust"
+															className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.78rem] text-rust"
 														>
 															{concept}
 														</span>
@@ -987,13 +998,13 @@ function RetestPhase() {
 										)}
 										{a.gaps.covered.length > 0 && (
 											<p className="mt-2 flex flex-wrap items-center gap-1.5">
-												<span className="font-medium text-[0.68rem] text-muted-foreground">
+												<span className="font-medium text-[0.78rem] text-muted-foreground">
 													{t("landed")}
 												</span>
 												{a.gaps.covered.map((concept, gi) => (
 													<span
 														key={`${gi}-${concept}`}
-														className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.68rem] text-sage"
+														className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.78rem] text-sage"
 													>
 														{concept}
 													</span>
@@ -1109,7 +1120,7 @@ function ResultPhase({
 						</Button>
 						<button
 							type="button"
-							className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+							className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
 							onClick={onTryAgain}
 						>
 							{t("start-over")}
@@ -1117,7 +1128,7 @@ function ResultPhase({
 						{state.attempts >= 2 && (
 							<button
 								type="button"
-								className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
+								className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
 								onClick={() => void onDone()}
 							>
 								{t("come-back-later")}
@@ -1236,7 +1247,7 @@ function ResultPanel({
 				)}
 				<p
 					className={cn(
-						"inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium text-[0.72rem]",
+						"inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium text-[0.78rem]",
 						isGold && "bg-gold/15 text-gold",
 						tone === "sage" && "bg-sage/15 text-sage",
 						tone === "rust" && "bg-rust/15 text-rust",
@@ -1384,7 +1395,7 @@ function ScoreBar({
 			<div className="flex items-baseline justify-between text-sm">
 				<span
 					className={cn(
-						"font-medium text-[0.72rem]",
+						"font-medium text-[0.78rem]",
 						active ? "text-foreground/90" : "text-muted-foreground",
 					)}
 				>

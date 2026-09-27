@@ -202,10 +202,13 @@ export default function Syllabus() {
 								key={row.id}
 								type="button"
 								onClick={() => selectSyllabus(row.subject, row.grade)}
+								aria-pressed={
+									row.subject === current.subject && row.grade === current.grade
+								}
 								className={
 									row.subject === current.subject && row.grade === current.grade
-										? "rounded-full border border-gold/40 bg-gold/10 px-3 py-1 font-medium text-[0.72rem] text-gold"
-										: "rounded-full border border-border/70 px-3 py-1 text-[0.72rem] text-muted-foreground hover:border-gold/40 hover:text-gold"
+										? "rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1.5 font-medium text-[0.78rem] text-gold"
+										: "rounded-full border border-border/70 px-3.5 py-1.5 text-[0.78rem] text-muted-foreground transition-colors duration-200 hover:border-gold/40 hover:text-gold"
 								}
 							>
 								{row.title}
@@ -326,7 +329,7 @@ export default function Syllabus() {
 											<p className="truncate font-medium text-foreground/90 text-sm">
 												{ch.title}
 											</p>
-											<p className="truncate text-[0.72rem] text-muted-foreground">
+											<p className="truncate text-[0.78rem] text-muted-foreground">
 												{ch.textbookTitle}
 											</p>
 										</div>
@@ -400,12 +403,12 @@ function UnitCard({
 									total: unit.total,
 								})}
 							</span>
-							<span className="block text-[0.72rem] text-muted-foreground">
+							<span className="block text-[0.78rem] text-muted-foreground">
 								{t("pct-unit", { pct })}
 							</span>
 						</p>
 					) : (
-						<p className="text-[0.72rem] text-muted-foreground">
+						<p className="text-[0.78rem] text-muted-foreground">
 							{t("no-chapters-mapped")}
 						</p>
 					)}
@@ -429,17 +432,17 @@ function UnitCard({
 									<p className="truncate font-medium text-foreground/90 text-sm">
 										{ch.title}
 									</p>
-									<p className="truncate text-[0.72rem] text-muted-foreground">
+									<p className="truncate text-[0.78rem] text-muted-foreground">
 										{ch.textbookTitle}
 									</p>
 								</div>
 								<div className="flex items-center gap-2">
 									{covered ? (
-										<span className="rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 font-medium text-[0.72rem] text-sage">
+										<span className="rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 font-medium text-[0.78rem] text-sage">
 											{ch.coverage?.before ?? "—"}% → {ch.coverage?.after}%
 										</span>
 									) : (
-										<span className="px-2.5 py-0.5 text-[0.72rem] text-muted-foreground">
+										<span className="px-2.5 py-0.5 text-[0.78rem] text-muted-foreground">
 											{t("not-studied")}
 										</span>
 									)}
@@ -485,7 +488,7 @@ function UnitSelect({
 			disabled={saving}
 			aria-label={t("map-aria")}
 			onChange={(e) => onChange(e.target.value || null)}
-			className="rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-[0.72rem] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50"
+			className="rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-[0.78rem] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50"
 		>
 			<option value="">{t("no-unit")}</option>
 			{units.map((u) => (

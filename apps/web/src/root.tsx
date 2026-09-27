@@ -1,17 +1,12 @@
 import { Toaster } from "@kiftet/ui/components/sonner";
-import {
-	isRouteErrorResponse,
-	Links,
-	Meta,
-	Outlet,
-	Scripts,
-	ScrollRestoration,
-} from "react-router";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
 import "./index.css";
 import type { Route } from "./+types/root";
+import { ErrorScreen } from "./components/error-screen";
 import Header from "./components/header";
-import { LanguageProvider } from "./components/language-provider";
+import { LanguageProvider, useLanguage } from "./components/language-provider";
+import { NavigationProgress } from "./components/navigation-progress";
 import { ThemeProvider } from "./components/theme-provider";
 
 export const links: Route.LinksFunction = () => [
@@ -96,6 +91,18 @@ export function meta(): ReturnType<Route.MetaFunction> {
 	];
 }
 
+function SkipLink() {
+	const { t } = useLanguage();
+	return (
+		<a
+			href="#main-content"
+			className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-full focus:bg-popover focus:px-4 focus:py-2.5 focus:text-popover-foreground"
+		>
+			{t("skip-to-content")}
+		</a>
+	);
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
@@ -104,7 +111,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<script src="/registerSW.js" defer />
 
 				<meta charSet="utf-8" />
-				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				{/* viewport-fit=cover so the installed app can paint under the
+				    notch; without it the status bar overlaps the header. */}
+				<meta
+					name="viewport"
+					content="width=device-width, initial-scale=1, viewport-fit=cover"
+				/>
 				<meta name="format-detection" content="telephone=no" />
 				{/* iOS Home Screen: give the installed app the brand name and a
 				    dark status bar instead of the page title. */}
@@ -131,15 +143,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<Links />
 			</head>
 			<body>
-				<a
-					href="#main-content"
-					className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-foreground"
+				{/* The providers live here rather than inside <App/> so the error
+				    screen is a first-class citizen: it renders in the reader's
+				    chosen room, in their language, with the toast channel alive.
+				    A crash used to drop them into an unstyled, English-only page
+				    with no theme context at all. */}
+				<ThemeProvider
+					attribute="class"
+					defaultTheme="dark"
+					disableTransitionOnChange
+					storageKey="kiftet-theme"
+					themes={[
+						"dark",
+						"ember",
+						"jade",
+						"violet",
+						"ochre",
+						"midnight",
+						"meadow",
+						"copper",
+						"light",
+					]}
 				>
-					Skip to content
-				</a>
-				{children}
-				<ScrollRestoration />
-				<Scripts />
+					<LanguageProvider>
+						<NavigationProgress />
+						<SkipLink />
+						{children}
+						<Toaster />
+						<ScrollRestoration />
+						<Scripts />
+					</LanguageProvider>
+				</ThemeProvider>
 			</body>
 		</html>
 	);
@@ -147,59 +181,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
 	return (
-		<ThemeProvider
-			attribute="class"
-			defaultTheme="dark"
-			disableTransitionOnChange
-			storageKey="kiftet-theme"
-			themes={[
-				"dark",
-				"ember",
-				"jade",
-				"violet",
-				"ochre",
-				"midnight",
-				"meadow",
-				"copper",
-				"light",
-			]}
-		>
-			<LanguageProvider>
-				<div className="flex min-h-dvh flex-col">
-					<Header />
-					<div id="main-content" className="flex-1" tabIndex={-1}>
-						<Outlet />
-					</div>
-				</div>
-				<Toaster richColors />
-			</LanguageProvider>
-		</ThemeProvider>
+		<div className="flex min-h-dvh flex-col">
+			<Header />
+			<div id="main-content" className="flex-1" tabIndex={-1}>
+				<Outlet />
+			</div>
+		</div>
 	);
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-	let message = "Oops!";
-	let details = "An unexpected error occurred.";
-	let stack: string | undefined;
-	if (isRouteErrorResponse(error)) {
-		message = error.status === 404 ? "404" : "Error";
-		details =
-			error.status === 404
-				? "The requested page could not be found."
-				: error.statusText || details;
-	} else if (import.meta.env.DEV && error && error instanceof Error) {
-		details = error.message;
-		stack = error.stack;
-	}
+	// No <Header/> here on purpose: the header pulls in the auth client and the
+	// offline probe, either of which may be the thing that just crashed. The
+	// screen carries its own mark and its own way out.
 	return (
-		<main className="container mx-auto p-4 pt-16">
-			<h1>{message}</h1>
-			<p>{details}</p>
-			{stack && (
-				<pre className="w-full overflow-x-auto p-4">
-					<code>{stack}</code>
-				</pre>
-			)}
-		</main>
+		<div className="flex min-h-dvh flex-col">
+			<ErrorScreen error={error} />
+		</div>
 	);
 }
