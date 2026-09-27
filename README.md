@@ -112,7 +112,9 @@ dev-safe placeholders and generate typed `env.ts` modules on install. Point
 | `bun run dev` | run both dev servers via Turbo |
 | `bun run build` | typecheck + build web and server |
 | `bun run serve` / `bun run start` | run the built combined service (prod) |
-| `bun run check` | Biome format/lint |
+| `bun run check-types` | TypeScript across every package |
+| `bun run lint` | Biome format + lint, reports only — this is what CI runs |
+| `bun run format` | Biome, applies fixes in place |
 | `bun run db:generate` | next Drizzle migration from schema changes |
 | `bun run db:migrate` | apply pending migrations |
 | `bun run db:studio` | browse/edit the database visually |

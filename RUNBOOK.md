@@ -71,18 +71,52 @@ bun run env:generate       # regenerate the typed env modules (web, server, db)
 ```bash
 bun run check-types   # TypeScript across the workspace — MUST be green
 bun run build         # Turborepo build; also regenerates PWA icons + service worker — MUST be green
-bun run check         # biome format + lint — run it; safe to `--write`
+bun run lint          # biome format + lint, reports only — MUST be green
 ```
 
-**Note on `bun run check`:** biome currently reports ~95 *pre-existing*
-formatting errors across the repo (files like `turbo.json`, package.jsons)
-that predate this runbook. They are auto-fixable formatting, not logic — but
-if you run `bun run check -- --write` it will reformat ~35 files. Do that as
-a deliberate, separate "formatting baseline" commit, not as part of a feature
-release.
+These three are exactly what CI runs (`.github/workflows/ci.yml`), and **CI
+blocks merges into `main`** — a PR cannot land until the check is green. So a
+green local run means the same thing CI will say.
+
+`bun run check` is kept as an alias of `bun run format` (`biome check --write .`),
+which **rewrites your files**. Use it when you want the fixes applied; use
+`bun run lint` when you want to know whether CI would pass.
+
+> **Formatting baseline (settled 2026-09-27).** The repo used to carry ~95
+> pre-existing biome errors — mostly the config demanding tab indentation
+> against an entirely 2-space codebase, so `biome check` had never once passed.
+> Fixed at the source: `biome.json` now asks for 2-space/80 columns, which is
+> what the code actually is, and the whole tree was formatted once. **The tree
+> is clean — `bun run lint` exits 0. Keep it that way.**
+
+Two categories are deliberately exempt, both stated in `biome.json` rather than
+scattered as inline suppressions:
+
+- **Generated output** is not linted — `.react-router/**` (React Router typegen),
+  `src/env.ts` (varlock codegen), and `routeTree.gen.ts` (already exempt). These
+  are rewritten by their generators on every build and typecheck, so a hand-fix
+  would be undone immediately.
+- **`packages/ui/**`** (vendored shadcn primitives) is exempt from three a11y
+  rules — `useSemanticElements`, `useKeyWithClickEvents`, `noLabelWithoutControl`.
+  Those are pass-through wrappers where the rule can't see the consumer's
+  `htmlFor` or the real focus target. Standalone `.svg` brand assets are exempt
+  from `noSvgWithoutTitle` for the same reason: they're a favicon and an
+  og:image, never inlined into the accessibility tree.
 
 If `check-types` complains only about the Node version, the shell is on a
 stale Node — run `nvm use` and retry before investigating further.
+
+### Branch protection (one-time setup)
+
+`main` is production, so it is protected. If you ever see a PR merge without CI
+running, re-apply it: **repo → Settings → Branches → Add rule** (or
+`gh api -X PATCH repos/redwivision/Kiftet/branches/main/protection`):
+
+- **Branch name pattern:** `main`
+- **Require status checks to pass:** on, and require the `lint, types, build`
+  check
+- **Require branches to be up to date:** on
+- **Require at least one approval:** on (you can approve your own PR if solo)
 
 ---
 
