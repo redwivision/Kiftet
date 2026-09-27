@@ -136,7 +136,8 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 ## Docs
 
 - **[`docs/howItWorks/`](docs/howItWorks/README.md)** — the single source of truth, split by concern: product, stack, data flow, database, API, auth, security, env, decisions, roadmap, running, inventory, glossary.
-- **[`STRATEGY.md`](docs/STRATEGY.md)** — the five bets that make Kiftet hard to copy: EHEEE syllabus anchoring, the national misconception map, the offline-first loop, Ethiopian texture, and this doc trail.
+- **[`STRATEGY.md`](docs/STRATEGY.md)** — positioning, the defensibility ladder ("a study guide is not a company"), the subject boundary, and go-to-market: the Grade 12 student in the last 90 days, and the syllabus/misconception/mastery moat that ChatGPT can't replicate.
+- **[`SYLLABUS.md`](docs/SYLLABUS.md)** — the core defensible asset: the official MoE unit structure, period allocations that make prioritisation a fact rather than a guess, the Grade 9–12 expansion plan, and why we don't yet claim computational subjects.
 - **[`PRD.md`](docs/PRD.md)** — product requirements, the market case, sponsor integrations.
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
 - **[`DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)** — the visual identity: monochrome — ivory `#F2EFE9` on black `#0A0B0D`, the open-ring mark, type and UI principles.

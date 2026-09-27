@@ -3,7 +3,8 @@
 **Tagline:** Close the gap. Turn any textbook chapter into a spoken, adaptive review that closes exactly the gaps you have — not the ones you don't.
 
 **Hackathon:** STARK Hackathon 2026
-**Status:** Draft v1
+**Status:** Draft v2 — adds the subject boundary (conceptual subjects, explicitly) and the syllabus-anchored prioritisation.
+**Read with:** [`STRATEGY.md`](STRATEGY.md) (positioning + go-to-market), [`SYLLABUS.md`](SYLLABUS.md) (the core asset), the [roadmap](howItWorks/roadmap.md) (status).
 
 ---
 
@@ -24,12 +25,42 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 
 ## 4. Core user flow (per topic/chapter)
 
-1. Student picks a chapter (from a pre-ingested textbook).
-2. Student speaks a cold explanation of what they remember — no notes, no prompting.
-3. System transcribes and grades the explanation against that chapter's concept-and-misconception checklist, identifying specific gaps.
-4. System delivers a short, spoken, targeted micro-lesson addressing only the identified gaps.
-5. Student is retested with differently-phrased questions on the same gap concepts (not a repeat of the micro-lesson wording — tests real understanding, not parroting).
-6. Before/after gap-coverage score is shown.
+The loop is **Recall → Diagnose → Relearn → Re-test**, and it works end to end
+today. Phase 11 adds student-chosen scope and makes re-test *optional* rather
+than mandatory — a student who wants a diagnosis before studying, or proof
+afterwards, can take it at either point.
+
+1. Student picks a **unit** from the official syllabus structure, or their own
+   chapter/topic (Phase 11: scope is the student's choice — chapter(s) and/or
+   topic(s)).
+2. Student speaks a cold explanation of what they remember — no notes, no
+   prompting.
+3. System transcribes and grades the explanation against that chapter's
+   concept-and-misconception checklist, identifying specific gaps **per
+   concept**, weighted by importance.
+4. System delivers a targeted, structured study guide addressing the
+   identified gaps — ordered by how much they matter, and cached so it's cheap
+   and instant after the first generation.
+5. **Optional:** student re-tests with differently-phrased questions on the same
+   gap concepts — a real check of understanding, not parroting. Usable *before*
+   studying (diagnose) or *after* (verify), graded against the same per-concept
+   rubric so the two are comparable.
+6. Before/after gap-coverage is shown, per concept and overall.
+
+**Anchoring:** concepts map to official MoE syllabus units, and prioritisation
+uses the **period allocations** from the official document, not a model's guess
+about what seems important. This is the product's core promise — *which parts
+of the syllabus can't you actually answer* — and its full design is in
+[`SYLLABUS.md`](SYLLABUS.md).
+
+**Scope — subject boundary (a commitment, not a delay).** Kiftet assesses
+**conceptual** subjects well (Biology, History, Geography, Civics, languages)
+and **computational** subjects not at all yet (Mathematics, Physics, Chemistry).
+The instrument is spoken explanatory recall; for calculation-heavy subjects
+that's the wrong instrument — speech mangles notation and "I explained it" is
+not evidence of "I can compute it." We don't claim those subjects until the
+assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
+[`SYLLABUS.md`](SYLLABUS.md) §5 for the reasoning and the path to change it.
 
 ## 5. Feature scope
 
@@ -37,10 +68,10 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 - Textbook chapter ingestion → automatic concept + common-misconception extraction (AI-generated, not hand-authored — this is what lets "every topic in the book" work without manually writing a checklist per topic).
 - Voice capture of student's cold explanation (Voxide).
 - Gap analysis against the extracted checklist.
-- Spoken, targeted micro-lesson generation (Voxide, text-to-speech).
+- Targeted study-guide generation (structured, Voxide-capable for playback).
 - Retest with varied-phrasing questions on gap concepts only.
 - Before/after score display.
-- Works end-to-end on at least 2–3 chapters across different topic types (at least one conceptual topic, at least one numerical/formula topic) to prove generalization, not a single cherry-picked demo path.
+- Works end-to-end on at least 2–3 chapters across different topic types to prove generalization, not a single cherry-picked demo path — **choosing conceptual subjects**, per the subject boundary above.
 
 ### Explicitly out of scope for the hackathon
 - Native mobile app (building a **web app / PWA** instead — see §8).
@@ -75,6 +106,27 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 
 ## 9. Known risks (said honestly, not hidden)
 
-- **Numerical/formula-based topics need different grading logic than conceptual topics.** Checking "did you explain the idea correctly" is a different problem from "did you get the right numeric answer via the right method." Test both types before assuming one grading approach generalizes.
-- **"Answer accurately on any question" is scoped, not literal** — the goal is strong coverage of the realistic question types for a topic (via the concept + misconception checklist), not a guarantee against every conceivable question.
-- **Links.et is the least natural sponsor fit.** Institutional licensing is the most honest way to include it — don't force a fake per-student payment moment into the demo.
+- **Computational subjects need a different assessment instrument, and we're not
+  claiming them until they have one.** Checking "did you explain the idea
+  correctly" is a different problem from "did you set the problem up correctly
+  and get the right value with the right units." Spoken recall also degrades
+  exactly where these subjects live — superscripts, fractions, matrices, chemical
+  formulae. A confident wrong grade is *worse* than an honest "we don't assess
+  this yet," so the boundary is drawn deliberately and stated in our marketing
+  ([`STRATEGY.md`](STRATEGY.md) §3). Path to changing it:
+  [`SYLLABUS.md`](SYLLABUS.md) §5.
+- **"Answer accurately on any question" is scoped, not literal** — the goal is
+  strong coverage of the realistic question types for a topic (via the concept +
+  misconception checklist), not a guarantee against every conceivable question.
+- **Links.et is the least natural sponsor fit.** Institutional licensing is the
+  most honest way to include it — don't force a fake per-student payment moment
+  into the demo.
+- **A generated study guide is not a moat** — a free chatbot produces one in
+  four seconds. Our defensibility is the syllabus layer, per-concept mastery,
+  and the misconception map, all of which require data we don't have yet. See
+  the defensibility ladder in [`STRATEGY.md`](STRATEGY.md) §1.
+- **Syllabus accuracy is a trust dependency.** If our unit list or period
+  allocations are wrong, students act on them and we lose the one thing we
+  can't get back. Mitigated by curated (not scraped) sources, recorded
+  provenance, and a teacher verification pass before anything ships as
+  "verified" to students ([`SYLLABUS.md`](SYLLABUS.md) §6).
