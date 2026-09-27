@@ -10,17 +10,23 @@ import {
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
-import { ai, focusScore } from "../ai/gemini";
+import { ai, aiTelemetrySnapshot, focusScore } from "../ai/gemini";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
 
 const router = Router();
 const aiWindows = new Map<string, number[]>();
 
-// Demo is deliberately stingy: 5 AI calls/minute per visitor, 3 new textbooks
-// per day. Signed-in users get the generous limits once we're live — the caps
-// below are the cue to swap that for real (DB-backed) quotas.
-const AI_REQUESTS_PER_MINUTE = { signedIn: 30, demo: 5 };
+// Our per-user allowance is deliberately set BELOW the provider's per-project
+// ceiling. Gemini's free tier is per *project* (~10 req/min, ~1-1.5k req/day),
+// shared by every user — not per key, and not per user. An allowance above that
+// number does not buy capacity, it just manufactures 429s, which used to be
+// swallowed silently into the deterministic fallback. Staying under it is what
+// keeps the real model answering. Demo is stingier still, and shares the same
+// ceiling: demo traffic is the first thing to shed when a real student is
+// waiting. Raise these when/if we move to a paid tier, and re-read the actual
+// limits in AI Studio rather than trusting a comment.
+const AI_REQUESTS_PER_MINUTE = { signedIn: 8, demo: 3 };
 const DEMO_TEXTBOOKS_PER_DAY = 3;
 
 function isDemo(req: Request): boolean {
@@ -283,6 +289,15 @@ router.post("/chapters/ingest", async (req, res) => {
 // small "AI calls left" pill so nobody is surprised by a 429 mid-session.
 router.get("/ai/budget", async (_req, res) => {
   ok(res, aiBudgetFor(_req));
+});
+
+// Process-wide counters for how the AI seam is actually behaving: attempts,
+// retries, and the four ways a student ends up on a deterministic fallback
+// instead of a real model answer. This is the "usage visibility" the money
+// decision needs — in-memory for now, so it resets on restart, but it is what
+// tells us whether we are quietly serving fallbacks and not real generations.
+router.get("/ai/telemetry", async (_req, res) => {
+  ok(res, aiTelemetrySnapshot());
 });
 
 // Each textbook with its chapters, in import order — the library view and the
