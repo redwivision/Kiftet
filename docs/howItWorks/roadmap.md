@@ -239,12 +239,32 @@ server stored, drawn as a ring that closes; it used to be a flat count of list
 lengths sitting above bars whose heights came from weights, so the number, the
 picture, and the stored score all disagreed.
 
-**Still not done (step 3b):** the guide is still the old single micro-lesson.
-Nothing yet *orders* study by the map — the ladder and the per-concept cache
-(table + `generate`/`grade` split) are the remaining half of this step.
+**Landed (phase 11, step 3b) — the guide.** `guide_section` is keyed
+`(chapter, concept, language)` with a unique constraint, and that constraint
+*is* the cache: the second student on a chapter generates nothing. `GET
+/chapters/:id/guide` returns sections **in this student's order**, computed from
+the mastery map with `triageConcepts` — no AI call for ordering, so it cannot
+disagree between two students with the same diagnosis, and it costs nothing.
+Order is `L2 → L1 → L0 → L3`: wrong belief first, then the cheapest win, then
+untouched by weight, then what they already have as a confirmation. A section is
+`what` / `why` / `recall` rather than one string, and each carries a
+**deterministic anchor** (`sourceOffset` + `sourceQuote`) into `chapter.rawText`
+so the guide can hand the student back to their own book. The anchor is
+computed from lexical overlap, never asked of a model.
 
-**What is next.** 3b the guide, then 4 scope selection, 5 retest as an optional
-tool, 6 tests (the diagnosis screen is covered; the guide is not).
+Measured on a real chapter against a real database: **first guide 4 AI calls,
+second guide 0.** Two bugs surfaced only by running it: the anchor split on
+newlines and returned mid-sentence fragments in hard-wrapped textbook text, and
+the deterministic fallback copied the English book sentence into a guide that had
+already claimed `language: "am"`.
+
+**What is next.** 4 scope selection, then 5 retest as an optional tool, then 6.
+
+**One thing 3b deliberately did not do:** the offline `CachedLessonRow` is still
+keyed by `sessionId` (`apps/web/src/lib/store.ts:175`), so the *phone* copy
+still cannot dedupe across students even though the server can. The server cache
+is the one that costs money; the local one is a convenience. Re-keying it is
+still open and is noted rather than silently forgotten.
 
 **One trap in the new pre/post retest.** Retest questions deliberately mirror
 the student's *own* recall wording, and the cache carries the originating gap

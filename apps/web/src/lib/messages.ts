@@ -48,6 +48,26 @@ export const en = {
   "lesson-title": "The short version",
   "lesson-text":
     "Just what you missed — nothing more. Read it now, or hear it spoken back to you.",
+  // Guide (phase 11, 3b). The study order itself is the message: wrong first,
+  // because that is the one thing re-reading does not fix.
+  "guide-start-here": "Start here",
+  "guide-wrong-first": "You had this one backwards",
+  "guide-almost-first": "So close — one sentence from you",
+  "guide-almost-title": "You raised it. Now finish it.",
+  "guide-almost-body":
+    "You brought these up but did not quite land them. They are the cheapest wins on this page — say each one back in your own words and they are done.",
+  "guide-not-yet": "Not yet touched",
+  "guide-already-have": "Already yours",
+  "guide-already-body":
+    "You got these right. Skim them, don’t read them twice.",
+  "guide-why": "Why it matters",
+  "guide-recall": "Say it back",
+  "guide-in-your-book": "In your book",
+  "guide-estimated-note":
+    "Some sections are a quick summary from the text itself, not a written lesson. The ideas are real; the wording is ours.",
+  "guide-empty":
+    "Nothing needs work here — every idea in this section is solid. Recap out loud, then move on.",
+  "guide-section-count": "{count} to work through",
   "retest-title": "A short retest",
   "retest-text":
     "These questions come after the lesson, so they test what stuck — not what you just heard.",
@@ -544,6 +564,23 @@ export const am: Record<MessageKey, string> = {
     "አሁን በከባይ ጥቅበት ላይ ነው፤ ስለዚህ ይህ ውጤት ከሰማት ብቻ የተዘጋጀ ፈጣን ግምት ነው፤ ሙሉ ምርመራ አይደለም። ክፍት የሆኑትን ተማር፣ ከዚያ ስራህን እንደገና ሞክር።",
   "lesson-title": "አጭሩ ማብራሪያ",
   "lesson-text": "ያመለጠህን ብቻ — ከዚያ ያለፈ ምንም። አሁን አንብበው፣ ወይም ተናግሮ ስማው።",
+  "guide-start-here": "እዚህ ይጀምር",
+  "guide-wrong-first": "ይህን ተናሽተዋል",
+  "guide-almost-first": "በጣም ቅርብ — አንድ ምርስ ከእርስህ",
+  "guide-almost-title": "አስተያዩ። አሁን ያጠናቅቅ።",
+  "guide-almost-body":
+    "እነዚህን ጠቅስተህ፣ ግን በተስተካከለ አልጠናቀቅም። በዚህ ገጽ ላይ በጭማሪ የሆኑ ትሩር ናቸው — እያንዳንዱን በራስህ ቃላት አስተናግሮ ጨርስተዋል።",
+  "guide-not-yet": "ገና አልተነካም",
+  "guide-already-have": "የእርስህ ነው",
+  "guide-already-body": "እነዚህን በትክክል መልሰኝ። አንብብ ሳይሁሉ አጭሩ።",
+  "guide-why": "ለምን አስፈላጊ ነው",
+  "guide-recall": "በራስህ ቃል ግለጽ",
+  "guide-in-your-book": "በመጽሐፍህ ውስጥ",
+  "guide-estimated-note":
+    "ከዚህ ቅርጾች ከጽሑቱ በራስዎች የተዘጋጁ አጭር ማጠቃለያዎች ናቸው — የተጻፈባቸው ትምህርት አይደለም። ሃሳቦቹ እውነታዊ ናቸው፤ ቃላቱ የእኛ ናቸው።",
+  "guide-empty":
+    "እዚህ ምንም ለመስራት የለም — በዚህ ክፍል ውስጥ ያሉት ሁሉም ሃሳቦች ጠንካራ ናቸው። በአፍ በአፍ አስታውስ፣ ከዚያም ቀጥል።",
+  "guide-section-count": "{count} ለመስራት",
   "retest-title": "አጭር ድጋሚ ፈተና",
   "retest-text":
     "እነዚህ ጥያቄዎች ከትምህርቱ በኋላ ይመጣሉ፣ ስለዚህ የተረጋገጠውን ይፈትናሉ — አሁን የሰማኸውን አይደለም።",

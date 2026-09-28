@@ -2,6 +2,7 @@ import {
   attempt,
   chapter,
   conceptNode,
+  guideSection,
   misconceptionHit,
   studySession,
   syllabusUnit,
@@ -14,7 +15,12 @@ import {
   ai,
   aiTelemetrySnapshot,
   focusScore,
+  type GuideSection,
   gapAnalysisFrom,
+  levelOf,
+  type MasteryLevel,
+  type MasteryMap,
+  triageConcepts,
 } from "../ai/gemini";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -132,6 +138,35 @@ async function chapterConcepts(chapterId: string) {
     .from(conceptNode)
     .where(eq(conceptNode.chapterId, chapterId))
     .orderBy(conceptNode.sortOrder);
+}
+
+/** A chapter the caller actually owns. The guide is generated content, so
+ *  ownership is checked here rather than inherited from a session id. */
+async function chapterOwned(
+  chapterId: string,
+  userId: string,
+): Promise<string | null> {
+  const rows = await db()
+    .select({ id: chapter.id })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(and(eq(chapter.id, chapterId), eq(textbook.ownerId, userId)))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/** Parse `?mastery=photosynthesis:2,osmosis:1` into a level map. */
+function readMasteryParam(raw: unknown): MasteryMap {
+  const out: MasteryMap = {};
+  if (typeof raw !== "string" || !raw.trim()) return out;
+  for (const pair of raw.split(",")) {
+    const [name, level] = pair.split(":");
+    if (!name?.trim()) continue;
+    const n = Math.round(Number(level));
+    if (!Number.isFinite(n) || n < 0 || n > 3) continue;
+    out[name.trim()] = n as MasteryLevel;
+  }
+  return out;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -774,6 +809,167 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
     parsed.data.language,
   );
   ok(res, lesson);
+});
+
+// ────────────────────────────────────────────────────────────────
+// Guide
+// ────────────────────────────────────────────────────────────────
+
+/** Load cached sections for a chapter in one query, keyed by concept. */
+async function cachedSections(
+  chapterId: string,
+  language: "en" | "am",
+): Promise<Map<string, typeof guideSection.$inferSelect>> {
+  const rows = await db()
+    .select()
+    .from(guideSection)
+    .where(
+      and(
+        eq(guideSection.chapterId, chapterId),
+        eq(guideSection.language, language),
+      ),
+    );
+  return new Map(rows.map((r) => [r.conceptText.trim().toLowerCase(), r]));
+}
+
+/** Insert a section, treating a concurrent insert as success. */
+async function storeSection(
+  chapterId: string,
+  conceptText: string,
+  language: "en" | "am",
+  section: GuideSection,
+): Promise<void> {
+  await db()
+    .insert(guideSection)
+    .values({
+      id: crypto.randomUUID(),
+      chapterId,
+      conceptText,
+      language,
+      whatText: section.what,
+      whyText: section.why ?? null,
+      recallText: section.recall ?? null,
+      sourceOffset: section.sourceOffset ?? null,
+      sourceQuote: section.sourceQuote ?? null,
+      estimated: section.estimated,
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * The guide: sections in the order THIS student needs, built from mastery.
+ *
+ * Ordering is deterministic and costs nothing — it is not asked of a model.
+ * "Explained wrong" first, because a wrong belief is the one thing a student
+ * cannot revise by re-reading alone; then "raised but not explained", the
+ * cheapest win; then untouched concepts by importance. Solid concepts are
+ * listed last as a one-line confirmation rather than a section to read.
+ *
+ * Content is cached per (chapter, concept, language), so this call spends AI
+ * calls only for concepts nobody has generated yet — the second student on a
+ * chapter spends none at all.
+ */
+router.get("/chapters/:id/guide", async (req, res) => {
+  const chapterId = await chapterOwned(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Chapter not found", 404);
+
+  const language = req.query.language === "am" ? "am" : "en";
+  const concepts = await chapterConcepts(chapterId);
+  const [row] = await db()
+    .select({ rawText: chapter.rawText })
+    .from(chapter)
+    .where(eq(chapter.id, chapterId))
+    .limit(1);
+  const rawText = row?.rawText ?? "";
+
+  const mastery = readMasteryParam(req.query.mastery);
+  const cache = await cachedSections(chapterId, language);
+
+  // The concepts worth generating: everything not already solid. Solid ones
+  // need no AI call and no stored row.
+  const targets = triageConcepts(concepts, mastery).filter(
+    (c) => levelOf(mastery, c.conceptText) !== 3,
+  );
+
+  let estimated = false;
+  for (const concept of targets) {
+    const key = concept.conceptText.trim().toLowerCase();
+    if (cache.has(key)) continue;
+    const section = await ai.generateGuideSection(
+      concept.conceptText,
+      rawText,
+      language,
+    );
+    await storeSection(chapterId, concept.conceptText, language, section);
+    cache.set(key, {
+      id: "",
+      chapterId,
+      conceptText: concept.conceptText,
+      language,
+      whatText: section.what,
+      whyText: section.why ?? null,
+      recallText: section.recall ?? null,
+      sourceOffset: section.sourceOffset ?? null,
+      sourceQuote: section.sourceQuote ?? null,
+      estimated: section.estimated,
+      createdAt: new Date(),
+    });
+  }
+
+  const sections = triageConcepts(concepts, mastery)
+    .map((concept) => {
+      const level = levelOf(mastery, concept.conceptText);
+      const cached = cache.get(concept.conceptText.trim().toLowerCase());
+      if (level === 3) {
+        return {
+          conceptText: concept.conceptText,
+          weight: concept.weight,
+          level,
+          what: language === "am" ? "ይህን በጠንክር ታደርግሃለህ።" : "You have this one.",
+          why: null,
+          recall: null,
+          sourceOffset: null,
+          sourceQuote: null,
+          estimated: false,
+          needsWork: false,
+        };
+      }
+      if (!cached) {
+        // Nothing cached and nothing generated: the checklist itself is the
+        // skeleton, so a chapter with no prose is still a usable revision list.
+        return {
+          conceptText: concept.conceptText,
+          weight: concept.weight,
+          level,
+          what:
+            language === "am"
+              ? `“${concept.conceptText}” — ከዚህ ታች ባለው ክፍል ይሸፍናል።`
+              : `“${concept.conceptText}” — the part of your book below covers it.`,
+          why: null,
+          recall: null,
+          sourceOffset: null,
+          sourceQuote: null,
+          estimated: true,
+          needsWork: true,
+        };
+      }
+      if (cached.estimated) estimated = true;
+      return {
+        conceptText: concept.conceptText,
+        weight: concept.weight,
+        level,
+        what: cached.whatText,
+        why: cached.whyText,
+        recall: cached.recallText,
+        sourceOffset: cached.sourceOffset,
+        sourceQuote: cached.sourceQuote,
+        estimated: cached.estimated,
+        needsWork: true,
+      };
+    })
+    .filter((s) => s.needsWork || s.level === 3);
+
+  ok(res, { sections, estimated, language });
 });
 
 // ────────────────────────────────────────────────────────────────
