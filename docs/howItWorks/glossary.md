@@ -37,3 +37,17 @@
   duplicate-recognizing `attemptId` makes a network retry harmless ([policies §10.4](security.md)).
 - **Health check** — a ping endpoint (`GET /`) that monitoring systems hit to
   confirm the server is alive.
+- **Mastery (per-concept)** — a `0`–`3` level for one checklist concept: `0` not
+  addressed, `1` raised but not explained, `2` explained *wrong*, `3` explained
+  correctly. Grading returns a map of these; the covered/missing/misconception
+  lists and the overall score are both derived from it, never graded separately.
+- **Weight** — how important a concept is (1–5, from the chapter checklist).
+  Weights decide how much each concept contributes to the overall score, so a
+  heavy idea counts for more than an aside.
+- **Estimated grade** — a grade produced by the deterministic fallback instead of
+  Gemini. It can detect *which* ideas were mentioned but not whether they were
+  explained, so it deliberately under-credits and is flagged `estimated: true`
+  in the API and labelled in the UI. Never present one as a real measurement.
+- **Concept checklist** — the list of ideas a chapter must cover, extracted at
+  ingest. It is the yardstick for every grade, and the key a mastery map is
+  stored against.

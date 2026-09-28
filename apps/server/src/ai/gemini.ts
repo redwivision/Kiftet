@@ -18,11 +18,32 @@ export type ConceptChecklistItem = {
  *  Follows the app's language pref (bet 4 / phase 10, slice C). */
 export type ContentLanguage = "en" | "am";
 
+/** Per-concept mastery, the spine of phase 11.
+ *  0 = not addressed, 1 = raised but not explained, 2 = explained WRONG
+ *  (a misconception), 3 = explained correctly.
+ *  A single scalar cannot carry this: one strong answer among nine concepts
+ *  used to read as "that student knows the chapter". */
+export type MasteryLevel = 0 | 1 | 2 | 3;
+
+export type MasteryMap = Record<string, MasteryLevel>;
+
 export type GapAnalysis = {
   covered: string[];
   missing: string[];
   misconceptions: string[];
+  /** conceptText (verbatim from the checklist) -> level. The source of truth
+   *  for every other field here. */
+  mastery: MasteryMap;
+  /** Weighted fraction of real concepts at level 1 or 3. Derived from
+   *  `mastery`, never asked of the model, so the number is deterministic
+   *  across the AI and fallback paths. */
   score: number;
+  /** True when this came from the lexical fallback, which can see word overlap
+   *  but cannot judge whether an explanation was correct. Every level is then a
+   *  guess capped well below "mastered", and the UI must label the number as
+   *  an estimate — a student must not be shown a quietly halved score because
+   *  *we* hit a rate limit. */
+  estimated: boolean;
 };
 
 export type MicroLesson = {
@@ -52,6 +73,43 @@ export type AiService = {
     language?: ContentLanguage,
   ): Promise<RetestQuestion[]>;
 };
+
+/** Rebuild a GapAnalysis from the flat gap lists a client sent.
+ *
+ *  The microlesson and retest routes only receive gap *names* from the browser,
+ *  but generation now runs off the mastery map, so they cannot hand-build the
+ *  object any more. This derives levels the same way grading does — a named gap
+ *  is 0 (not demonstrated), a named misconception 2 — and recomputes the score,
+ *  so a generated lesson keeps targeting exactly the gaps the grade found. */
+export function gapAnalysisFrom(
+  parts: { covered?: string[]; missing: string[]; misconceptions: string[] },
+  concepts: ConceptChecklistItem[],
+): GapAnalysis {
+  const covered = parts.covered ?? [];
+  const misconceptions = parts.misconceptions;
+  const named = new Set(
+    [...covered, ...misconceptions].map((c) => c.trim().toLowerCase()),
+  );
+  for (const name of parts.missing) {
+    if (!name.trim()) continue;
+    named.add(name.trim().toLowerCase());
+  }
+  // Concepts the client never mentioned are not gaps to teach, so they are left
+  // out of the map rather than being asserted as unmastered.
+  const scoped = concepts.filter((c) =>
+    named.has(c.conceptText.trim().toLowerCase()),
+  );
+  const mastery = masteryFromLists(covered, misconceptions, scoped);
+  const lists = listsFromMastery(mastery, scoped);
+  return {
+    mastery,
+    covered: lists.covered,
+    missing: lists.missing,
+    misconceptions: lists.misconceptions,
+    score: masteryScore(mastery, scoped),
+    estimated: false,
+  };
+}
 
 // ────────────────────────────────────────────────────────────────
 // Fallback chain (the design's seam rule: the product must always work,
@@ -111,48 +169,129 @@ function conceptLexicallyHit(
   return matched >= Math.max(1, Math.ceil(nameTokens.size * 0.6));
 }
 
-// Score = fraction of non-misconception concepts covered, weighted by each
-// concept's importance (weight 1-5). A weight-5 idea counts five times as
+// Score = fraction of non-misconception concepts *demonstrated*, weighted by
+// each concept's importance (weight 1-5). A weight-5 idea counts five times as
 // much as a weight-1 aside, so the number reflects what the chapter actually
 // requires, not just how many titles were touched.
-function weightedCoverage(
-  covered: string[],
+//
+// Derived from the mastery map so per-concept and scalar can never disagree.
+// A concept at level 2 (misconception) is NOT credited: a student who states
+// a wrong belief has not demonstrated the concept. Previously a model that
+// listed a concept in both `covered` and `misconceptions` still scored it as
+// mastered, which hid exactly the signal this product exists to surface.
+function masteryScore(
+  mastery: MasteryMap,
   concepts: ConceptChecklistItem[],
 ): number {
   const real = concepts.filter((c) => !c.isMisconception);
   if (!real.length) return 1;
-  const seen = new Set(covered.map((c) => c.trim().toLowerCase()));
-  let coveredWeight = 0;
-  let totalWeight = 0;
+  const norm = normalizeMastery(mastery);
+  let earned = 0;
+  let total = 0;
   for (const concept of real) {
-    totalWeight += concept.weight;
-    if (seen.has(concept.conceptText.trim().toLowerCase()))
-      coveredWeight += concept.weight;
+    total += concept.weight;
+    const level = levelOf(norm, concept.conceptText);
+    if (level === 1) earned += concept.weight * 0.5;
+    else if (level === 3) earned += concept.weight;
   }
-  return totalWeight ? coveredWeight / totalWeight : 1;
+  return total ? Math.min(1, earned / total) : 1;
 }
 
+function normalizeMastery(mastery: MasteryMap): MasteryMap {
+  const out: MasteryMap = {};
+  for (const [key, value] of Object.entries(mastery)) {
+    const name = key.trim();
+    if (!name) continue;
+    const level = Math.round(Number(value));
+    if (!Number.isFinite(level) || level < 0 || level > 3) continue;
+    out[name] = level as MasteryLevel;
+  }
+  return out;
+}
+
+const keyOf = (conceptText: string) => conceptText.trim().toLowerCase();
+
+/** Read one concept's level, tolerating case/whitespace drift in the keys the
+ *  model produced. Defaults to 0 ("not shown") — never to credit. */
+function levelOf(mastery: MasteryMap, conceptText: string): MasteryLevel {
+  const direct = mastery[keyOf(conceptText)];
+  if (direct !== undefined) return direct;
+  for (const [key, level] of Object.entries(mastery)) {
+    if (keyOf(key) === keyOf(conceptText)) return level;
+  }
+  return 0;
+}
+
+/** Build a mastery map from the three flat lists, so the map is a total
+ *  function over the checklist: every real concept has a level. */
+function masteryFromLists(
+  covered: string[],
+  misconceptions: string[],
+  concepts: ConceptChecklistItem[],
+): MasteryMap {
+  const mastery: MasteryMap = {};
+  const name = (c: string) => c.trim();
+  for (const concept of concepts) {
+    const key = name(concept.conceptText);
+    const wrong = misconceptions.some((m) => keyOf(m) === keyOf(key));
+    const right = covered.some((c) => keyOf(c) === keyOf(key));
+    // A misconception outranks a covered tick for the same concept: the wrong
+    // belief is the thing to fix.
+    mastery[key] = wrong ? 2 : right ? 3 : 0;
+  }
+  return mastery;
+}
+
+/** The three flat lists, derived from the mastery map, for the UI and the
+ *  lesson/retest prompts. Misconceptions are excluded from `covered` so the
+ *  student never sees a concept ticked off that they got wrong. */
+function listsFromMastery(
+  mastery: MasteryMap,
+  concepts: ConceptChecklistItem[],
+): { covered: string[]; missing: string[]; misconceptions: string[] } {
+  const covered: string[] = [];
+  const missing: string[] = [];
+  const misconceptions: string[] = [];
+  for (const concept of concepts) {
+    const key = concept.conceptText.trim();
+    const level = levelOf(mastery, key);
+    if (level === 2) misconceptions.push(key);
+    else if (concept.isMisconception) continue;
+    else if (level >= 1) covered.push(key);
+    else missing.push(key);
+  }
+  return { covered, missing, misconceptions };
+}
+
+// Deterministic path, also the shape the AI path degrades to. It can only see
+// word overlap, so it never claims level 3 ("explained correctly") off a
+// keyword hit — a bare mention is level 1, and a known misconception named is
+// level 2. Under-crediting here is deliberate: the fallback must not inflate
+// mastery it cannot see, or a degraded request would look like a good answer.
 function fallbackGrade(
   transcript: string,
   concepts: ConceptChecklistItem[],
 ): GapAnalysis {
-  const covered: string[] = [];
-  const misconceptions: string[] = [];
   const tokens = significantTokens(transcript);
+  const mastery: MasteryMap = {};
   for (const concept of concepts) {
-    const nameTokens = significantTokens(concept.conceptText);
-    if (!conceptLexicallyHit(nameTokens, tokens)) continue;
-    if (concept.isMisconception) misconceptions.push(concept.conceptText);
-    else covered.push(concept.conceptText);
+    const key = concept.conceptText.trim();
+    const nameTokens = significantTokens(key);
+    if (nameTokens.size === 0) {
+      mastery[key] = 0;
+      continue;
+    }
+    const hit = conceptLexicallyHit(nameTokens, tokens);
+    mastery[key] = concept.isMisconception ? (hit ? 2 : 0) : hit ? 1 : 0;
   }
-  const missing = concepts
-    .filter((c) => !c.isMisconception && !covered.includes(c.conceptText))
-    .map((c) => c.conceptText);
+  const lists = listsFromMastery(mastery, concepts);
   return {
-    covered,
-    missing,
-    misconceptions,
-    score: weightedCoverage(covered, concepts),
+    mastery,
+    covered: lists.covered,
+    missing: lists.missing,
+    misconceptions: lists.misconceptions,
+    score: masteryScore(mastery, concepts),
+    estimated: true,
   };
 }
 
@@ -194,11 +333,6 @@ function fallbackQuestions(
 function clampWeight(weight: unknown): number {
   const n = typeof weight === "number" ? weight : 1;
   return Math.min(5, Math.max(1, Math.round(n)));
-}
-
-function clampScore(score: unknown): number {
-  const n = typeof score === "number" ? score : 0;
-  return Math.min(1, Math.max(0, n));
 }
 
 function strings(value: unknown): string[] {
@@ -375,10 +509,22 @@ function parseGaps(
       covered: strings(data.covered),
       missing: strings(data.missing),
       misconceptions: strings(data.misconceptions),
-      score: clampScore(data.score),
+      mastery: readMastery(data.mastery),
+      // Ignored on purpose: the score is recomputed from the levels below.
+      score: 0,
+      estimated: false,
     },
     concepts,
   );
+}
+
+// The model's mastery object is untrusted input: it may hold non-numbers, keys
+// that are not checklist concepts, or levels outside 0-3. normalizeMastery
+// drops the unusable ones, and sanitizeGaps fills the rest from the three flat
+// lists, so a bad object degrades to the old behaviour instead of throwing.
+function readMastery(value: unknown): MasteryMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return normalizeMastery(value as Record<string, unknown> as MasteryMap);
 }
 
 // Keep AI output consistent with the stored concept list: fuzzy-match returned
@@ -394,24 +540,43 @@ function sanitizeGaps(
         ?.conceptText ?? value.trim()
     );
   };
+  // Snap every concept the model named onto the checklist's exact spelling, so
+  // a drifted key can't silently open a hole in the mastery map.
   const covered = [...new Set(gaps.covered.map(match))].filter(Boolean);
   const misconceptions = [...new Set(gaps.misconceptions.map(match))].filter(
     Boolean,
   );
-  const missingSet = new Set(gaps.missing.map(match).filter(Boolean));
-  for (const concept of concepts) {
-    if (concept.isMisconception) continue;
-    const name = concept.conceptText.trim();
-    const isNamed = [...covered, ...misconceptions].some(
-      (c) => c.trim().toLowerCase() === name.toLowerCase(),
+  // A checklist item the model neither covered nor called a misconception was
+  // not demonstrated, so it enters the map at 0 rather than being absent.
+  // Only near-misses the model flagged as "raised" (level 1) come from the
+  // model's own mastery object.
+  const nearMisses = Object.entries(
+    normalizeMastery(gaps.mastery ?? {}),
+  ).filter(([, level]) => level === 1);
+  const named = new Set(
+    [...covered, ...misconceptions].map((c) => c.trim().toLowerCase()),
+  );
+  for (const [name] of nearMisses) {
+    if (named.has(name.trim().toLowerCase())) continue;
+    const concept = concepts.find(
+      (c) => c.conceptText.trim().toLowerCase() === name.trim().toLowerCase(),
     );
-    if (!isNamed) missingSet.add(name);
+    if (concept && !concept.isMisconception) covered.push(concept.conceptText);
   }
-  // The system recomputes the score itself (weighted by concept importance)
-  // so the number is deterministic and consistent across AI/fallback paths,
-  // instead of trusting whatever the model happened to guess.
-  const score = weightedCoverage(covered, concepts);
-  return { covered, missing: [...missingSet], misconceptions, score };
+  const mastery = masteryFromLists(covered, misconceptions, concepts);
+  for (const [name, level] of nearMisses) {
+    const key = name.trim();
+    if (mastery[key] === 0) mastery[key] = level;
+  }
+  const lists = listsFromMastery(mastery, concepts);
+  return {
+    mastery,
+    covered: lists.covered,
+    missing: lists.missing,
+    misconceptions: lists.misconceptions,
+    score: masteryScore(mastery, concepts),
+    estimated: false,
+  };
 }
 
 function conceptsChecklist(concepts: ConceptChecklistItem[]): string {
@@ -473,9 +638,13 @@ const EXTRACT_SYSTEM =
 const GRADE_SYSTEM =
   "You judge how well a student's spoken recall covers the concept checklist. " +
   "Return STRICT JSON, no prose: " +
-  '{"covered":["conceptText that the student correctly explained"],"missing":["checklist concepts not really addressed"],"misconceptions":["checklist items the student got WRONG or stated as a misconception"],"score":0.0-1.0}. ' +
-  "Only reference concepts that exist in the checklist verbatim (bare conceptText, never the [MISCONCEPTION] marker). " +
-  "score = fraction of non-misconception concepts covered. " +
+  '{"mastery":{"<exact conceptText>":0|1|2|3},"covered":["conceptText the student correctly explained"],"missing":["checklist concepts not really addressed"],"misconceptions":["checklist items the student got WRONG or stated as a misconception"]}. ' +
+  "Judge EVERY checklist concept, including ones the student never raised, and set one level for each: " +
+  "0 = not addressed at all, 1 = raised but not really explained, 2 = explained WRONG (a misconception), 3 = explained correctly. " +
+  "Most gaps are 0, and 3 is the hardest to earn: reserve it for a real explanation, not a passing mention. " +
+  "Keys must be the conceptText exactly as it appears in the checklist, bare (never the [MISCONCEPTION] marker). " +
+  "Keep 'covered', 'missing' and 'misconceptions' consistent with those levels (covered = 3, misconceptions = 2, missing = 0 or 1). " +
+  "Do NOT output 'score': the system computes it from the levels, weighting each concept by its importance. " +
   "A misconception item listed in 'covered' is an error — it goes to 'misconceptions' instead.";
 
 const LESSON_SYSTEM =

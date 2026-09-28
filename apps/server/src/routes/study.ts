@@ -10,7 +10,12 @@ import {
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
-import { ai, aiTelemetrySnapshot, focusScore } from "../ai/gemini";
+import {
+  ai,
+  aiTelemetrySnapshot,
+  focusScore,
+  gapAnalysisFrom,
+} from "../ai/gemini";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
 
@@ -532,6 +537,12 @@ type AttemptInsert = {
     covered: string[];
     missing: string[];
     misconceptions: string[];
+    /** Phase 11: per-concept levels, the source the three lists derive from.
+     *  Optional so attempts written before this change still read back. */
+    mastery?: Record<string, number>;
+    /** True when the grade came from the lexical fallback, which cannot judge
+     *  correctness. The UI must not present such a score as a real one. */
+    estimated?: boolean;
   };
   score: number;
 };
@@ -702,6 +713,8 @@ router.post("/sessions/:id/recall", async (req, res) => {
       covered: gaps.covered,
       missing: gaps.missing,
       misconceptions: gaps.misconceptions,
+      mastery: gaps.mastery,
+      estimated: gaps.estimated,
     },
     score,
   });
@@ -747,12 +760,13 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
 
   const concepts = await chapterConcepts(chapterId);
 
-  const gapAnalysis = {
-    covered: [],
-    missing: parsed.data.missing,
-    misconceptions: parsed.data.misconceptions,
-    score: 0,
-  };
+  const gapAnalysis = gapAnalysisFrom(
+    {
+      missing: parsed.data.missing,
+      misconceptions: parsed.data.misconceptions,
+    },
+    concepts,
+  );
 
   const lesson = await ai.generateMicroLesson(
     gapAnalysis,
@@ -787,12 +801,13 @@ router.post("/sessions/:id/retest", async (req, res) => {
 
   const concepts = await chapterConcepts(chapterId);
 
-  const gapAnalysis = {
-    covered: [],
-    missing: parsed.data.missing,
-    misconceptions: parsed.data.misconceptions,
-    score: 0,
-  };
+  const gapAnalysis = gapAnalysisFrom(
+    {
+      missing: parsed.data.missing,
+      misconceptions: parsed.data.misconceptions,
+    },
+    concepts,
+  );
 
   // Echo the student's own recall: hand the question writer their latest
   // spoken/written recall for this session so it mirrors how they phrased
@@ -926,6 +941,8 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
       covered: gaps.covered,
       missing: gaps.missing,
       misconceptions: gaps.misconceptions,
+      mastery: gaps.mastery,
+      estimated: gaps.estimated,
     },
     score,
   });

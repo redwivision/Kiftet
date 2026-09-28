@@ -198,11 +198,37 @@ be buying intelligence.
 
 ### The spine: per-concept mastery
 
-`focusScore` (`gemini.ts:357`) already loops over every concept and then throws
-away everything but one weighted scalar. Extend grading to a 0–3 estimate per
-concept and the rest of the phase falls out of it: guide ordering, retest
-targeting, per-concept before/after on the result screen, and a misconception
-map that is genuinely per-concept.
+`focusScore` already loops over every concept and then throws away everything
+but one weighted scalar. Extending grading to a 0–3 estimate per concept makes
+the rest of the phase fall out of it: guide ordering, retest targeting,
+per-concept before/after on the result screen, and a misconception map that is
+genuinely per-concept.
+
+**Landed (phase 11, step 2).** `GapAnalysis` now carries
+`mastery: Record<string, MasteryLevel>` — `0` not addressed, `1` raised but not
+explained, `2` explained wrong, `3` explained correctly — and the three flat
+lists derive *from* that map, so the per-concept and scalar views can never
+disagree. `score` is recomputed from the levels (a level-1 idea earns half
+credit) and is still never asked of the model. The model is asked for levels
+only; unusable ones are dropped and fall back to the flat lists, so a sloppy
+response degrades to the old behaviour instead of throwing. The fallback path
+caps at level 1 by construction — it can hear a word but not an explanation.
+
+Two consequences worth keeping:
+
+- **A misconception is no longer credited as mastered.** Previously a model that
+  listed a concept in both `covered` and `misconceptions` still scored it as
+  mastered. That hid exactly the signal this product exists to surface.
+- **A degraded grade is labelled, not silently halved.** Half credit for a
+  level-1 mention is the honest reading, but applying it to a *rate-limited*
+  request would punish the student for our quota. So the fallback sets
+  `estimated: true`, it is persisted on the attempt, and the gaps screen says
+  the number is an estimate (`gaps-estimated`).
+
+Persisted in `attempt.gapsIdentified.mastery` (+ `estimated`). Both are optional
+in the type, so attempts written before this change still read back. What is
+**not** done: nothing consumes the map yet — the gaps screen still renders the
+three lists, and guide ordering is still step 3.
 
 **One trap in the new pre/post retest.** Retest questions deliberately mirror
 the student's *own* recall wording, and the cache carries the originating gap
@@ -214,12 +240,14 @@ per-concept rubric, targeting the same concepts.
 ### Sequencing
 
 1. **Instrument first.** Per-user AI call / 429 / fallback counters, plus a
-   429-aware `askJson`. *(Partly landed: the counters and the 429-aware retry
-   are in; `GET /api/ai/telemetry` is the read side.)*
+   429-aware `askJson`. *(Landed: counters, the 429-aware retry, and
+   `GET /api/ai/telemetry`.)*
 2. **Per-concept mastery.** Replace the scalar with the 0–3 map; stop
-   hardcoding `covered: []`.
+   hardcoding `covered: []`. *(Landed — the map exists, is persisted, and
+   derives the lists; nothing reads it yet.)*
 3. **Guide sections + cache.** New table keyed by (chapter, concept, language);
-   the three-step ladder; Amharic parity; source anchors.
+   the three-step ladder; Amharic parity; source anchors. *The map is the
+   ordering input for this step.*
 4. **Scope selection** — chapters and/or topics, the student's choice.
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
 6. **Tests.** All of the above is currently verifiable by hand only.
@@ -312,8 +340,10 @@ product bets that steer the next phases.
 
 > **The voice seam, honestly.** The SDK owns the orb + its word-by-word
 > caption (no hide flag in `VoxideAppearance`). We never bet the platform on
-> that: real grading reads only **finalized** turns (the same `!m.partial`
-> gate as the captions' own bubbles), and the calm replies + read-back come
+> that: grading runs on the **joined transcript of every user chunk** — partial
+> and final alike — because a long recall streams in as many pieces and
+> filtering to "final" alone would silently drop most of what the student said
+> (`transcriptOf` in `study.$sessionId.tsx`). The calm replies + read-back come
 > from the browser natively — `speechSynthesis` for reading our reply aloud,
 > no vendor TTS-commit. Voice = the seam; Gemini + text = load-bearing.
 

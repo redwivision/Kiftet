@@ -26,9 +26,35 @@ Additional routes added for Phase 6 (textbook library + demo quotas):
 | `GET /api/textbooks` | Each textbook with its chunks, in import order | 6 |
 | `GET /api/ai/budget` | Demo/signed-in AI quota remaining this minute + daily book cap | 6 |
 
-In Phase 0, the AI-graded endpoints return **empty placeholders** (empty gaps,
-empty questions). The *shape* of the contract is real — the *brains* arrive in
-Phase 2.
+In Phase 0, the AI-graded endpoints returned **empty placeholders** (empty gaps,
+empty questions). The brains are live since Phase 2.
+
+**The gaps payload.** `POST /recall` and `POST /retest/answer` return the same
+shape, and `mastery` is the part that matters:
+
+```jsonc
+{
+  "score": 60,                  // 0-100, derived from mastery + weights
+  "estimated": false,           // true => deterministic fallback, not a real grade
+  "mastery": {                  // per concept, 0-3  (see glossary)
+    "Photosynthesis": 3,        // explained correctly
+    "Chlorophyll": 1,           // raised, not really explained
+    "Plants do not eat": 2      // explained wrong
+  },
+  "covered": ["Photosynthesis"],
+  "missing": ["Chlorophyll", "Enzyme"],
+  "misconceptions": ["Plants do not eat"]
+}
+```
+
+`covered` / `missing` / `misconceptions` are **derived from `mastery`**, so a
+client should read `mastery` for anything per-concept and must not expect the
+lists to carry more than the map does. A concept at `2` never appears in
+`covered`. The map is also persisted to `attempt.gapsIdentified.mastery`.
+
+`POST /microlesson` and `POST /retest` take only the gap **names**
+(`missing`, `misconceptions`) and rebuild the levels server-side, so a lesson is
+always aimed at the gaps that were actually graded.
 
 Every route below is mounted behind the `requireAuth` middleware — a request
 without a valid session gets `401` before it ever reaches the route (see the [authentication sector](auth.md)).
