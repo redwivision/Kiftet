@@ -36,11 +36,21 @@ export type ChapterInfo = {
   unitId?: string | null;
 };
 
+export type MasteryLevel = 0 | 1 | 2 | 3;
+
 export type Gaps = {
   covered: string[];
   missing: string[];
   misconceptions: string[];
   score: number;
+  /** Phase 11: per-concept levels. 0 = not addressed, 1 = raised but not
+   *  explained, 2 = explained wrong, 3 = explained correctly. The three lists
+   *  above derive from this. Absent on attempts graded before phase 11. */
+  mastery?: Record<string, MasteryLevel>;
+  /** True when the grade came from the server's lexical fallback, which cannot
+   *  judge correctness — the score is then an estimate, capped well below full
+   *  credit, and must be labelled as one. */
+  estimated?: boolean;
 };
 
 export type SessionResult = {

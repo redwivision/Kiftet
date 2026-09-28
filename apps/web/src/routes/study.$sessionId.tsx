@@ -728,6 +728,15 @@ function GapsPhase() {
   return (
     <div className="space-y-6">
       <PhaseHeading title={t("gaps-title")} text={t("gaps-text")} />
+      {/* A degraded request must never look like a judged one. The lexical
+        fallback can see which ideas were mentioned but not whether they were
+        explained correctly, so its score is an estimate held well below full
+        credit -- say so instead of showing a quietly halved number. */}
+      {gaps.estimated && (
+        <p className="rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground text-sm">
+          {t("gaps-estimated")}
+        </p>
+      )}
       <CoverageView
         covered={gaps.covered}
         missing={gaps.missing}

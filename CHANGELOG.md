@@ -7,6 +7,35 @@ detail is in the [roadmap](docs/howItWorks/roadmap.md).
 
 ---
 
+## Unreleased — per-concept mastery
+
+**What changed.** Grading now returns a **per-concept level** for every idea in
+the checklist instead of one weighted number: `0` not addressed, `1` raised but
+not explained, `2` explained wrong, `3` explained correctly. The covered /
+missing / misconception lists are now *derived* from that map, so the
+per-concept view and the single score can never disagree. Stored with every
+attempt.
+
+**Why it matters.** One strong answer used to read as "that student knows the
+chapter". The product is a diagnostic, and a diagnostic that throws away
+per-concept detail is a score wearing a diagnosis's clothes.
+
+Two things it fixed along the way:
+
+- **A misconception can no longer be scored as mastered.** A grading response
+  that listed a concept as both covered *and* a misconception used to have it
+  counted as mastered — hiding exactly the wrong belief this product exists to
+  surface. The misconception now wins.
+- **A rate-limited grade says so.** The offline fallback can hear *which* ideas
+  a student mentioned but not whether they explained them correctly, so its
+  levels are capped well below "mastered". Because that could quietly halve a
+  student's score for *our* quota problem, such grades are now labelled as
+  estimates on the screen.
+
+> **Not yet true:** nothing consumes the map yet. The gaps screen still draws
+> the three lists, and the "right length, right order" study guide is still
+> **not built** — that is the next step.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,
