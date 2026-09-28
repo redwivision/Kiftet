@@ -312,8 +312,10 @@ product bets that steer the next phases.
 
 > **The voice seam, honestly.** The SDK owns the orb + its word-by-word
 > caption (no hide flag in `VoxideAppearance`). We never bet the platform on
-> that: real grading reads only **finalized** turns (the same `!m.partial`
-> gate as the captions' own bubbles), and the calm replies + read-back come
+> that: grading runs on the **joined transcript of every user chunk** — partial
+> and final alike — because a long recall streams in as many pieces and
+> filtering to "final" alone would silently drop most of what the student said
+> (`transcriptOf` in `study.$sessionId.tsx`). The calm replies + read-back come
 > from the browser natively — `speechSynthesis` for reading our reply aloud,
 > no vendor TTS-commit. Voice = the seam; Gemini + text = load-bearing.
 

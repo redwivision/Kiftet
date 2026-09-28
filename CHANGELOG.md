@@ -1,0 +1,108 @@
+# Changelog
+
+The major updates, in order. Written to be **accurate as of each entry** — a
+feature is listed when it works, and where something is partial, gated, or
+deliberately not built, it says so. Full commit history is in `git log`; phase
+detail is in the [roadmap](docs/howItWorks/roadmap.md).
+
+---
+
+## 2026-09-27 — Strategy reframe, and official period allocations
+
+**What changed.** Reframed the product around one rule: *content is delivery,
+diagnosis is the product.* A free chatbot can write a study guide in seconds, so
+the guide is how we deliver an answer, not what we are. Added
+[`docs/SYLLABUS.md`](docs/SYLLABUS.md) as the argument for the syllabus layer
+being the real defensible asset, and drew an explicit **subject boundary**:
+we assess conceptual subjects (Biology, History, Geography, Civics, languages)
+and do **not** yet claim computational ones (Mathematics, Physics, Chemistry),
+because spoken explanatory recall is the wrong instrument for calculation and a
+confident wrong grade is worse than an honest gap.
+
+**Reliability fix.** Our per-user AI allowance was 3× the Gemini free tier's
+per-project ceiling, manufacturing 429s, and every one of them fell into a bare
+`catch { return fallback(); }` with no log and no counter — so a rate-limited
+student was indistinguishable from a successful one. Now: the allowance sits
+under the provider ceiling, `429`/`5xx` retry with jittered backoff inside a
+single wall-clock budget, `400`/`404` fail fast, and every fallback logs and
+counts (`GET /api/ai/telemetry`).
+
+**Schema.** Migration `0004` adds `syllabus_unit.periods` + `periods_source` for
+the official MoE teaching-period allocation, surfaced on `/syllabus`.
+
+> **Not yet true:** the Biology 12 period figures are **not** in the database.
+> All six units are deliberately `NULL` until someone transcribes the official
+> MoE syllabus with a page reference. The mechanism ships; the data does not.
+> The smart study guide (Phase 11) is **designed, not built**.
+
+## 2026-09-22 — Offline-first loop and Amharic everywhere
+
+**Offline.** The study loop now survives a dead connection: an IndexedDB
+submission outbox replays with the original `attemptId` so the existing
+idempotency means a retry never double-grades, checklists and generated
+lessons/questions are cached, and an honest three-state banner distinguishes
+*offline* / *saved, will grade when you're back* / *syncing*. A queued item never
+shows a score it doesn't have. Grading itself stays online.
+
+**Amharic.** Bilingual EN/አማርኛ across every surface, with a pre-hydration
+`lang` attribute, Ethiopic type verified (Noto Sans Ethiopic 400–700), and
+**generated content following the language preference** — lessons, retest
+questions and diagnoses are written in Ge'ez, with concept names kept verbatim
+as data rather than translated. The offline fallback content is Amharic too, and
+cached reads honestly flag which language they hold.
+
+## 2026-09-21 — Syllabus anchoring and the first misconception map
+
+**Syllabus.** The `syllabus` / `syllabus_unit` tables, seeded with the **verified
+six-unit Biology Grade 12 structure** from the MoE New-Curriculum textbook
+(2023, ISBN 978-99990-0-011-6), provenance recorded in `sourceNote`. Students
+can browse by syllabus unit and see how much of each unit is covered, and
+chapters can be mapped to units.
+
+**Misconception map.** Recall grading records misconception hits, and
+`GET /misconceptions` returns aggregate counts with a **k-anonymity floor of 5**,
+shown as a panel on the dashboard. Privacy by construction: aggregate only, no
+raw transcripts or voice.
+
+> **Not yet true:** one subject/grade (Biology 12), and the seed is
+> "carefully transcribed," **not** teacher-signed-off — that pass is still on the
+> go-live checklist. The misconception map needs real student volume to mean
+> anything.
+
+## 2026-09-19 — Bring your own textbook, and demo mode
+
+Students can upload **their own** PDF or paste text; the device reads the table
+of contents and slices the book into chapters on-device, each flowing into the
+existing ingest pipeline. Anonymous visitors can try the loop as a **demo**
+without signing up, IP-throttled and rate-limited.
+
+> **Not yet true:** import is **gated behind `TEXTBOOK_IMPORT_ENABLED`** and is
+> not open to students yet — the Phase 6 go-live checklist (DB-backed quotas,
+> chunk idempotency, cookie hardening) has to land first.
+
+## 2026-09-18 — Craft, accessibility, and honest failure states
+
+A full UI/UX pass: the open-ring mark (which closes in gold as gaps close),
+ink-settling motion, fixed Sage/Rust feedback colours instead of theme-following,
+and a rebuild of the control layer. Voice capture gathers **every** user
+transcript chunk, partial and final, because a long recall streams in pieces and
+filtering to "final" alone would drop most of what the student actually said.
+A typed recall surface exists as an alternative to speaking.
+
+## 2026-09-15 — The AI loop, live-verified
+
+The real Gemini loop behind a deterministic fallback chain: concept and
+misconception extraction from a chapter, grading spoken recall against that
+checklist, a targeted lesson for the gaps, and retest questions on the same
+concepts. All four endpoints live-verified against `gemini-3.6-flash`. The
+product **works with or without a key** — without one it degrades to
+deterministic heuristics rather than failing.
+
+## 2026-09-14 — Foundation and the voice spine
+
+Turborepo monorepo (Bun + React Router + Postgres), the domain model, the API
+shell, and the AI seam. The voice spine landed first and stayed load-bearing:
+Voxide for capture, native `speechSynthesis` for read-back, a voice-state ring,
+and a `/voice-test` route. The seam rule from day one: **voice is the
+interface, Gemini + text are load-bearing** — so the loop never bets on a
+vendor's speech layer being correct.
