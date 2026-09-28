@@ -36,6 +36,44 @@ Two things it fixed along the way:
 > the three lists, and the "right length, right order" study guide is still
 > **not built** — that is the next step.
 
+### Then: the diagnosis you can act on
+
+**What changed.** The gaps screen now reads those per-concept levels instead of
+three flat lists. Each bar carries two readings at once: **how tall it stands is
+how much the concept matters**, and **how much of it is filled is how much the
+student can actually answer**. The headline number became the weighted score,
+drawn as a ring that closes — the brand's own open ring turned into a readout,
+so progress is something you watch happen rather than a number you are told.
+
+**The honest new state.** *"You raised it, but didn't say what it means"* now
+has its own look — a half-filled gold bar, and a gold panel that calls it the
+cheapest win on the page. It used to be filed as *covered* and drawn in the
+same solid green as a correct answer, which is the one lie this product cannot
+tell.
+
+**Two real bugs fixed on the way:**
+
+- The headline number was a **flat count of list lengths** sitting directly
+  above bars whose heights came from importance weights. The number, the
+  picture, and the score stored in the database could all disagree. On the
+  worked example that is 40% against a real 56%.
+- A concept at level 1 appears in **none** of the three lists — it is neither
+  covered nor missing — so the first draft of the new screen dropped it
+  entirely. Caught by a test that fails when the bug is put back.
+
+**Landing page.** A new section shows what Kiftet actually sees: one Biology 12
+unit, all four levels, and the difference between a wrong belief and an
+unfinished one. The old hero card quietly demoed **Physics**, which the product
+does not claim to assess — it is Biology now.
+
+**First automated tests.** `bun test` runs in CI as a fourth gate, covering the
+two things we got wrong by hand: a level disappearing from the diagnosis, and a
+headline number drifting from the weighted score.
+
+> **Not yet true:** the study guide is still the old single micro-lesson.
+> Nothing orders study by the mastery map yet — the map is measured, stored and
+> displayed, but the next chapter is the one that acts on it.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,

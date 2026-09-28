@@ -16,8 +16,12 @@ import {
 } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { useLanguage } from "@/components/language-provider";
+import { ConceptRing } from "@/components/mastery-ring";
+import type { MasteryLevel } from "@/components/study-provider";
 import { apiError } from "@/lib/api";
 import { setDemoUser, startDemo } from "@/lib/demo";
+import { type ConceptMeta, weightedMastery } from "@/lib/mastery";
+import type { MessageKey } from "@/lib/messages";
 import { useOnScreen } from "@/lib/on-screen";
 import type { Route } from "./+types/_index";
 
@@ -209,6 +213,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── What it actually sees ─────────────────────────────── */}
+      <DiagnosisSection />
 
       {/* ── Try it live ──────────────────────────────────────────── */}
       <DemoSection />
@@ -527,7 +534,7 @@ function DemoCard() {
           </p>
         </div>
         <div className="mb-1 flex items-center justify-between gap-3">
-          <p className="k-label">Physics · wave mechanics</p>
+          <p className="k-label">{t("demo-card-unit")}</p>
           <span className="inline-flex items-center gap-1.5 font-medium text-[0.78rem] text-sage">
             <span
               className="size-1.5 rounded-full bg-sage"
@@ -537,22 +544,14 @@ function DemoCard() {
           </span>
         </div>
         <h3 className="font-display font-semibold text-xl tracking-tight">
-          Heat and Temperature
+          {t("demo-card-chapter")}
         </h3>
       </div>
 
       <div className="p-6">
         <CoverageView
-          covered={[
-            "Heat flows hot to cold",
-            "Thermal equilibrium",
-            "Phase changes",
-          ]}
-          missing={[
-            "Temperature vs. heat",
-            "Heat capacity",
-            "Why metal feels colder",
-          ]}
+          covered={[t("demo-card-c-1"), t("demo-card-c-2"), t("demo-card-c-3")]}
+          missing={[t("demo-card-c-4"), t("demo-card-c-5")]}
         />
       </div>
 
@@ -565,6 +564,132 @@ function DemoCard() {
         </Link>
       </div>
     </div>
+  );
+}
+
+/**
+ * The section that has to earn the product.
+ *
+ * Everything else on this page is a claim. This one is a receipt: a real
+ * Biology 12 checklist, the four levels a recall can land on, and the numbers
+ * that come out of them. A visitor should be able to read the gold row and
+ * recognise their own Tuesday night — "I said the word, I just didn't say what
+ * it meant" is the feeling the product exists for, and it is worth more to a
+ * student than any percentage.
+ *
+ * Biology 12 on purpose. We do not claim Mathematics or Physics (a spoken
+ * explanation cannot show that someone can calculate), so the hero must not
+ * quietly contradict that with a Physics screenshot.
+ */
+function DiagnosisSection() {
+  const { t } = useLanguage();
+  const reveal = useOnScreen<HTMLDivElement>();
+
+  // The checklist of one real Biology 12 unit, with the levels one student's
+  // spoken recall actually landed on. Kept as data, not JSX, so it renders
+  // through the same component the study screen uses.
+  const mastery: Record<string, MasteryLevel> = {
+    [t("demo-c-1")]: 3,
+    [t("demo-c-2")]: 3,
+    [t("demo-c-3")]: 1,
+    [t("demo-c-4")]: 2,
+    [t("demo-c-5")]: 0,
+  };
+  const meta: Record<string, ConceptMeta> = {
+    [t("demo-c-1")]: { weight: 5, isMisconception: false },
+    [t("demo-c-2")]: { weight: 3, isMisconception: false },
+    [t("demo-c-3")]: { weight: 4, isMisconception: false },
+    [t("demo-c-4")]: { weight: 2, isMisconception: false },
+    [t("demo-c-5")]: { weight: 4, isMisconception: false },
+  };
+  const name = (i: 1 | 2 | 3 | 4 | 5) => t(`demo-c-${i}` as MessageKey);
+
+  return (
+    <section className="mt-6" aria-labelledby="diagnosis-title">
+      <div
+        ref={reveal.ref}
+        className={cn("space-y-6", reveal.shown && "kft-in")}
+      >
+        <div className="space-y-3">
+          <p
+            className="kft-rise font-medium text-muted-foreground text-sm"
+            style={{ "--kft-i": "0ms" } as CSSProperties}
+          >
+            {t("diag-eyebrow")}
+          </p>
+          <h2
+            id="diagnosis-title"
+            className="kft-rise max-w-2xl text-balance font-display font-semibold text-2xl text-foreground tracking-[-0.02em] sm:text-3xl"
+            style={{ "--kft-i": "80ms" } as CSSProperties}
+          >
+            {t("diag-title")}
+          </h2>
+          <p
+            className="kft-rise max-w-2xl text-muted-foreground text-sm leading-6 sm:text-base"
+            style={{ "--kft-i": "160ms" } as CSSProperties}
+          >
+            {t("diag-sub")}
+          </p>
+        </div>
+
+        <div
+          className="kft-rise grid gap-6 lg:grid-cols-[1.25fr_1fr] lg:items-start lg:gap-8"
+          style={{ "--kft-i": "240ms" } as CSSProperties}
+        >
+          <div className="surface p-5 sm:p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <p className="k-label">{t("diag-unit")}</p>
+              <p className="font-medium text-muted-foreground text-xs">
+                {t("diag-one-minute")}
+              </p>
+            </div>
+            <CoverageView
+              covered={[name(1), name(2)]}
+              missing={[name(5)]}
+              misconceptions={[name(4)]}
+              mastery={mastery}
+              meta={meta}
+              score={weightedMastery(mastery, meta, Object.keys(mastery))}
+            />
+          </div>
+
+          <ul className="space-y-3">
+            {(
+              [
+                ["3", t("diag-l3"), t("diag-t3"), "var(--color-sage)"],
+                ["1", t("diag-l1"), t("diag-t1"), "var(--color-gold)"],
+                ["2", t("diag-l2"), t("diag-t2"), "var(--color-rust)"],
+                ["0", t("diag-l0"), t("diag-t0"), "var(--border)"],
+              ] as const
+            ).map(([level, head, body, color], i) => (
+              <li
+                key={level}
+                className="kft-rise inner-surface flex gap-3 p-4"
+                style={{ "--kft-i": `${280 + i * 80}ms` } as CSSProperties}
+              >
+                <ConceptRing level={Number(level) as MasteryLevel} size={26} />
+                <div className="min-w-0 space-y-1">
+                  <p className="font-medium text-sm" style={{ color }}>
+                    {head}
+                  </p>
+                  <p className="text-muted-foreground text-sm leading-6">
+                    {body}
+                  </p>
+                </div>
+              </li>
+            ))}
+            <li
+              className="kft-rise inner-surface border-gold/30 p-4"
+              style={{ "--kft-i": "600ms" } as CSSProperties}
+            >
+              <p className="text-foreground text-sm leading-6">
+                {t("diag-punchline")}
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
   );
 }
 
