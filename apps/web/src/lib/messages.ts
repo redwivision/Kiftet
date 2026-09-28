@@ -43,6 +43,8 @@ export const en = {
   "gaps-title": "Your starting picture",
   "gaps-text":
     "The solid ideas stay. The open ones are what the short version will fix. Bars that sit taller matter more.",
+  "gaps-estimated":
+    "Heavily used right now, so this grade is a quick estimate from what it could hear, not a full check. Study the open ones, then test yourself again.",
   "lesson-title": "The short version",
   "lesson-text":
     "Just what you missed — nothing more. Read it now, or hear it spoken back to you.",
@@ -499,6 +501,8 @@ export const am: Record<MessageKey, string> = {
   "gaps-title": "የመነሻ ሁኔታህ",
   "gaps-text":
     "የተረጋገጡት እውቀቶች ይቆያሉ። ክፍት የሆኑትን አጭሩ ማብራሪያ ያስተካክላል። ረዥሙ አምዶች የበለጠ አስፈላጊ ናቸው።",
+  "gaps-estimated":
+    "አሁን በከባይ ጥቅበት ላይ ነው፤ ስለዚህ ይህ ውጤት ከሰማት ብቻ የተዘጋጀ ፈጣን ግምት ነው፤ ሙሉ ምርመራ አይደለም። ክፍት የሆኑትን ተማር፣ ከዚያ ስራህን እንደገና ሞክር።",
   "lesson-title": "አጭሩ ማብራሪያ",
   "lesson-text": "ያመለጠህን ብቻ — ከዚያ ያለፈ ምንም። አሁን አንብበው፣ ወይም ተናግሮ ስማው።",
   "retest-title": "አጭር ድጋሚ ፈተና",

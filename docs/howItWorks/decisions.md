@@ -21,7 +21,11 @@
    is the monochrome identity. The voice state ("Listening…", "Thinking…") is a first-class
    UI element — a student has to trust the app is hearing them. The one place we
    spend visual boldness is the gap visualization: show *which* concepts are
-   covered vs missing, not just "62%".
+   covered vs missing, not just "62%". Grading returns a per-concept level
+   (0–3) for every checklist idea, and that map is the source the three lists
+   derive from — the number never exists without the per-concept detail
+   underneath it. A grade we had to estimate is labelled as an estimate; a grade
+   we did not measure is never shown.
 
 5. **Institutional licensing, not per-student fees** (B2B2C). Schools and
    tutoring centers pay; students get it free. Real deal with Links.et sponsor.
