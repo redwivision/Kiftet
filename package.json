@@ -31,6 +31,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "test": "bun test",
+    "test:web": "cd apps/web && bun test",
     "dev:web": "turbo run dev -F web --",
     "dev:server": "turbo run dev -F server --",
     "serve": "node apps/server/serve.js",

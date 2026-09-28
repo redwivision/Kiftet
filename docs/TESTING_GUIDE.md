@@ -833,3 +833,48 @@ and the favicon + PWA PNG set is generated from the same geometry.
 
 Acceptance: no tofu anywhere in Ge'ez; the file mark and the component mark use
 the same geometry; icon set sharp at 16–512 px.
+
+---
+
+## Phase 11 — The diagnosis screen (per-concept mastery)
+
+### How I tested
+
+Automated (`bun test`, now a CI gate —
+`apps/web/src/components/gap-list.test.tsx`):
+
+1. **All four levels render.** The level-1 concept is passed in *none* of the
+   three lists, because it is neither covered nor missing. Asserting it appears
+   catches the exact bug that hit the first draft, where the concept list was
+   built from the flat lists and the "so close" row vanished.
+2. **The headline number is the weighted score.** Weights 5/4/2/4 and levels
+   3/1/2/0 → 47%. Asserts both the value and that it is *not* the flat count.
+3. **No map given → levels inferred** from which list a name is in, so the
+   landing illustration still means something.
+4. **An empty chapter renders** a placeholder rather than crashing.
+5. **The ring is decorative** (`aria-hidden`) and the number is real text, so
+   the score is readable without seeing the arc.
+
+I confirmed test 1 and 2 have teeth by reintroducing the dropped-concept bug and
+watching them fail with the number silently changing to 56%.
+
+Manual:
+
+6. `bun run dev`, open a chapter, speak a recall, and on the gaps screen confirm
+   a concept you *named but did not explain* lands in the gold "So close" panel
+   rather than in "Already solid".
+7. Confirm the bar strip: height tracks importance, fill tracks mastery — a
+   weight-5 concept you got wrong is a full-height rust bar, a weight-2 concept
+   you skipped is a short dashed one.
+8. Toggle Amharic: every new string renders in Ge'ez, including the "So close"
+   panel and the four-state legend.
+9. Force a degraded grade (unset `GEMINI_API_KEY`) and confirm the estimate note
+   appears above the screen and the ring renders at reduced opacity.
+10. Switch rooms (Sunlight, Ember, Copper) and confirm the gold level-1 state is
+    legible in every one — it is the only state that leans on the accent.
+11. Turn on reduced motion and confirm the rings and bars appear instantly with
+    the content still complete.
+
+Acceptance: a half-raised concept is never drawn as solid; the number matches
+the stored weighted score; all four states legible in every room and both
+languages; nothing shown is a guess without saying so.
