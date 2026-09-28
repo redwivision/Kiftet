@@ -156,14 +156,25 @@ flowchart TD
 
 ```
 Sending:   { transcriptText, attemptId }
-Receiving: { gaps: { covered: [...], missing: [...], misconceptions: [], score: 60 } }
+Receiving: { gaps: { mastery: {...}, covered: [...], missing: [...], misconceptions: [], score: 60, estimated: false } }
 ```
 
 A few things worth knowing:
 
-- **What's graded:** covered (explained correctly), missing (never mentioned),
-  misconceptions (stated a wrong belief). The score is a **weighted** percentage
-  — higher-weight concepts count more, and stating a misconception lowers it.
+- **What's graded:** every concept gets a **level** — `0` not addressed, `1`
+  raised but not explained, `2` explained wrong, `3` explained correctly — in
+  `gaps.mastery`. The `covered` / `missing` / `misconceptions` lists you see are
+  **derived from those levels**, so the per-concept view and the single number
+  can never disagree. `covered` = level 3 (and 1), `misconceptions` = level 2,
+  `missing` = level 0.
+- **The score is a weighted roll-up of the levels**, not a separate judgement:
+  level 3 earns full weight, level 1 earns half, level 2 earns **nothing** —
+  a student who states a wrong belief is not credited for it. Higher-weight
+  concepts count more.
+- **`estimated: true`** means this came from the deterministic fallback (no AI
+  key, or Gemini failed/rate-limited). It can see which ideas were mentioned
+  but not whether they were explained, so it caps at level 1 and the number is
+  an estimate. The UI labels it. Don't treat it as a real grade.
 - **Idempotency:** because every submission carries a random `attemptId`, a
   double-tap, a retry, or a network replay can never create a phantom second
   attempt. The dedup is scoped to the session.
@@ -404,7 +415,7 @@ The study domain uses **five tables**, and one row of each means:
 | `chapter` | One chapter in a textbook, with its text | `textbookId`, `title`, `rawText` |
 | `concept_node` | One idea (or misconception) in the checklist | `chapterId`, `conceptText`, `isMisconception`, `weight` |
 | `study_session` | One study attempt on a chapter | `chapterId`, `userId` (→ user), `status`, `startedAt`, `completedAt`, `retestQuestions` (JSON), `retestIndex` |
-| `attempt` | One measurement inside a session: the recall, or one retest answer | `id` (client `attemptId`), `sessionId`, `stage`, `transcriptText`, `gapsIdentified` (JSON), `score` |
+| `attempt` | One measurement inside a session: the recall, or one retest answer | `id` (client `attemptId`), `sessionId`, `stage`, `transcriptText`, `gapsIdentified` (JSON: `mastery` per-concept levels + the three lists derived from them + `estimated`), `score` |
 
 *Why `retestQuestions` and `retestIndex` exist:* if the student reloads
 mid-retest, the server can rebuild the exact question they were on and restore
@@ -445,11 +456,15 @@ different things get asked:
    misconception counts as handled when *not* restated; a real concept counts
    when covered. Applied to the question's focus subset only.
 
-Grading never trusts the AI's raw float: every score is recomputed
-deterministically server-side using the concept weights. And every prompt has a
-fallback — if Gemini fails or the key is a placeholder, deterministic
-heuristics take over (token matching for grading, sentence splitting for
-concepts, templates for lessons/questions).
+Grading never trusts the AI's own number: the model returns per-concept
+*levels* and nothing else, and the score is recomputed deterministically
+server-side from those levels plus the concept weights. A level that is
+out-of-range, non-numeric, or keyed to something not on the checklist is
+dropped — a sloppy response degrades to the older list-based behaviour rather
+than throwing. And every prompt has a fallback: if Gemini fails or the key is a
+placeholder, deterministic heuristics take over (token matching for grading,
+sentence splitting for concepts, templates for lessons/questions), flagged
+with `estimated: true`.
 
 ---
 
