@@ -53,6 +53,33 @@ export type Gaps = {
   estimated?: boolean;
 };
 
+/** One concept's section, in this student's study order (phase 11, step 3b).
+ *  Content is shared by every student on the chapter; the ORDER is per-student
+ *  and computed from mastery, which is why this arrives as an array. */
+export type GuideSection = {
+  conceptText: string;
+  /** The concept's importance, 1-5. */
+  weight: number;
+  level: MasteryLevel;
+  /** The idea itself, 1-2 sentences. */
+  what: string;
+  why?: string | null;
+  /** The say-it-back prompt. */
+  recall?: string | null;
+  /** Character offset of this concept in the chapter's raw text, so the guide
+   *  can hand the student back to their own book. */
+  sourceOffset?: number | null;
+  sourceQuote?: string | null;
+  estimated: boolean;
+  needsWork: boolean;
+};
+
+export type Guide = {
+  sections: GuideSection[];
+  estimated: boolean;
+  language: "en" | "am";
+};
+
 export type SessionResult = {
   before: number | null;
   after: number | null;
@@ -82,6 +109,11 @@ export type StudyState = {
   allCovered: boolean;
   lessonText: string | null;
   lessonLoading: boolean;
+  /** The ordered guide (phase 11, step 3b). Populated alongside lessonText; the
+   *  text is the flattened read-aloud, the sections are what the student
+   *  actually reads. */
+  guide: GuideSection[] | null;
+  guideEstimated: boolean;
   retestLoading: boolean;
   questions: SessionQuestion[];
   currentQuestion: number;
@@ -108,6 +140,7 @@ export type StudyAction =
   | { type: "RECALL"; gaps: Gaps }
   | { type: "RECALL_FULL"; gaps: Gaps }
   | { type: "LESSON"; text: string }
+  | { type: "GUIDE"; guide: GuideSection[]; estimated: boolean }
   | { type: "QUESTIONS"; questions: SessionQuestion[] }
   | {
       type: "RESTORE_RETEST";
@@ -140,6 +173,8 @@ function initialState(_sessionId: string): StudyState {
     allCovered: false,
     lessonText: null,
     lessonLoading: false,
+    guide: null,
+    guideEstimated: false,
     retestLoading: false,
     questions: [],
     currentQuestion: 0,
@@ -177,6 +212,25 @@ function attemptGaps(raw: unknown): Gaps {
     misconceptions: [],
     score: 0,
   };
+}
+
+/**
+ * Serialise the mastery map for the guide's query string.
+ *
+ * The guide is ordered per-student, so the server needs the levels. The map is
+ * a plain object of concept name → level, so a concept name containing a comma
+ * or a colon would corrupt the encoding; those are percent-encoded here rather
+ * than trusted, because concept names come from a model.
+ */
+export function masteryQuery(gaps: Gaps): string {
+  const entries = Object.entries(gaps.mastery ?? {});
+  if (!entries.length) return "mastery=";
+  return `mastery=${entries
+    .map(
+      ([name, level]) =>
+        `${encodeURIComponent(name)}:${encodeURIComponent(String(level))}`,
+    )
+    .join(",")}`;
 }
 
 // Order-insensitive concept-set comparison, used to decide how honest the copy
@@ -251,6 +305,12 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         error: null,
         notice: null,
         queued: null,
+      };
+    case "GUIDE":
+      return {
+        ...state,
+        guide: action.guide,
+        guideEstimated: action.estimated,
       };
     case "QUESTIONS":
       return {
@@ -495,18 +555,34 @@ export function StudyProvider({
 
   const fetchLesson = useCallback(() => {
     const gaps = stateRef.current.gaps;
+    const chapterId = stateRef.current.chapter?.id;
     if (!gaps) return Promise.resolve();
+
+    // The guide is the ordered sections; the microlesson is the single
+    // read-aloud script built from them. Two requests, not one: the sections
+    // are what the student reads and they come from the shared cache, while the
+    // read-aloud is still per-session because it stitches this student's
+    // concepts into one continuous script.
+    const fetchGuide = chapterId
+      ? api<Guide>(
+          `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}`,
+        )
+      : Promise.resolve<Guide | null>(null);
+
     return run(
       () =>
-        api<{ text: string }>(`/sessions/${sessionId}/microlesson`, {
-          method: "POST",
-          body: JSON.stringify({
-            missing: gaps.missing,
-            misconceptions: gaps.misconceptions,
-            language: lang,
+        Promise.all([
+          api<{ text: string }>(`/sessions/${sessionId}/microlesson`, {
+            method: "POST",
+            body: JSON.stringify({
+              missing: gaps.missing,
+              misconceptions: gaps.misconceptions,
+              language: lang,
+            }),
           }),
-        })
-          .then((lesson) => {
+          fetchGuide,
+        ])
+          .then(([lesson, guide]) => {
             // Bet 3: keep the freshly generated lesson on the phone so it
             // can be re-read (honestly flagged) if the connection drops
             // later in the loop.
@@ -518,6 +594,13 @@ export function StudyProvider({
               lang,
             );
             dispatch({ type: "LESSON", text: lesson.text });
+            if (guide) {
+              dispatch({
+                type: "GUIDE",
+                guide: guide.sections,
+                estimated: guide.estimated,
+              });
+            }
           })
           .catch(async (err: unknown) => {
             // Offline: fall back to the lesson saved on this phone — it

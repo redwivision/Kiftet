@@ -1,6 +1,8 @@
 # Testing Guide — Kiftet
 
-Workflow for the `prototype` branch:
+Manual coverage for a feature branch. The automated half of this is
+`bun run test` (16 cases; see the end of this file). What follows is the part
+that still needs a human with a real voice and a real textbook.
 
 - Build one phase at a time. Never move to the next phase until the current one is
   tested and fixed.
@@ -878,3 +880,77 @@ Manual:
 Acceptance: a half-raised concept is never drawn as solid; the number matches
 the stored weighted score; all four states legible in every room and both
 languages; nothing shown is a guess without saying so.
+
+---
+
+## Phase 11 step 3b — The guide (cached, ordered, anchored)
+
+### How I tested
+
+Automated (`bun run test`, 16 cases total):
+
+- **`apps/server/src/ai/guide.test.ts`** — the study order and the anchor.
+  - Ordering is `L2 → L1 → L0 → L3`: a wrong belief first, then the cheapest
+    win, then untouched ideas by importance, then what they already have. If
+    triage regressed to "list order", the first assertion fails.
+  - A checklist item flagged `isMisconception` never gets a section of its own —
+    it is a wrong belief, not a concept.
+  - The same map in gives the same guide out, and the caller's array is not
+    mutated by sorting.
+  - The anchor's offset indexes the *original* text, so a "go to this place in
+    your book" link lands on the sentence, not the space before it.
+  - **A hard-wrapped chapter still yields whole sentences.** Textbook text is
+    wrapped across lines; an earlier version split on newlines and produced
+    anchors like *"Inside, the cytoplasm is a watery fluid that holds the"* — a
+    fragment that is useless as a link and as the section's own text. Caught by
+    running the real thing, not by reading the code.
+  - **The fallback never fakes a language.** The deterministic path cannot
+    translate, so it must not copy the English book sentence into a guide that
+    already claimed `language: "am"`. Caught end-to-end: the Amharic guide came
+    back with English `what` text.
+
+End-to-end, against a real Postgres built from the migrations and the real
+server, with the model actually called:
+
+1. Ran the server's own boot migrator against an empty database and confirmed
+   it created `guide_section` — the migration is wired into the real path, not
+   just hand-applied SQL.
+2. Graded a spoken recall. Gemini returned `503 UNAVAILABLE` twice. The ladder
+   behaved correctly: retried, logged `upstream_status_503`, counted it in
+   `/api/ai/telemetry`, and returned a grade labelled `estimated: true` rather
+   than a fake zero.
+3. Hit the per-user budget (8/min) by retrying, and the `429` was refused
+   honestly instead of silently degrading.
+4. Requested the guide twice with the same mastery map. **Cold cache: 4 AI
+   attempts for 4 non-solid concepts. Warm cache: 0 attempts**, byte-identical
+   response, 4 rows in the table. That is the entire cost argument, measured.
+5. Confirmed `am` and `en` are separate rows (4 each) and that the Amharic
+   scaffolding is Amharic while the book quote stays verbatim English.
+6. Ownership: no identity → `401`; a forged `X-Demo-User-Id` → `401`; a
+   *different* legitimate user asking for this chapter → `404`; the owner →
+   `200`. The guide is generated content, so it is checked against the chapter
+   owner rather than inherited from a session id.
+
+### What I could not verify
+
+- **The model-written section itself.** `gemini-3.6-flash` returned `503` for
+  every attempt during this session ("high demand"). The schema, the prompt,
+  the ladder and the caching are all verified; the quality of a
+  successfully-generated `what`/`why`/`recall` is not. Run this again when
+  upstream is healthy.
+- A real voice read-along of the sections, and the offline path for the guide.
+
+### Manual, still to do with a human
+
+1. `bun run dev`, speak a recall that gets some concepts *wrong*, then read the
+   guide top to bottom. The first card must be the wrong one, and it must feel
+   like the right first move rather than a punishment.
+2. Tap "Say it back" on a section. It should read the `what` then the prompt,
+   and stop cleanly when you leave the phase.
+3. Compare the guide for two students with different gaps on the same chapter.
+   The wording must be identical where they overlap — that is the cache — and
+   only the order and the badges should differ.
+4. Switch to Amharic. Sections must be in Amharic, and any English book quote
+   must still read as a quotation from the book, not as a translated lesson.
+5. Turn off the network mid-lesson. The guide must still render from cache and
+   say so, rather than showing an empty page.

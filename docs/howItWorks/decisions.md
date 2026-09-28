@@ -102,3 +102,39 @@
     config, and config-file reformatting noise was reverted so the diff stays
     honest about what actually changed.
 
+
+13. **The unique constraint is the cache.** `guide_section` is keyed
+    `(chapter, concept, language)` and nothing else — no user, no session — for
+    one reason: a per-project Gemini quota is shared by every user, so the second
+    student on a chapter has to be free. The alternative designs were rejected
+    concretely, not on taste:
+
+    - *Key by session* (what `CachedLessonRow` still does) — cannot dedupe
+      across students even in principle. It was the existing precedent, which is
+      exactly why it is worth writing down that it is the wrong shape for
+      server-side content.
+    - *Regenerate when a section looks wrong* — a bad generation is sticky
+      forever. There is deliberately no regeneration path; delete the row.
+    - *Ask the model to order the guide* — ordering is the product's answer to
+      "what should I study", and it must not contradict the diagnosis screen the
+      student just looked at. It is computed from the same map, deterministically,
+      at zero cost.
+
+    Measured on a real chapter against a real database: first guide 4 AI calls,
+    second guide 0.
+
+14. **A fallback must not fake a capability it does not have.** The deterministic
+    path cannot translate. An early version copied the chapter's sentence into
+    `what`, which produced an English "section" inside a guide that had already
+    returned `language: "am"` — found end-to-end, not by reading the code. The
+    rule now: the fallback writes target-language scaffolding and carries the
+    book's own words in `sourceQuote`, where the UI labels them as a quotation.
+    The same instinct applies to the anchor: never ask a model for a page number,
+    compute it, and return nothing when there is nothing to point at.
+
+15. **Student-independent content lives in the server cache; the phone copy
+    still does not.** `CachedLessonRow` remains keyed by `sessionId`
+    (`apps/web/src/lib/store.ts:175`) and was deliberately left alone in 3b. It
+    costs nothing to be wrong about — the server cache is what spends the quota —
+    so fixing it was deferred rather than bundled into a change about the study
+    order. It is written down in the roadmap so it is not forgotten.

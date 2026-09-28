@@ -74,6 +74,41 @@ headline number drifting from the weighted score.
 > Nothing orders study by the mastery map yet — the map is measured, stored and
 > displayed, but the next chapter is the one that acts on it.
 
+### Then: the guide, in the order you actually need it
+
+**What changed.** The map now decides what you read and in what order. A
+**wrong belief comes first** — re-reading cannot fix the one thing you have
+actually got backwards. Then the ideas you raised but did not finish, which are
+the cheapest wins on the page. Then what you have not touched yet, by how much
+it matters. What you already have goes last, as a line of confirmation rather
+than something to read twice.
+
+**The economics.** The Gemini free tier is a budget for the whole *project*,
+not for one key: roughly 1,500 calls a day shared by every user. Generating a
+guide per session spends twelve of them to show one page. So a section is now
+written **once per chapter, per concept, per language** and stored. Measured on
+a real chapter: **first guide 4 AI calls, second guide 0.** The second student
+on a chapter costs nothing.
+
+**"The right length" is now structure, not a vibe.** A section is `what` / `why`
+/ `recall` instead of one blob, and each is readable on its own — `recall` is
+the prompt a voice UI can hand straight to a microphone.
+
+**Every section points back at your book.** Each concept is anchored to a real
+sentence in your own textbook by computing where the words overlap. It is
+computed, never asked of a model, because a model asked for a page number
+invents one, and an invented page number is worse than none.
+
+**Two honesty bugs, both found by running the thing end to end:**
+
+- The anchor split on newlines. Textbook text is hard-wrapped, so "go to this
+  place" was landing on *"Inside, the cytoplasm is a watery fluid that holds
+  the"* — a mid-sentence fragment that is useless as both a link and a lesson.
+- The offline fallback copied the book's sentence into a guide that had already
+  claimed to be **Amharic**. The fallback cannot translate, so it must not
+  pretend to: the scaffolding is now in your language and your book is quoted
+  verbatim underneath, labelled as a quotation.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,
