@@ -114,7 +114,9 @@ running, re-apply it: **repo → Settings → Branches → Add rule** (or
 
 - **Branch name pattern:** `main`
 - **Require status checks to pass:** on, and require the `lint, types, build`
-  check
+  and `lint, types, build, test` checks. (CI now has four gates — a `test` job
+  was added with the first automated tests. If a PR shows as mergeable but you
+  expected CI to block, the required-check list is usually the stale part.)
 - **Require branches to be up to date:** on
 - **Require at least one approval:** on (you can approve your own PR if solo)
 

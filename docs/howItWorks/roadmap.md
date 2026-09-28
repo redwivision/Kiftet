@@ -16,7 +16,7 @@ table can't tell you.
 | 2026-09-27 | `09bd00d` — rebuilt the control layer, failure states and PWA caching | `error-screen.tsx`, `navigation-progress.tsx`, the typed `messages.ts` corpus, the rebuilt `root.tsx`/auth shell, and a PWA caching pass. Shipped **without** being recorded here, which is why this section now exists. |
 | 2026-09-27 | The repo's quality baseline, settled | The formatting debt is gone and `bun run lint` exits 0 for the first time. See [the gates](../RUNBOOK.md#4-the-quality-gates). Two real bugs fell out of it — see below. |
 | 2026-09-27 | `migrateDb()` takes a Postgres advisory lock | Was an unchecked go-live item; two instances of a rolling deploy could race the migration journal. |
-| 2026-09-27 | CI: `.github/workflows/ci.yml`, blocking `main` | Lint + typecheck + build on every push and PR to `main`. **There are still no automated tests** — CI proves it builds and typechecks, not that it works. |
+| 2026-09-27 | CI: `.github/workflows/ci.yml`, blocking `main` | Lint + typecheck + test + build on every push and PR to `main`. The `test` gate arrived with the first automated tests (`bun test`) — it is still a small suite, and CI proves far more than it used to, not everything. |
 
 ### Bugs the lint pass actually found
 
@@ -226,9 +226,25 @@ Two consequences worth keeping:
   the number is an estimate (`gaps-estimated`).
 
 Persisted in `attempt.gapsIdentified.mastery` (+ `estimated`). Both are optional
-in the type, so attempts written before this change still read back. What is
-**not** done: nothing consumes the map yet — the gaps screen still renders the
-three lists, and guide ordering is still step 3.
+in the type, so attempts written before this change still read back.
+
+**Landed (phase 11, step 3) — the diagnosis reads the map.** The gaps screen
+(`components/gap-list.tsx`) now renders the four levels instead of three lists.
+Each bar carries two readings at once: its **height** is the concept's
+importance weight, and its **fill** is the mastery (0, 45%, or 100%). Level 1
+gets its own state — a half-filled gold bar and a gold panel titled "So close —
+you raised it" — because filing it under "covered" is the exact flattening the
+product exists to undo. The headline number is now the *weighted* score the
+server stored, drawn as a ring that closes; it used to be a flat count of list
+lengths sitting above bars whose heights came from weights, so the number, the
+picture, and the stored score all disagreed.
+
+**Still not done (step 3b):** the guide is still the old single micro-lesson.
+Nothing yet *orders* study by the map — the ladder and the per-concept cache
+(table + `generate`/`grade` split) are the remaining half of this step.
+
+**What is next.** 3b the guide, then 4 scope selection, 5 retest as an optional
+tool, 6 tests (the diagnosis screen is covered; the guide is not).
 
 **One trap in the new pre/post retest.** Retest questions deliberately mirror
 the student's *own* recall wording, and the cache carries the originating gap
@@ -246,11 +262,14 @@ per-concept rubric, targeting the same concepts.
    hardcoding `covered: []`. *(Landed — the map exists, is persisted, and
    derives the lists; nothing reads it yet.)*
 3. **Guide sections + cache.** New table keyed by (chapter, concept, language);
-   the three-step ladder; Amharic parity; source anchors. *The map is the
-   ordering input for this step.*
+   the three-step ladder; Amharic parity; source anchors. *Half landed: the
+   diagnosis now reads the map and triage order is written down
+   (`lib/mastery.ts`); the guide itself is still the old micro-lesson.*
 4. **Scope selection** — chapters and/or topics, the student's choice.
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
-6. **Tests.** All of the above is currently verifiable by hand only.
+6. **Tests.** Automated coverage now exists only for the diagnosis screen
+   (`apps/web/src/components/gap-list.test.tsx`, run by `bun test` in CI). The
+   guide, cache, retest and the offline path are still hand-verified only.
 
 **Cheap and high-leverage, done:** `syllabus_unit.periods` (migration `0004`)
 carries the official period allocation from the MoE document, with
