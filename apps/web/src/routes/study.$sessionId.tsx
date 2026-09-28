@@ -26,6 +26,7 @@ import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
 import { findBoundaryEnd, leadingText } from "@/lib/intent";
+import type { ConceptMeta } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
 import {
   type ChecklistRow,
@@ -687,22 +688,31 @@ function GapsPhase() {
   const { state, fetchLesson, startRetest } = useStudy();
   const { t } = useLanguage();
   const gaps = state.gaps;
-  const [weights, setWeights] = useState<Record<string, number>>({});
+  const [meta, setMeta] = useState<Record<string, ConceptMeta>>({});
 
-  // Concept importance (1-5) lives on the chapter's checklist; pull it once
-  // so the coverage bars can reflect what actually matters. The same rows are
-  // cached (bet 3) so a lost connection still lets the bars render from what
-  // was saved.
+  // Concept importance (1-5) and the known-misconception flag live on the
+  // chapter's checklist; pull them once so the bars can reflect what actually
+  // matters and the weighted score can exclude the trap entries. The same rows
+  // are cached (bet 3) so a lost connection still lets the bars render from
+  // what was saved.
   useEffect(() => {
     let cancelled = false;
     const chapterId = state.chapter?.id;
     if (!chapterId) return;
+    const adopt = (rows: ChecklistRow[]) => {
+      const next: Record<string, ConceptMeta> = {};
+      for (const row of rows) {
+        next[row.conceptText] = {
+          weight: row.weight,
+          isMisconception: row.isMisconception,
+        };
+      }
+      setMeta(next);
+    };
     api<ChecklistRow[]>(`/chapters/${chapterId}/concepts`)
       .then((rows) => {
         if (cancelled) return;
-        const map: Record<string, number> = {};
-        for (const row of rows) map[row.conceptText] = row.weight;
-        setWeights(map);
+        adopt(rows);
         void cacheChecklist(chapterId, rows);
       })
       .catch(async (err) => {
@@ -713,9 +723,7 @@ function GapsPhase() {
         if (err instanceof ApiError && err.status === 0) {
           const cached = await getCachedChecklist(chapterId);
           if (cancelled || !cached) return;
-          const map: Record<string, number> = {};
-          for (const row of cached.rows) map[row.conceptText] = row.weight;
-          setWeights(map);
+          adopt(cached.rows);
         }
       });
     return () => {
@@ -741,7 +749,10 @@ function GapsPhase() {
         covered={gaps.covered}
         missing={gaps.missing}
         misconceptions={gaps.misconceptions}
-        weights={weights}
+        meta={meta}
+        mastery={gaps.mastery}
+        score={gaps.score}
+        estimated={gaps.estimated}
       />
       <div className="space-y-2 pt-2">
         <Button

@@ -306,6 +306,37 @@ export const en = {
 
   // ── Home / landing page ──────────────────────────────────────
   "hero-eyebrow": "Kiftet · spoken study review for Ethiopian students",
+  "diag-eyebrow": "What it actually sees",
+  "diag-title": "Not a score. A list of exactly what to fix.",
+  "diag-sub":
+    "You speak for a minute about a chapter. Kiftet checks each idea on the syllabus against what you actually said — and marks the difference between not raising something and raising it badly. That difference is the whole product.",
+  "diag-unit": "Biology 12 · Plant physiology",
+  "diag-one-minute": "1 minute of speech",
+  "diag-l3": "3 — you can answer this",
+  "diag-l1": "1 — you raised it, but didn't say what it means",
+  "diag-l2": "2 — you said it the wrong way",
+  "diag-l0": "0 — not raised yet",
+  "diag-t3": "It landed. Leave it alone and spend your night somewhere else.",
+  "diag-t1":
+    "This is the good news hiding in plain sight. You remember it exists; one clear sentence finishes it.",
+  "diag-t2":
+    "Re-reading will not fix this one. It has to be unlearned and put back the right way.",
+  "diag-t0":
+    "Fair enough — nobody covers everything. This is what the short version is for.",
+  "diag-punchline":
+    "Two of those need one sentence from you. One needs correcting, not re-reading. That's a very different night from “revise the whole chapter” — and it's the difference between 6 weeks of hoping and 6 days of knowing.",
+  "demo-c-1": "Photosynthesis",
+  "demo-c-2": "Chlorophyll and absorbed light",
+  "demo-c-3": "Respiration and photosynthesis",
+  "demo-c-4": "Water as a reactant in photosynthesis",
+  "demo-c-5": "Factors limiting the rate",
+  "demo-card-unit": "Biology 12 · Cell biology",
+  "demo-card-chapter": "The cell and its organelles",
+  "demo-card-c-1": "Cell theory",
+  "demo-card-c-2": "Mitochondria and ATP",
+  "demo-card-c-3": "Nucleus and control of the cell",
+  "demo-card-c-4": "Ribosomes and protein synthesis",
+  "demo-card-c-5": "How organelles stay in their compartments",
   "hero-gap": "Close the gap.",
   "hero-87":
     "87 in every 100 students fail the national exam. Trying harder isn't the answer — knowing which gaps are yours is.",
@@ -397,11 +428,19 @@ export const en = {
   "cov-wrong": "stated wrong",
   "cov-aria": "{covered} of {total} concepts covered, {missing} still gaps",
   "cov-aria-wrong": ", {n} stated incorrectly",
+  "cov-aria-almost": ", {n} raised but not explained",
   "cov-importance": "importance {n}/5",
+  "cov-legend-sage": "solid",
+  "cov-legend-gold": "nearly",
+  "cov-legend-rust": "wrong",
+  "cov-legend-open": "not raised",
   "cov-already-solid": "Already solid",
   "cov-needs-work": "Needs work",
   "cov-none-yet": "Nothing landed yet — that's the starting point.",
   "cov-all-solid": "Nothing. Every concept we checked is solid.",
+  "cov-almost-title": "So close — you raised it",
+  "cov-almost-text":
+    "You brought these up, but stopped before saying what they mean or why. One clear sentence each is usually the whole thing — start here and the payoff is fastest.",
   "cov-wrong-title": "Watch out — stated wrong",
   "cov-wrong-text":
     "These aren't ideas you skipped; you said them the wrong way. The short lesson will fix them first.",
@@ -751,6 +790,35 @@ export const am: Record<MessageKey, string> = {
 
   // ── Home / landing page ──────────────────────────────────────
   "hero-eyebrow": "ኪፍተት · ለኢትዮጵያ ተማሪዎች በድምጽ የሚደረግ የትምህርት ግምገማ",
+  "diag-eyebrow": "በእውነት የሚያየው",
+  "diag-title": "ውጤት አይደለም። በትክክል የሚስተካከል ዝርዝር።",
+  "diag-sub":
+    "ስለ አንድ ምዕራፍ አንድ ደቂቃ ይናገራለህ። ኪፍተት እያንዳንዱ ሃሳብ ከስምህ በእንዴት መናገርህ ጋር ያወዳዳል። ለምሳሌ በላም አላጠራህን ከበስተዋል በተለየ መለያ ይሰጣል። ይህ ልዩነትም የምርቱ ሁሉ ነው።",
+  "diag-unit": "ባዮሎጂ 12 · የእፍሎች አካሳሽ",
+  "diag-one-minute": "የ1 ደቂቃ ድምጽ",
+  "diag-l3": "3 — ይህን መስሮች መልስ ይሰጣለህ",
+  "diag-l1": "1 — ጠቅሞሃል፣ ግን ምንስ ማለት አልገለጠህም",
+  "diag-l2": "2 — በተሳሳተኝ ገልጿል",
+  "diag-l0": "0 — ገና አልጠበቀም",
+  "diag-t3": "ተቀምጧል። በዚህ ላይ ጊዜ አታስፈልግ — ሌሊትህን በሌላ ቦታ አስቀምጥ።",
+  "diag-t1":
+    "ይህም በግልጽ የሚታይ ውስጥ የተቀመጠ ጥሩ ዜና ነው። ታስታውሻለህ፤ አንድ ግልጽ ዓረፍተኛ ማስረጃ ብቻ ያጠናቅቅዋል።",
+  "diag-t2": "ማንበብ እንደማይችልት ነው። መጀመሪያው መተዳሰር፣ ከዚያ ትክክል በማስገባት መሆን አለበት።",
+  "diag-t0": "በርቀት ነው — ሁሉም አይሸፍኑም። በጭማሪው የሚሰጠው ነገር ስለዚህ ነው።",
+  "diag-punchline":
+    "ከሁለቱ አንዱ ከአንድ ዓረፍተኛ መልስ ይፈልጋል። አንዱ ደግሞ መርማር ሳይሆን ማስተካከል አለበት። ይህ ከጠንላ ምዕራፉን ማስረስ በተለየ የምሽት ነው — እና ከስድስት ሳምንት ተስጠር ከስድስት ቀን ማወቅ ጋር ያለው ልዩነትም ነው።",
+  "demo-c-1": "ፎቶሲንቴሲስ",
+  "demo-c-2": "ክሎሮፊል እና የተጠበሰ ብርሃን",
+  "demo-c-3": "የትንታስ መተንበርና ፎቶሲንቴሲስ",
+  "demo-c-4": "እስከ ፎቶሲንቴሲስ ውስጥ የሆነ ውሃ",
+  "demo-c-5": "ፍጥነትን የሚገደቡ ሁኔታዎች",
+  "demo-card-unit": "ባዮሎጂ 12 · የመቅላት ክልል",
+  "demo-card-chapter": "የመቅላት ክፍልና አካላቶች",
+  "demo-card-c-1": "የመቅላት ትሮሪ",
+  "demo-card-c-2": "ሚትዎንድሪያና ATP",
+  "demo-card-c-3": "የመቅላት አገላቂና ማዕከል",
+  "demo-card-c-4": "ሪቦሶሞችና የፕሮቴን ማስፈርጌት",
+  "demo-card-c-5": "አካላቶች በምትሎቻቸው የሚቆዩበት መንገድ",
   "hero-gap": "ክፍተቱን ዝጋ።",
   "hero-87":
     "ከ100 ተማሪዎች 87ቱ በብሔራዊ ፈተና ይወድቃሉ። የበለጠ መጣር መልሱ አይደለም — የትኞቹ ክፍተቶች የአንተ እንደሆኑ ማወቅ ነው።",
@@ -838,11 +906,19 @@ export const am: Record<MessageKey, string> = {
   "cov-wrong": "በተሳሳተኝ መልክት",
   "cov-aria": "ከ{total} ሃሳቦች {covered} ተሸፍነዋል፣ {missing} ክፍተቶች አሁንም ክፍት ናቸው",
   "cov-aria-wrong": "፣ {n} በተሳሳተኝ ተገልጸዋል",
+  "cov-aria-almost": "፣ {n} ተጥቅሞል ግን አልተፈረሰም",
   "cov-importance": "አስፈላጊነት {n}/5",
+  "cov-legend-sage": "የጠነ",
+  "cov-legend-gold": "ተቃርበ",
+  "cov-legend-rust": "ተሳሳተኝ",
+  "cov-legend-open": "አልተጥቀሰም",
   "cov-already-solid": "አስቀድሞ የጠኑ",
   "cov-needs-work": "ስራ ይፈልጋል",
   "cov-none-yet": "ገና ምንም አልተረጋገጠም — ይህም መጀመሪያው ነው።",
   "cov-all-solid": "ምንም የለም። ከምርመራቸው የጠኑ ሁሉም ሃሳቦች ናቸው።",
+  "cov-almost-title": "በጣም ተቃርቧል — ጥቅሞታው አለበት",
+  "cov-almost-text":
+    "እነዚህን ጠቅሞታ ነህ፤ ግን እርስዎ ያለውን ትርጉም ወይም ምክንያቱን ስለማልተና አልጠናከትም። እያንዳንዱ በአንድ ግልጽ ዓረፍተኛ ማስረጃ ብቻ ይችላል — እዚህም ምርጥ ማስገንድ ነው።",
   "cov-wrong-title": "አንቀታ — በተሳሳተኝ ተገልጿል",
   "cov-wrong-text":
     "እነዚህ ያልዘለስት ሃሳቦች አይደሉም፤ በተሳሳተኝ መናገር ተገልጸዋል። አጭሩ ትምህርቱ እነዚህን ቀድሞ ያስተካክላል።",
