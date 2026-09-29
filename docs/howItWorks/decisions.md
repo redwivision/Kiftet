@@ -138,3 +138,21 @@
     costs nothing to be wrong about — the server cache is what spends the quota —
     so fixing it was deferred rather than bundled into a change about the study
     order. It is written down in the roadmap so it is not forgotten.
+
+16. **The model is chosen by measurement, and a busy model is not retried in
+    place.** The default for most of the project was `gemini-3.6-flash`, which
+    began returning `503 high demand` on every call. This is the worst kind of
+    AI failure: the UI still renders, the offline fallback still answers, and
+    nothing says the model was the reason. So the default is now
+    `gemini-2.5-flash` — the one that answered every probe — with
+    `MODEL_FALLBACKS` behind it, and the attempt loop walks that list on
+    429/503/timeout.
+
+    Two rules come out of it. **Model choice is a tested claim**, not a constant:
+    `apps/server/src/ai/model.test.ts` asserts the leader is the model that
+    measured working and that no retired (404) model is listed, so the list
+    cannot silently rot into a ladder of guaranteed failures. And **backoff is
+    reserved for retrying a model we know works** — a 503 is not a rate limit on
+    us, so waiting it out spends the student's 24s budget to no end. The
+    measured ceiling underneath all of it is 5 requests/minute on the free tier,
+    which is why the shared cache is load-bearing rather than an optimisation.

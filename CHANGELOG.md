@@ -109,6 +109,27 @@ invents one, and an invented page number is worse than none.
   pretend to: the scaffolding is now in your language and your book is quoted
   verbatim underneath, labelled as a quotation.
 
+**Then: a model that actually answers.** The default model was returning
+`503 high demand` on *every* call, which in production looks identical to a
+dead AI feature — the screen would quietly show the offline fallback, forever,
+and nothing in the logs would say the model was the reason. Probing the whole
+family found the split: every 3.x flash alias is capacity-limited, and the
+older `2.5-flash-lite` / `2.0-flash` / `1.5-flash` are **retired** — the API
+returns 404, so they were never options. `gemini-2.5-flash` answered everything.
+
+**A busy model is no longer a student without a guide.** The model list is now
+walked on a 429/503/timeout rather than retried in place, so a model that is
+merely *busy* is answered by a different one instead of by waiting out a budget
+the student does not have. Backoff is kept for the case that genuinely needs
+it — retrying the model we already know works.
+
+**The honest ceiling, measured rather than assumed.** The free tier allows
+**5 requests a minute**, and a cold ten-concept guide wants ten. So the first
+guide of a chapter now degrades *honestly*: **8 of 10 sections written, 2
+labelled as estimates** after the quota ran out, instead of all ten pretending.
+The cache is not a nicety here — it is what makes the second student cost zero
+calls, which is the only reason a five-a-minute budget can serve a class.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,
