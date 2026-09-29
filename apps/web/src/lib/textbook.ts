@@ -77,6 +77,119 @@ function withPartSplits(title: string, full: string): ImportChunk[] {
 // PDF path — text is extracted on this device; the file never uploads.
 // ────────────────────────────────────────────────────────────────
 
+/**
+ * Some PDFs — including Ministry of Education textbooks — embed subsetted
+ * fonts with no Unicode mapping. A viewer renders them by glyph outline, so
+ * the pages *look* fine, but a text extractor gets back control characters
+ * instead of letters.
+ *
+ * Measured on the Grade 10 Biology student textbook (182 pages, bilingual):
+ * the body prose decodes to C0 control codes (U+0014–U+001E) and only the
+ * running headers ("Unit 4: Cell Reproduction") come through as real text.
+ *
+ * Those control characters are never legitimate in a textbook, so they are
+ * dropped here rather than passed on.
+ */
+export function stripUndecodableGlyphs(text: string): string {
+  // Keep \n and \t (we join text items with them); drop every other C0/C1
+  // control, which is what a missing ToUnicode map produces.
+  return text.replace(
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the whole point is to match the control codes a font with no Unicode map emits
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g,
+    "",
+  );
+}
+
+// A word is a run of two or more letters/digits. Amharic breaks on spaces
+// the way Latin does, so one count serves every language in the library.
+const WORD_RE = /[\p{L}\p{N}]{2,}/gu;
+
+function wordCount(text: string): number {
+  return (text.match(WORD_RE) ?? []).length;
+}
+
+/**
+ * A running header — "Unit 4: Cell Reproduction    47" — is about six words.
+ * A page of body text is 150–400. The whole distance between those two
+ * numbers is the signal that separates a book we can read from a book that
+ * only *looks* readable.
+ *
+ * Median words per page, measured across the books on hand: the Grade 10
+ * Biology textbook scores 27 (headers only), while every genuinely readable
+ * PDF scores 58 or higher. 40 sits in the gap, closer to the middle than to
+ * either side, and a book that trips it tells the user to paste the text —
+ * a recoverable inconvenience — instead of silently producing a confident,
+ * wrong checklist, which is the one failure this product cannot make.
+ */
+const MIN_MEDIAN_WORDS_PER_PAGE = 40;
+
+// A whole book of 1,000 letters is about half a page. Below that there is
+// nothing to chunk, whatever the file's byte count says.
+const MIN_READABLE_CHARS = 1_000;
+
+// A chunk under this many readable words is a heading and a page number, not
+// study material.
+const MIN_CHUNK_WORDS = 40;
+
+export type PdfUnreadableReason = "no-text" | "too-thin" | "header-only";
+
+export type PageTextAudit = {
+  /** Letters and digits across the whole book — the "is anything there" floor. */
+  readableChars: number;
+  /** Words on a typical page — the "is it a book or just headers" measure. */
+  medianWords: number;
+  /** null when the book passed. */
+  problem: PdfUnreadableReason | null;
+};
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2
+    ? sorted[mid]
+    : Math.floor((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+/**
+ * Decide whether a PDF's text is real prose or a book-shaped shell.
+ *
+ * The earlier check counted readable characters across the whole file and
+ * demanded 1,000. That sounds strict and measured nothing at all: the Grade
+ * 10 Biology book clears it with 30,444 characters, every one of them a
+ * running header repeated 182 times. Length cannot tell the difference,
+ * because a broken book is not short — it is *dense with nothing*.
+ */
+export function auditPageText(pages: string[]): PageTextAudit {
+  const readableChars = (pages.join(" ").match(/[\p{L}\p{N}]/gu) ?? []).length;
+  const medianWords = median(pages.map(wordCount));
+
+  let problem: PdfUnreadableReason | null = null;
+  if (readableChars < MIN_READABLE_CHARS) {
+    problem = readableChars === 0 ? "no-text" : "too-thin";
+  } else if (medianWords < MIN_MEDIAN_WORDS_PER_PAGE) {
+    problem = "header-only";
+  }
+  return { readableChars, medianWords, problem };
+}
+
+/**
+ * Thrown when a PDF's text cannot be trusted. Carries the measured numbers
+ * and a reason code rather than a finished sentence, so the route can render
+ * it in the student's language.
+ */
+export class PdfUnreadableError extends Error {
+  readonly reason: PdfUnreadableReason;
+  readonly audit: PageTextAudit;
+
+  constructor(audit: PageTextAudit) {
+    super(`PDF text is not readable (${audit.problem ?? "no-text"})`);
+    this.name = "PdfUnreadableError";
+    this.reason = audit.problem ?? "no-text";
+    this.audit = audit;
+  }
+}
+
 let pdfLibPromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
 type OutlineNode = NonNullable<
@@ -175,17 +288,19 @@ async function extractPdfPages(
         }
       }
       if (line.trim()) lines.push(line);
-      pages.push(lines.join("\n").trim());
+      // Drop undecodable glyphs per page, so a page that is half headers and
+      // half control codes does not poison the chunk it lands in.
+      pages.push(stripUndecodableGlyphs(lines.join("\n")).trim());
     }
 
     const outline = await readOutline(doc);
 
-    const total = pages.join(" ").replace(/\s+/g, "").length;
-    if (total < 200) {
-      throw new Error(
-        "This PDF has no readable text (it may be scanned images). Try the paste path instead.",
-      );
-    }
+    // Reject a book whose text is not really there *before* any of it is
+    // chunked, imported, or sent to the model. See `auditPageText` for the
+    // measurement that replaced the old raw-length check, which this book
+    // passed with 30,000+ characters of nothing but page headers.
+    const audit = auditPageText(pages);
+    if (audit.problem) throw new PdfUnreadableError(audit);
     return { pages, outline };
   } finally {
     // Free the PDF worker no matter how far extraction got — a throw mid-page
@@ -326,6 +441,11 @@ export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
       const full = pages.slice(s.start, s.end).join("\n\n").trim();
       return full ? withPartSplits(s.title, full) : [];
     });
+    // A book can pass the audit overall and still have a section that is
+    // nothing but a heading and a page number. Importing that as a chapter
+    // would have the model diagnose a page it never actually read, so those
+    // segments are dropped rather than shown as study material.
+    chunks = chunks.filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
   } else {
     const segments = segmentText(source.text);
     chunks = segments.flatMap((s) => withPartSplits(s.title, s.text));

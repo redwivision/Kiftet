@@ -130,6 +130,24 @@ labelled as estimates** after the quota ran out, instead of all ten pretending.
 The cache is not a nicety here — it is what makes the second student cost zero
 calls, which is the only reason a five-a-minute budget can serve a class.
 
+**Then: a book that opens but cannot be read.** Testing against a real Ministry
+of Education textbook (Grade 10 Biology, 182 pages) found the worst bug so far,
+and it was the quiet kind. The book's fonts carry no Unicode map, so the
+extractor returns **control codes instead of letters** — and a viewer renders
+those pages perfectly, because it draws the glyph outlines. The pages *look*
+fine; the text is not there. The old check asked for 1,000 readable characters
+and this book **clears it with 30,444** — every one of them a running header
+repeated 182 times. Length cannot tell a book from a book-shaped shell.
+
+The check now measures **density instead**: a running header is about six
+words, a page of prose is 150–400. Measured across real files, the unreadable
+textbook scores a median of **27 words per page** and every genuinely readable
+PDF scores **58 or more**, so the threshold sits at 40 — in the gap, not near
+either edge. A book that trips it is refused with an explanation and pointed at
+pasting text, in both languages. A chapter that is nothing but a heading is
+dropped rather than imported. The failure this prevents is the one the product
+cannot make: a confident, wrong checklist built from a page nobody read.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,
