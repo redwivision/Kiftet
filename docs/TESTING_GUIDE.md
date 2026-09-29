@@ -172,8 +172,10 @@ working.
 **LIVE as of the Voxide round:** a real `GEMINI_API_KEY` is in
 `apps/server/.env` (gitignored). **Important:** the old default model
 `gemini-2.0-flash` was retired by Google (404 "no longer available"), which made
-every AI call silently fall back to heuristics even with a valid key. Fixed by
-using `gemini-3.6-flash` (`apps/server/src/ai/gemini.ts`). Verified end-to-end
+every AI call silently fall back to heuristics even with a valid key. Fixed at
+the time by moving to `gemini-3.6-flash`, which is itself now capacity-limited
+— the current default is `gemini-2.5-flash`, behind a fallback list. See *The
+model, and why it changed* below for the measured split. Verified end-to-end
 over HTTP: recall grades semantically (covered/missing/misconceptions/score),
 micro-lessons are genuine spoken lessons with analogies, retest questions are
 targeted spoken prompts, and `extractConcepts` returns weighted concepts +
@@ -407,8 +409,8 @@ Tap once to start, tap again to hang up.
 **What was verified (Phase-2-round review fixes):**
 
 1. **Topic-type diversity — the reviewer's core ask.** Two chapters ingested into
-   the same SQLite DB, graded live by real Gemini (key is in `apps/server/.env`,
-   `DEFAULT_MODEL = "gemini-3.6-flash"`):
+   the    same SQLite DB, graded live by real Gemini (key is in `apps/server/.env`;
+   the model was `gemini-3.6-flash` at the time, now `gemini-2.5-flash`):
    - **"Heat and Temperature"** (conceptual) → recall `score: 0.29`, gaps a real
      missing list (covered *"temperature vs heat distinction"*, *"thermal
      equilibrium"*; missing *"specific heat capacity"*, *"latent heat"*,
@@ -931,14 +933,57 @@ server, with the model actually called:
    `200`. The guide is generated content, so it is checked against the chapter
    owner rather than inherited from a session id.
 
+### The model, and why it changed
+
+`gemini-3.6-flash` — the default since Phase 2 — returned `503 high demand` on
+**every** call during the step-3b run, and the retries could not save it. That
+is the failure mode worth naming: a capacity-limited model looks exactly like a
+dead AI feature, because the screen shows the offline fallback and nothing says
+the model was the reason.
+
+Probing the whole family (list the models, then call each one with our own
+prompts):
+
+| Model | Result |
+| --- | --- |
+| `gemini-2.5-flash` | **works** — every prompt answered |
+| `gemini-3.6-flash` | `503` every attempt (the old default) |
+| `gemini-3.5-flash` | `503` |
+| `gemini-3.7-flash` / `3.8` | `503` |
+| `gemini-flash-latest` | `503` |
+| `gemini-2.5-flash-lite` / `2.0-flash` / `1.5-flash` | `404` retired — never options |
+
+So `gemini-2.5-flash` is now the default and the others sit behind it in
+`MODEL_FALLBACKS`. The attempt loop **walks that list** rather than retrying one
+model in place: a model that is merely *busy* is answered by a different one
+instead of by waiting out a budget the student does not have. Backoff is kept
+for the case that genuinely needs it — retrying the model we measured working.
+`aiTelemetry.lastModel` records which model last answered, so "is this the
+model, or is it us?" is answerable from `/api/ai/telemetry` alone.
+
+**The real ceiling is 5 requests a minute**, not the ~1,500/day the free tier
+allows. A cold ten-concept guide wants ten. Measured on the demo chapter:
+
+- **Cold EN guide, 71s:** 8 sections model-written, 2 labelled `estimated: true`
+  after the quota ran out. It degraded honestly rather than pretending.
+- **Warm guide, 0.07s:** 0 AI calls, byte-identical response.
+- **Cold AM guide, 64s:** a separate set of 10 rows, Amharic scaffolding with the
+  English book quote left verbatim.
+- **Recall grading, 7s:** 10/10 exact concept keys, correct levels, `score: 50`
+  on a transcript that mentioned 5 of 10 concepts and got them right, with 2
+  sections degrading to estimates under the same quota pressure.
+
+That 5/min ceiling is the strongest argument for the cache: it is the only
+reason a five-a-minute project budget can serve a class, since only the first
+student on a chapter pays.
+
 ### What I could not verify
 
-- **The model-written section itself.** `gemini-3.6-flash` returned `503` for
-  every attempt during this session ("high demand"). The schema, the prompt,
-  the ladder and the caching are all verified; the quality of a
-  successfully-generated `what`/`why`/`recall` is not. Run this again when
-  upstream is healthy.
+- **Triage ordering against a real wrong answer.** The graded transcript above
+  had no *wrong* concepts, so `L2 → L1 → L0 → L3` was not exercised by live data
+  — only by unit tests.
 - A real voice read-along of the sections, and the offline path for the guide.
+- Real textbook quality at volume: the demo chapter is a seed, not a book.
 
 ### Manual, still to do with a human
 

@@ -4,7 +4,34 @@ import { env } from "../env.server";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-export const DEFAULT_MODEL = "gemini-3.6-flash";
+/**
+ * The model, and the fallback order behind it.
+ *
+ * Chosen by measurement, not preference. `gemini-3.6-flash` (the previous
+ * default) returned `503 UNAVAILABLE — high demand` on *every* attempt while
+ * probing, and the 3.x flash family (3.5 / 3.7 / 3.8 / `flash-latest`) all did
+ * the same. `gemini-2.5-flash` answered every prompt and, through the real
+ * endpoints, graded a spoken transcript with 10/10 exact concept keys and
+ * correct levels, and wrote 8/10 guide sections in English and Amharic.
+ *
+ * The older `2.5-flash-lite`, `2.0-flash` and `1.5-flash` are gone — the API
+ * returns 404 "no longer available" for all three, so they are not options.
+ *
+ * The list is ordered by measured reliability, and the ladder is walked on a
+ * 429/503/timeout: one wasted call is cheaper than a student who gets the
+ * deterministic fallback because the model we picked was busy.
+ *
+ * Note the free tier is 5 requests/minute for this model, which is a real
+ * ceiling on a cold 10-concept guide — see the guide cache, which exists for
+ * exactly this reason.
+ */
+export const MODEL_FALLBACKS = [
+  "gemini-2.5-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+] as const;
+
+export const DEFAULT_MODEL = MODEL_FALLBACKS[0];
 
 const PLACEHOLDER_KEY = "placeholder-gemini-api-key";
 
@@ -539,13 +566,17 @@ function parseJson<T>(raw: string): T | null {
 const GEMINI_TIMEOUT_MS = 20_000;
 
 // Retries share ONE wall-clock budget rather than getting a fresh full timeout
-// each. Three 20s attempts would be 60s+ of hanging, which blows past the 30s
+// each. Four 20s attempts would be 80s+ of hanging, which blows past the 30s
 // client fetch timeout in `api.ts` and turns a transient blip into a hard error
 // page. Each attempt gets whatever is left of the budget, so the retry path
 // stays inside the client window (24s of calls + backoff vs 30s) with a little
 // headroom. Raise GEMINI_TOTAL_BUDGET_MS only if that client timeout moves.
 const GEMINI_TOTAL_BUDGET_MS = 24_000;
-const GEMINI_MAX_ATTEMPTS = 3;
+// The attempt list length, kept next to the budget comment because the two are
+// one decision: the budget bounds the wall clock, this bounds how many models
+// or retries we can try inside it. A 503 on one model is answered by the next
+// rather than by waiting.
+const GEMINI_MAX_ATTEMPTS = MODEL_FALLBACKS.length + 1;
 
 // Only transient conditions are retried. A 400 (malformed request) or 404 will
 // fail identically every time, and retrying it just burns quota we have per
@@ -593,6 +624,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // ~1-1.5k/day) and we are explicitly not paying until real users prove the
 // case, so our own per-user allowance is deliberately set below it.
 const aiTelemetry = {
+  /** Which model last answered, or "" if none has. Read at 2am to answer
+   *  "is this the model, or is it us?" without adding a log line per call. */
+  lastModel: "",
   attempts: 0,
   retries: 0,
   rateLimited: 0,
@@ -605,6 +639,37 @@ export function aiTelemetrySnapshot() {
   return { ...aiTelemetry };
 }
 
+/**
+ * Interleave the model list so a busy model is answered by another one rather
+ * than by waiting.
+ *
+ * Probing found 3.6 returning 503 "high demand" while 2.5 answered every
+ * prompt, so a student asking during a 3.6 outage should still get a written
+ * section instead of the deterministic fallback. The first model leads and
+ * gets a second turn, because it is the one measured working: a transient blip
+ * on it is worth retrying before trying anything else.
+ *
+ * Exported for tests — the order is a claim about reliability, so it is
+ * asserted rather than assumed.
+ */
+export function buildAttemptOrder(
+  models: readonly string[],
+  attempts: number,
+): string[] {
+  if (attempts <= 0) return [];
+  const [leader, ...alternates] = models;
+  if (!leader) return [];
+  // Leader first, then each alternate in order, then over again. So attempt 2
+  // is a different model (a busy leader is answered by another one, not by
+  // waiting), and the leader returns on attempt N+1 rather than being written
+  // off, so a single transient blip still gets the model we measured working.
+  const order: string[] = [];
+  while (order.length < attempts) {
+    order.push(leader, ...alternates);
+  }
+  return order.slice(0, attempts);
+}
+
 async function askJson(
   systemPrompt: string,
   userInput: string,
@@ -612,7 +677,9 @@ async function askJson(
   const deadline = Date.now() + GEMINI_TOTAL_BUDGET_MS;
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+  const order = buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS);
+
+  for (const [index, model] of order.entries()) {
     const remaining = deadline - Date.now();
     // Out of wall clock: a timeout, not a provider fault. Fall back rather
     // than starting an attempt that cannot finish inside the client window.
@@ -624,7 +691,7 @@ async function askJson(
     try {
       const response = await withTimeout(
         genAI.models.generateContent({
-          model: DEFAULT_MODEL,
+          model,
           contents: [
             {
               role: "user",
@@ -635,17 +702,25 @@ async function askJson(
         }),
         Math.min(GEMINI_TIMEOUT_MS, remaining),
       );
+      aiTelemetry.lastModel = model;
       return response.text ?? "";
     } catch (error) {
       lastError = error;
-      if (!isRetryable(error) || attempt === GEMINI_MAX_ATTEMPTS) break;
+      if (!isRetryable(error) || index === order.length - 1) break;
       // Jitter matters here: many students hit the same per-project ceiling at
       // the same moment, and fixed backoff would have them all retry in
       // lockstep and re-trip the 429 immediately.
-      const delay =
-        RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250;
+      //
+      // No delay when the NEXT attempt uses a DIFFERENT model: a busy model
+      // is not a rate limit on us, so backing off would waste wall clock we
+      // do not have. Back off only when we are retrying the same model.
+      const sameModel = order[index + 1] === model;
+      const delay = sameModel
+        ? RETRY_BASE_DELAY_MS * 2 ** index + Math.random() * 250
+        : 0;
       aiTelemetry.retries += 1;
-      await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
+      if (delay)
+        await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
     }
   }
 

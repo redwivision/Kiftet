@@ -273,6 +273,22 @@ engagement and **invalid as a before/after delta** — you cannot compare two
 different questions. Keep the mirroring; grade pre and post against the same
 per-concept rubric, targeting the same concepts.
 
+**Landed (step 3b, follow-up) — a model that answers.** The long-standing
+default `gemini-3.6-flash` started returning `503 high demand` on every call,
+which silently turns the whole AI layer into its offline fallback. Measured the
+model family: `gemini-2.5-flash` answers everything; the rest of the 3.x flash
+line is capacity-limited; the `2.5-lite` / `2.0` / `1.5` models are **retired**
+(404). The default is now `gemini-2.5-flash` behind a fallback list that the
+attempt loop walks, with the leader first and backoff reserved for a retry of
+the model we know works. `apps/server/src/ai/model.test.ts` holds the claim.
+
+The number that matters for planning: **the free tier allows 5 requests a
+minute**, not the ~1,500/day it advertises. A cold ten-concept guide wants ten,
+so a first guide degrades honestly (measured 8 written / 2 estimated) and every
+later student costs zero. **If guide quality at real-textbook scale is the goal,
+the 5/min ceiling is the constraint to design against** — not the daily quota,
+and not the model.
+
 ### Sequencing
 
 1. **Instrument first.** Per-user AI call / 429 / fallback counters, plus a
@@ -282,14 +298,16 @@ per-concept rubric, targeting the same concepts.
    hardcoding `covered: []`. *(Landed — the map exists, is persisted, and
    derives the lists; nothing reads it yet.)*
 3. **Guide sections + cache.** New table keyed by (chapter, concept, language);
-   the three-step ladder; Amharic parity; source anchors. *Half landed: the
-   diagnosis now reads the map and triage order is written down
-   (`lib/mastery.ts`); the guide itself is still the old micro-lesson.*
+   the three-step ladder; Amharic parity; source anchors. **Landed** — the guide
+   is the ordered section list, cached and shared, and cost is measured (cold 10
+   calls, warm 0).
 4. **Scope selection** — chapters and/or topics, the student's choice.
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
-6. **Tests.** Automated coverage now exists only for the diagnosis screen
-   (`apps/web/src/components/gap-list.test.tsx`, run by `bun test` in CI). The
-   guide, cache, retest and the offline path are still hand-verified only.
+6. **Tests.** Automated coverage now spans the diagnosis screen
+   (`apps/web/src/components/gap-list.test.tsx`), the guide's cost and ordering
+   arguments (`apps/server/src/ai/guide.test.ts`) and the model list
+   (`apps/server/src/ai/model.test.ts`), all run by `bun test` in CI. The offline
+   path, the retest loop and the voice UI are still hand-verified only.
 
 **Cheap and high-leverage, done:** `syllabus_unit.periods` (migration `0004`)
 carries the official period allocation from the MoE document, with
