@@ -303,6 +303,16 @@ export const en = {
   "chunks-failed": "{n} chunks didn't land. Retry to finish.",
   "nothing-to-import": "Nothing to import — the text looks empty.",
 
+  // PDF that opens but whose text is not really there. Three cases, three
+  // messages, because the fix differs: paste for the first two, and a
+  // different file for a book that is simply not text at all.
+  "pdf-no-text":
+    "This PDF has no text we can read. It is probably scanned pages, or photos of a book. Paste the chapter text instead and the study loop works the same.",
+  "pdf-too-thin":
+    "Only {n} characters of this PDF could be read — too little to study. Its fonts are probably not readable, or it is scanned pages. Paste the chapter text instead.",
+  "pdf-header-only":
+    "This PDF opens, but its words will not come out. All we could read were page headers, which means the pages themselves are images or use fonts this browser cannot read. Paste the chapter text instead and the study loop works the same.",
+
   // ── Voice-test harness ───────────────────────────────────────
   "vt-nothing": "Nothing to see here",
   "vt-nothing-text":
@@ -804,6 +814,13 @@ export const am: Record<MessageKey, string> = {
   "chunk-failed": "{n} ክፍል አልደረሰም። ለማጠናቀቅ እንደገና ሞክር።",
   "chunks-failed": "{n} ክፍሎች አልደረሱም። ለማጠናቀቅ እንደገና ሞክር።",
   "nothing-to-import": "የሚገባ ነገር የለም — ጽሑፉ ባዶ ይመስላል።",
+
+  "pdf-no-text":
+    "በዚህ PDF ውስጥ የሚነበበት ጽሑፍ የለም። በመስተግበር የተያዙ ገጾች ወይም የመጽሐፍ ፎቶዎች ይሆናል። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
+  "pdf-too-thin":
+    "ከዚህ PDF {n} ፊደሎችን ብቻ ማንበት ተቻለ — ለመጥናት በቂ አይደለም። ፊደሎቹ ስለማይነበሩ ወይም ገጾቹ በመስተግበር የተያዙ ናቸው። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው።",
+  "pdf-header-only":
+    "ይህ PDF ይከፍታል፣ ግን ቃላቱ አይወጡም። የገጹ ላይኛው አርማዎችን ብቻ ማንበት ተቻለ — ይህም ገጾቹ ምስሎች እና በዚህ አሳሳሪው የማይችል ፊደል የተጠበቀ ቋንቋ እንደሆነው ያሳያል። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
 
   // ── Voice-test harness ───────────────────────────────────────
   "vt-nothing": "እዚህ የሚታይ ነገር የለም",

@@ -18,6 +18,7 @@ import {
   fileSizeError,
   type ImportChunk,
   MAX_FILE_MB,
+  PdfUnreadableError,
   planChunks,
 } from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
@@ -130,7 +131,23 @@ export default function Textbooks() {
       );
       setStep("review");
     } catch (err) {
-      setError(apiError(err));
+      // An unreadable PDF is the one failure we must explain rather than
+      // report: the student picked a real book and deserves to know which
+      // part of it we could not read, in their own language.
+      if (err instanceof PdfUnreadableError) {
+        setError(
+          t(
+            err.reason === "no-text"
+              ? "pdf-no-text"
+              : err.reason === "too-thin"
+                ? "pdf-too-thin"
+                : "pdf-header-only",
+            { n: err.audit.readableChars },
+          ),
+        );
+      } else {
+        setError(apiError(err));
+      }
       setStep("form");
     }
   };

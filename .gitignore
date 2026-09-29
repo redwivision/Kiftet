@@ -53,6 +53,11 @@ lerna-debug.log*
 coverage
 .nyc_output
 
+# Real textbooks, kept locally for end-to-end testing. MoE books are 10MB+
+# PDFs, they are not ours to publish, and no text from them belongs in git.
+docs/*.pdf
+*.pdf
+
 # Misc
 *.tgz
 .cache
