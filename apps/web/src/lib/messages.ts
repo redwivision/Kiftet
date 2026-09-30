@@ -48,6 +48,26 @@ export const en = {
   "lesson-title": "The short version",
   "lesson-text":
     "Just what you missed — nothing more. Read it now, or hear it spoken back to you.",
+  // Guide (phase 11, 3b). The study order itself is the message: wrong first,
+  // because that is the one thing re-reading does not fix.
+  "guide-start-here": "Start here",
+  "guide-wrong-first": "You had this one backwards",
+  "guide-almost-first": "So close — one sentence from you",
+  "guide-almost-title": "You raised it. Now finish it.",
+  "guide-almost-body":
+    "You brought these up but did not quite land them. They are the cheapest wins on this page — say each one back in your own words and they are done.",
+  "guide-not-yet": "Not yet touched",
+  "guide-already-have": "Already yours",
+  "guide-already-body":
+    "You got these right. Skim them, don’t read them twice.",
+  "guide-why": "Why it matters",
+  "guide-recall": "Say it back",
+  "guide-in-your-book": "In your book",
+  "guide-estimated-note":
+    "Some sections are a quick summary from the text itself, not a written lesson. The ideas are real; the wording is ours.",
+  "guide-empty":
+    "Nothing needs work here — every idea in this section is solid. Recap out loud, then move on.",
+  "guide-section-count": "{count} to work through",
   "retest-title": "A short retest",
   "retest-text":
     "These questions come after the lesson, so they test what stuck — not what you just heard.",
@@ -163,10 +183,15 @@ export const en = {
   "create-free-account": "Create a free account",
   "ai-calls-minute": "AI calls this minute:",
   "of-left": "{remaining} of {limitPerMinute} left",
-  "budget-out": " — out. Try again in a moment.",
-  "budget-careful": " — spend carefully.",
+  "budget-out": " — all used. Wait a moment and try again.",
+  "budget-out-in": " — all used. Back in {time}.",
+  "budget-careful": " — nearly used up.",
   "new-textbooks-today": "New textbooks today:",
   "textbooks-max": "{n} max (demo)",
+  "textbooks-used-of": "{used} of {n} used",
+  "textbooks-unlimited": "{used} added, no daily limit",
+  "textbooks-reset-at":
+    " — that's today's limit. New books allowed from {time}.",
   "misconception-map": "The national misconception map",
   "misconception-title": "What students most often get wrong — {subject}",
   "misconception-text":
@@ -277,11 +302,33 @@ export const en = {
   "scan-chunks": "Scan into chunks",
   "plan-confirm": "You'll confirm the chunks before anything is imported.",
   "demo-budget":
-    "Demo rooms run on a small daily budget — your dashboard shows what's left. Signed-in users get more when we open the doors.",
+    "This room runs on a small request budget — your dashboard shows exactly what's left and when it refills. Signing in raises the limit and removes the daily book cap.",
   "book-on-shelf": "\u201C{title}\u201D is on the shelf.",
   "chunk-failed": "{n} chunk didn't land. Retry to finish.",
   "chunks-failed": "{n} chunks didn't land. Retry to finish.",
   "nothing-to-import": "Nothing to import — the text looks empty.",
+
+  // PDF that opens but whose text is not really there. Three cases, three
+  // messages, because the fix differs: paste for the first two, and a
+  // different file for a book that is simply not text at all.
+  "pdf-no-text":
+    "This PDF has no text we can read. It is probably scanned pages, or photos of a book. Paste the chapter text instead and the study loop works the same.",
+  "pdf-too-thin":
+    "Only {n} characters of this PDF could be read — too little to study. Its fonts are probably not readable, or it is scanned pages. Paste the chapter text instead.",
+  "pdf-header-only":
+    "This PDF opens, but its words will not come out. All we could read were page headers, which means the pages themselves are images or use fonts this browser cannot read. Paste the chapter text instead and the study loop works the same.",
+
+  // A book whose words will not come out is not a dead end any more: the
+  // chapter list is still found from the readable headings, and each chapter's
+  // body is read from the page image on this device when you import it.
+  "ocr-notice":
+    "This book's words do not come out of the file, so we will read them from the page image — on this device, exactly as the file is never uploaded. Each chapter takes about two minutes the first time, and only once.",
+  "ocr-reading-page": "Reading page {done} of {total}…",
+  "ocr-read-chapter": "Reading this chapter from the page image",
+  "ocr-unavailable":
+    "This device could not start the on-device reader. Paste the chapter text instead and the study loop works the same.",
+  "ocr-read-nothing":
+    "We could not read any words from these pages, so there is nothing to study here. Try a different chapter, or paste the text.",
 
   // ── Voice-test harness ───────────────────────────────────────
   "vt-nothing": "Nothing to see here",
@@ -544,6 +591,23 @@ export const am: Record<MessageKey, string> = {
     "አሁን በከባይ ጥቅበት ላይ ነው፤ ስለዚህ ይህ ውጤት ከሰማት ብቻ የተዘጋጀ ፈጣን ግምት ነው፤ ሙሉ ምርመራ አይደለም። ክፍት የሆኑትን ተማር፣ ከዚያ ስራህን እንደገና ሞክር።",
   "lesson-title": "አጭሩ ማብራሪያ",
   "lesson-text": "ያመለጠህን ብቻ — ከዚያ ያለፈ ምንም። አሁን አንብበው፣ ወይም ተናግሮ ስማው።",
+  "guide-start-here": "እዚህ ይጀምር",
+  "guide-wrong-first": "ይህን ተናሽተዋል",
+  "guide-almost-first": "በጣም ቅርብ — አንድ ምርስ ከእርስህ",
+  "guide-almost-title": "አስተያዩ። አሁን ያጠናቅቅ።",
+  "guide-almost-body":
+    "እነዚህን ጠቅስተህ፣ ግን በተስተካከለ አልጠናቀቅም። በዚህ ገጽ ላይ በጭማሪ የሆኑ ትሩር ናቸው — እያንዳንዱን በራስህ ቃላት አስተናግሮ ጨርስተዋል።",
+  "guide-not-yet": "ገና አልተነካም",
+  "guide-already-have": "የእርስህ ነው",
+  "guide-already-body": "እነዚህን በትክክል መልሰኝ። አንብብ ሳይሁሉ አጭሩ።",
+  "guide-why": "ለምን አስፈላጊ ነው",
+  "guide-recall": "በራስህ ቃል ግለጽ",
+  "guide-in-your-book": "በመጽሐፍህ ውስጥ",
+  "guide-estimated-note":
+    "ከዚህ ቅርጾች ከጽሑቱ በራስዎች የተዘጋጁ አጭር ማጠቃለያዎች ናቸው — የተጻፈባቸው ትምህርት አይደለም። ሃሳቦቹ እውነታዊ ናቸው፤ ቃላቱ የእኛ ናቸው።",
+  "guide-empty":
+    "እዚህ ምንም ለመስራት የለም — በዚህ ክፍል ውስጥ ያሉት ሁሉም ሃሳቦች ጠንካራ ናቸው። በአፍ በአፍ አስታውስ፣ ከዚያም ቀጥል።",
+  "guide-section-count": "{count} ለመስራት",
   "retest-title": "አጭር ድጋሚ ፈተና",
   "retest-text":
     "እነዚህ ጥያቄዎች ከትምህርቱ በኋላ ይመጣሉ፣ ስለዚህ የተረጋገጠውን ይፈትናሉ — አሁን የሰማኸውን አይደለም።",
@@ -648,10 +712,14 @@ export const am: Record<MessageKey, string> = {
   "create-free-account": "ነፃ መለያ ፍጠር",
   "ai-calls-minute": "በዚህ ደቂቃ የ AI ጥሪዎች:",
   "of-left": "{remaining} ከ {limitPerMinute} ቀርተዋል",
-  "budget-out": " — አልቀሩም። ትንሽ ቆይቶ ሞክር።",
-  "budget-careful": " — በጥንቃቄ ተጠቀም።",
+  "budget-out": " — ሁሉም ተጠቅመዋል። ትንሽ ጠብቅተን እና እንደገና ሞክር።",
+  "budget-out-in": " — ሁሉም ተጠቅመዋል። በ {time} ይመለሳል።",
+  "budget-careful": " — በቅርብ ተሟልቷል።",
   "new-textbooks-today": "ዛሬ አዲስ መጽሐፎች:",
   "textbooks-max": "{n} ቢበዛ (ማሳያ)",
+  "textbooks-used-of": "ከ {n} ውስጥ {used} ተጠቅመዋል",
+  "textbooks-unlimited": "{used} ተጨምረዋል፣ የቀኑ ገደብ የለም",
+  "textbooks-reset-at": " — የዛሬን ገደብ አስተልቋል። ከ {time} ጀምሮ አዲስ መጽሐፎች ይችላሉ።",
   "misconception-map": "ብሔራዊ የስህተት አረዳድ ካርታ",
   "misconception-title": "ተማሪዎች በብዛት የሚሳሳቱት — {subject}",
   "misconception-text":
@@ -762,11 +830,27 @@ export const am: Record<MessageKey, string> = {
   "scan-chunks": "ወደ ክፍሎች ቃኝ",
   "plan-confirm": "ማንኛውም ነገር ከመግባቱ በፊት ክፍሎቹን ያረጋግጣሉ።",
   "demo-budget":
-    "የማሳያ ክፍሎች በአነስተኛ የዕለት በጀት ይሰራሉ — ዋና ገጽህ ምን እንደቀረ ያሳያል። በሮች ስንከፍት በመለያ የገቡ ተጠቃሚዎች ተጨማሪ ያገኛሉ።",
+    "ይህ ክፍል በአነስተኛ የጥሪ በጀት ይሰራል — ዋና ገጽህ ምን ቀርቷልና መቼ ይሞላል በግልጽ ያሳያል። በመለያ ማስገባት ገደቡን ያሳድጋል፤ የቀኑንም የመጽሐፍ ገደብ ያነሳል።",
   "book-on-shelf": "\u201C{title}\u201D በመደርደሪያው ላይ ነው።",
   "chunk-failed": "{n} ክፍል አልደረሰም። ለማጠናቀቅ እንደገና ሞክር።",
   "chunks-failed": "{n} ክፍሎች አልደረሱም። ለማጠናቀቅ እንደገና ሞክር።",
   "nothing-to-import": "የሚገባ ነገር የለም — ጽሑፉ ባዶ ይመስላል።",
+
+  "pdf-no-text":
+    "በዚህ PDF ውስጥ የሚነበበት ጽሑፍ የለም። በመስተግበር የተያዙ ገጾች ወይም የመጽሐፍ ፎቶዎች ይሆናል። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
+  "pdf-too-thin":
+    "ከዚህ PDF {n} ፊደሎችን ብቻ ማንበት ተቻለ — ለመጥናት በቂ አይደለም። ፊደሎቹ ስለማይነበሩ ወይም ገጾቹ በመስተግበር የተያዙ ናቸው። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው።",
+  "pdf-header-only":
+    "ይህ PDF ይከፍታል፣ ግን ቃላቱ አይወጡም። የገጹ ላይኛው አርማዎችን ብቻ ማንበት ተቻለ — ይህም ገጾቹ ምስሎች እና በዚህ አሳሳሪው የማይችል ፊደል የተጠበቀ ቋንቋ እንደሆነው ያሳያል። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
+
+  "ocr-notice":
+    "የዚህ መጽሐፍ ቃላት ከፋይሉ አይወጡም፤ ስለዚህ እነሱን ከገጹ ምስል — በዚህ መሣሪያ ላይ፣ ልክ በሆነ መጽሐፉ ሲል ማንለት። እያንዳንዱ ምዕራፍ በመጀመሪያዎ በወርቅ ሁለት ደቂቃ ይያዛል፣ ግን አንድ ጊዜ ብቻ ነው።",
+  "ocr-reading-page": "ገጾች {done} ከ{total} በኋላ እየተነበᥨ ነው…",
+  "ocr-read-chapter": "ይህን ምዕራፍ ከገጹ ምስል እየነበረ ነው",
+  "ocr-unavailable":
+    "በዚህ መሣሪያ ላይ የሚገኝ አንባቢ ልሩ ማስጀመር አልተቻለም። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
+  "ocr-read-nothing":
+    "ከእነዚህ ገጾች ምንም ቃል ማንበት አልተቻለም፤ ስለዚህ እዚህ ለመጥናት የለም። ሌላ ምዕራፍ ይሞክሩ ወይም ጽሑፉን ሰርተር ገልብጠው።",
 
   // ── Voice-test harness ───────────────────────────────────────
   "vt-nothing": "እዚህ የሚታይ ነገር የለም",

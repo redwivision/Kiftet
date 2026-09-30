@@ -8,6 +8,8 @@
 //                session id (see lib/study-cache.ts)
 //   questions  — the last retest questions generated for a session, keyed by
 //                session id (see lib/study-cache.ts)
+//   ocr        — recognized text for one page of one textbook, keyed by
+//                book + page (see lib/ocr-cache.ts)
 //
 // Everything is SSR-safe: in a server build (or a browser without IndexedDB)
 // every call resolves to a no-op/empty result instead of throwing.
@@ -27,13 +29,14 @@ export type CachedQuestion = {
 };
 
 const DB_NAME = "kiftet-store";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORES = [
   "chapters",
   "checklist",
   "outbox",
   "lesson",
   "questions",
+  "ocr",
 ] as const;
 
 type StoreName = (typeof STORES)[number];

@@ -224,6 +224,55 @@ Data kept: nothing — pure AI generation
 The read-aloud step uses the agent's natural voice when available, otherwise
 the browser's TTS from the "Read it to me" button (see 5.11).
 
+#### 5.6b Guide — the cached, ordered sections (phase 11, 3b)
+
+The microlesson above is a *per-session* read-aloud script. The **guide** is the
+other half: the structured sections the student actually reads, in the order
+*this* student needs them. They are fetched alongside the microlesson, in
+parallel.
+
+```mermaid
+flowchart LR
+  A["1 · lesson phase"] --> B["2 · GET /chapters/:id/guide<br/>?mastery=water:2,osmosis:1"]
+  B --> C["3 · triageConcepts orders<br/>by level, then weight — no AI"]
+  C --> D{"4 · section cached?"}
+  D -->|yes| E["5 · read from guide_section"]
+  D -->|no| F["6 · Gemini writes<br/>what / why / recall<br/>for ONE concept"]
+  F --> G["7 · insert, conflict<br/>does nothing"]
+  E --> H["8 · ordered sections<br/>+ source anchor"]
+  G --> H
+```
+
+```
+Sending:   GET /chapters/:id/guide?language=en&mastery=<urlencoded levels>
+Receiving: { sections: [{ conceptText, weight, level, what, why, recall,
+                         sourceOffset, sourceQuote, estimated, needsWork }],
+            estimated, language }
+Data kept: one row per (chapter, concept, language) in `guide_section`
+```
+
+Two things make this affordable, and they are the whole point:
+
+- **The unique constraint `(chapter_id, concept_text, language)` is the cache.**
+  The second student on a chapter generates nothing. Measured: first guide 4 AI
+  calls, second guide 0.
+- **Ordering costs nothing.** `triageConcepts` reads the mastery map the
+  server already has. The model is never asked what to study next, so it cannot
+  contradict the diagnosis screen the student just looked at.
+
+**The ladder, per section** (a failure costs one section, never the guide):
+
+1. Valid JSON → store it.
+2. Timeout / 429 / malformed → deterministic section from the concept plus the
+   overlapping chapter sentence, flagged `estimated: true`. It cannot translate,
+   so it never copies the book sentence into a non-English guide; the scaffolding
+   is in the requested language and the book is quoted verbatim underneath.
+3. Nothing at all → the checklist concept and its weight. The checklist is the
+   skeleton, so a chapter with no prose is still a usable revision list.
+
+`sourceOffset` is computed by lexical overlap against `chapter.rawText`, never
+asked of a model — a model asked for a location invents one.
+
 ---
 
 ### 5.7 Retest — "prove you learned it"

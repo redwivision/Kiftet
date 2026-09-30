@@ -98,19 +98,40 @@ Every AI-grading call (`recall`, `microlesson`, `retest`, `retest/answer`) and
 chapter ingest is rate-limited per user per minute, tracked in an in-memory
 `Map`:
 
-- **Demo visitors:** **5 requests / minute** — enough to feel the product,
-  stingy enough to protect the Gemini budget. The client shows this as a
-  live "AI calls left this minute" pill (`GET /api/ai/budget`).
-- **Signed-in users:** **30 requests / minute** today; the number exists only
+- **Demo visitors:** **3 requests / minute** — enough to feel the product,
+  stingy enough to protect the Gemini budget.
+- **Signed-in users:** **8 requests / minute** today; the number exists only
   as a safety net and gets much larger before launch (see the go-live note in
-  (see the go-live note in [the roadmap](roadmap.md)).
+  [the roadmap](roadmap.md)).
 
-When the limit is hit the server returns `429 Too Many Requests` with a
-friendly message.
+Both numbers sit deliberately *below* Gemini's free-tier per-project ceiling
+(~10/min), because a limit set above the provider's just manufactures 429s.
+
+**Every visitor sees their remaining budget**, not only demo ones
+(`GET /api/ai/budget`), as a live "AI calls left this minute" pill on the
+dashboard. The payload carries `resetAt` and `retryAfterSeconds`, and the pill
+counts the wait down in the student's own clock — so "when does it restart?"
+has a number on it instead of the word "soon".
+
+**When the limit is hit** the server returns `429 Too Many Requests` with a
+friendly message stating the exact wait and a `Retry-After` header. It also
+notes that already-studied material stays available: a cached guide costs
+nothing, so a student who is blocked on generation can still reopen it.
+
+**The guide endpoint is charged too.** `GET /chapters/:id/guide` generates one
+section per uncached concept — up to ten provider calls from a single click — so
+each generation is charged against the same window. Once the window is spent
+the remaining concepts fall back to the lexical section rather than failing the
+request: a chapter of fallbacks beats a 429 and nothing at all. Fallbacks
+produced *because* of the budget are not written to the cache, so a busy minute
+cannot poison what later visitors read.
 
 **Demo daily book cap:** demo visitors may create at most **3 new textbooks
-per day** (re-ingesting chunks of an existing book doesn't count). Signed-in
-users are not capped.
+per day** (re-ingesting chunks of an existing book doesn't count, so one book
+split across six chapters costs one). Signed-in users are not capped, and the
+dashboard says so rather than showing a number that does not apply. The cap
+resets at server-local midnight and is reported as an ISO `resetAt` so the
+client can show the student's own local hour.
 
 **Demo identity is DB-backed:** an anonymous visit is authenticated by an
 `X-Demo-User-Id` header, and the header is trusted only when it resolves to a

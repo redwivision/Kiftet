@@ -51,3 +51,17 @@
 - **Concept checklist** — the list of ideas a chapter must cover, extracted at
   ingest. It is the yardstick for every grade, and the key a mastery map is
   stored against.
+- **Guide section** — one concept's teaching content: `what` (the idea), `why`
+  (why it matters), `recall` (the say-it-back prompt). Generated once per
+  `(chapter, concept, language)` and shared by every student; the *order* of the
+  sections is per-student.
+- **Triage order** — the study order the guide uses, computed from a mastery map
+  with no AI call: `2` (wrong) first, then `1` (raised, not explained), then `0`
+  (untouched) by weight, then `3` (already solid) last as a confirmation. Wrong
+  beliefs come first because re-reading cannot fix them.
+- **Source anchor** — a concept's real character offset and sentence in the
+  chapter's own text, found by lexical overlap and computed rather than
+  generated. A model asked for a location invents one, so it is never asked.
+- **Student-independent content** — content that depends on the chapter and the
+  language but not on who is asking. This is the property that makes a cached
+  guide possible: the second student on a chapter generates nothing.

@@ -1,6 +1,8 @@
 # Testing Guide — Kiftet
 
-Workflow for the `prototype` branch:
+Manual coverage for a feature branch. The automated half of this is
+`bun run test` (16 cases; see the end of this file). What follows is the part
+that still needs a human with a real voice and a real textbook.
 
 - Build one phase at a time. Never move to the next phase until the current one is
   tested and fixed.
@@ -170,8 +172,10 @@ working.
 **LIVE as of the Voxide round:** a real `GEMINI_API_KEY` is in
 `apps/server/.env` (gitignored). **Important:** the old default model
 `gemini-2.0-flash` was retired by Google (404 "no longer available"), which made
-every AI call silently fall back to heuristics even with a valid key. Fixed by
-using `gemini-3.6-flash` (`apps/server/src/ai/gemini.ts`). Verified end-to-end
+every AI call silently fall back to heuristics even with a valid key. Fixed at
+the time by moving to `gemini-3.6-flash`, which is itself now capacity-limited
+— the current default is `gemini-2.5-flash`, behind a fallback list. See *The
+model, and why it changed* below for the measured split. Verified end-to-end
 over HTTP: recall grades semantically (covered/missing/misconceptions/score),
 micro-lessons are genuine spoken lessons with analogies, retest questions are
 targeted spoken prompts, and `extractConcepts` returns weighted concepts +
@@ -405,8 +409,8 @@ Tap once to start, tap again to hang up.
 **What was verified (Phase-2-round review fixes):**
 
 1. **Topic-type diversity — the reviewer's core ask.** Two chapters ingested into
-   the same SQLite DB, graded live by real Gemini (key is in `apps/server/.env`,
-   `DEFAULT_MODEL = "gemini-3.6-flash"`):
+   the    same SQLite DB, graded live by real Gemini (key is in `apps/server/.env`;
+   the model was `gemini-3.6-flash` at the time, now `gemini-2.5-flash`):
    - **"Heat and Temperature"** (conceptual) → recall `score: 0.29`, gaps a real
      missing list (covered *"temperature vs heat distinction"*, *"thermal
      equilibrium"*; missing *"specific heat capacity"*, *"latent heat"*,
@@ -496,10 +500,11 @@ half-finished stream drive what we grade or read back.
 
 ## Phase 6 — Your own textbook (import → study)
 
-> **Status:** UI shipped, import **gated** (preview). The device-side chunk
-> planning, the 15 MB file cap, and the demo quotas (5 AI calls/min,
-> 3 textbooks/day) are all live; the actual ingest + AI extraction is disabled
-> behind `TEXTBOOK_IMPORT_ENABLED` until the go-live checklist in §13 lands.
+> **Status:** **open.** Import, device-side OCR, and AI extraction are all
+> live. The 15 MB file cap applies, and every caller is charged the same
+> per-minute budget (demo 3, signed-in 8) plus the demo 3-textbooks/day cap.
+> Set `TEXTBOOK_IMPORT_ENABLED = false` in `apps/web/src/routes/textbooks.tsx`
+> to hide the flow without removing any code.
 
 ### How to test
 
@@ -524,11 +529,19 @@ half-finished stream drive what we grade or read back.
 6. Ingested chunks show up in the dashboard like the seeded chapters — start a
    study session on your own chunk and run recall → gaps → lesson → retest
    against **its** checklist.
-7. **Demo quotas:** `GET /api/ai/budget` returns the current-minute AI budget
-   and the daily book cap; the dashboard pill shows it. Firing more than
-   5 AI calls within a minute returns `429` with a friendly message; a demo can
-   only create 3 new textbooks per day (re-ingesting an existing book is free).
-   Signed-in users get the large limits.
+7. **Quotas:** `GET /api/ai/budget` returns the current-minute AI budget
+   (`remaining`, `resetAt`, `retryAfterSeconds`) and the daily book usage
+   (`books.used`, `books.limit`, `books.resetAt`). The dashboard pill shows
+   both to **every** visitor, signed-in or demo, and counts the wait down when
+   out. Firing more than 3 calls (demo) / 8 (signed-in) within a minute returns
+   `429` with a `Retry-After` header. A demo can create 3 new textbooks per day;
+   re-ingesting an existing book is free, so one six-chapter book costs one.
+   Signed-in users are uncapped and the pill says "no daily limit" rather than
+   a number that does not apply.
+8. **Guide budget:** opening a cold chapter generates a section per uncached
+   concept (up to ten provider calls). The response carries `throttled` and
+   `retryAfterSeconds`; the remaining concepts render as estimated sections
+   rather than failing the request, and those fallbacks are not cached.
 
 ### How you can test
 
@@ -878,3 +891,120 @@ Manual:
 Acceptance: a half-raised concept is never drawn as solid; the number matches
 the stored weighted score; all four states legible in every room and both
 languages; nothing shown is a guess without saying so.
+
+---
+
+## Phase 11 step 3b — The guide (cached, ordered, anchored)
+
+### How I tested
+
+Automated (`bun run test`, 16 cases total):
+
+- **`apps/server/src/ai/guide.test.ts`** — the study order and the anchor.
+  - Ordering is `L2 → L1 → L0 → L3`: a wrong belief first, then the cheapest
+    win, then untouched ideas by importance, then what they already have. If
+    triage regressed to "list order", the first assertion fails.
+  - A checklist item flagged `isMisconception` never gets a section of its own —
+    it is a wrong belief, not a concept.
+  - The same map in gives the same guide out, and the caller's array is not
+    mutated by sorting.
+  - The anchor's offset indexes the *original* text, so a "go to this place in
+    your book" link lands on the sentence, not the space before it.
+  - **A hard-wrapped chapter still yields whole sentences.** Textbook text is
+    wrapped across lines; an earlier version split on newlines and produced
+    anchors like *"Inside, the cytoplasm is a watery fluid that holds the"* — a
+    fragment that is useless as a link and as the section's own text. Caught by
+    running the real thing, not by reading the code.
+  - **The fallback never fakes a language.** The deterministic path cannot
+    translate, so it must not copy the English book sentence into a guide that
+    already claimed `language: "am"`. Caught end-to-end: the Amharic guide came
+    back with English `what` text.
+
+End-to-end, against a real Postgres built from the migrations and the real
+server, with the model actually called:
+
+1. Ran the server's own boot migrator against an empty database and confirmed
+   it created `guide_section` — the migration is wired into the real path, not
+   just hand-applied SQL.
+2. Graded a spoken recall. Gemini returned `503 UNAVAILABLE` twice. The ladder
+   behaved correctly: retried, logged `upstream_status_503`, counted it in
+   `/api/ai/telemetry`, and returned a grade labelled `estimated: true` rather
+   than a fake zero.
+3. Hit the per-user budget (8/min) by retrying, and the `429` was refused
+   honestly instead of silently degrading.
+4. Requested the guide twice with the same mastery map. **Cold cache: 4 AI
+   attempts for 4 non-solid concepts. Warm cache: 0 attempts**, byte-identical
+   response, 4 rows in the table. That is the entire cost argument, measured.
+5. Confirmed `am` and `en` are separate rows (4 each) and that the Amharic
+   scaffolding is Amharic while the book quote stays verbatim English.
+6. Ownership: no identity → `401`; a forged `X-Demo-User-Id` → `401`; a
+   *different* legitimate user asking for this chapter → `404`; the owner →
+   `200`. The guide is generated content, so it is checked against the chapter
+   owner rather than inherited from a session id.
+
+### The model, and why it changed
+
+`gemini-3.6-flash` — the default since Phase 2 — returned `503 high demand` on
+**every** call during the step-3b run, and the retries could not save it. That
+is the failure mode worth naming: a capacity-limited model looks exactly like a
+dead AI feature, because the screen shows the offline fallback and nothing says
+the model was the reason.
+
+Probing the whole family (list the models, then call each one with our own
+prompts):
+
+| Model | Result |
+| --- | --- |
+| `gemini-2.5-flash` | **works** — every prompt answered |
+| `gemini-3.6-flash` | `503` every attempt (the old default) |
+| `gemini-3.5-flash` | `503` |
+| `gemini-3.7-flash` / `3.8` | `503` |
+| `gemini-flash-latest` | `503` |
+| `gemini-2.5-flash-lite` / `2.0-flash` / `1.5-flash` | `404` retired — never options |
+
+So `gemini-2.5-flash` is now the default and the others sit behind it in
+`MODEL_FALLBACKS`. The attempt loop **walks that list** rather than retrying one
+model in place: a model that is merely *busy* is answered by a different one
+instead of by waiting out a budget the student does not have. Backoff is kept
+for the case that genuinely needs it — retrying the model we measured working.
+`aiTelemetry.lastModel` records which model last answered, so "is this the
+model, or is it us?" is answerable from `/api/ai/telemetry` alone.
+
+**The real ceiling is 5 requests a minute**, not the ~1,500/day the free tier
+allows. A cold ten-concept guide wants ten. Measured on the demo chapter:
+
+- **Cold EN guide, 71s:** 8 sections model-written, 2 labelled `estimated: true`
+  after the quota ran out. It degraded honestly rather than pretending.
+- **Warm guide, 0.07s:** 0 AI calls, byte-identical response.
+- **Cold AM guide, 64s:** a separate set of 10 rows, Amharic scaffolding with the
+  English book quote left verbatim.
+- **Recall grading, 7s:** 10/10 exact concept keys, correct levels, `score: 50`
+  on a transcript that mentioned 5 of 10 concepts and got them right, with 2
+  sections degrading to estimates under the same quota pressure.
+
+That 5/min ceiling is the strongest argument for the cache: it is the only
+reason a five-a-minute project budget can serve a class, since only the first
+student on a chapter pays.
+
+### What I could not verify
+
+- **Triage ordering against a real wrong answer.** The graded transcript above
+  had no *wrong* concepts, so `L2 → L1 → L0 → L3` was not exercised by live data
+  — only by unit tests.
+- A real voice read-along of the sections, and the offline path for the guide.
+- Real textbook quality at volume: the demo chapter is a seed, not a book.
+
+### Manual, still to do with a human
+
+1. `bun run dev`, speak a recall that gets some concepts *wrong*, then read the
+   guide top to bottom. The first card must be the wrong one, and it must feel
+   like the right first move rather than a punishment.
+2. Tap "Say it back" on a section. It should read the `what` then the prompt,
+   and stop cleanly when you leave the phase.
+3. Compare the guide for two students with different gaps on the same chapter.
+   The wording must be identical where they overlap — that is the cache — and
+   only the order and the badges should differ.
+4. Switch to Amharic. Sections must be in Amharic, and any English book quote
+   must still read as a quotation from the book, not as a translated lesson.
+5. Turn off the network mid-lesson. The guide must still render from cache and
+   say so, rather than showing an empty page.

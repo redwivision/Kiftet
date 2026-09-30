@@ -2,6 +2,7 @@ import {
   attempt,
   chapter,
   conceptNode,
+  guideSection,
   misconceptionHit,
   studySession,
   syllabusUnit,
@@ -14,7 +15,12 @@ import {
   ai,
   aiTelemetrySnapshot,
   focusScore,
+  type GuideSection,
   gapAnalysisFrom,
+  levelOf,
+  type MasteryLevel,
+  type MasteryMap,
+  triageConcepts,
 } from "../ai/gemini";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -48,12 +54,53 @@ function aiBudgetFor(req: Request) {
   const limitPerMinute = isDemo(req)
     ? AI_REQUESTS_PER_MINUTE.demo
     : AI_REQUESTS_PER_MINUTE.signedIn;
+  const remaining = Math.max(0, limitPerMinute - recent.length);
+  // The window is a rolling 60s filter, not a bucket that empties on the hour,
+  // so "when does it restart" has a real answer: the oldest call in the window
+  // ages out 60s after it happened. Only meaningful when the student is
+  // actually blocked — that's the moment they ask.
+  const oldest = recent.at(0) ?? null;
+  const resetAt = oldest === null ? null : oldest + 60_000;
   return {
     demo: isDemo(req),
     limitPerMinute,
     callsThisMinute: recent.length,
-    remaining: Math.max(0, limitPerMinute - recent.length),
-    textbooksPerDay: DEMO_TEXTBOOKS_PER_DAY,
+    remaining,
+    windowSeconds: 60,
+    resetAt,
+    retryAfterSeconds:
+      remaining > 0 || resetAt === null
+        ? 0
+        : Math.max(1, Math.ceil((resetAt - now) / 1000)),
+  };
+}
+
+// The daily book cap is derived from real rows rather than a counter, so it
+// survives a restart — the AI window above does not. Signed-in students have no
+// book cap today, which is reported as `limit: null` rather than a fake number.
+async function dailyBookUsageFor(req: Request) {
+  const demo = isDemo(req);
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(dayStart);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const today = await db()
+    .select({ id: textbook.id })
+    .from(textbook)
+    .where(
+      and(
+        eq(textbook.ownerId, ownerId(req)),
+        gte(textbook.createdAt, dayStart),
+        ne(textbook.title, DEMO_SEED_TITLE),
+      ),
+    );
+  return {
+    demo,
+    used: today.length,
+    limit: demo ? DEMO_TEXTBOOKS_PER_DAY : null,
+    // Server-local midnight, the same boundary textbookIdFor enforces — telling
+    // the student a time the server doesn't use would be worse than none.
+    resetAt: demo ? tomorrow.toISOString() : null,
   };
 }
 
@@ -70,7 +117,14 @@ function allowAiRequest(req: Request): boolean {
   return true;
 }
 
-class DailyBookLimitError extends Error {}
+class DailyBookLimitError extends Error {
+  constructor(
+    message: string,
+    readonly resetAt: string,
+  ) {
+    super(message);
+  }
+}
 
 function db() {
   return getDb();
@@ -86,8 +140,39 @@ function ok<T>(res: Response, data: T, status = 200) {
   res.status(status).json(data);
 }
 
-function err(res: Response, message: string, status = 400) {
-  res.status(status).json({ error: message });
+// `resetAt` travels as an ISO timestamp rather than a pre-rendered hour: the
+// server's clock is not the student's (Ethiopia is UTC+3), so naming an hour
+// server-side would tell them to come back at the wrong time. The client
+// renders it in their own zone.
+function err(
+  res: Response,
+  message: string,
+  status = 400,
+  resetAt: string | null = null,
+) {
+  res
+    .status(status)
+    .json(resetAt ? { error: message, resetAt } : { error: message });
+}
+
+// A 429 that says what to do and how long to wait. "Try again later" leaves a
+// student guessing, and guessing means hammering retry, which is how the
+// shared free-tier quota gets drained in the first place. The count comes from
+// the same rolling window the check just used, so it is not a guess either.
+// The reassurance matters: a cached guide costs nothing, so a student who is
+// blocked on generation can still reopen everything they have already read.
+function aiBudgetError(res: Response, req: Request) {
+  const { retryAfterSeconds } = aiBudgetFor(req);
+  const wait =
+    retryAfterSeconds > 0
+      ? `${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"}`
+      : "a moment";
+  res.setHeader("Retry-After", String(Math.max(1, retryAfterSeconds)));
+  return err(
+    res,
+    `You've used all your AI requests for this minute. Wait ${wait} and try again — anything you've already studied stays available.`,
+    429,
+  );
 }
 
 // Zod's default messages are written for developers ("Invalid input: expected
@@ -132,6 +217,35 @@ async function chapterConcepts(chapterId: string) {
     .from(conceptNode)
     .where(eq(conceptNode.chapterId, chapterId))
     .orderBy(conceptNode.sortOrder);
+}
+
+/** A chapter the caller actually owns. The guide is generated content, so
+ *  ownership is checked here rather than inherited from a session id. */
+async function chapterOwned(
+  chapterId: string,
+  userId: string,
+): Promise<string | null> {
+  const rows = await db()
+    .select({ id: chapter.id })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(and(eq(chapter.id, chapterId), eq(textbook.ownerId, userId)))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/** Parse `?mastery=photosynthesis:2,osmosis:1` into a level map. */
+function readMasteryParam(raw: unknown): MasteryMap {
+  const out: MasteryMap = {};
+  if (typeof raw !== "string" || !raw.trim()) return out;
+  for (const pair of raw.split(",")) {
+    const [name, level] = pair.split(":");
+    if (!name?.trim()) continue;
+    const n = Math.round(Number(level));
+    if (!Number.isFinite(n) || n < 0 || n > 3) continue;
+    out[name.trim()] = n as MasteryLevel;
+  }
+  return out;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -189,8 +303,11 @@ async function textbookIdFor(
         ),
       );
     if (today.length >= DEMO_TEXTBOOKS_PER_DAY) {
+      const tomorrow = new Date(dayStart);
+      tomorrow.setDate(tomorrow.getDate() + 1);
       throw new DailyBookLimitError(
-        `Demo keeps ${DEMO_TEXTBOOKS_PER_DAY} new textbooks per day. You've hit today's — come back tomorrow, or sign up to get more.`,
+        `That's ${DEMO_TEXTBOOKS_PER_DAY} new textbooks for today — today's limit. You can still add chapters to books you already have, as many as you like.`,
+        tomorrow.toISOString(),
       );
     }
   }
@@ -226,7 +343,8 @@ router.post("/chapters/ingest", async (req, res) => {
       demo,
     );
   } catch (e) {
-    if (e instanceof DailyBookLimitError) return err(res, e.message, 429);
+    if (e instanceof DailyBookLimitError)
+      return err(res, e.message, 429, e.resetAt);
     throw e;
   }
 
@@ -246,13 +364,7 @@ router.post("/chapters/ingest", async (req, res) => {
     });
   }
 
-  if (!allowAiRequest(req)) {
-    return err(
-      res,
-      `You're out of AI budget for this minute. Give it a moment and try again.`,
-      429,
-    );
-  }
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
 
   const chapterId = crypto.randomUUID();
   await db().insert(chapter).values({
@@ -290,10 +402,15 @@ router.post("/chapters/ingest", async (req, res) => {
   );
 });
 
-// What the visitor can still spend this minute — the demo UI paints this as a
-// small "AI calls left" pill so nobody is surprised by a 429 mid-session.
-router.get("/ai/budget", async (_req, res) => {
-  ok(res, aiBudgetFor(_req));
+// What the visitor can still spend — the UI paints this as a small pill so
+// nobody is surprised by a 429 mid-session, and so "when does it restart?" has
+// an answer with a number on it instead of "soon".
+router.get("/ai/budget", async (req, res) => {
+  const [ai, books] = await Promise.all([
+    Promise.resolve(aiBudgetFor(req)),
+    dailyBookUsageFor(req),
+  ]);
+  ok(res, { ...ai, books });
 });
 
 // Process-wide counters for how the AI seam is actually behaving: attempts,
@@ -685,12 +802,7 @@ const recallSchema = z.object({
 });
 
 router.post("/sessions/:id/recall", async (req, res) => {
-  if (!allowAiRequest(req))
-    return err(
-      res,
-      `You're out of AI budget for this minute. Give it a moment and try again.`,
-      429,
-    );
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = recallSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -746,12 +858,7 @@ const microlessonSchema = z.object({
 });
 
 router.post("/sessions/:id/microlesson", async (req, res) => {
-  if (!allowAiRequest(req))
-    return err(
-      res,
-      `You're out of AI budget for this minute. Give it a moment and try again.`,
-      429,
-    );
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = microlessonSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -777,6 +884,189 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────
+// Guide
+// ────────────────────────────────────────────────────────────────
+
+/** Load cached sections for a chapter in one query, keyed by concept. */
+async function cachedSections(
+  chapterId: string,
+  language: "en" | "am",
+): Promise<Map<string, typeof guideSection.$inferSelect>> {
+  const rows = await db()
+    .select()
+    .from(guideSection)
+    .where(
+      and(
+        eq(guideSection.chapterId, chapterId),
+        eq(guideSection.language, language),
+      ),
+    );
+  return new Map(rows.map((r) => [r.conceptText.trim().toLowerCase(), r]));
+}
+
+/** Insert a section, treating a concurrent insert as success. */
+async function storeSection(
+  chapterId: string,
+  conceptText: string,
+  language: "en" | "am",
+  section: GuideSection,
+): Promise<void> {
+  await db()
+    .insert(guideSection)
+    .values({
+      id: crypto.randomUUID(),
+      chapterId,
+      conceptText,
+      language,
+      whatText: section.what,
+      whyText: section.why ?? null,
+      recallText: section.recall ?? null,
+      sourceOffset: section.sourceOffset ?? null,
+      sourceQuote: section.sourceQuote ?? null,
+      estimated: section.estimated,
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * The guide: sections in the order THIS student needs, built from mastery.
+ *
+ * Ordering is deterministic and costs nothing — it is not asked of a model.
+ * "Explained wrong" first, because a wrong belief is the one thing a student
+ * cannot revise by re-reading alone; then "raised but not explained", the
+ * cheapest win; then untouched concepts by importance. Solid concepts are
+ * listed last as a one-line confirmation rather than a section to read.
+ *
+ * Content is cached per (chapter, concept, language), so this call spends AI
+ * calls only for concepts nobody has generated yet — the second student on a
+ * chapter spends none at all.
+ */
+router.get("/chapters/:id/guide", async (req, res) => {
+  const chapterId = await chapterOwned(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Chapter not found", 404);
+
+  const language = req.query.language === "am" ? "am" : "en";
+  const concepts = await chapterConcepts(chapterId);
+  const [row] = await db()
+    .select({ rawText: chapter.rawText })
+    .from(chapter)
+    .where(eq(chapter.id, chapterId))
+    .limit(1);
+  const rawText = row?.rawText ?? "";
+
+  const mastery = readMasteryParam(req.query.mastery);
+  const cache = await cachedSections(chapterId, language);
+
+  // The concepts worth generating: everything not already solid. Solid ones
+  // need no AI call and no stored row.
+  const targets = triageConcepts(concepts, mastery).filter(
+    (c) => levelOf(mastery, c.conceptText) !== 3,
+  );
+
+  let estimated = false;
+  // A cold chapter is ~10 uncached concepts, so this loop is the one place that
+  // can spend a whole minute of the student's budget in a single click. Each
+  // generation is charged individually; once the window is spent the remaining
+  // concepts fall back to the lexical section rather than failing the request,
+  // because a chapter full of fallbacks is a far better answer than a 429 and
+  // nothing at all. Fallbacks produced *because of* the budget are deliberately
+  // not stored — otherwise a busy minute would poison the cache and every later
+  // visitor would read them as if they had been written properly.
+  let throttled = false;
+  for (const concept of targets) {
+    const key = concept.conceptText.trim().toLowerCase();
+    if (cache.has(key)) continue;
+    const skipAi = !allowAiRequest(req);
+    if (skipAi) throttled = true;
+    const section = await ai.generateGuideSection(
+      concept.conceptText,
+      rawText,
+      language,
+      { skipAi },
+    );
+    if (!skipAi) {
+      await storeSection(chapterId, concept.conceptText, language, section);
+    }
+    // Always in the map for this response, so a budget-capped chapter still
+    // shows the section it just built rather than collapsing to the skeleton.
+    cache.set(key, {
+      id: "",
+      chapterId,
+      conceptText: concept.conceptText,
+      language,
+      whatText: section.what,
+      whyText: section.why ?? null,
+      recallText: section.recall ?? null,
+      sourceOffset: section.sourceOffset ?? null,
+      sourceQuote: section.sourceQuote ?? null,
+      estimated: section.estimated,
+      createdAt: new Date(),
+    });
+  }
+
+  const sections = triageConcepts(concepts, mastery)
+    .map((concept) => {
+      const level = levelOf(mastery, concept.conceptText);
+      const cached = cache.get(concept.conceptText.trim().toLowerCase());
+      if (level === 3) {
+        return {
+          conceptText: concept.conceptText,
+          weight: concept.weight,
+          level,
+          what: language === "am" ? "ይህን በጠንክር ታደርግሃለህ።" : "You have this one.",
+          why: null,
+          recall: null,
+          sourceOffset: null,
+          sourceQuote: null,
+          estimated: false,
+          needsWork: false,
+        };
+      }
+      if (!cached) {
+        // Nothing cached and nothing generated: the checklist itself is the
+        // skeleton, so a chapter with no prose is still a usable revision list.
+        return {
+          conceptText: concept.conceptText,
+          weight: concept.weight,
+          level,
+          what:
+            language === "am"
+              ? `“${concept.conceptText}” — ከዚህ ታች ባለው ክፍል ይሸፍናል።`
+              : `“${concept.conceptText}” — the part of your book below covers it.`,
+          why: null,
+          recall: null,
+          sourceOffset: null,
+          sourceQuote: null,
+          estimated: true,
+          needsWork: true,
+        };
+      }
+      if (cached.estimated) estimated = true;
+      return {
+        conceptText: concept.conceptText,
+        weight: concept.weight,
+        level,
+        what: cached.whatText,
+        why: cached.whyText,
+        recall: cached.recallText,
+        sourceOffset: cached.sourceOffset,
+        sourceQuote: cached.sourceQuote,
+        estimated: cached.estimated,
+        needsWork: true,
+      };
+    })
+    .filter((s) => s.needsWork || s.level === 3);
+
+  ok(res, {
+    sections,
+    estimated,
+    throttled,
+    retryAfterSeconds: throttled ? aiBudgetFor(req).retryAfterSeconds : 0,
+    language,
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
 // Retest
 // ────────────────────────────────────────────────────────────────
 
@@ -787,12 +1077,7 @@ const retestSchema = z.object({
 });
 
 router.post("/sessions/:id/retest", async (req, res) => {
-  if (!allowAiRequest(req))
-    return err(
-      res,
-      `You're out of AI budget for this minute. Give it a moment and try again.`,
-      429,
-    );
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = retestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -883,12 +1168,7 @@ const answerSchema = z.object({
 });
 
 router.post("/sessions/:id/retest/answer", async (req, res) => {
-  if (!allowAiRequest(req))
-    return err(
-      res,
-      `You're out of AI budget for this minute. Give it a moment and try again.`,
-      429,
-    );
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = answerSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 

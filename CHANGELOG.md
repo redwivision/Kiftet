@@ -74,6 +74,114 @@ headline number drifting from the weighted score.
 > Nothing orders study by the mastery map yet — the map is measured, stored and
 > displayed, but the next chapter is the one that acts on it.
 
+### Then: the guide, in the order you actually need it
+
+**What changed.** The map now decides what you read and in what order. A
+**wrong belief comes first** — re-reading cannot fix the one thing you have
+actually got backwards. Then the ideas you raised but did not finish, which are
+the cheapest wins on the page. Then what you have not touched yet, by how much
+it matters. What you already have goes last, as a line of confirmation rather
+than something to read twice.
+
+**The economics.** The Gemini free tier is a budget for the whole *project*,
+not for one key: roughly 1,500 calls a day shared by every user. Generating a
+guide per session spends twelve of them to show one page. So a section is now
+written **once per chapter, per concept, per language** and stored. Measured on
+a real chapter: **first guide 4 AI calls, second guide 0.** The second student
+on a chapter costs nothing.
+
+**"The right length" is now structure, not a vibe.** A section is `what` / `why`
+/ `recall` instead of one blob, and each is readable on its own — `recall` is
+the prompt a voice UI can hand straight to a microphone.
+
+**Every section points back at your book.** Each concept is anchored to a real
+sentence in your own textbook by computing where the words overlap. It is
+computed, never asked of a model, because a model asked for a page number
+invents one, and an invented page number is worse than none.
+
+**Two honesty bugs, both found by running the thing end to end:**
+
+- The anchor split on newlines. Textbook text is hard-wrapped, so "go to this
+  place" was landing on *"Inside, the cytoplasm is a watery fluid that holds
+  the"* — a mid-sentence fragment that is useless as both a link and a lesson.
+- The offline fallback copied the book's sentence into a guide that had already
+  claimed to be **Amharic**. The fallback cannot translate, so it must not
+  pretend to: the scaffolding is now in your language and your book is quoted
+  verbatim underneath, labelled as a quotation.
+
+**Then: a model that actually answers.** The default model was returning
+`503 high demand` on *every* call, which in production looks identical to a
+dead AI feature — the screen would quietly show the offline fallback, forever,
+and nothing in the logs would say the model was the reason. Probing the whole
+family found the split: every 3.x flash alias is capacity-limited, and the
+older `2.5-flash-lite` / `2.0-flash` / `1.5-flash` are **retired** — the API
+returns 404, so they were never options. `gemini-2.5-flash` answered everything.
+
+**A busy model is no longer a student without a guide.** The model list is now
+walked on a 429/503/timeout rather than retried in place, so a model that is
+merely *busy* is answered by a different one instead of by waiting out a budget
+the student does not have. Backoff is kept for the case that genuinely needs
+it — retrying the model we already know works.
+
+**The honest ceiling, measured rather than assumed.** The free tier allows
+**5 requests a minute**, and a cold ten-concept guide wants ten. So the first
+guide of a chapter now degrades *honestly*: **8 of 10 sections written, 2
+labelled as estimates** after the quota ran out, instead of all ten pretending.
+The cache is not a nicety here — it is what makes the second student cost zero
+calls, which is the only reason a five-a-minute budget can serve a class.
+
+**Then: a book that opens but cannot be read.** Testing against a real Ministry
+of Education textbook (Grade 10 Biology, 182 pages) found the worst bug so far,
+and it was the quiet kind. The book's fonts carry no Unicode map, so the
+extractor returns **control codes instead of letters** — and a viewer renders
+those pages perfectly, because it draws the glyph outlines. The pages *look*
+fine; the text is not there. The old check asked for 1,000 readable characters
+and this book **clears it with 30,444** — every one of them a running header
+repeated 182 times. Length cannot tell a book from a book-shaped shell.
+
+The check now measures **density instead**: a running header is about six
+words, a page of prose is 150–400. Measured across real files, the unreadable
+textbook scores a median of **27 words per page** and every genuinely readable
+PDF scores **58 or more**, so the threshold sits at 40 — in the gap, not near
+either edge. A book that trips it is refused with an explanation and pointed at
+pasting text, in both languages. A chapter that is nothing but a heading is
+dropped rather than imported. The failure this prevents is the one the product
+cannot make: a confident, wrong checklist built from a page nobody read.
+
+**Textbook import is open.** The door above was deliberate — a book we cannot
+read should not be studied — but the students who own those books were left with
+nothing at all. So the broken font is handled instead of refused. The page is
+drawn to a canvas and recognized by Tesseract compiled to WASM, in the browser:
+the book still never leaves the device, and no vendor receives it. It is never
+read in full, because 182 pages at ~7s is not a wait worth asking anyone for.
+The chapters are found in about **4s** from the readable 10% of the text — unit
+headers and captions survive even when the body does not — and each chapter's
+body is recognized only as it is imported, with every page cached by book and
+page so a book is read once. Measured on the Grade 10 Biology textbook in
+Chrome: six units at the right page boundaries in 4.3s, then ~7s/page at 90%
+confidence returning real prose.
+
+Recognised chapters are now split before they are sent, on the same sentence
+boundary the readable path uses, because a 59-page unit lands as one string well
+past both the 200k character cap and the 256kb request body the server accepts.
+
+**Every visitor can see their budget, and when it refills.** The pill was
+demo-only, which left the only people who could actually run out — signed-in
+students — with no screen to tell them. All of them now get it, with the wait
+counting down in their own clock, and a `429` names the number of seconds
+instead of saying "a moment". Textbooks today is shown as used-of-limit, or as
+"no daily limit" for a signed-in account, because a number that does not apply
+is worse than none. The daily cap resets at server-local midnight and is sent as
+an ISO timestamp so the hour quoted is the student's, not the server's.
+
+**The guide endpoint is charged for its own calls.** Opening a cold chapter
+generated a section per uncached concept — up to ten provider requests from one
+click, unbudgeted, against a shared per-project free tier. Each is now charged.
+When the minute runs out the remaining concepts fall back to the lexical section
+rather than failing the request, because a chapter of fallbacks beats a 429 and
+nothing at all; and those fallbacks are not written to the cache, so a busy
+minute cannot poison what a later visitor reads.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,
@@ -173,3 +281,46 @@ Voxide for capture, native `speechSynthesis` for read-back, a voice-state ring,
 and a `/voice-test` route. The seam rule from day one: **voice is the
 interface, Gemini + text are load-bearing** — so the loop never bets on a
 vendor's speech layer being correct.
+**Then: that book, read anyway — on the device, from the page image.** The
+check above refuses a book whose words will not come out. For most real files
+that is still the right answer, but for *this* class of file it refused the
+books students actually own, so the refusal now has a way through: the page is
+drawn to a canvas and recognized by Tesseract running as WebAssembly **in the
+browser**. The textbook still never leaves the device — only the page bitmap
+is ever in memory, and nothing is uploaded.
+
+Recognizing all 182 pages up front measured **~16 minutes**, which is not
+something to ask a student to sit through, so it is never done. The trick is
+that the unreadable book is not unreadable *everywhere*: **90% of its
+characters** sit in the broken font, but the remaining 10% — unit headers,
+figure captions, "Review Questions" — extracts cleanly, and that is enough to
+find where each unit starts. The chapter list therefore appears in about
+**4 seconds**, and each chapter's body is recognized **only when that chapter
+is imported**. One chapter is ~20–35 pages.
+
+Measured on the Grade 10 Biology textbook in Chrome: chapter list in 4.3 s,
+OCR at ~7 s/page, 90% confidence, returning real prose ("Learning competencies
+2.1. Characteristics of plants…"). Every page's text is cached in IndexedDB by
+book and page, so a book is read **once, ever** — a retry, a re-import or a
+second visit reads the text back instead of re-recognizing.
+
+Two things this had to get right that are not obvious:
+
+- **A header that repeats is not a chapter per page.** The book prints its unit
+  header on every page, and on some pages writes it *five times in a row* in
+  the same font. Cutting on each occurrence yields 175 one-page chunks; taken
+  literally, the name becomes "Unit 2: PlantsUnit 2: PlantsUnit 2: Plants".
+  Headings are now deduplicated and the repetition collapsed, giving 6 units at
+  the right page boundaries.
+- **The OCR engine is not part of the install.** Three WASM cores (~12 MB) ship
+  but are excluded from the service worker's precache, because on the low-end
+  phones this app is built for that is the difference between installing and
+  not. They are fetched the first time a book needs reading and cached from
+  then on, so the *second* book works with no network at all.
+
+> **Not yet true:** import is still behind `TEXTBOOK_IMPORT_ENABLED`, so this
+> is not reachable from the UI yet. **Amharic is unverified** — no Amharic-dense
+> PDF was available to measure against, so every Amharic OCR figure quoted so
+> far is untested, and the Amharic model is only selected, never proven. Pages
+> that open with a decorative graphic can still return a line of noise ahead of
+> the real text, which the model would have to read around.

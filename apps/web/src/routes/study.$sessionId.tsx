@@ -14,6 +14,7 @@ import {
 } from "@/components/assistant";
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
+import { GuideView } from "@/components/guide-view";
 import { InkSettling } from "@/components/ink-settling";
 import { useLanguage } from "@/components/language-provider";
 import {
@@ -870,40 +871,55 @@ function LessonPhase() {
           {t("fluency-am")}
         </p>
       )}
-      <div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
-        {sentences.length > 1
-          ? sentences.map((sentence, i) => (
-              <span
-                key={`${i}-${sentence}`}
-                className={cn(
-                  "rounded px-0.5 transition-colors duration-150",
-                  activeSentence === i && "bg-gold/15 text-foreground",
-                )}
-              >
-                {sentence}{" "}
-              </span>
-            ))
-          : (state.lessonText ?? "Writing it…")}
-      </div>
+      {/* The guide is the real lesson: ordered sections the student reads. The
+          single read-aloud script is the fallback for when it is unavailable. */}
+      {state.guide?.length ? (
+        <GuideView
+          sections={state.guide}
+          estimated={state.guideEstimated}
+          onRecall={(section) =>
+            section.recall &&
+            void narrate(`${section.what} ${section.recall}`, "button")
+          }
+        />
+      ) : (
+        <>
+          <div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
+            {sentences.length > 1
+              ? sentences.map((sentence, i) => (
+                  <span
+                    key={`${i}-${sentence}`}
+                    className={cn(
+                      "rounded px-0.5 transition-colors duration-150",
+                      activeSentence === i && "bg-gold/15 text-foreground",
+                    )}
+                  >
+                    {sentence}{" "}
+                  </span>
+                ))
+              : (state.lessonText ?? "Writing it…")}
+          </div>
 
-      {state.lessonText && (
-        <div className="flex items-center justify-center gap-2">
-          {reading ? (
-            <Button variant="outline" size="sm" onClick={stopReading}>
-              <Square className="size-3.5" aria-hidden="true" />
-              {t("stop-reading")}
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void narrate(state.lessonText ?? "")}
-            >
-              <Volume2 className="size-4" aria-hidden="true" />
-              {t("read-it-to-me")}
-            </Button>
+          {state.lessonText && (
+            <div className="flex items-center justify-center gap-2">
+              {reading ? (
+                <Button variant="outline" size="sm" onClick={stopReading}>
+                  <Square className="size-3.5" aria-hidden="true" />
+                  {t("stop-reading")}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void narrate(state.lessonText ?? "")}
+                >
+                  <Volume2 className="size-4" aria-hidden="true" />
+                  {t("read-it-to-me")}
+                </Button>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
 
       <div className="space-y-2 pt-1">
