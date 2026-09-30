@@ -26,13 +26,13 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 ## 4. Core user flow (per topic/chapter)
 
 The loop is **Recall → Diagnose → Relearn → Re-test**, and it works end to end
-today. Phase 11 adds student-chosen scope and makes re-test *optional* rather
-than mandatory — a student who wants a diagnosis before studying, or proof
-afterwards, can take it at either point.
+today. The current study flow includes per-concept diagnosis and an ordered,
+cached guide. Phase 11's remaining scope is student-chosen multi-chapter/topic
+study and making re-test *optional* before or after studying.
 
 1. Student picks a **unit** from the official syllabus structure, or their own
-   chapter/topic (Phase 11: scope is the student's choice — chapter(s) and/or
-   topic(s)).
+chapter. Choosing broader multi-chapter/topic scope remains planned Phase 11
+work.
 2. Student speaks a cold explanation of what they remember — no notes, no
    prompting.
 3. System transcribes and grades the explanation against that chapter's
@@ -79,11 +79,10 @@ assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
 - Full gamification, 3D models, avatar/character layer.
 - Spaced-repetition scheduling across sessions/days.
 
-> The one lonely book in the demo is a **post-hackathon** gap. The next phase
-> (Phase 6) is "bring your own book": the student uploads their textbook (PDF or
-> pasted text), the device extracts per-chapter text locally, and each chapter
-> flows through the existing ingest pipeline into a study. The server API already
-> supports it — the work is the on-device extraction flow and the import UI.
+> The demo seed is still limited, but Phase 6 is shipped: students can upload a
+> PDF or paste text, inspect the proposed chapters and import them into their
+> library. PDF text, contents parsing and OCR run on-device; only chapter text
+> and optional numbered topics are sent to the ingest API.
 
 ## 6. Non-functional requirements
 

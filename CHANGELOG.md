@@ -1,326 +1,165 @@
-# Changelog
+# Kiftet — major milestone log
 
-The major updates, in order. Written to be **accurate as of each entry** — a
-feature is listed when it works, and where something is partial, gated, or
-deliberately not built, it says so. Full commit history is in `git log`; phase
-detail is in the [roadmap](docs/howItWorks/roadmap.md).
+Chronological record of the major product, architecture, UI, and quality
+milestones from the repository's first commits onward. Times are Git author
+timestamps in **Africa/Addis Ababa (UTC+03:00)**, except the latest working-tree
+entry, which is marked with the time this task began. Small fixes and follow-up
+commits are intentionally consolidated; the complete record is `git log`.
+Current implementation details live in [`docs/howItWorks/`](docs/howItWorks/README.md)
+and the [roadmap](docs/howItWorks/roadmap.md).
 
----
+## 2026-09-30
 
-## Unreleased — per-concept mastery
+- **Work began 21:57+03:00 — OCR contents become the source of textbook hierarchy.** Parse
+  real contents-page OCR into units and nested numbered topics, validate
+  printed-page offsets against detected chapter starts, show topics in the
+  import review, and seed the concept checklist in book order. Model extraction
+  still adds detail and misconceptions. If OCR/alignment is unreliable, fall
+  back to heading-based chapters. Verified against the Grade 10 Biology book:
+  six units and 53 numbered topics.
+- **20:32+03:00 — Open textbook import and expose usage budgets** (`bc13243`).
+  Make the previously gated import reachable; support local OCR for unreadable
+  PDFs, visible AI/book limits and clearer error states.
+- **19:50+03:00 — Read unreadable PDFs on-device** (`298f5a1`). Use browser
+  canvas and Tesseract WASM to recognize chapter text without uploading the
+  textbook; cache recognized pages locally and import a chapter at a time.
 
-**What changed.** Grading now returns a **per-concept level** for every idea in
-the checklist instead of one weighted number: `0` not addressed, `1` raised but
-not explained, `2` explained wrong, `3` explained correctly. The covered /
-missing / misconception lists are now *derived* from that map, so the
-per-concept view and the single score can never disagree. Stored with every
-attempt.
+## 2026-09-29
 
-**Why it matters.** One strong answer used to read as "that student knows the
-chapter". The product is a diagnostic, and a diagnostic that throws away
-per-concept detail is a score wearing a diagnosis's clothes.
+- **21:04+03:00 — Refuse unreadable text rather than create a false checklist**
+  (`9f6ae6f`). Detect text-layer failures by per-page text density and explain
+  recovery instead of mistaking repeated headers for readable textbook prose.
+- **18:59+03:00 — Make AI degradation observable and recoverable** (`9bee524`).
+  Move to a model that answers, add a model fallback ladder, retry transient
+  failures, and report fallbacks rather than silently presenting them as normal
+  AI output.
 
-Two things it fixed along the way:
+## 2026-09-28
 
-- **A misconception can no longer be scored as mastered.** A grading response
-  that listed a concept as both covered *and* a misconception used to have it
-  counted as mastered — hiding exactly the wrong belief this product exists to
-  surface. The misconception now wins.
-- **A rate-limited grade says so.** The offline fallback can hear *which* ideas
-  a student mentioned but not whether they explained them correctly, so its
-  levels are capped well below "mastered". Because that could quietly halve a
-  student's score for *our* quota problem, such grades are now labelled as
-  estimates on the screen.
+- **19:36+03:00 — Order study from the mastery map** (`a0632b9`). Add structured
+  `what`/`why`/`recall` guide sections cached per chapter, concept and language;
+  compute deterministic source anchors and mastery-based triage without
+  spending AI calls on ordering.
+- **18:34+03:00 — Finish the actionable diagnosis UI** (`9c0edc3`). Replace
+  flat lists with weighted concept-level mastery bars, make the partial state
+  visible, and ensure the headline score matches the weighted diagnosis.
+- **17:43+03:00 — Grade mastery per concept** (`2e88453`). Persist a 0–3
+  mastery level per concept, derive the score and gap lists from that map, and
+  label deterministic estimates honestly.
 
-> **Not yet true:** nothing consumes the map yet. The gaps screen still draws
-> the three lists, and the "right length, right order" study guide is still
-> **not built** — that is the next step.
+## 2026-09-27
 
-### Then: the diagnosis you can act on
+- **23:13+03:00 — Reframe the product around diagnosis** (`097c008`). The
+  study guide becomes delivery, not the moat; syllabus grounding, longitudinal
+  mastery and aggregate misconception data become the strategic core. Set an
+  explicit boundary against claiming computation-heavy subjects.
+- **22:49+03:00 — Stop silently degrading on rate limits** (`55a71dc`,
+  `339ef02`). Retry transient provider failures, record degraded responses, and
+  design the cached, mastery-ordered study guide before building it.
+- **21:49+03:00 — Establish the initial CI quality gate** (`18578b8`,
+  `ce8bec9`). Add lint, type checks and builds on changes to `main`; record
+  the current product thread and fix lint-discovered study-loop defects.
+- **18:34+03:00 — Add diagnosis regression tests to CI** (`9c0edc3`). Begin
+  automated coverage for the per-concept UI and score behavior; later guide and
+  OCR tests extend the same test gate.
+- **15:31+03:00 — Complete a major control-layer and PWA reliability pass**
+  (`09bd00d`). Rebuild the shared form controls, route failures, navigation
+  feedback and offline cache behavior.
 
-**What changed.** The gaps screen now reads those per-concept levels instead of
-three flat lists. Each bar carries two readings at once: **how tall it stands is
-how much the concept matters**, and **how much of it is filled is how much the
-student can actually answer**. The headline number became the weighted score,
-drawn as a ring that closes — the brand's own open ring turned into a readout,
-so progress is something you watch happen rather than a number you are told.
+## 2026-09-23
 
-**The honest new state.** *"You raised it, but didn't say what it means"* now
-has its own look — a half-filled gold bar, and a gold panel that calls it the
-cheapest win on the page. It used to be filed as *covered* and drawn in the
-same solid green as a correct answer, which is the one lie this product cannot
-tell.
+- **21:59+03:00 — Make connectivity status reflect the platform** (`e5e2a89`).
+  Probe the app's own health endpoint instead of trusting `navigator.onLine`,
+  so offline messaging describes whether Kiftet can actually be reached.
+- **19:41+03:00 — Stabilize production boot and health checks** (`304791d`,
+  `3c793f9`). Correct production-mode startup and common platform probe
+  handling for the combined service.
 
-**Two real bugs fixed on the way:**
+## 2026-09-22
 
-- The headline number was a **flat count of list lengths** sitting directly
-  above bars whose heights came from importance weights. The number, the
-  picture, and the score stored in the database could all disagree. On the
-  worked example that is 40% against a real 56%.
-- A concept at level 1 appears in **none** of the three lists — it is neither
-  covered nor missing — so the first draft of the new screen dropped it
-  entirely. Caught by a test that fails when the bug is put back.
+- **13:47+03:00 — Make the study loop bilingual and document the system by
+  concern** (`8007a93`). Complete EN/Amharic shell and generated-content
+  coverage, Ethiopic typography, and split the how-it-works reference into
+  focused files.
+- **10:21+03:00 — Keep the study loop usable through network loss** (`4d85727`,
+  `c6ee10e`). Add IndexedDB caches, a submission outbox with idempotent replay,
+  reconnect sync, and honest offline states for lessons and retest questions.
 
-**Landing page.** A new section shows what Kiftet actually sees: one Biology 12
-unit, all four levels, and the difference between a wrong belief and an
-unfinished one. The old hero card quietly demoed **Physics**, which the product
-does not claim to assess — it is Biology now.
+## 2026-09-21
 
-**First automated tests.** `bun test` runs in CI as a fourth gate, covering the
-two things we got wrong by hand: a level disappearing from the diagnosis, and a
-headline number drifting from the weighted score.
+- **20:43+03:00 — Verify the Biology 12 curriculum seed** (`953cae1`). Record
+  the six-unit MoE source and provenance; keep the seed auditable.
+- **19:53+03:00 — Start the aggregate misconception map** (`165d727`). Record
+  misconception hits during grading and expose only aggregates above the
+  k-anonymity floor.
+- **19:24+03:00 — Anchor study in the national syllabus** (`71dfc2e`). Add
+  syllabus browsing, chapter-to-unit mapping and unit coverage.
+- **18:45+03:00 — Settle the craft system** (`7794734`). Refine motion and
+  feedback colors across the study experience.
 
-> **Not yet true:** the study guide is still the old single micro-lesson.
-> Nothing orders study by the mastery map yet — the map is measured, stored and
-> displayed, but the next chapter is the one that acts on it.
+## 2026-09-20
 
-### Then: the guide, in the order you actually need it
+- **00:27+03:00 — Harden errors, timeouts and demo identity** (`21f0fb5`).
+  Add user-readable JSON failures, bounded Gemini/database/client waits and
+  persistent demo identity.
 
-**What changed.** The map now decides what you read and in what order. A
-**wrong belief comes first** — re-reading cannot fix the one thing you have
-actually got backwards. Then the ideas you raised but did not finish, which are
-the cheapest wins on the page. Then what you have not touched yet, by how much
-it matters. What you already have goes last, as a line of confirmation rather
-than something to read twice.
+## 2026-09-19
 
-**The economics.** The Gemini free tier is a budget for the whole *project*,
-not for one key: roughly 1,500 calls a day shared by every user. Generating a
-guide per session spends twelve of them to show one page. So a section is now
-written **once per chapter, per concept, per language** and stored. Measured on
-a real chapter: **first guide 4 AI calls, second guide 0.** The second student
-on a chapter costs nothing.
+- **21:38+03:00 — Add chunk ingestion, quotas and budget UI** (`6cc7c90`).
+  Bound textbook uploads and AI requests, introduce demo book limits and show
+  the current budget.
+- **21:07+03:00 — Build the first bring-your-own-textbook flow** (`fa699ce`).
+  Add an on-device PDF/text import and chapter review path; it initially
+  shipped behind a feature gate and was opened on September 30.
+- **13:31+03:00 — Add anonymous demo access** (`3e54c23`). Let visitors try the
+  study loop without creating an account.
+- **10:48+03:00 — Deploy the combined web/API service and finish the open-ring
+  brand** (`f1eeaece`, `0efb32e`).
 
-**"The right length" is now structure, not a vibe.** A section is `what` / `why`
-/ `recall` instead of one blob, and each is readable on its own — `recall` is
-the prompt a voice UI can hand straight to a microphone.
+## 2026-09-18
 
-**Every section points back at your book.** Each concept is anchored to a real
-sentence in your own textbook by computing where the words overlap. It is
-computed, never asked of a model, because a model asked for a page number
-invents one, and an invented page number is worse than none.
+- **20:41+03:00 — Move production storage to Neon Postgres** (`798c59b`).
+- **17:38+03:00 — Finish the mobile-first UI/UX and how-it-works docs**
+  (`da857c5`). Establish a documented design system and app-wide interaction
+  patterns.
+- **17:11+03:00 — Add real authentication and owner-scoped study data**
+  (`84ce298`). Require sessions on study routes and persist study progress
+  across reloads.
 
-**Two honesty bugs, both found by running the thing end to end:**
+## 2026-09-17
 
-- The anchor split on newlines. Textbook text is hard-wrapped, so "go to this
-  place" was landing on *"Inside, the cytoplasm is a watery fluid that holds
-  the"* — a mid-sentence fragment that is useless as both a link and a lesson.
-- The offline fallback copied the book's sentence into a guide that had already
-  claimed to be **Amharic**. The fallback cannot translate, so it must not
-  pretend to: the scaffolding is now in your language and your book is quoted
-  verbatim underneath, labelled as a quotation.
+- **20:25+03:00 — Ground the voice agent in the active chapter** (`74519b0`).
+  Make the how-it-works documentation the source of truth, with dataflow and
+  dependency inventory.
+- **18:47+03:00 — Audit the end-to-end study loop** (`25311d3`). Run a broad
+  product and failure-state review before polishing the core experience.
 
-**Then: a model that actually answers.** The default model was returning
-`503 high demand` on *every* call, which in production looks identical to a
-dead AI feature — the screen would quietly show the offline fallback, forever,
-and nothing in the logs would say the model was the reason. Probing the whole
-family found the split: every 3.x flash alias is capacity-limited, and the
-older `2.5-flash-lite` / `2.0-flash` / `1.5-flash` are **retired** — the API
-returns 404, so they were never options. `gemini-2.5-flash` answered everything.
+## 2026-09-16
 
-**A busy model is no longer a student without a guide.** The model list is now
-walked on a 429/503/timeout rather than retried in place, so a model that is
-merely *busy* is answered by a different one instead of by waiting out a budget
-the student does not have. Backoff is kept for the case that genuinely needs
-it — retrying the model we already know works.
+- **20:08+03:00 — Add themed visual rooms** (`8853e16`). Expand the interface's
+  theme system and add a user-facing theme switcher.
+- **16:50+03:00 — Complete the editorial UI/UX overhaul** (`ec9d3a6`). Replace
+  early scaffolding with a coherent brand, problem-first landing page, and
+  open-ring progress language.
 
-**The honest ceiling, measured rather than assumed.** The free tier allows
-**5 requests a minute**, and a cold ten-concept guide wants ten. So the first
-guide of a chapter now degrades *honestly*: **8 of 10 sections written, 2
-labelled as estimates** after the quota ran out, instead of all ten pretending.
-The cache is not a nicety here — it is what makes the second student cost zero
-calls, which is the only reason a five-a-minute budget can serve a class.
+## 2026-09-15
 
-**Then: a book that opens but cannot be read.** Testing against a real Ministry
-of Education textbook (Grade 10 Biology, 182 pages) found the worst bug so far,
-and it was the quiet kind. The book's fonts carry no Unicode map, so the
-extractor returns **control codes instead of letters** — and a viewer renders
-those pages perfectly, because it draws the glyph outlines. The pages *look*
-fine; the text is not there. The old check asked for 1,000 readable characters
-and this book **clears it with 30,444** — every one of them a running header
-repeated 182 times. Length cannot tell a book from a book-shaped shell.
+- **18:24+03:00 — Finish the first complete study loop** (`d1425b2`). Grade
+  finalized voice turns, add a calm typed escape hatch and keep read-aloud
+  vendor-independent.
+- **10:06+03:00 — Verify the four Gemini study endpoints live** (`7cd8674`).
+  Complete concept extraction, recall grading, lesson generation and retest
+  question generation with deterministic fallbacks.
 
-The check now measures **density instead**: a running header is about six
-words, a page of prose is 150–400. Measured across real files, the unreadable
-textbook scores a median of **27 words per page** and every genuinely readable
-PDF scores **58 or more**, so the threshold sits at 40 — in the gap, not near
-either edge. A book that trips it is refused with an explanation and pointed at
-pasting text, in both languages. A chapter that is nothing but a heading is
-dropped rather than imported. The failure this prevents is the one the product
-cannot make: a confident, wrong checklist built from a page nobody read.
+## 2026-09-14
 
-**Textbook import is open.** The door above was deliberate — a book we cannot
-read should not be studied — but the students who own those books were left with
-nothing at all. So the broken font is handled instead of refused. The page is
-drawn to a canvas and recognized by Tesseract compiled to WASM, in the browser:
-the book still never leaves the device, and no vendor receives it. It is never
-read in full, because 182 pages at ~7s is not a wait worth asking anyone for.
-The chapters are found in about **4s** from the readable 10% of the text — unit
-headers and captions survive even when the body does not — and each chapter's
-body is recognized only as it is imported, with every page cached by book and
-page so a book is read once. Measured on the Grade 10 Biology textbook in
-Chrome: six units at the right page boundaries in 4.3s, then ~7s/page at 90%
-confidence returning real prose.
-
-Recognised chapters are now split before they are sent, on the same sentence
-boundary the readable path uses, because a 59-page unit lands as one string well
-past both the 200k character cap and the 256kb request body the server accepts.
-
-**Every visitor can see their budget, and when it refills.** The pill was
-demo-only, which left the only people who could actually run out — signed-in
-students — with no screen to tell them. All of them now get it, with the wait
-counting down in their own clock, and a `429` names the number of seconds
-instead of saying "a moment". Textbooks today is shown as used-of-limit, or as
-"no daily limit" for a signed-in account, because a number that does not apply
-is worse than none. The daily cap resets at server-local midnight and is sent as
-an ISO timestamp so the hour quoted is the student's, not the server's.
-
-**The guide endpoint is charged for its own calls.** Opening a cold chapter
-generated a section per uncached concept — up to ten provider requests from one
-click, unbudgeted, against a shared per-project free tier. Each is now charged.
-When the minute runs out the remaining concepts fall back to the lexical section
-rather than failing the request, because a chapter of fallbacks beats a 429 and
-nothing at all; and those fallbacks are not written to the cache, so a busy
-minute cannot poison what a later visitor reads.
-
-## 2026-09-27 — Strategy reframe, and official period allocations
-
-**What changed.** Reframed the product around one rule: *content is delivery,
-diagnosis is the product.* A free chatbot can write a study guide in seconds, so
-the guide is how we deliver an answer, not what we are. Added
-[`docs/SYLLABUS.md`](docs/SYLLABUS.md) as the argument for the syllabus layer
-being the real defensible asset, and drew an explicit **subject boundary**:
-we assess conceptual subjects (Biology, History, Geography, Civics, languages)
-and do **not** yet claim computational ones (Mathematics, Physics, Chemistry),
-because spoken explanatory recall is the wrong instrument for calculation and a
-confident wrong grade is worse than an honest gap.
-
-**Reliability fix.** Our per-user AI allowance was 3× the Gemini free tier's
-per-project ceiling, manufacturing 429s, and every one of them fell into a bare
-`catch { return fallback(); }` with no log and no counter — so a rate-limited
-student was indistinguishable from a successful one. Now: the allowance sits
-under the provider ceiling, `429`/`5xx` retry with jittered backoff inside a
-single wall-clock budget, `400`/`404` fail fast, and every fallback logs and
-counts (`GET /api/ai/telemetry`).
-
-**Schema.** Migration `0004` adds `syllabus_unit.periods` + `periods_source` for
-the official MoE teaching-period allocation, surfaced on `/syllabus`.
-
-> **Not yet true:** the Biology 12 period figures are **not** in the database.
-> All six units are deliberately `NULL` until someone transcribes the official
-> MoE syllabus with a page reference. The mechanism ships; the data does not.
-> The smart study guide (Phase 11) is **designed, not built**.
-
-## 2026-09-22 — Offline-first loop and Amharic everywhere
-
-**Offline.** The study loop now survives a dead connection: an IndexedDB
-submission outbox replays with the original `attemptId` so the existing
-idempotency means a retry never double-grades, checklists and generated
-lessons/questions are cached, and an honest three-state banner distinguishes
-*offline* / *saved, will grade when you're back* / *syncing*. A queued item never
-shows a score it doesn't have. Grading itself stays online.
-
-**Amharic.** Bilingual EN/አማርኛ across every surface, with a pre-hydration
-`lang` attribute, Ethiopic type verified (Noto Sans Ethiopic 400–700), and
-**generated content following the language preference** — lessons, retest
-questions and diagnoses are written in Ge'ez, with concept names kept verbatim
-as data rather than translated. The offline fallback content is Amharic too, and
-cached reads honestly flag which language they hold.
-
-## 2026-09-21 — Syllabus anchoring and the first misconception map
-
-**Syllabus.** The `syllabus` / `syllabus_unit` tables, seeded with the **verified
-six-unit Biology Grade 12 structure** from the MoE New-Curriculum textbook
-(2023, ISBN 978-99990-0-011-6), provenance recorded in `sourceNote`. Students
-can browse by syllabus unit and see how much of each unit is covered, and
-chapters can be mapped to units.
-
-**Misconception map.** Recall grading records misconception hits, and
-`GET /misconceptions` returns aggregate counts with a **k-anonymity floor of 5**,
-shown as a panel on the dashboard. Privacy by construction: aggregate only, no
-raw transcripts or voice.
-
-> **Not yet true:** one subject/grade (Biology 12), and the seed is
-> "carefully transcribed," **not** teacher-signed-off — that pass is still on the
-> go-live checklist. The misconception map needs real student volume to mean
-> anything.
-
-## 2026-09-19 — Bring your own textbook, and demo mode
-
-Students can upload **their own** PDF or paste text; the device reads the table
-of contents and slices the book into chapters on-device, each flowing into the
-existing ingest pipeline. Anonymous visitors can try the loop as a **demo**
-without signing up, IP-throttled and rate-limited.
-
-> **Not yet true:** import is **gated behind `TEXTBOOK_IMPORT_ENABLED`** and is
-> not open to students yet — the Phase 6 go-live checklist (DB-backed quotas,
-> chunk idempotency, cookie hardening) has to land first.
-
-## 2026-09-18 — Craft, accessibility, and honest failure states
-
-A full UI/UX pass: the open-ring mark (which closes in gold as gaps close),
-ink-settling motion, fixed Sage/Rust feedback colours instead of theme-following,
-and a rebuild of the control layer. Voice capture gathers **every** user
-transcript chunk, partial and final, because a long recall streams in pieces and
-filtering to "final" alone would drop most of what the student actually said.
-A typed recall surface exists as an alternative to speaking.
-
-## 2026-09-15 — The AI loop, live-verified
-
-The real Gemini loop behind a deterministic fallback chain: concept and
-misconception extraction from a chapter, grading spoken recall against that
-checklist, a targeted lesson for the gaps, and retest questions on the same
-concepts. All four endpoints live-verified against `gemini-3.6-flash`. The
-product **works with or without a key** — without one it degrades to
-deterministic heuristics rather than failing.
-
-## 2026-09-14 — Foundation and the voice spine
-
-Turborepo monorepo (Bun + React Router + Postgres), the domain model, the API
-shell, and the AI seam. The voice spine landed first and stayed load-bearing:
-Voxide for capture, native `speechSynthesis` for read-back, a voice-state ring,
-and a `/voice-test` route. The seam rule from day one: **voice is the
-interface, Gemini + text are load-bearing** — so the loop never bets on a
-vendor's speech layer being correct.
-**Then: that book, read anyway — on the device, from the page image.** The
-check above refuses a book whose words will not come out. For most real files
-that is still the right answer, but for *this* class of file it refused the
-books students actually own, so the refusal now has a way through: the page is
-drawn to a canvas and recognized by Tesseract running as WebAssembly **in the
-browser**. The textbook still never leaves the device — only the page bitmap
-is ever in memory, and nothing is uploaded.
-
-Recognizing all 182 pages up front measured **~16 minutes**, which is not
-something to ask a student to sit through, so it is never done. The trick is
-that the unreadable book is not unreadable *everywhere*: **90% of its
-characters** sit in the broken font, but the remaining 10% — unit headers,
-figure captions, "Review Questions" — extracts cleanly, and that is enough to
-find where each unit starts. The chapter list therefore appears in about
-**4 seconds**, and each chapter's body is recognized **only when that chapter
-is imported**. One chapter is ~20–35 pages.
-
-Measured on the Grade 10 Biology textbook in Chrome: chapter list in 4.3 s,
-OCR at ~7 s/page, 90% confidence, returning real prose ("Learning competencies
-2.1. Characteristics of plants…"). Every page's text is cached in IndexedDB by
-book and page, so a book is read **once, ever** — a retry, a re-import or a
-second visit reads the text back instead of re-recognizing.
-
-Two things this had to get right that are not obvious:
-
-- **A header that repeats is not a chapter per page.** The book prints its unit
-  header on every page, and on some pages writes it *five times in a row* in
-  the same font. Cutting on each occurrence yields 175 one-page chunks; taken
-  literally, the name becomes "Unit 2: PlantsUnit 2: PlantsUnit 2: Plants".
-  Headings are now deduplicated and the repetition collapsed, giving 6 units at
-  the right page boundaries.
-- **The OCR engine is not part of the install.** Three WASM cores (~12 MB) ship
-  but are excluded from the service worker's precache, because on the low-end
-  phones this app is built for that is the difference between installing and
-  not. They are fetched the first time a book needs reading and cached from
-  then on, so the *second* book works with no network at all.
-
-> **Not yet true:** import is still behind `TEXTBOOK_IMPORT_ENABLED`, so this
-> is not reachable from the UI yet. **Amharic is unverified** — no Amharic-dense
-> PDF was available to measure against, so every Amharic OCR figure quoted so
-> far is untested, and the Amharic model is only selected, never proven. Pages
-> that open with a decorative graphic can still return a line of noise ahead of
-> the real text, which the model would have to read around.
+- **18:29+03:00 — Build the first AI study loop** (`741499a`). Connect
+  extraction, grading, targeted lessons and retests; fix ingest so extracted
+  concepts are actually stored.
+- **18:24+03:00 — Land the voice spine** (`45f302c`). Add the voice interface,
+  browser adapter, state ring and dedicated voice test route.
+- **18:00+03:00 — Create the working application skeleton** (`0c7e9e8`).
+  Establish the domain model, SQLite-backed API shell, AI seam and initial
+  project guides.
+- **11:49+03:00 — Start the repository** (`9b4134b`). Set up the initial
+  TypeScript monorepo and technical stack.

@@ -189,7 +189,11 @@ export default function Textbooks() {
       // server accepts in one request (200k of text, 256kb of body). Split on
       // the same boundary the readable path uses, so a long unit arrives as
       // "(part 1)", "(part 2)" instead of being rejected outright.
-      for (const part of withPartSplits(chapter.title, rawText)) {
+      for (const part of withPartSplits(
+        chapter.title,
+        rawText,
+        chapter.topics,
+      )) {
         await api("/chapters/ingest", {
           method: "POST",
           body: JSON.stringify({
@@ -198,6 +202,7 @@ export default function Textbooks() {
             language,
             title: part.title,
             rawText: part.rawText,
+            topics: part.topics,
           }),
         });
       }
@@ -591,6 +596,38 @@ function AddTextbook({
                       aria-label={`Chunk ${i + 1} title`}
                     />
                   )}
+                  {chapter.topics?.length ? (
+                    // Showing the topics is the difference between "it read six
+                    // pages and guessed" and "it read the contents". Indented
+                    // by numbering depth, so 1.1 sits under its unit and 1.1.1
+                    // under 1.1, the way the book sets them.
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-muted-foreground text-xs hover:text-foreground">
+                        {chapter.topics.length}{" "}
+                        {chapter.topics.length === 1 ? "topic" : "topics"}
+                      </summary>
+                      <ul className="mt-1.5 space-y-0.5 border-border/60 border-l pl-3">
+                        {chapter.topics.map((topic) => {
+                          const depth =
+                            /^([\d.]+)/
+                              .exec(topic)?.[1]
+                              .split(".")
+                              .filter(Boolean).length ?? 1;
+                          return (
+                            <li
+                              key={topic}
+                              className="text-muted-foreground text-xs leading-snug"
+                              style={{
+                                paddingInlineStart: `${(depth - 1) * 12}px`,
+                              }}
+                            >
+                              {topic}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                  ) : null}
                 </div>
 
                 {stage === "done" || (!isNew && stage === "skip") ? (

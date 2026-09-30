@@ -11,6 +11,7 @@ import {
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
+import { mergeConcepts } from "../ai/concepts";
 import {
   ai,
   aiTelemetrySnapshot,
@@ -270,6 +271,20 @@ const ingestSchema = z.object({
     .string({ message: "This chunk has no text — the section looks empty." })
     .min(1, "This chunk has no text — the section looks empty.")
     .max(200_000, "That chunk is too large. Pick a smaller section."),
+  /**
+   * The chapter's own topics, in the order the book teaches them, as printed:
+   * "2.3.1 The internal structure of a leaf".
+   *
+   * When the import could read a contents page these arrive with the chapter
+   * and are used verbatim. A model re-inferring a table of contents from prose
+   * gets the *ideas* right and the *structure* wrong — it will happily return
+   * twelve unrelated bullets where the book had three nested sections, and it
+   * will reorder them. The book already knows.
+   */
+  topics: z
+    .array(z.string().trim().min(1).max(300))
+    .max(200, "Too many topics in one chapter.")
+    .optional(),
 });
 
 async function textbookIdFor(
@@ -327,7 +342,8 @@ router.post("/chapters/ingest", async (req, res) => {
   const parsed = ingestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  const { textbookTitle, subject, language, title, rawText } = parsed.data;
+  const { textbookTitle, subject, language, title, rawText, topics } =
+    parsed.data;
   const owner = ownerId(req);
   const demo = isDemo(req);
 
@@ -375,11 +391,16 @@ router.post("/chapters/ingest", async (req, res) => {
   });
 
   const extracted = await ai.extractConcepts(rawText);
-  if (extracted.length) {
+  // A chapter read from a contents page carries the author's own structure;
+  // the model is still asked, because it finds misconceptions and detail the
+  // contents left out, but it no longer decides what the chapter contains or
+  // what order it goes in.
+  const concepts = mergeConcepts(topics, extracted);
+  if (concepts.length) {
     await db()
       .insert(conceptNode)
       .values(
-        extracted.map((c, i) => ({
+        concepts.map((c, i) => ({
           id: crypto.randomUUID(),
           chapterId,
           conceptText: c.conceptText,
@@ -395,7 +416,9 @@ router.post("/chapters/ingest", async (req, res) => {
     {
       textbookId,
       chapterId,
-      conceptsExtracted: extracted.length,
+      conceptsExtracted: concepts.length,
+      // Worth showing: it tells the student the checklist came from the book.
+      seededFromContents: (topics?.length ?? 0) > 0,
       reused: false,
     },
     201,

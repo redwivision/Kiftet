@@ -1,8 +1,8 @@
 # Testing Guide — Kiftet
 
 Manual coverage for a feature branch. The automated half of this is
-`bun run test` (16 cases; see the end of this file). What follows is the part
-that still needs a human with a real voice and a real textbook.
+`bun test` (see the package scripts and CI for the current suite). What follows
+is the part that still needs a human with a real voice and a real textbook.
 
 - Build one phase at a time. Never move to the next phase until the current one is
   tested and fixed.
@@ -511,19 +511,26 @@ half-finished stream drive what we grade or read back.
 1. Down a real PDF with a text layer (any textbook excerpt), or just copy-paste
    chapter text. Confirm:
    - a PDF **over 15 MB** is rejected with a clear message (no extraction runs);
-   - a scanned/image-only PDF (no embedded text) tells you to use paste.
+   - a scanned/image-only PDF is recognized locally when it has readable
+     chapter headings or a contents page; the original PDF is never uploaded.
 2. In the app: **Add your textbook** → name it, pick subject + language, attach
    the PDF (or choose "paste text"). The PDF is read **on the device** — the
    file is never uploaded.
-3. **TOC slicing:** chunk boundaries come from the PDF's own outline/bookmarks
-   (`getOutline()`). Chunk titles show the full path (e.g. `Chapter 2 · 2.3
-   Reflection`). For a pasted/text book, chunk starts fall back to heading
-   detection (`Unit 1`, `ምዕራፍ 2`, …), then even page runs.
+3. **Contents and boundaries:** readable PDFs use their outline/bookmarks and
+   extracted headings. For scanned PDFs, inspect the proposed unit list and
+   expandable numbered topics; printed-page alignment is only used when it
+   agrees with detected chapter starts. If OCR/alignment cannot be trusted,
+   the importer falls back to detected headings. Pasted text uses heading
+   detection (`Unit 1`, `ምዕራፍ 2`, …), then even text chunks.
+   The repository fixture for the real Grade 10 Biology contents is
+   `apps/web/src/lib/toc.fixture.ts`; the parser tests assert six units and all
+   53 numbered topics, including wrapped titles and OCR-split numbering.
 4. Review and edit chunk titles → in and out of the flow and back in
    **resumes** where it stopped (already-done chunks are skipped with
    `reused: true`, never re-ingested, never re-spending AI).
-5. Each chunk is POSTed one at a time to `/api/chapters/ingest`; a fresh
-   concept checklist is built per chunk. Watch for per-chunk progress, and a
+5. Each chunk is POSTed one at a time to `/api/chapters/ingest`; TOC topics
+   seed the checklist in their original order, and the model can add concepts
+   and misconceptions from the chapter text. Watch for per-chunk progress, and a
    clear failure/retry on any single chunk (weak-wifi friendly: small text
    payloads, no giant upload).
 6. Ingested chunks show up in the dashboard like the seeded chapters — start a
@@ -898,7 +905,7 @@ languages; nothing shown is a guess without saying so.
 
 ### How I tested
 
-Automated (`bun run test`, 16 cases total):
+Automated coverage (`bun test`; the suite grows with the codebase):
 
 - **`apps/server/src/ai/guide.test.ts`** — the study order and the anchor.
   - Ordering is `L2 → L1 → L0 → L3`: a wrong belief first, then the cheapest

@@ -2,7 +2,8 @@
 
 **Tagline:** Close the gap.
 **Status:** v2 — positioning, the defensibility ladder, subject boundaries, and
-go-to-market. Phase 11 (the smart study guide) is the current build.
+go-to-market. Phase 11 has shipped per-concept mastery and the ordered guide;
+broader scope selection and optional pre/post retesting remain.
 **Read with:** [`SYLLABUS.md`](SYLLABUS.md) (the core asset, in depth),
 [`PRD.md`](PRD.md) (the product), [`DESIGN_BRIEF.md`](DESIGN_BRIEF.md) (how it
 should feel), the [roadmap](howItWorks/roadmap.md) (where we are).
