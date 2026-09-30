@@ -59,6 +59,38 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          // The on-device OCR engine. Three WASM cores ship — SIMD, relaxed
+          // SIMD and a baseline for browsers with neither — at ~3.9 MB each.
+          // Precaching them would add ~12 MB to every install, which on the
+          // low-end phones this app is built for is the difference between
+          // installing and not. They are excluded from precache below and
+          // cached on first use here, so the *second* book a student reads
+          // works with no network at all.
+          {
+            urlPattern: ({ url, request }) =>
+              request.mode === "same-origin" &&
+              /tesseract-core-.*\.js$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "kiftet-ocr-core",
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // The OCR language model itself. Tesseract also keeps its own copy in
+          // IndexedDB, but a service-worker entry makes the offline path
+          // deterministic instead of depending on that cache being writable.
+          // `fast` is ~1 MB gzipped for English. A model file is not the
+          // student's textbook, so nothing they own is ever sent anywhere.
+          {
+            urlPattern: /^https:\/\/tessdata\.projectnaptha\.com\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "kiftet-ocr-lang",
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
         // `woff2` is in the list on purpose even though nothing self-hosts a
         // font today. The runtime rules above only cover the *remote* Google
@@ -66,6 +98,9 @@ export default defineConfig({
         // only thing that would precache it, and a missing extension fails
         // silently — the app installs, then renders in system-ui offline.
         globPatterns: ["**/*.{js,css,html,png,svg,ico,woff,woff2}"],
+        // Paired with the `kiftet-ocr-core` runtime rule above: fetched when a
+        // book needs OCR, cached from then on, never part of the install.
+        globIgnores: ["**/tesseract-core-*.js"],
       },
       manifest: {
         name: "Kiftet — Close the gap",

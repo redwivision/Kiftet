@@ -4,6 +4,7 @@ import {
   type ImportSource,
   PdfUnreadableError,
   planChunks,
+  segmentsForOcrBook,
   stripUndecodableGlyphs,
 } from "./textbook";
 
@@ -111,4 +112,69 @@ test("pasted text still chunks by heading", async () => {
     "Unit 1 Introduction",
     "Unit 2 Cell Structure",
   ]);
+});
+
+// ── Finding chapters in a book whose body text cannot be extracted ──
+//
+// These mirror the measured structure of the Grade 10 Biology textbook, where
+// 90% of characters sit in a font with no Unicode map and the readable 10% is
+// unit headers plus captions. The chapter list has to come from that 10%.
+
+test("a running header starts one chapter, not one per page", () => {
+  // The real book prints "Unit One: Sub-fields of Biology" on all 15 pages of
+  // Unit One. Cutting on every occurrence gives 175 one-page chunks.
+  const pages = [
+    "Grade 10 Biology\n47",
+    ...Array.from(
+      { length: 15 },
+      () => "Grade 10 Biology\nUnit One: Sub-fields of Biology\n48",
+    ),
+    ...Array.from(
+      { length: 12 },
+      () => "Grade 10 Biology\nUnit Two: Plants\n63",
+    ),
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(2);
+  expect(segments[0].title).toBe("Unit One: Sub-fields of Biology");
+  expect(segments[0].start).toBe(1);
+  expect(segments[0].end).toBe(16);
+  expect(segments[1].title).toBe("Unit Two: Plants");
+});
+
+test("a one-page stub is folded into the chapter it introduces", () => {
+  // Pages 7 and 23 of the real book carry a truncated variant of the unit name
+  // ("Unit 1: S") immediately before the full one. Cutting on both leaves a
+  // chunk that is only a title page, which is not study material.
+  const pages = [
+    "Grade 10 Biology\n47",
+    "Table of Contents\nUnit 1: S",
+    "Grade 10 Biology\nUnit One: Sub-fields of Biology\n48",
+    "Grade 10 Biology\nUnit One: Sub-fields of Biology\n49",
+    "Grade 10 Biology\nUnit One: Sub-fields of Biology\n50",
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(1);
+  // The longer of the two names is the real one.
+  expect(segments[0].title).toBe("Unit One: Sub-fields of Biology");
+  expect(segments[0].start).toBe(1);
+  expect(segments[0].end).toBe(5);
+});
+
+test("the cover and contents before the first heading are not a chapter", () => {
+  const pages = [
+    "Grade 10 Biology\n1",
+    "Grade 10 Biology\n2",
+    "Grade 10 Biology\nUnit One: Sub-fields of Biology\n3",
+    "Grade 10 Biology\nUnit One: Sub-fields of Biology\n4",
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(1);
+  expect(segments[0].start).toBe(2);
+});
+
+test("a scanned book with no headings at all yields nothing to segment", () => {
+  // Nothing readable means nothing to cut on — the caller falls back to even
+  // page runs rather than inventing chapters.
+  expect(segmentsForOcrBook(Array.from({ length: 30 }, () => ""))).toEqual([]);
 });
