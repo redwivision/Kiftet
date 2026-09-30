@@ -6,6 +6,7 @@ import {
   planChunks,
   segmentsForOcrBook,
   stripUndecodableGlyphs,
+  withPartSplits,
 } from "./textbook";
 
 // A page of prose, close to what the extractor pulls off a real textbook.
@@ -177,4 +178,46 @@ test("a scanned book with no headings at all yields nothing to segment", () => {
   // Nothing readable means nothing to cut on — the caller falls back to even
   // page runs rather than inventing chapters.
   expect(segmentsForOcrBook(Array.from({ length: 30 }, () => ""))).toEqual([]);
+});
+
+// A recognised chapter arrives as one string that nothing has bounded yet — a
+// 59-page unit of dense biology is comfortably past both the 200k character cap
+// and the 256kb request body the server accepts. These are the tests that keep
+// the import from dying on the biggest chapters in a real book.
+test("a chapter under the cap is one part, titled as the chapter", () => {
+  const parts = withPartSplits("Unit Two: Plants", "short enough");
+  expect(parts).toHaveLength(1);
+  expect(parts[0].title).toBe("Unit Two: Plants");
+  expect(parts[0].rawText).toBe("short enough");
+});
+
+test("an oversized chapter splits into numbered parts", () => {
+  const big = "word ".repeat(60_000); // ~300k chars, over the 190k cap
+  const parts = withPartSplits("Unit Five: Human Biology", big);
+  expect(parts.length).toBeGreaterThan(1);
+  for (const [i, part] of parts.entries()) {
+    expect(part.title).toBe(`Unit Five: Human Biology (part ${i + 1})`);
+    expect(part.rawText.length).toBeLessThanOrEqual(190_000);
+  }
+});
+
+test("split parts keep every character, so no page is silently dropped", () => {
+  const big = "word ".repeat(60_000);
+  const parts = withPartSplits("Unit", big);
+  const rejoined = parts
+    .map((p) => p.rawText)
+    .join(" ")
+    .replace(/\s+/g, " ");
+  expect(rejoined.split(" ").filter(Boolean)).toHaveLength(
+    big.split(" ").filter(Boolean).length,
+  );
+});
+
+test("the split lands on a sentence boundary when one is near enough", () => {
+  // A sentence end well past the 70% mark is preferred to a hard cut.
+  const head = "x".repeat(140_000);
+  const big = `${head}. ${"y".repeat(200_000)}`;
+  const parts = withPartSplits("Unit", big);
+  expect(parts.length).toBeGreaterThan(1);
+  expect(parts[0].rawText.endsWith(".")).toBe(true);
 });

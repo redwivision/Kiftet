@@ -134,6 +134,7 @@ export type AiService = {
     conceptText: string,
     chapterText: string,
     language?: ContentLanguage,
+    options?: { skipAi?: boolean },
   ): Promise<GuideSection>;
   generateRetestQuestions(
     gaps: GapAnalysis,
@@ -1067,12 +1068,19 @@ export const ai: AiService = {
     conceptText: string,
     chapterText: string,
     language: ContentLanguage = "en",
+    // Set when the caller has already spent this student's request budget on
+    // earlier concepts in the same response. The lexical fallback still comes
+    // back — a student asking for a chapter should get a chapter — but no
+    // provider call is made, so a cold guide cannot quietly spend ten requests
+    // behind one click.
+    options: { skipAi?: boolean } = {},
   ): Promise<GuideSection> {
     // The anchor is computed, not generated: a model asked for a location in
     // the text invents one, and an invented page number is worse than none.
     const anchor = sourceAnchor(conceptText, chapterText);
     const fallback = (): GuideSection =>
       fallbackSection(conceptText, chapterText, language);
+    if (options.skipAi) return fallback();
     if (!isAiAvailable()) return fallback();
     try {
       const raw = await askJson(

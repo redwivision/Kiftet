@@ -21,6 +21,7 @@ import {
   type OcrChunkReader,
   type PdfUnreadableReason,
   planImport,
+  withPartSplits,
 } from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
 
@@ -58,10 +59,11 @@ type ImportStep = "form" | "planning" | "review" | "importing";
 // Progress of the on-device reader, for the one chapter being read.
 type OcrProgressView = { done: number; total: number } | null;
 
-// UI-only push: the import flow is fully visible (device-side splitting
-// preview included) but the actual ingest + AI extraction stays off until the
-// scale/limits story is settled. Flip to true when we open the doors.
-const TEXTBOOK_IMPORT_ENABLED = false;
+// The import flow is visible and real: chapters are found on-device, OCR runs
+// on-device, and each chapter is ingested under the same per-minute request
+// budget and daily book cap as everything else. Open. Reverting this to false
+// hides the flow without removing any code.
+const TEXTBOOK_IMPORT_ENABLED = true;
 
 export default function Textbooks() {
   const navigate = useNavigate();
@@ -182,16 +184,23 @@ export default function Textbooks() {
       prev.map((s) => (s.key === key ? { ...s, state: "ingesting" } : s)),
     );
     try {
-      await api("/chapters/ingest", {
-        method: "POST",
-        body: JSON.stringify({
-          textbookTitle: bookTitle.trim(),
-          subject: subject.trim(),
-          language,
-          title: chapter.title,
-          rawText,
-        }),
-      });
+      // A recognised chapter is no longer bounded by the readable headings that
+      // carved it up: 59 OCR'd pages of dense biology runs well past what the
+      // server accepts in one request (200k of text, 256kb of body). Split on
+      // the same boundary the readable path uses, so a long unit arrives as
+      // "(part 1)", "(part 2)" instead of being rejected outright.
+      for (const part of withPartSplits(chapter.title, rawText)) {
+        await api("/chapters/ingest", {
+          method: "POST",
+          body: JSON.stringify({
+            textbookTitle: bookTitle.trim(),
+            subject: subject.trim(),
+            language,
+            title: part.title,
+            rawText: part.rawText,
+          }),
+        });
+      }
       setStages((prev) =>
         prev.map((s) => (s.key === key ? { ...s, state: "done" } : s)),
       );
