@@ -148,6 +148,40 @@ pasting text, in both languages. A chapter that is nothing but a heading is
 dropped rather than imported. The failure this prevents is the one the product
 cannot make: a confident, wrong checklist built from a page nobody read.
 
+**Textbook import is open.** The door above was deliberate — a book we cannot
+read should not be studied — but the students who own those books were left with
+nothing at all. So the broken font is handled instead of refused. The page is
+drawn to a canvas and recognized by Tesseract compiled to WASM, in the browser:
+the book still never leaves the device, and no vendor receives it. It is never
+read in full, because 182 pages at ~7s is not a wait worth asking anyone for.
+The chapters are found in about **4s** from the readable 10% of the text — unit
+headers and captions survive even when the body does not — and each chapter's
+body is recognized only as it is imported, with every page cached by book and
+page so a book is read once. Measured on the Grade 10 Biology textbook in
+Chrome: six units at the right page boundaries in 4.3s, then ~7s/page at 90%
+confidence returning real prose.
+
+Recognised chapters are now split before they are sent, on the same sentence
+boundary the readable path uses, because a 59-page unit lands as one string well
+past both the 200k character cap and the 256kb request body the server accepts.
+
+**Every visitor can see their budget, and when it refills.** The pill was
+demo-only, which left the only people who could actually run out — signed-in
+students — with no screen to tell them. All of them now get it, with the wait
+counting down in their own clock, and a `429` names the number of seconds
+instead of saying "a moment". Textbooks today is shown as used-of-limit, or as
+"no daily limit" for a signed-in account, because a number that does not apply
+is worse than none. The daily cap resets at server-local midnight and is sent as
+an ISO timestamp so the hour quoted is the student's, not the server's.
+
+**The guide endpoint is charged for its own calls.** Opening a cold chapter
+generated a section per uncached concept — up to ten provider requests from one
+click, unbudgeted, against a shared per-project free tier. Each is now charged.
+When the minute runs out the remaining concepts fall back to the lexical section
+rather than failing the request, because a chapter of fallbacks beats a 429 and
+nothing at all; and those fallbacks are not written to the cache, so a busy
+minute cannot poison what a later visitor reads.
+
 ## 2026-09-27 — Strategy reframe, and official period allocations
 
 **What changed.** Reframed the product around one rule: *content is delivery,

@@ -500,10 +500,11 @@ half-finished stream drive what we grade or read back.
 
 ## Phase 6 — Your own textbook (import → study)
 
-> **Status:** UI shipped, import **gated** (preview). The device-side chunk
-> planning, the 15 MB file cap, and the demo quotas (5 AI calls/min,
-> 3 textbooks/day) are all live; the actual ingest + AI extraction is disabled
-> behind `TEXTBOOK_IMPORT_ENABLED` until the go-live checklist in §13 lands.
+> **Status:** **open.** Import, device-side OCR, and AI extraction are all
+> live. The 15 MB file cap applies, and every caller is charged the same
+> per-minute budget (demo 3, signed-in 8) plus the demo 3-textbooks/day cap.
+> Set `TEXTBOOK_IMPORT_ENABLED = false` in `apps/web/src/routes/textbooks.tsx`
+> to hide the flow without removing any code.
 
 ### How to test
 
@@ -528,11 +529,19 @@ half-finished stream drive what we grade or read back.
 6. Ingested chunks show up in the dashboard like the seeded chapters — start a
    study session on your own chunk and run recall → gaps → lesson → retest
    against **its** checklist.
-7. **Demo quotas:** `GET /api/ai/budget` returns the current-minute AI budget
-   and the daily book cap; the dashboard pill shows it. Firing more than
-   5 AI calls within a minute returns `429` with a friendly message; a demo can
-   only create 3 new textbooks per day (re-ingesting an existing book is free).
-   Signed-in users get the large limits.
+7. **Quotas:** `GET /api/ai/budget` returns the current-minute AI budget
+   (`remaining`, `resetAt`, `retryAfterSeconds`) and the daily book usage
+   (`books.used`, `books.limit`, `books.resetAt`). The dashboard pill shows
+   both to **every** visitor, signed-in or demo, and counts the wait down when
+   out. Firing more than 3 calls (demo) / 8 (signed-in) within a minute returns
+   `429` with a `Retry-After` header. A demo can create 3 new textbooks per day;
+   re-ingesting an existing book is free, so one six-chapter book costs one.
+   Signed-in users are uncapped and the pill says "no daily limit" rather than
+   a number that does not apply.
+8. **Guide budget:** opening a cold chapter generates a section per uncached
+   concept (up to ten provider calls). The response carries `throttled` and
+   `retryAfterSeconds`; the remaining concepts render as estimated sections
+   rather than failing the request, and those fallbacks are not cached.
 
 ### How you can test
 

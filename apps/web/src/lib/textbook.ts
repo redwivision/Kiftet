@@ -93,7 +93,15 @@ function uniqueTitles(chunks: ImportChunk[]): ImportChunk[] {
   });
 }
 
-function withPartSplits(title: string, full: string): ImportChunk[] {
+/**
+ * Split one chapter's text into parts the server will accept.
+ *
+ * Exported because OCR produces text no chunker has bounded yet: a recognised
+ * 59-page unit lands as one string, and the ingest endpoint caps a chapter at
+ * 200k characters inside a 256kb body. Splitting here, at the same sentence
+ * boundary, means the split is invisible in the library — just "(part 2)".
+ */
+export function withPartSplits(title: string, full: string): ImportChunk[] {
   const out: ImportChunk[] = [];
   let rest = full;
   let part = 1;
