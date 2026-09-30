@@ -17,6 +17,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Recall ("what do you remember?") | [dataflow §5.4](dataflow.md) | `apps/web/src/routes/study.$sessionId.tsx` (RecallPhase) | `POST /sessions/:id/recall` |
 | Diagnose (gap chips + bars) | [dataflow §5.5](dataflow.md) | `study.$sessionId.tsx` (DiagnosePhase) | — |
 | Microlesson + read-aloud | [dataflow §5.6](dataflow.md) | `study.$sessionId.tsx` (LessonPhase), `lib/voice.ts` | `POST /sessions/:id/microlesson` |
+| Ordered guide — cached per concept/language, source anchored | [dataflow §5.6](dataflow.md) | `apps/web/src/components/guide-view.tsx`, `apps/server/src/routes/study.ts`, `apps/server/src/ai/gemini.ts`, `packages/db/src/schema/study.ts` | `GET /chapters/:id/guide` |
 | Retest (questions + per-focus grading) | [dataflow §5.7](dataflow.md) | `study.$sessionId.tsx` (RetestPhase) | `POST /sessions/:id/retest`, `POST /sessions/:id/retest/answer` |
 | Retest echoes the student's recall | [dataflow §5.7](dataflow.md) | `apps/server/src/routes/study.ts` (reads latest recall attempt), `apps/server/src/ai/gemini.ts` (`retestUserPrompt`) | (server-side, part of `/retest`) |
 | Result (before/after/delta) | [dataflow §5.8](dataflow.md) | `study.$sessionId.tsx` (ResultPhase) | `GET /sessions/:id/result` |
@@ -31,8 +32,8 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Unified JSON error handling + process guards | [security §10.2](security.md) | `apps/server/src/error-handler.ts`, `apps/server/src/index.ts` (error middleware, SIGTERM drain) | — |
 | Idempotent submissions | [security §10.4](security.md) | `apps/server/src/routes/study.ts` (`insertAttemptOnce`) | — |
 | Retest resume on reload | [database §5.13](database.md) | `study.$sessionId.tsx`, `study-provider.tsx`, server `/sessions/:id` | — |
-| Chunk ingest — putting content in (TOC-sliced) | [dataflow §5.2](dataflow.md) | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/web/src/lib/textbook.ts` | `POST /chapters/ingest` |
-| Your own textbook (import → library, gated) | [dataflow §5.2](dataflow.md), [roadmap phase 6](roadmap.md) | `apps/web/src/routes/textbooks.tsx`, `apps/web/src/lib/textbook.ts` | `GET /textbooks`, `POST /chapters/ingest` |
+| Chunk ingest — TOC/outline/heading-derived chapters, book topics seed concepts | [dataflow §5.2](dataflow.md) | `apps/server/src/routes/study.ts` (`/chapters/ingest`), `apps/server/src/ai/concepts.ts`, `apps/web/src/lib/textbook.ts`, `apps/web/src/lib/toc.ts` | `POST /chapters/ingest` |
+| Your own textbook (PDF/text import, on-device OCR, library) | [dataflow §5.2](dataflow.md), [roadmap phase 6](roadmap.md) | `apps/web/src/routes/textbooks.tsx`, `apps/web/src/lib/textbook.ts`, `apps/web/src/lib/ocr.ts` | `GET /textbooks`, `POST /chapters/ingest` |
 | Themes (9 rooms: 8 dark + Sunlight) | [stack](stack.md) | `components/theme-provider.tsx`, `components/theme-switcher.tsx` | — |
 | Ink motion system — one-shot ripple, breathing idle ring, ink-settling loaders, gap-closed settle, paper grain | [dataflow §5.10](dataflow.md), [decisions](decisions.md) | `components/voxide-ring.tsx`, `components/ink-settling.tsx`, `components/brand-mark.tsx` (`closing`), `index.css` keyframes | — |
 | Concept-graph empty states | [dataflow §5.3/5.2](dataflow.md) | `components/concept-graph.tsx` (dashboard, textbook "No chunks yet.") | — |
@@ -59,7 +60,8 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | `react-router` + `@react-router/fs-routes` + `@react-router/node` + `@react-router/serve` | apps/web | URL → screen routing, file-based routes, SSR server, static serving. |
 | `@tanstack/react-form` | apps/web | Typed forms for sign-in and sign-up. |
 | `@voxide/react` | apps/web | The voice session: speech-to-text (hears the student) and the agent's natural text-to-speech. |
-| `pdfjs-dist` | apps/web | On-device PDF reading for the textbook import flow: text extraction **and** the outline/TOC tree (via `getOutline()`), which is how chunks are cut. Lazy-loaded (dynamic `import()`) so it never ships in the base bundle. |
+| `pdfjs-dist` | apps/web | On-device PDF reading for textbook import: text extraction, outline/bookmarks, and page rendering for OCR. Lazy-loaded (dynamic `import()`) so it never ships in the base bundle. |
+| `tesseract.js` + language/core assets | apps/web | On-device OCR for scanned or unreadable PDF text, including contents pages and chapter bodies; WASM assets are fetched on demand rather than precached. |
 | `better-auth` | apps/web, apps/server, packages/auth | Authentication: credentials, sessions, cookies, and the client hooks. |
 | `isbot` | apps/web | Bot detection for SSR. |
 | `lucide-react` | apps/web, packages/ui | All the icons. |

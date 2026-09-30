@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 import {
   auditPageText,
+  chaptersFromContents,
   type ImportSource,
   PdfUnreadableError,
   planChunks,
   segmentsForOcrBook,
   stripUndecodableGlyphs,
+  tocPageOffset,
   withPartSplits,
 } from "./textbook";
 
@@ -220,4 +222,94 @@ test("the split lands on a sentence boundary when one is near enough", () => {
   const parts = withPartSplits("Unit", big);
   expect(parts.length).toBeGreaterThan(1);
   expect(parts[0].rawText.endsWith(".")).toBe(true);
+});
+
+// ────────────────────────────────────────────────────────────────
+// The contents page decides the hierarchy; these tests decide the pages.
+// ────────────────────────────────────────────────────────────────
+
+test("printed page numbers are aligned to PDF pages by cross-checking headers", () => {
+  // The Grade 10 Biology book: contents say the units start at printed pages
+  // 1, 17, 50, 81, 94, 153; the running headers put them at 0-based PDF pages
+  // 6, 22, 55, 86, 99, 158. Every pair agrees on an offset of 5.
+  const chapters = [
+    { unit: 1, title: "Sub-fields of Biology", page: 1, topics: [] },
+    { unit: 2, title: "Plants", page: 17, topics: [] },
+    { unit: 3, title: "Biochemical Molecules", page: 50, topics: [] },
+    { unit: 4, title: "Cell Reproduction", page: 81, topics: [] },
+    { unit: 5, title: "Human Biology", page: 94, topics: [] },
+    { unit: 6, title: "Ecological Interaction", page: 153, topics: [] },
+  ];
+  const segments = [
+    { title: "Unit One: Sub-fields of Biology", start: 6, end: 22 },
+    { title: "Unit Two: Plants", start: 22, end: 55 },
+    { title: "Unit 3: Biochemical Molecules", start: 55, end: 86 },
+    { title: "Unit 4: Cell Reproduction", start: 86, end: 99 },
+    { title: "Unit 5: Human Biology", start: 99, end: 158 },
+    { title: "Unit 6: Ecological Interactions", start: 158, end: 182 },
+  ];
+  expect(tocPageOffset(chapters, segments)).toBe(5);
+  const out = chaptersFromContents(
+    chapters.map((c) => ({
+      ...c,
+      topics: [
+        {
+          kind: "section" as const,
+          path: ["2", "1"],
+          title: "Characteristics of plants",
+          page: 17,
+        },
+      ],
+    })),
+    5,
+    182,
+  );
+  // Derived from the contents alone — and identical to the ranges the running
+  // headers produced, which is the cross-check the offset exists to make.
+  expect(out?.map((c) => [c.title, c.start, c.end])).toEqual([
+    ["Unit 1: Sub-fields of Biology", 6, 22],
+    ["Unit 2: Plants", 22, 55],
+    ["Unit 3: Biochemical Molecules", 55, 86],
+    ["Unit 4: Cell Reproduction", 86, 99],
+    ["Unit 5: Human Biology", 99, 158],
+    ["Unit 6: Ecological Interaction", 158, 182],
+  ]);
+  expect(out?.[1].topics).toEqual(["2.1 Characteristics of plants"]);
+});
+
+test("an offset only two coincidences support is refused, not guessed", () => {
+  const chapters = [
+    { unit: 1, title: "A", page: 1, topics: [] },
+    { unit: 2, title: "B", page: 2, topics: [] },
+  ];
+  // Both pairs point somewhere different, so no majority exists.
+  expect(
+    tocPageOffset(chapters, [
+      { title: "x", start: 6, end: 9 },
+      { title: "y", start: 20, end: 30 },
+    ]),
+  ).toBeNull();
+  // A single agreeing pair is not a pattern either.
+  expect(
+    tocPageOffset(chapters, [
+      { title: "x", start: 6, end: 9 },
+      { title: "y", start: 30, end: 40 },
+    ]),
+  ).toBeNull();
+});
+
+test("a page range that runs off the book is refused rather than imported", () => {
+  const chapters = [{ unit: 1, title: "A", page: 1, topics: [] }];
+  expect(chaptersFromContents(chapters, 500, 182)).toBeNull();
+  expect(chaptersFromContents(chapters, 5, 182)).not.toBeNull();
+});
+
+test("contents topics are attached only to the first part of a split chapter", () => {
+  const parts = withPartSplits("Unit 2: Plants", "a".repeat(190_001), [
+    "2.1 Characteristics of plants",
+  ]);
+  expect(parts.map((part) => part.topics)).toEqual([
+    ["2.1 Characteristics of plants"],
+    undefined,
+  ]);
 });

@@ -10,13 +10,15 @@ table can't tell you.
 
 | When | What landed | Notes |
 |---|---|---|
+| 2026-09-30 | **The contents page now supplies textbook hierarchy** | Scanned PDFs can have OCR'd contents pages parsed into numbered topics and units. Printed page numbers are checked against the detected unit starts before they define chapter ranges; untrusted OCR/alignment falls back to heading detection. The review screen shows the parsed topics, and ingest seeds the chapter checklist with them in book order while retaining model-discovered concepts and misconceptions. Verified against the real Grade 10 Biology contents: six units and 53 numbered topics. |
+| 2026-09-30 | **Textbook import opened, with visible budgets** | Import is reachable in the UI. OCR runs on-device for unreadable text layers; the library and current AI/book limits are visible rather than gated behind a demo-only screen. |
 | 2026-09-27 | **Official period allocations — the schema, and the discipline around it** | `syllabus_unit.periods` + `periods_source` (migration `0004`), surfaced by the syllabus API and rendered on `/syllabus` only when a figure exists. Two deliberate refusals: the column lives on the **unit**, not the concept (MoE allocates per unit/sub-unit; there is no official per-concept number, and a number there would manufacture authority we don't have), and all six Biology 12 units ship as `NULL` because the verified source — the textbook's table of contents — does not state allocations. Guessing them would be exactly the fabricated ground truth the bet exists to prevent. The seed writes a figure only when a unit declares one and omits the columns from its `ON CONFLICT` SET, so a teacher's transcription can't be blanked by a boot — verified on a scratch Postgres (declared written, undeclared `NULL`, stored `24` survived a seed replay that overwrote the title). **Remaining: transcribe the real numbers from the official MoE Grade 12 Biology syllabus.** See [`SYLLABUS.md`](../SYLLABUS.md) §4. |
 | 2026-09-27 | **Fixed: we were serving fallbacks to rate-limited students and never saying so** | Our per-user AI allowance (30/min) was 3× the Gemini free tier's *per-project* ceiling (~10/min), so 429s were being manufactured by our own limit. Each one hit `catch { return fallback(); }` with **no log and no counter** — a student on a fallback was indistinguishable from a successful student. Now: allowance lowered to 8/min (demo 3), `askJson` retries 429/5xx with jittered backoff inside one 24s budget (under the 30s client timeout), 400/404 fail fast instead of burning quota, and every degraded path logs a reason to `[ai]` plus a counter, exposed at `GET /api/ai/telemetry`. Retrying also means fewer fallbacks overall. Verified the retry/classification branches with a throwaway harness (13 cases) before deleting it — it is not a lasting test, because it duplicates the private logic. |
 | 2026-09-27 | **The smart study guide was designed** (not built) | Agreed on scope: the student picks the chapter(s) and/or topic(s), the guide prioritises weak concepts, and retest becomes an *optional* tool usable **before** studying to diagnose and **after** to verify. Kiftet was explicitly reframed as one instrument in a larger kit that routes the student out to the textbook, NotebookLM, FutureX etc. — that dissolved the "walled garden" objection to a written guide, and it is why the guide needs real **source anchors**. Hard constraint recorded: the Gemini free tier is per _project_ and shared by all users, so the guide **must** be cached per concept, not generated per session. Full design, free-tier budget and sequencing in [Phase 11 below](#phase-11--the-smart-study-guide); two forks still need a decision. |
 | 2026-09-27 | `09bd00d` — rebuilt the control layer, failure states and PWA caching | `error-screen.tsx`, `navigation-progress.tsx`, the typed `messages.ts` corpus, the rebuilt `root.tsx`/auth shell, and a PWA caching pass. Shipped **without** being recorded here, which is why this section now exists. |
 | 2026-09-27 | The repo's quality baseline, settled | The formatting debt is gone and `bun run lint` exits 0 for the first time. See [the gates](../RUNBOOK.md#4-the-quality-gates). Two real bugs fell out of it — see below. |
 | 2026-09-27 | `migrateDb()` takes a Postgres advisory lock | Was an unchecked go-live item; two instances of a rolling deploy could race the migration journal. |
-| 2026-09-27 | CI: `.github/workflows/ci.yml`, blocking `main` | Lint + typecheck + test + build on every push and PR to `main`. The `test` gate arrived with the first automated tests (`bun test`) — it is still a small suite, and CI proves far more than it used to, not everything. |
+| 2026-09-27 | CI: `.github/workflows/ci.yml`, blocking `main` | Lint + typecheck + build on every push and PR to `main`; the test gate was added with diagnosis tests on 2026-09-28 and now runs alongside the other checks. CI proves far more than it used to, not everything. |
 
 ### Bugs the lint pass actually found
 
@@ -44,13 +46,13 @@ Not cosmetic — both were live in the study loop:
 | 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ Done |
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
 | 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
-| 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ⏭️ Next (UI shipped, import gated; chunking + MB cap + demo quotas are in) |
-| 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | 🔨 In progress (slice shipped: `syllabus`/`syllabus_unit` tables + migrations, **verified** Biology 12 seed — the 6 MoE New-Curriculum units with provenance in `sourceNote`, `/syllabus` routes, chapter→unit mapping, `/syllabus` UI) |
-| 8 | Misconception events + first aggregate map (bet 2) — count each known misconception surfaced in a session, show only clusters above the k-anonymity floor | 🔨 In progress (first slice shipped: `misconception_hit` table + migration, recorder on recall grading, `GET /misconceptions` with K=5 floor, dashboard panel) |
-| 9 | Offline-first loop (bet 3) — cached checklists/chapters, a submission outbox with an honest "saved — will be graded when you're back online" state, reconnect sync through the existing attempt idempotency | 🔨 In progress (slice shipped: `lib/store.ts` IndexedDB stores, `lib/outbox.ts` replaying with the original `attemptId`, `use-online` hook, offline banner, queued-state panels on recall/retest, checklist + chapter caching with offline fallbacks, per-session lesson + retest-question cache with honest offline re-reads)
+| 6 | Your own textbook — student uploads their book (PDF/paste), device reads the TOC and slices it into chunks, per-chunk ingest → study | ✅ Open and shipped (PDF/text import, local extraction, on-device OCR for unreadable PDFs, TOC hierarchy when available, review/edit, ingest, demo quotas, visible budget) |
+| 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | ✅ First slice shipped (tables/migrations, Biology 12 seed with provenance, `/syllabus`, chapter→unit mapping and coverage; additional grades and verified period data remain) |
+| 8 | Misconception events + first aggregate map (bet 2) — count each known misconception surfaced in a session, show only clusters above the k-anonymity floor | ✅ First slice shipped (writes on recall grading, aggregate endpoint with K=5 floor, dashboard panel; useful population-level signal still depends on real student volume) |
+| 9 | Offline-first loop (bet 3) — cached checklists/chapters, a submission outbox with an honest "saved — will be graded when you're back online" state, reconnect sync through the existing attempt idempotency | ✅ First slice shipped (IndexedDB caches/outbox, original `attemptId` replay, connectivity probe, offline banner, queued states, lesson/question cache and offline reads) |
 | 10 | Amharic everywhere (bet 4) — bilingual EN/🇪🇹 both-script chrome, generated content in both scripts, Ethiopic type verified | ✅ Done (slices A–D shipped: `Language` pref at `kiftet-language` + persisted through the `LanguageProvider`, pre-hydration `lang` script, `LanguageSwitcher` in the header, typed `messages.ts` corpus where `am` must cover every key, and the study loop's load-bearing chrome wired → `t()`: the four step pills, phase headings/bodies, every primary CTA, session/error/queued/result/voice-guide copy, and the offline banner), plus the landing page and the dashboard, syllabus, textbooks, and voice-test routes. Slice C makes generated content follow the pref: the loop sends `language: "am"`, gemini.ts writes lessons/retest questions in Amharic (Ge'ez) via the `AMHARIC_OUTPUT` instruction with concept names kept verbatim as data, offline fallback content is Amharic too, cached reads honestly flag their language, and a "በአማርኛ / In Amharic" badge marks generated text. Slice D verified the SVG/icon set (same `OPEN_ARC` geometry as the brand mark) and the Ethiopic type stack (Noto Sans Ethiopic loaded at 400–700, Ethiopic-first font stacks, pre-hydration `lang`), and closed the doc gaps — including this doc being split into `docs/howItWorks/` |
 
-| 11 | The smart study guide — scope the student picks (chapter(s) and/or topic(s)), per-concept mastery, a structured guide cached per concept, retest as an optional pre/post tool | 🔨 In progress (**design settled, nothing built** — [see below](#phase-11--the-smart-study-guide); the micro-lesson it replaces is still what ships) |
+| 11 | The smart study guide — scope the student picks (chapter(s) and/or topic(s)), per-concept mastery, a structured guide cached per concept, retest as an optional pre/post tool | 🔨 In progress (per-concept grading and diagnosis, ordered/cached guide sections, source anchors, model fallback ladder, and budget accounting have shipped; multi-chapter/topic scope and optional pre/post retest remain) |
 | 12 | Syllabus depth — official `periods` per unit, then Biology 9/10/11 | 🔨 Schema landed (migration `0004`: nullable `periods` + `periods_source` on `syllabus_unit`, exposed via the syllabus API and shown on `/syllabus`; the seed writes figures only when a unit declares one, and never blanks a teacher's transcription on boot). **The data is the remaining work** — Biology 12's six units are deliberately `NULL` until transcribed from the official syllabus document ([`SYLLABUS.md`](../SYLLABUS.md) §4, §6) |
 
 The five product bets that steer the phases after this — syllabus
@@ -72,10 +74,13 @@ commitment, not only an engineering one.
 
 ## Phase 11 — the smart study guide
 
-**Read this second when picking the work back up.** The micro-lesson is the
-weakest part of an otherwise real product, and this is the agreed design for
-replacing it. **None of it is built yet** — what ships today is still the
-micro-lesson.
+**Read this second when picking the work back up.** The guide is partly
+implemented and used in the study flow: per-concept mastery drives the
+diagnosis and guide order, guide sections are cached per chapter/concept/
+language, and each section points to a deterministic source anchor. The
+remaining work is to let students choose broader chapter/topic scope and make
+retesting an optional pre/post tool. The existing micro-lesson endpoint remains
+for compatibility and its existing UI paths.
 
 ### Why the micro-lesson has to go
 
@@ -179,13 +184,13 @@ the quota only against real counters.
 
 ### Prove it before paying for it
 
-We cannot argue about cost yet, because **usage is invisible**: no count of AI
-calls, 429s, or fallbacks per user exists. Instrumenting that is free, and it
-is the prerequisite for the money conversation — not "we need more users" but
-"here is the per-user cost curve, and here is the fallback rate." Once the daily
-quota is the binding constraint and there are real numbers on the table, Gemini
-Tier 1 input is $0.75/1M. We would be buying **headroom**, long before we would
-be buying intelligence.
+**Basic usage is observable; durable per-user accounting is not.** The server
+counts AI calls and degraded outcomes in process memory and exposes the current
+telemetry endpoint. Those counters reset on restart and do not provide a
+cross-instance or per-user cost history. Before making a cost decision, retain
+the actual per-user call/fallback rates in a persistent store; until then,
+provider pricing and request quotas should be treated as operational limits,
+not measured student cost.
 
 ### Two things in the data that make the "plan" real
 
@@ -258,7 +263,8 @@ newlines and returned mid-sentence fragments in hard-wrapped textbook text, and
 the deterministic fallback copied the English book sentence into a guide that had
 already claimed `language: "am"`.
 
-**What is next.** 4 scope selection, then 5 retest as an optional tool, then 6.
+**What is next.** 4 scope selection, then 5 retest as an optional tool, then
+broader manual coverage and measurement against more textbooks and users.
 
 **One thing 3b deliberately did not do:** the offline `CachedLessonRow` is still
 keyed by `sessionId` (`apps/web/src/lib/store.ts:175`), so the *phone* copy
@@ -295,19 +301,20 @@ and not the model.
    429-aware `askJson`. *(Landed: counters, the 429-aware retry, and
    `GET /api/ai/telemetry`.)*
 2. **Per-concept mastery.** Replace the scalar with the 0–3 map; stop
-   hardcoding `covered: []`. *(Landed — the map exists, is persisted, and
-   derives the lists; nothing reads it yet.)*
+   hardcoding `covered: []`. *(Landed — persisted on attempts, used by the
+   diagnosis UI and guide ordering, with lists and weighted score derived from
+   the same map.)*
 3. **Guide sections + cache.** New table keyed by (chapter, concept, language);
    the three-step ladder; Amharic parity; source anchors. **Landed** — the guide
    is the ordered section list, cached and shared, and cost is measured (cold 10
    calls, warm 0).
 4. **Scope selection** — chapters and/or topics, the student's choice.
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
-6. **Tests.** Automated coverage now spans the diagnosis screen
-   (`apps/web/src/components/gap-list.test.tsx`), the guide's cost and ordering
-   arguments (`apps/server/src/ai/guide.test.ts`) and the model list
-   (`apps/server/src/ai/model.test.ts`), all run by `bun test` in CI. The offline
-   path, the retest loop and the voice UI are still hand-verified only.
+6. **Tests.** Automated coverage includes diagnosis, guide ordering/fallbacks,
+   model selection, OCR TOC parsing/page alignment, and the study loop. `bun
+   test` runs in CI alongside lint, typecheck and build. Browser OCR quality on
+   other textbooks, Amharic-dense PDFs, offline behavior, retest and voice still
+   need hands-on coverage.
 
 **Cheap and high-leverage, done:** `syllabus_unit.periods` (migration `0004`)
 carries the official period allocation from the MoE document, with
@@ -327,10 +334,10 @@ allocation drive concept ordering in the Phase 11 guide. Details in
   session loop and scope is capped at one chapter, or a new **Plan** surface is
   defined first and the retest becomes an optional tool inside it. The second
   matches what was actually asked for, and it is much larger.
-- **A structured guide is an object, not a string.** `lessonText` is
-  `string | null` through the reducer, the IndexedDB cache, the Amharic corpus
-  and `LessonPhase`. Convert it deliberately in step 3 rather than smuggling
-  JSON through a string field.
+- **Keep guide content typed.** The shipped guide flow uses structured
+  `GuideSection` values; the legacy microlesson still uses `lessonText`. Do not
+  serialize the guide into that string field when adding scope selection or
+  more offline behavior.
 - **When to pay** is not a step here. Revisit only against real counters.
 
 ## Go-live checklist — Phase 6
@@ -346,8 +353,9 @@ allocation drive concept ordering in the Phase 11 guide. Details in
       layout-aware markdown (tables, formulas, reading order) and are a strict
       upgrade for scanned or layout-mangled PDFs. Keep the pdf.js-outline path
       for the school-wifi case; offer Docling as the "high quality" route.
-- [ ] **Usage visibility** — promote the demo budget pill to a real per-user
-      quota screen once quotas are DB-backed.
+- [x] **Usage visibility** — current-minute AI and daily textbook budgets are
+      shown in the app; long-term per-user request history and DB-persisted AI
+      windows remain separate work.
 - [ ] **Session lifetime** — configure Better Auth `expiresIn` (currently the
       default ~7 days) once product decides on a cadence.
 - [ ] **Cookie hardening** — switch `sameSite: "none"` → `"lax"` if app and
@@ -409,4 +417,3 @@ testing guide, only then start the next.** Nobody ever fires all phases at once 
 each phase is a checkpoint.
 
 ---
-

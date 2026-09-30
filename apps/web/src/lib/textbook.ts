@@ -6,6 +6,15 @@ import {
   ocrPageRange,
 } from "./ocr";
 import { ocrBookKey } from "./ocr-cache";
+import {
+  chaptersFromToc,
+  looksLikeTocPage,
+  parseToc,
+  TOC_MAX_PAGES,
+  TOC_MIN_ENTRIES_PER_PAGE,
+  TOC_SEARCH_PAGES,
+  type TocChapter,
+} from "./toc";
 
 type ExtractedItem = { str?: string; hasEOL?: boolean };
 
@@ -27,6 +36,15 @@ export type ImportChunk = {
    * recognized from the page image. `rawText` is empty until that happens.
    */
   needsOcr?: boolean;
+  /**
+   * The topics the book's own contents lists inside this chapter, in reading
+   * order, as written: "2.3.1 The internal structure of a leaf".
+   *
+   * These are the author's own structure, so they seed the checklist directly
+   * instead of being inferred from prose by a model that has never seen the
+   * table of contents.
+   */
+  topics?: string[];
 };
 
 export type ImportSource =
@@ -101,7 +119,11 @@ function uniqueTitles(chunks: ImportChunk[]): ImportChunk[] {
  * 200k characters inside a 256kb body. Splitting here, at the same sentence
  * boundary, means the split is invisible in the library — just "(part 2)".
  */
-export function withPartSplits(title: string, full: string): ImportChunk[] {
+export function withPartSplits(
+  title: string,
+  full: string,
+  topics?: string[],
+): ImportChunk[] {
   const out: ImportChunk[] = [];
   let rest = full;
   let part = 1;
@@ -113,6 +135,9 @@ export function withPartSplits(title: string, full: string): ImportChunk[] {
     out.push({
       title: `${title} (part ${part})`,
       rawText: rest.slice(0, cut).trim(),
+      // Keep the chapter outline on one part; repeating it creates duplicate
+      // checklist items across the split chapters.
+      topics: part === 1 ? topics : undefined,
     });
     rest = rest.slice(cut).trim();
     part += 1;
@@ -121,6 +146,7 @@ export function withPartSplits(title: string, full: string): ImportChunk[] {
     out.push({
       title: part === 1 ? title : `${title} (part ${part})`,
       rawText: rest,
+      topics: part === 1 ? topics : undefined,
     });
   return out;
 }
@@ -518,6 +544,128 @@ export function segmentsForOcrBook(pages: string[]): PageSegment[] {
 }
 
 // ────────────────────────────────────────────────────────────────
+// The book's own contents page — the best answer to "what are the chapters".
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * Recognize the contents pages, starting at the page that announces one.
+ *
+ * Page at a time, rather than a fixed block, because the length of a contents
+ * is not knowable in advance and every page beyond it is both seconds the
+ * student waits and noise in the parse. A page that stops yielding entries
+ * ends the walk.
+ *
+ * Returns whatever was read, so a contents cut short by a bad page still yields
+ * the units it did manage to state.
+ */
+async function readContentsPages(
+  doc: PDFDocumentProxy,
+  bookKey: string,
+  start: number,
+  pageCount: number,
+  language: OcrLanguage,
+): Promise<TocChapter[]> {
+  let text = "";
+  let chapters: TocChapter[] = [];
+  const limit = Math.min(start + TOC_MAX_PAGES, pageCount);
+  for (let page = start; page < limit; page += 1) {
+    const [recognized] = await ocrPageRange(
+      doc,
+      bookKey,
+      page,
+      page + 1,
+      language,
+    );
+    const grown = parseToc(joinOcrPages([recognized]));
+    // One thin page mid-contents — a blank verso, a fold — should not be read as
+    // the end of it, so only stop once the walk has found something to lose.
+    if (chapters.length > 0 && grown.length < TOC_MIN_ENTRIES_PER_PAGE) break;
+    text += `\n${recognized?.text ?? ""}`;
+    chapters = chaptersFromToc(parseToc(text));
+  }
+  return chapters;
+}
+
+/**
+ * Find the printed-page → PDF-page offset by cross-checking two independent
+ * signals: the contents page names where each unit starts, and the running
+ * headers in the page text show where each unit actually begins.
+ *
+ * Pairing them in order is deliberate. Matching on the *text* of a heading
+ * would be more direct and much less reliable — this book's contents say "Unit
+ * 2: Plants" while its headers say "Unit Two: Plants", and on a worse book
+ * neither may extract at all. Order survives when wording does not.
+ *
+ * Returns null unless the agreement is convincing, because a wrong offset
+ * silently produces six chapters of the wrong pages, and that is worse than
+ * falling back to the heading scan which at least knows where the headings are.
+ */
+export function tocPageOffset(
+  chapters: TocChapter[],
+  segments: PageSegment[],
+): number | null {
+  const pairs = Math.min(chapters.length, segments.length);
+  if (pairs < 2) return null;
+  const tally = new Map<number, number>();
+  for (let i = 0; i < pairs; i += 1) {
+    const offset = segments[i].start - chapters[i].page;
+    tally.set(offset, (tally.get(offset) ?? 0) + 1);
+  }
+  let best: number | null = null;
+  let bestCount = 0;
+  for (const [offset, count] of tally) {
+    if (offset < 0) continue;
+    if (count > bestCount) {
+      best = offset;
+      bestCount = count;
+    }
+  }
+  // One coincidence is not a pattern. Two agreeing pairs is the floor, and the
+  // winner must hold more of them than any rival.
+  if (best === null || bestCount < 2) return null;
+  return best;
+}
+
+/**
+ * Chapters as the contents page describes them, with the page ranges the
+ * printed page numbers imply.
+ *
+ * Returns null — meaning "use the heading scan instead" — when the numbering
+ * cannot be trusted: no units, no sections under them, pages that do not
+ * increase, or a range that runs off the end of the book.
+ */
+export function chaptersFromContents(
+  chapters: TocChapter[],
+  offset: number,
+  pageCount: number,
+): { title: string; start: number; end: number; topics: string[] }[] | null {
+  if (chapters.length === 0) return null;
+  const out = chapters.map((chapter, i) => {
+    const next = chapters[i + 1];
+    const start = chapter.page + offset;
+    const end = next ? next.page + offset : pageCount;
+    return {
+      title: `Unit ${chapter.unit}: ${chapter.title}`,
+      start,
+      end: Math.min(end, pageCount),
+      // The number is kept: "2.3.1" carries that it is a third-level idea, and
+      // it is what lets the checklist be read in the order the book teaches it.
+      topics: chapter.topics.map(
+        (topic) => `${topic.path.join(".")} ${topic.title}`,
+      ),
+    };
+  });
+  const sane = out.every(
+    (c, i) =>
+      c.start >= 0 &&
+      c.start < pageCount &&
+      c.end > c.start &&
+      (i === 0 || c.start > out[i - 1].start),
+  );
+  return sane ? out : null;
+}
+
+// ────────────────────────────────────────────────────────────────
 // Pasted-text path — same chunking, over raw text instead of pages.
 // ────────────────────────────────────────────────────────────────
 
@@ -651,16 +799,68 @@ export async function planImport(
     let segments = segmentsForOcrBook(pages);
     if (segments.length === 0) segments = fallbackPages(pages);
 
+    const bookKey = ocrBookKey(source.name, source.file.size);
+    const language_ = ocrLanguage(language);
+
+    // The contents pages are the cheapest pages in the book to recognize and
+    // the only ones that state the structure outright, so they are read before
+    // anything else — two or three pages, a few seconds, against the ~16
+    // minutes the whole file would take.
+    let contents:
+      | {
+          title: string;
+          start: number;
+          end: number;
+          topics: string[];
+        }[]
+      | null = null;
+    const tocStart = pages.findIndex(
+      (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
+    );
+    if (tocStart >= 0) {
+      try {
+        // Read the contents one page at a time and stop at the first page that
+        // is not one. The book's contents run to two pages; the third is the
+        // first chapter, which also lists numbered lines but no page numbers,
+        // so it ends the walk in three recognitions instead of six.
+        const found = await readContentsPages(
+          doc,
+          bookKey,
+          tocStart,
+          pages.length,
+          language_,
+        );
+        const offset = tocPageOffset(found, segments);
+        if (offset !== null) {
+          contents = chaptersFromContents(found, offset, pages.length);
+        }
+      } catch (error) {
+        // No contents, or they would not recognize. The heading scan below
+        // already found every unit, so this is a smaller loss, not a failure.
+        console.warn(
+          "[textbook] contents OCR failed; using detected headings",
+          error,
+        );
+      }
+    }
+
     const chunks = uniqueTitles(
-      segments.map((s) => ({
-        title: s.title,
-        rawText: "",
-        pages: { start: s.start, end: s.end },
-        needsOcr: true,
-      })),
+      contents
+        ? contents.map((c) => ({
+            title: c.title,
+            rawText: "",
+            pages: { start: c.start, end: c.end },
+            needsOcr: true,
+            topics: c.topics,
+          }))
+        : segments.map((s) => ({
+            title: s.title,
+            rawText: "",
+            pages: { start: s.start, end: s.end },
+            needsOcr: true,
+          })),
     );
 
-    const bookKey = ocrBookKey(source.name, source.file.size);
     const done = new Set<string>();
     const pagesOf = (chunk: ImportChunk): number[] => {
       if (!chunk.needsOcr || !chunk.pages) return [];

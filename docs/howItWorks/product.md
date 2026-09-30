@@ -7,12 +7,14 @@
 Kiftet (ክፍተት, "gap") is a studying tool for Ethiopian students
 preparing for the national exam. The idea is simple:
 
-> A student speaks out loud what they remember about a topic. The app listens,
-> figures out which specific concepts they **did not** explain (their "gaps"),
-> teaches a short lesson covering **only** those gaps, then re-tests them to
-> confirm the gaps closed.
+> A student speaks or types what they remember about a topic. The app grades
+> each checklist concept, shows which ideas are unfinished or explained wrong,
+> teaches from an ordered guide linked back to the student's book, then
+> re-tests to check whether the gaps closed.
 
-The core loop is: **Recall → Diagnose → Relearn → Retest**.
+The core loop is: **Recall → Diagnose → Relearn → Retest**. Diagnosis stores a
+0–3 mastery level per concept; the guide prioritizes wrong beliefs before
+unfinished and untouched concepts.
 
 The bet behind the product: the national exam pass rate rose to 12.8% in 2026,
 which means 87.2% of students still failed. Students aren't failing from lack of
@@ -58,4 +60,3 @@ program publicly lets other programs do. Think of a waiter: the kitchen (server)
 cooks, but you communicate through the waiter (API).
 
 ---
-

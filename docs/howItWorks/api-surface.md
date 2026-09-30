@@ -7,7 +7,7 @@ All routes live behind `/api`:
 
 | Method & path | What it does | Phase |
 |---|---|---|
-| `POST /api/chapters/ingest` | Store a textbook chapter, ready for AI concept extraction | 0 (skeleton) |
+| `POST /api/chapters/ingest` | Store a textbook chapter; optional `topics` seed the checklist from the book's contents | 0 (skeleton) |
 | `GET /api/chapters` | List all chapters | 0 |
 | `GET /api/chapters/:id/concepts` | View a chapter's concept checklist | 0 |
 | `POST /api/sessions/start` | Begin a study session on a chapter | 0 |
@@ -29,6 +29,14 @@ Additional routes added for Phase 6 (textbook library + demo quotas):
 
 In Phase 0, the AI-graded endpoints returned **empty placeholders** (empty gaps,
 empty questions). The brains are live since Phase 2.
+
+**Textbook ingest.** `POST /chapters/ingest` requires `textbookTitle`,
+`subject`, `language`, `title` and `rawText`. `topics` is optional and accepts
+the chapter's numbered contents entries (for example
+`["2.3 Structure and function of plant parts", "2.3.1 The internal structure of a leaf"]`).
+When provided, they seed the checklist in book order; the model can add
+distinct concepts and misconceptions from the chapter prose. The response
+includes `seededFromContents` to indicate whether TOC topics were supplied.
 
 **The gaps payload.** `POST /recall` and `POST /retest/answer` return the same
 shape, and `mastery` is the part that matters:
@@ -76,14 +84,16 @@ generation is sticky. To force a rewrite, delete the row; there is no
 regeneration path, by design, because that is what keeps the second student
 free.
 
-Every route below is mounted behind the `requireAuth` middleware — a request
-without a valid session gets `401` before it ever reaches the route (see the [authentication sector](auth.md)).
+Every route below is mounted behind `requireAuth`: it accepts either a valid
+signed-in session or a valid DB-backed demo identity. A request with neither
+gets `401` before it reaches the route (see the [authentication sector](auth.md)).
 
-**Phase 6 (textbook import) note:** the device extracts the book's text and
-TOC locally and posts each **chunk** through `POST /api/chapters/ingest` (the
-server reuses one textbook row per title and skips chunks it already has, so
-re-importing mid-book is a free resume). Two extra routes above support the
-library view and the visible AI budget.
+**Phase 6 (textbook import) note:** the device reads PDF text/bookmarks locally
+and uses OCR locally for scanned text layers and contents pages. TOC topics
+are sent as optional `topics` with the chapter text; the server keeps their
+numbering and order while adding model-discovered details. The PDF itself never
+uploads. The server reuses one textbook row per title and skips chunks already
+ingested, so re-importing can resume. The library and visible AI budget routes
+support that flow.
 
 ---
-

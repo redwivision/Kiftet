@@ -75,12 +75,14 @@ Two ways content gets in:
 - **Seeded/demo content** — the demo (and any seeds) load chapters directly on
   the server (see [the roadmap](roadmap.md)).
 - **The student's own textbook (Phase 6)** — the student uploads their book
-  (PDF up to **15 MB**, or pasted text) from the app. The browser reads the
-  PDF's outline (its real table of contents via pdf.js `getOutline()`) and
-  slices the book along it into chunks, on the device. Only cleaned chunk
-  text is POSTed to `/api/chapters/ingest` — the file bytes never leave the
-  phone and the server never sees a PDF. Books without a TOC fall back to
-  heading detection (`Unit 1`, `ምዕራፍ 2`, ...) then to even page runs.
+  (PDF up to **15 MB**, or pasted text) from the app. The browser reads PDF
+  text and bookmarks locally. When a PDF has an unreadable text layer, it
+  recognizes the contents pages and chapter bodies with on-device Tesseract
+  OCR; the file bytes never leave the phone. Numbered contents entries provide
+  unit topics and, when printed-page alignment is corroborated by detected
+  chapter starts, chapter page ranges. If contents OCR or alignment is not
+  trustworthy, the importer falls back to headings extracted from the book.
+  Readable PDFs continue to use their outline/bookmarks and text headings.
 
 ```mermaid
 flowchart LR
@@ -97,15 +99,17 @@ flowchart LR
 > extracts concepts → concepts saved → ids returned.
 
 ```
-Sending:   { textbookTitle, subject, language, title, rawText }
-Receiving: { textbookId, chapterId, conceptsExtracted, reused }
+Sending:   { textbookTitle, subject, language, title, rawText, topics? }
+Receiving: { textbookId, chapterId, conceptsExtracted, seededFromContents?, reused }
 Data kept: textbook (1) → chapter/chunk (1) → concept_node (5-12)
 ```
 
-That checklist is the **foundation of everything that follows**: it's what the
-AI grades against, what it teaches, and what it re-tests. If the AI ever fails,
-the server falls back to a deterministic extraction (sentence splitting + token
-matching), so ingest never hard-fails.
+When `topics` are supplied from a book's contents, their titles and numbering
+lead the checklist in the order the book teaches them; model-extracted details
+and misconceptions are added without duplicating those topics. Otherwise, the
+model builds the checklist from chapter text as before. When the AI fails, the
+server falls back to deterministic extraction (sentence splitting + token
+matching), so ingest does not hard-fail.
 
 ---
 
@@ -544,4 +548,3 @@ the voice agent can do is `completeSession` — one endpoint, one job. The
 server doesn't care who sent the request.
 
 ---
-

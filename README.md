@@ -43,13 +43,13 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 ## Features
 
 - **Concept-level diagnosis, not a grade.** Instead of "76% correct", Kiftet maps your explanation against the chapter's concept checklist and tells you *which concepts* didn't stick — including pre-warned common misconceptions.
-- **Targeted micro-lessons.** After diagnosis, a short spoken lesson covers only the missing and mistaken concepts. No re-reading the whole chapter.
+- **An ordered, source-anchored guide.** After diagnosis, cached sections prioritize misconceptions and unfinished concepts, and link back to sentences in the student's own chapter.
 - **Retest with differently-phrased questions.** Reconfirmation uses different wording, so a memorized one-liner can't fake a real understanding.
 - **Resume anywhere.** The study loop persists across sessions and devices; sign out and back in and you're exactly where you left off.
 - **Calm, inked motion.** Loading is ink settling into place; the idle voice ring breathes; "Gap closed." has the mark draw itself in and settle to sage. Plain CSS keyframes only — no animation library, nothing gamified, and `prefers-reduced-motion` stills it all.
 - **Feedback colours that mean the same everywhere.** Sage `#5C7A5E` = solid/covered, Rust `#B54A2C` = gap/needs work (including what you stated wrong) — the same two fixed colours in diagnosis and retest, every room.
 - **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and work queued on the phone when the signal drops. Connectivity is judged **against our own platform, never the browser's `navigator.onLine`** — the app probes the server's `/health` (a real Postgres ping), so a "No connection" message is always literally true, and the signed work re-flushes the moment the platform answers again.
-- **Your own textbook, on the device.** Upload your book (PDF up to 15 MB or pasted text); the browser reads the book's table of contents and slices it into chunks — file bytes never leave the phone — and each chunk is ingested into the study flow one at a time, weak-wifi friendly.
+- **Your own textbook, on the device.** Upload a PDF up to 15 MB or paste text. The browser reads PDF text/bookmarks and uses on-device OCR for scanned books. Numbered contents topics are preserved in the checklist when page alignment is reliable; the PDF itself never uploads.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
 - **Guardrails built in.** AI rate limiting, idempotent submissions, per-user AI budgets, typed environment variables with dev-safe placeholders.
 
@@ -80,9 +80,10 @@ kiftet/
 ├── docs/           ← PRD, system design, design brief, how-it-works, testing guide
 └── RUNBOOK.md      ← ops: deploying, envs, verification, incident playbook
 ```
-The data model is **12 tables** in two families — study domain (textbook,
-chapter, concept, session, attempt, syllabus, syllabus_unit, misconception_hit)
-and auth (user, session, account, verification). See
+The data model is **13 tables** in two families — nine study-domain tables
+(textbook, chapter, concept, session, attempt, syllabus, syllabus_unit,
+guide_section, misconception_hit) and four auth tables (user, session, account,
+verification). See
 [`docs/howItWorks/database.md`](docs/howItWorks/database.md).
 
 ## Getting started
@@ -142,6 +143,7 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
 - **[`DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)** — the visual identity: monochrome — ivory `#F2EFE9` on black `#0A0B0D`, the open-ring mark, type and UI principles.
 - **[`TESTING_GUIDE.md`](docs/TESTING_GUIDE.md)** — end-to-end verification of every phase.
+- **[`CHANGELOG.md`](CHANGELOG.md)** — timestamped major milestones from the repository's first commits.
 
 ## Status
 
@@ -171,12 +173,12 @@ What is shipped and live right now:
 - **Phase 8 — the misconception map — done.** Wrong turns are recorded on
   grading and surfaced in the aggregate (never individual, k-anonymity floor)
   on the dashboard.
-- **Phase 6 — bring your own textbook — in preview.** The on-device PDF/text
-  chapter split works end-to-end on the phone (file bytes never leave the
-  device); the live import gate into the study flow is the next step.
+- **Phase 6 — bring your own textbook — shipped.** PDF/text import, on-device
+  OCR, TOC hierarchy review and chapter ingest are open in the app; PDF bytes
+  stay on the device.
 - **Connectivity is platform-measured.** Offline detection probes the server's
-  `/health`, never `navigator.onLine`; demo quotas (5 AI calls/min,
-  3 textbooks/day) are live.
+  `/health`, never `navigator.onLine`; AI windows (demo 3/min, signed-in 8/min)
+  and the demo 3-textbooks/day cap are shown in the app.
 
 Full roadmap and phase tracking: [`docs/howItWorks/roadmap.md`](docs/howItWorks/roadmap.md); the five product bets that steer it: [`STRATEGY.md`](docs/STRATEGY.md). Built from scratch for the **STARK Hackathon 2026** kickoff.
 
