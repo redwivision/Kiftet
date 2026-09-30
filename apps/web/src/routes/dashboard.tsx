@@ -14,6 +14,7 @@ import {
   cacheChapters,
   getCachedChapters,
 } from "@/lib/store";
+import { visibleChapterTitle } from "@/lib/textbook";
 import type { Route } from "./+types/dashboard";
 
 export function meta(_args: Route.MetaArgs) {
@@ -216,6 +217,16 @@ export default function Dashboard() {
 
   const lastFor = (chapterId: string): SessionHistory | undefined =>
     history.find((h) => h.chapterId === chapterId);
+  const sectionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const chapter of chapters ?? []) {
+      const title = visibleChapterTitle(chapter.title);
+      if (title.section === null) continue;
+      const key = `${chapter.textbookTitle}\u0000${title.title}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [chapters]);
 
   const start = async (chapter: ChapterInfo) => {
     setStarting(chapter.id);
@@ -411,6 +422,18 @@ export default function Dashboard() {
         <ul className="grid gap-4 md:grid-cols-2">
           {chapters.map((chapter, i) => {
             const last = lastFor(chapter.id);
+            const chapterTitle = visibleChapterTitle(chapter.title);
+            const sectionCount =
+              sectionCounts.get(
+                `${chapter.textbookTitle}\u0000${chapterTitle.title}`,
+              ) ?? 1;
+            const title =
+              chapterTitle.section === null
+                ? chapterTitle.title
+                : `${chapterTitle.title} · ${t("study-section", {
+                    n: chapterTitle.section,
+                    total: sectionCount,
+                  })}`;
             return (
               <li
                 key={chapter.id}
@@ -420,6 +443,7 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   <ChapterCard
                     chapter={chapter}
+                    title={title}
                     starting={starting === chapter.id}
                     onStart={() => start(chapter)}
                   />
@@ -436,10 +460,12 @@ export default function Dashboard() {
 
 function ChapterCard({
   chapter,
+  title,
   starting,
   onStart,
 }: {
   chapter: ChapterInfo;
+  title: string;
   starting: boolean;
   onStart: () => void;
 }) {
@@ -457,7 +483,7 @@ function ChapterCard({
             {chapter.subject}
           </p>
           <h2 className="font-display font-semibold text-foreground text-xl tracking-tight sm:text-2xl">
-            {chapter.title}
+            {title}
           </h2>
         </div>
         <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">

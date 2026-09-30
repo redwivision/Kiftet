@@ -24,7 +24,8 @@ Additional routes added for Phase 6 (textbook library + demo quotas):
 
 | Method & path | What it does | Phase |
 |---|---|---|
-| `GET /api/textbooks` | Each textbook with its chunks, in import order | 6 |
+| `POST /api/textbooks` | Save/update an owned textbook's metadata and nested TOC before importing chapters; never accepts the source file | 6 |
+| `GET /api/textbooks` | Each owned textbook with its saved TOC and imported chapters, in order | 6 |
 | `GET /api/ai/budget` | Demo/signed-in AI quota remaining this minute + daily book cap | 6 |
 
 In Phase 0, the AI-graded endpoints returned **empty placeholders** (empty gaps,
@@ -89,11 +90,15 @@ signed-in session or a valid DB-backed demo identity. A request with neither
 gets `401` before it reaches the route (see the [authentication sector](auth.md)).
 
 **Phase 6 (textbook import) note:** the device reads PDF text/bookmarks locally
-and uses OCR locally for scanned text layers and contents pages. TOC topics
-are sent as optional `topics` with the chapter text; the server keeps their
-numbering and order while adding model-discovered details. The PDF itself never
-uploads. The server reuses one textbook row per title and skips chunks already
-ingested, so re-importing can resume. The library and visible AI budget routes
-support that flow.
+and uses OCR locally for scanned text layers and contents pages. Before chapter
+ingest, `POST /textbooks` saves `{title, subject, language, sourceName,
+sourceSize, toc}` under the authenticated owner and returns `{textbookId}`.
+`toc` is a nested list of `{id, title, start, end, children}` nodes; no PDF
+bytes are accepted. The source stays in browser IndexedDB on that device, and
+only a student-selected chapter's extracted text and optional `topics` are
+sent to `POST /chapters/ingest`. Topics retain their numbering and order while
+the model adds distinct details. `GET /textbooks` returns the saved outline and
+all already-imported chapter rows, so the UI can mark completed chapters and
+resume. Opening the same book on another device requires reselecting its PDF.
 
 ---

@@ -43,6 +43,13 @@
       "when": 1790012400000,
       "tag": "0005_keen_lantern",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790799285550,
+      "tag": "0006_long_siren",
+      "breakpoints": true
     }
   ]
 }

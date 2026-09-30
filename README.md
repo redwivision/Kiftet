@@ -49,7 +49,7 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 - **Calm, inked motion.** Loading is ink settling into place; the idle voice ring breathes; "Gap closed." has the mark draw itself in and settle to sage. Plain CSS keyframes only — no animation library, nothing gamified, and `prefers-reduced-motion` stills it all.
 - **Feedback colours that mean the same everywhere.** Sage `#5C7A5E` = solid/covered, Rust `#B54A2C` = gap/needs work (including what you stated wrong) — the same two fixed colours in diagnosis and retest, every room.
 - **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and work queued on the phone when the signal drops. Connectivity is judged **against our own platform, never the browser's `navigator.onLine`** — the app probes the server's `/health` (a real Postgres ping), so a "No connection" message is always literally true, and the signed work re-flushes the moment the platform answers again.
-- **Your own textbook, on the device.** Upload a PDF up to 15 MB or paste text. The browser reads PDF text/bookmarks and uses on-device OCR for scanned books. Numbered contents topics are preserved in the checklist when page alignment is reliable; the PDF itself never uploads.
+- **Your textbook, kept as a book.** Save its TOC hierarchy to your account, choose chapters from the tree, and return later to import more. Imported chapters stay in your library; the original PDF remains on this device and is never uploaded.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
 - **Guardrails built in.** AI rate limiting, idempotent submissions, per-user AI budgets, typed environment variables with dev-safe placeholders.
 

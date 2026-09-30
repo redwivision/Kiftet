@@ -3,11 +3,13 @@ import {
   auditPageText,
   chaptersFromContents,
   type ImportSource,
+  importTocTree,
   PdfUnreadableError,
   planChunks,
   segmentsForOcrBook,
   stripUndecodableGlyphs,
   tocPageOffset,
+  visibleChapterTitle,
   withPartSplits,
 } from "./textbook";
 
@@ -25,6 +27,53 @@ function prosePage(words: number, seed = 0): string {
 // The running header that survived extraction from the Grade 10 Biology
 // textbook, plus a page number — six words where prose has hundreds.
 const headerOnly = "Unit 5: Human Biology";
+
+test("the user-facing table of contents preserves nested topic hierarchy", () => {
+  const toc = importTocTree([
+    {
+      title: "Unit 1: Cells",
+      rawText: "",
+      pages: { start: 3, end: 15 },
+      topics: ["1.1 Cell structure", "1.1.1 The nucleus", "1.2 Cell division"],
+    },
+  ]);
+
+  expect(toc).toHaveLength(1);
+  expect(toc[0]?.title).toBe("Unit 1: Cells");
+  expect(toc[0]?.start).toBe(3);
+  expect(toc[0]?.end).toBe(15);
+  expect(toc[0]?.children.map((node) => node.title)).toEqual([
+    "1.1 Cell structure",
+    "1.2 Cell division",
+  ]);
+  expect(toc[0]?.children[0]?.children[0]?.title).toBe("1.1.1 The nucleus");
+});
+
+test("internal text-size splits stay grouped under one visible chapter", () => {
+  const toc = importTocTree([
+    {
+      title: "Unit 1 (part 1)",
+      parentTitle: "Unit 1",
+      rawText: "first part",
+    },
+    {
+      title: "Unit 1 (part 2)",
+      parentTitle: "Unit 1",
+      rawText: "second part",
+    },
+  ]);
+
+  expect(toc).toHaveLength(1);
+  expect(toc[0]?.title).toBe("Unit 1");
+  expect(toc[0]?.chunkIndexes).toEqual([0, 1]);
+});
+
+test("internal split titles are hidden from students", () => {
+  expect(visibleChapterTitle("Unit 1 (part 2)")).toEqual({
+    title: "Unit 1",
+    section: 2,
+  });
+});
 
 test("control characters are stripped, but line breaks survive", () => {
   // U+0014–U+001E is what a font with no Unicode map decodes to instead of

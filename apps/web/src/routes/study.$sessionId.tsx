@@ -34,6 +34,7 @@ import {
   cacheChecklist,
   getCachedChecklist,
 } from "@/lib/store";
+import { visibleChapterTitle } from "@/lib/textbook";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
 
@@ -152,7 +153,7 @@ function StudyScreen() {
       <div className="surface overflow-hidden">
         <SessionHeader
           subject={state.chapter.subject}
-          title={state.chapter.title}
+          title={visibleChapterTitle(state.chapter.title).title}
           phase={state.phase}
         />
 

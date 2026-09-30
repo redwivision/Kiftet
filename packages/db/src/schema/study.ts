@@ -13,6 +13,14 @@ import {
 
 import { user } from "./auth";
 
+export type TextbookTocNode = {
+  id: string;
+  title: string;
+  start: number | null;
+  end: number | null;
+  children: TextbookTocNode[];
+};
+
 export const textbook = pgTable("textbook", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id")
@@ -21,6 +29,9 @@ export const textbook = pgTable("textbook", {
   title: text("title").notNull(),
   subject: text("subject").notNull(),
   language: text("language").notNull().default("en"),
+  sourceName: text("source_name"),
+  sourceSize: integer("source_size"),
+  toc: jsonb("toc").$type<TextbookTocNode[]>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

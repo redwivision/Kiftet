@@ -11,7 +11,7 @@ tables (the product) and the four **auth tables** (who is signed in).
 
 | Table | What one row means | Key fields |
 |---|---|---|
-| `textbook` | A real school textbook (e.g. Physics) that a **user owns** | `ownerId` → user, `title`, `subject`, `language` |
+| `textbook` | A real school textbook (e.g. Physics) that a **user owns**, including its saved table of contents before any chapters are imported | `ownerId` → user, `title`, `subject`, `language`, `sourceName`, `sourceSize`, `toc` (nested JSON outline) |
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `guide_section` | Cached teaching content for one chapter concept and language | `chapterId`, `conceptText`, `language`, structured guide content and source anchor; unique `(chapterId, conceptText, language)` |
@@ -35,6 +35,12 @@ group-by only** — no user ids, no transcripts — and a cluster must clear a
 The `concept_node.isMisconception` flag is the interesting one: the product's
 whole trick is that we don't just grade "right/wrong," we grade *which specific
 concepts didn't stick* — and we pre-warn about the common mistakes students make.
+
+The original PDF is **not** stored in Postgres or sent to the server. The
+browser may retain it in IndexedDB on the current device to support later
+chapter selection; the saved TOC and imported chapter records are account data.
+If local browser storage is cleared or a student opens the account elsewhere,
+the PDF must be selected again.
 
 **Ownership / tenant isolation (added with real auth):** every textbook belongs
 to the user who ingested it (`textbook.owner_id`). Every server query that lists

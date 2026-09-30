@@ -14,13 +14,17 @@ import { useLanguage } from "@/components/language-provider";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
+import { getLocalTextbookSource, saveLocalTextbookSource } from "@/lib/store";
 import {
   fileSizeError,
   type ImportChunk,
+  type ImportTocNode,
+  importTocTree,
   MAX_FILE_MB,
   type OcrChunkReader,
   type PdfUnreadableReason,
   planImport,
+  visibleChapterTitle,
   withPartSplits,
 } from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
@@ -31,7 +35,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Bring your own textbook. It's read on your device — the file never uploads — and each TOC chunk becomes a study loop.",
+        "Save your textbook's table of contents to your account, then choose chapters to add to your study library. The original PDF stays on your device.",
     },
   ];
 }
@@ -43,6 +47,9 @@ type LibraryTextbook = {
   subject: string;
   language: string;
   createdAt: string;
+  sourceName: string | null;
+  sourceSize: number | null;
+  toc: ImportTocNode[] | null;
   chapters: LibraryChapter[];
 };
 
@@ -55,6 +62,17 @@ type Stage = {
 };
 
 type ImportStep = "form" | "planning" | "review" | "importing";
+
+function groupLibraryChapters(chapters: LibraryChapter[]) {
+  const groups = new Map<string, LibraryChapter[]>();
+  for (const chapter of chapters) {
+    const title = visibleChapterTitle(chapter.title).title;
+    const group = groups.get(title) ?? [];
+    group.push(chapter);
+    groups.set(title, group);
+  }
+  return [...groups].map(([title, rows]) => ({ title, chapters: rows }));
+}
 
 // Progress of the on-device reader, for the one chapter being read.
 type OcrProgressView = { done: number; total: number } | null;
@@ -78,6 +96,11 @@ export default function Textbooks() {
   const [mode, setMode] = useState<SourceMode>("pdf");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
+  const [tocSelection, setTocSelection] = useState<Set<string>>(new Set());
+  const [savedTextbookId, setSavedTextbookId] = useState<string | null>(null);
+  const [pendingResumeBook, setPendingResumeBook] =
+    useState<LibraryTextbook | null>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<ImportStep>("form");
   const [planned, setPlanned] = useState<ImportChunk[] | null>(null);
@@ -109,8 +132,49 @@ export default function Textbooks() {
   // skipped on import — that's what makes re-entering the flow a resume.
   const existingChapters = useMemo(() => {
     const book = textbooks?.find((t) => t.title === bookTitle.trim());
+    const sourceName = mode === "pdf" ? pdfFile?.name : "pasted-text.txt";
+    const sourceSize =
+      mode === "pdf"
+        ? pdfFile?.size
+        : pastedText
+          ? new Blob([pastedText]).size
+          : undefined;
+    if (
+      book?.sourceName &&
+      sourceName &&
+      book.sourceSize !== null &&
+      sourceSize !== undefined &&
+      (book.sourceName !== sourceName || book.sourceSize !== sourceSize)
+    ) {
+      return new Set<string>();
+    }
     return new Set((book?.chapters ?? []).map((c) => c.title));
-  }, [textbooks, bookTitle]);
+  }, [textbooks, bookTitle, mode, pdfFile, pastedText]);
+  const activeToc = useMemo(
+    () => (planned ? importTocTree(planned) : []),
+    [planned],
+  );
+
+  const applyPlan = (
+    result: Awaited<ReturnType<typeof planImport>>,
+    imported: Set<string>,
+    savedId: string | null = null,
+  ) => {
+    readerRef.current = result.reader;
+    setOcrReason(result.ocrReason);
+    setOcrProgress(null);
+    setPlanned(result.chunks);
+    setStages(
+      result.chunks.map((c, i) => ({
+        key: i,
+        title: c.title,
+        state: imported.has(c.title.trim()) ? "skip" : "queued",
+      })),
+    );
+    setTocSelection(new Set());
+    setSavedTextbookId(savedId);
+    setStep("review");
+  };
 
   const canPlan =
     (mode === "pdf" && pdfFile !== null) ||
@@ -130,18 +194,150 @@ export default function Textbooks() {
       // A second plan replaces the first reader, so close the old one rather
       // than leaking a loaded PDF and its WASM heaps.
       await readerRef.current?.close();
-      readerRef.current = result.reader;
-      setOcrReason(result.ocrReason);
-      setOcrProgress(null);
-      setPlanned(result.chunks);
-      setStages(
-        result.chunks.map((c, i) => ({
-          key: i,
-          title: c.title,
-          state: existingChapters.has(c.title.trim()) ? "skip" : "queued",
-        })),
+      applyPlan(result, existingChapters);
+    } catch (err) {
+      setError(apiError(err));
+      setStep("form");
+    }
+  };
+
+  const saveBook = async () => {
+    if (!planned) return;
+    setError(null);
+    try {
+      const sourceName = mode === "pdf" ? pdfFile?.name : "pasted-text.txt";
+      const sourceSize =
+        mode === "pdf" ? pdfFile?.size : new Blob([pastedText]).size;
+      const existingBook = textbooks?.find(
+        (book) => book.title === bookTitle.trim(),
       );
-      setStep("review");
+      if (
+        existingBook?.chapters.length &&
+        existingBook.sourceName &&
+        existingBook.sourceSize !== null &&
+        (existingBook.sourceName !== sourceName ||
+          existingBook.sourceSize !== sourceSize)
+      ) {
+        setError(t("textbook-source-conflict"));
+        return;
+      }
+      const { textbookId } = await api<{ textbookId: string }>("/textbooks", {
+        method: "POST",
+        body: JSON.stringify({
+          title: bookTitle.trim(),
+          subject: subject.trim(),
+          language,
+          sourceName,
+          sourceSize,
+          toc: importTocTree(planned),
+        }),
+      });
+      setSavedTextbookId(textbookId);
+      const source =
+        mode === "pdf"
+          ? pdfFile
+          : new Blob([pastedText], { type: "text/plain" });
+      if (source) {
+        try {
+          await saveLocalTextbookSource(
+            textbookId,
+            sourceName ?? "textbook",
+            source,
+          );
+        } catch (storageError) {
+          setError(
+            `${t("textbook-saved-local-error")} ${apiError(storageError)}`,
+          );
+        }
+      }
+      fetchLibrary();
+      toast.success(t("textbook-saved"));
+    } catch (err) {
+      setError(apiError(err));
+    }
+  };
+
+  const openSavedBook = async (book: LibraryTextbook) => {
+    setPendingResumeBook(null);
+    setError(null);
+    try {
+      setStep("planning");
+      const source = await getLocalTextbookSource(book.id);
+      if (!source) {
+        setBookTitle(book.title);
+        setSubject(book.subject);
+        setLanguage(book.language);
+        setSavedTextbookId(null);
+        if (book.sourceName === "pasted-text.txt") {
+          setMode("text");
+          setPastedText("");
+          setStep("form");
+          setError(t("reselect-textbook-text"));
+          return;
+        }
+        setStep("form");
+        setError(t("reselect-textbook-source"));
+        setPendingResumeBook(book);
+        resumeInputRef.current?.click();
+        return;
+      }
+      const imported = new Set(book.chapters.map((chapter) => chapter.title));
+      setBookTitle(book.title);
+      setSubject(book.subject);
+      setLanguage(book.language);
+      const file =
+        source.type === "application/pdf"
+          ? new File([source.blob], source.name, { type: source.type })
+          : null;
+      await readerRef.current?.close();
+      const result =
+        file !== null
+          ? await planImport(
+              { kind: "pdf", name: file.name, file },
+              book.language,
+            )
+          : await planImport({
+              kind: "text",
+              name: source.name,
+              text: await source.blob.text(),
+            });
+      setPdfFile(file);
+      setMode(file ? "pdf" : "text");
+      applyPlan(result, imported, book.id);
+    } catch (err) {
+      setError(apiError(err));
+      setStep("form");
+    }
+  };
+
+  const resumeWithFile = async (file: File | undefined) => {
+    const book = pendingResumeBook;
+    setPendingResumeBook(null);
+    if (!file || !book) return;
+    if (
+      (book.sourceSize !== null && book.sourceSize !== file.size) ||
+      (book.sourceName !== null && book.sourceName !== file.name)
+    ) {
+      setError(t("textbook-file-mismatch"));
+      return;
+    }
+    setBookTitle(book.title);
+    setSubject(book.subject);
+    setLanguage(book.language);
+    setPdfFile(file);
+    setMode("pdf");
+    setStep("planning");
+    try {
+      await readerRef.current?.close();
+      const result = await planImport(
+        { kind: "pdf", name: file.name, file },
+        book.language,
+      );
+      applyPlan(
+        result,
+        new Set(book.chapters.map((chapter) => chapter.title)),
+        book.id,
+      );
     } catch (err) {
       setError(apiError(err));
       setStep("form");
@@ -218,9 +414,16 @@ export default function Textbooks() {
   };
 
   const runImport = async () => {
-    if (!planned || !TEXTBOOK_IMPORT_ENABLED) return;
+    if (!planned || !savedTextbookId || !TEXTBOOK_IMPORT_ENABLED) return;
     setStep("importing");
-    const snapshot = planned.map((c, i) => ({ ...c, key: i }));
+    const selectedIndexes = new Set(
+      activeToc
+        .filter((node) => tocSelection.has(node.id))
+        .flatMap((node) => node.chunkIndexes ?? []),
+    );
+    const snapshot = planned
+      .map((c, i) => ({ ...c, key: i }))
+      .filter((chapter) => selectedIndexes.has(chapter.key));
     let failed = 0;
     for (const chapter of snapshot) {
       if (existingChapters.has(chapter.title.trim())) {
@@ -242,6 +445,7 @@ export default function Textbooks() {
       toast.success(t("book-on-shelf", { title: bookTitle.trim() }));
       resetForm();
     } else {
+      setStep("review");
       toast.error(
         failed === 1
           ? t("chunk-failed", { n: failed })
@@ -278,6 +482,9 @@ export default function Textbooks() {
     setPastedText("");
     setPlanned(null);
     setStages([]);
+    setTocSelection(new Set());
+    setSavedTextbookId(null);
+    setPendingResumeBook(null);
     setError(null);
     setStep("form");
   };
@@ -307,13 +514,14 @@ export default function Textbooks() {
     }
   };
 
-  const progress = !stages.length
-    ? 0
-    : stages.reduce(
-        (acc, s) => acc + (s.state === "done" || s.state === "skip" ? 1 : 0),
-        0,
-      );
-  const total = planned?.length ?? 0;
+  const selectedRoots = activeToc.filter((node) => tocSelection.has(node.id));
+  const progress = selectedRoots.filter((node) =>
+    (node.chunkIndexes ?? []).every((index) => {
+      const state = stages[index]?.state;
+      return state === "done" || state === "skip";
+    }),
+  ).length;
+  const total = selectedRoots.length;
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -323,7 +531,7 @@ export default function Textbooks() {
           {t("byob-title-full")}
         </h1>
         <p className="text-muted-foreground text-sm leading-6">
-          {t("textbooks-text", { max: MAX_FILE_MB })}
+          {t("textbooks-text")}
         </p>
       </header>
 
@@ -367,31 +575,89 @@ export default function Textbooks() {
                   </h2>
                 </div>
                 <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
-                  {book.chapters.length === 1
-                    ? t("chunk", { n: book.chapters.length })
-                    : t("chunks", { n: book.chapters.length })}
+                  {t("imported-chapters", { n: book.chapters.length })}
                 </span>
               </div>
+              {book.toc?.length ? (
+                <>
+                  <details className="mt-3 border-border/60 border-t pt-3">
+                    <summary className="cursor-pointer text-muted-foreground text-xs hover:text-foreground">
+                      {t("view-book-contents", { n: book.toc.length })}
+                    </summary>
+                    <ul className="mt-3 space-y-1 border-gold/25 border-l pl-3">
+                      {book.toc.map((node) => (
+                        <TocPreview
+                          key={node.id}
+                          node={node}
+                          chapters={book.chapters}
+                        />
+                      ))}
+                    </ul>
+                  </details>
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => void openSavedBook(book)}
+                    >
+                      {t("choose-chapters")}
+                    </Button>
+                  </div>
+                </>
+              ) : null}
               {book.chapters.length > 0 ? (
                 <ul className="mt-4 divide-y divide-border/60">
-                  {book.chapters.map((chapter, i) => (
-                    <li
-                      key={chapter.id}
-                      className="flex items-center justify-between gap-3 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium text-[0.78rem] text-muted-foreground">
-                          {String(i + 1).padStart(2, "0")}
-                        </p>
-                        <p className="truncate text-sm">{chapter.title}</p>
+                  {groupLibraryChapters(book.chapters).map((group, i) => (
+                    <li key={group.title} className="py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-[0.78rem] text-muted-foreground">
+                            {String(i + 1).padStart(2, "0")}
+                          </p>
+                          <p className="truncate text-sm">{group.title}</p>
+                        </div>
+                        {group.chapters.length === 1 && (
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              const chapter = group.chapters[0];
+                              if (chapter) startChapter(chapter.id);
+                            }}
+                          >
+                            {t("start-review")}
+                          </Button>
+                        )}
                       </div>
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={() => startChapter(chapter.id)}
-                      >
-                        {t("start-review")}
-                      </Button>
+                      {group.chapters.length > 1 && (
+                        <ul className="mt-2 space-y-1 border-gold/25 border-l pl-3">
+                          {group.chapters.map((chapter) => {
+                            const section = visibleChapterTitle(
+                              chapter.title,
+                            ).section;
+                            return (
+                              <li
+                                key={chapter.id}
+                                className="flex items-center justify-between gap-3 py-1"
+                              >
+                                <span className="text-muted-foreground text-xs">
+                                  {t("study-section", {
+                                    n: section ?? 1,
+                                    total: group.chapters.length,
+                                  })}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => startChapter(chapter.id)}
+                                >
+                                  {t("start-review")}
+                                </Button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -399,7 +665,7 @@ export default function Textbooks() {
                 <div className="mt-4 flex items-center gap-3">
                   <ConceptGraph className="h-9 w-16 shrink-0 text-gold" />
                   <p className="text-muted-foreground text-sm">
-                    {t("no-chunks")}
+                    {t("no-chapters-imported")}
                   </p>
                 </div>
               )}
@@ -426,9 +692,35 @@ export default function Textbooks() {
         canPlan={canPlan}
         onPlan={plan}
         planned={planned}
-        setPlanned={setPlanned}
+        toc={activeToc}
+        selection={tocSelection}
+        onToggleSelection={(id, checked) =>
+          setTocSelection((prev) => {
+            const next = new Set(prev);
+            checked ? next.add(id) : next.delete(id);
+            return next;
+          })
+        }
+        onSaveBook={saveBook}
+        onSelectAll={() =>
+          setTocSelection(
+            new Set(
+              activeToc
+                .filter((node) =>
+                  (node.chunkIndexes ?? []).some(
+                    (index) =>
+                      !existingChapters.has(
+                        planned?.[index]?.title.trim() ?? "",
+                      ),
+                  ),
+                )
+                .map((node) => node.id),
+            ),
+          )
+        }
+        onClearSelection={() => setTocSelection(new Set())}
+        savedTextbookId={savedTextbookId}
         stages={stages}
-        setStages={setStages}
         ocrReason={ocrReason}
         ocrProgress={ocrProgress}
         error={error}
@@ -440,7 +732,72 @@ export default function Textbooks() {
         skipped={existingChapters}
         onCancel={resetForm}
       />
+      <input
+        ref={resumeInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(event) => {
+          void resumeWithFile(event.currentTarget.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
     </main>
+  );
+}
+
+function TocChild({ node }: { node: ImportTocNode }) {
+  return (
+    <li className="text-muted-foreground text-xs leading-5">
+      {node.children.length > 0 ? (
+        <details>
+          <summary className="cursor-pointer hover:text-foreground">
+            {node.title}
+          </summary>
+          <ul className="mt-1 space-y-1 border-border/60 border-l pl-3">
+            {node.children.map((child) => (
+              <TocChild key={child.id} node={child} />
+            ))}
+          </ul>
+        </details>
+      ) : (
+        node.title
+      )}
+    </li>
+  );
+}
+
+function TocPreview({
+  node,
+  chapters,
+}: {
+  node: ImportTocNode;
+  chapters: LibraryChapter[];
+}) {
+  const { t } = useLanguage();
+  const imported = chapters.some(
+    (chapter) =>
+      chapter.title === node.title ||
+      chapter.title.startsWith(`${node.title} (part `),
+  );
+  return (
+    <li className="text-sm leading-6">
+      <div className="flex items-start justify-between gap-3">
+        <span>{node.title}</span>
+        {imported && (
+          <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 font-medium text-[0.7rem] text-gold">
+            {t("already-here")}
+          </span>
+        )}
+      </div>
+      {node.children.length > 0 && (
+        <ul className="mt-1 space-y-1 border-border/60 border-l pl-3">
+          {node.children.map((child) => (
+            <TocPreview key={child.id} node={child} chapters={chapters} />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
@@ -462,9 +819,14 @@ function AddTextbook({
   canPlan,
   onPlan,
   planned,
-  setPlanned,
+  toc,
+  selection,
+  onToggleSelection,
+  onSelectAll,
+  onClearSelection,
+  savedTextbookId,
+  onSaveBook,
   stages,
-  setStages,
   ocrReason,
   ocrProgress,
   error,
@@ -493,9 +855,14 @@ function AddTextbook({
   canPlan: boolean;
   onPlan: () => void;
   planned: ImportChunk[] | null;
-  setPlanned: (c: ImportChunk[] | null) => void;
+  toc: ImportTocNode[];
+  selection: Set<string>;
+  onToggleSelection: (id: string, checked: boolean) => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
+  savedTextbookId: string | null;
+  onSaveBook: () => void;
   stages: Stage[];
-  setStages: (s: Stage[]) => void;
   ocrReason: PdfUnreadableReason | null;
   ocrProgress: OcrProgressView;
   error: string | null;
@@ -519,18 +886,27 @@ function AddTextbook({
 
   if (step === "review" || step === "importing") {
     if (!planned) return null;
-    const newChapters = planned.filter(
-      (c) => !skipped.has(c.title.trim()),
+    const selectedChapters = toc.filter((node) => selection.has(node.id));
+    const newChapters = selectedChapters.filter((node) =>
+      (node.chunkIndexes ?? []).some((index) => {
+        const chunk = planned[index];
+        return chunk !== undefined && !skipped.has(chunk.title.trim());
+      }),
     ).length;
     const importing = step === "importing";
-    const failed = stages.filter((s) => s.state === "error").length;
+    const selectedChunkIndexes = new Set(
+      selectedChapters.flatMap((node) => node.chunkIndexes ?? []),
+    );
+    const failed = stages.filter(
+      (stage) => selectedChunkIndexes.has(stage.key) && stage.state === "error",
+    ).length;
 
     return (
       <section className="surface p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="k-label">
-              {importing ? t("importing-room") : t("ready-import")}
+              {importing ? t("importing-room") : t("textbook-contents")}
             </p>
             <h2 className="font-display font-semibold text-lg tracking-tight">
               {bookTitle.trim()}
@@ -552,7 +928,7 @@ function AddTextbook({
         {importing && total > 0 && (
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between text-muted-foreground text-xs">
-              <span>{t("chunk-progress", { progress, total })}</span>
+              <span>{t("chapter-progress", { progress, total })}</span>
               <span>{Math.round((progress / total) * 100)}%</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-gold/15">
@@ -564,114 +940,121 @@ function AddTextbook({
           </div>
         )}
 
-        <ul className="mt-4 divide-y divide-border/60">
-          {planned.map((chapter, i) => {
-            const stage = stages[i]?.state ?? "queued";
-            const isNew = !skipped.has(chapter.title.trim());
-            return (
-              <li key={i} className="flex items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  {importing ? (
-                    <p className="truncate text-sm">{chapter.title}</p>
-                  ) : (
-                    <Input
-                      value={chapter.title}
-                      onChange={(e) => {
-                        const next = [...planned];
-                        next[i] = { ...chapter, title: e.target.value };
-                        setPlanned(next);
-                        setStages(
-                          stages.map((s, si) =>
-                            si === i
-                              ? {
-                                  ...s,
-                                  title: e.target.value,
-                                  state: isNew ? "queued" : "skip",
-                                }
-                              : s,
-                          ),
-                        );
-                      }}
-                      className="h-9 text-sm"
-                      aria-label={`Chunk ${i + 1} title`}
+        <div className="mt-5 rounded-2xl border border-border/70 bg-card/40 p-3 sm:p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-border/60 border-b pb-3">
+            <p className="font-medium text-sm">{t("choose-from-toc")}</p>
+            {!importing && (
+              <div className="flex gap-2">
+                <Button variant="ghost" size="xs" onClick={onSelectAll}>
+                  {t("select-available")}
+                </Button>
+                <Button variant="ghost" size="xs" onClick={onClearSelection}>
+                  {t("clear-selection")}
+                </Button>
+              </div>
+            )}
+          </div>
+          <ul className="space-y-1">
+            {toc.map((node, i) => {
+              const chunkIndexes = node.chunkIndexes ?? [i];
+              const partStages = chunkIndexes.map(
+                (index) => stages[index]?.state ?? "queued",
+              );
+              const stage = partStages.includes("error")
+                ? "error"
+                : partStages.includes("reading")
+                  ? "reading"
+                  : partStages.includes("ingesting")
+                    ? "ingesting"
+                    : partStages.every(
+                          (state) => state === "done" || state === "skip",
+                        )
+                      ? partStages.every((state) => state === "skip")
+                        ? "skip"
+                        : "done"
+                      : "queued";
+              const isNew = chunkIndexes.some((index) => {
+                const chunk = planned[index];
+                return chunk !== undefined && !skipped.has(chunk.title.trim());
+              });
+              const retryKey =
+                chunkIndexes.find(
+                  (index) => stages[index]?.state === "error",
+                ) ??
+                chunkIndexes[0] ??
+                i;
+              return (
+                <li
+                  key={node.id}
+                  className="rounded-lg px-2 py-2 transition-colors hover:bg-muted/40"
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 accent-gold"
+                      checked={!isNew || selection.has(node.id)}
+                      disabled={!isNew || importing}
+                      onChange={(event) =>
+                        onToggleSelection(node.id, event.currentTarget.checked)
+                      }
+                      aria-label={t("select-chapter", { title: node.title })}
                     />
-                  )}
-                  {chapter.topics?.length ? (
-                    // Showing the topics is the difference between "it read six
-                    // pages and guessed" and "it read the contents". Indented
-                    // by numbering depth, so 1.1 sits under its unit and 1.1.1
-                    // under 1.1, the way the book sets them.
-                    <details className="mt-1.5">
-                      <summary className="cursor-pointer text-muted-foreground text-xs hover:text-foreground">
-                        {chapter.topics.length}{" "}
-                        {chapter.topics.length === 1 ? "topic" : "topics"}
-                      </summary>
-                      <ul className="mt-1.5 space-y-0.5 border-border/60 border-l pl-3">
-                        {chapter.topics.map((topic) => {
-                          const depth =
-                            /^([\d.]+)/
-                              .exec(topic)?.[1]
-                              .split(".")
-                              .filter(Boolean).length ?? 1;
-                          return (
-                            <li
-                              key={topic}
-                              className="text-muted-foreground text-xs leading-snug"
-                              style={{
-                                paddingInlineStart: `${(depth - 1) * 12}px`,
-                              }}
-                            >
-                              {topic}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </details>
-                  ) : null}
-                </div>
-
-                {stage === "done" || (!isNew && stage === "skip") ? (
-                  <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
-                    {importing ? t("already-in") : t("already-here")}
-                  </span>
-                ) : stage === "skip" ? (
-                  <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
-                    {t("landed")}
-                  </span>
-                ) : stage === "error" ? (
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-1 font-medium text-[0.78rem] text-rust">
-                      {t("failed")}
-                    </span>
-                    {!importing && (
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={() => onRetryOne(i)}
-                      >
-                        {t("retry")}
-                      </Button>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm leading-6">
+                        {node.title}
+                      </p>
+                      {node.children.length > 0 && (
+                        <ul className="mt-1 space-y-1 border-gold/25 border-l pl-3">
+                          {node.children.map((child) => (
+                            <TocChild key={child.id} node={child} />
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {stage === "done" || (!isNew && stage === "skip") ? (
+                      <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
+                        {importing ? t("already-in") : t("already-here")}
+                      </span>
+                    ) : stage === "skip" ? (
+                      <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
+                        {t("landed")}
+                      </span>
+                    ) : stage === "error" ? (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-1 font-medium text-[0.78rem] text-rust">
+                          {t("failed")}
+                        </span>
+                        {!importing && (
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => onRetryOne(retryKey)}
+                          >
+                            {t("retry")}
+                          </Button>
+                        )}
+                      </div>
+                    ) : stage === "reading" ? (
+                      <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
+                        {ocrProgress
+                          ? t("ocr-reading-page", ocrProgress)
+                          : t("ocr-read-chapter")}
+                      </span>
+                    ) : stage === "ingesting" ? (
+                      <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
+                        {t("building-checklist")}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
+                        {t("new-label")}
+                      </span>
                     )}
                   </div>
-                ) : stage === "reading" ? (
-                  <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
-                    {ocrProgress
-                      ? t("ocr-reading-page", ocrProgress)
-                      : t("ocr-read-chapter")}
-                  </span>
-                ) : stage === "ingesting" ? (
-                  <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
-                    {t("building-checklist")}
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
-                    {t("new-label")}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
         {error && (
           <p className="mt-4 rounded-lg border border-rust/40 bg-rust/10 px-3 py-2 text-rust text-sm">
@@ -682,20 +1065,24 @@ function AddTextbook({
         {!importing && (
           <>
             <p className="mt-4 text-muted-foreground text-xs leading-5">
-              {t("import-hint")}
+              {t("saved-book-device-note")}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              {enabled ? (
+              {!savedTextbookId ? (
+                <Button onClick={onSaveBook} disabled={!enabled}>
+                  {t("save-textbook")}
+                </Button>
+              ) : enabled ? (
                 <Button onClick={onImport} disabled={newChapters === 0}>
                   {newChapters === 0
-                    ? t("nothing-new")
+                    ? t("select-to-import")
                     : failed > 0
                       ? failed === 1
                         ? t("retry-failed", { n: failed })
                         : t("retry-failed-many", { n: failed })
                       : newChapters === 1
-                        ? t("import-n", { n: newChapters })
-                        : t("import-n-many", { n: newChapters })}
+                        ? t("import-chapter-n", { n: newChapters })
+                        : t("import-chapters-n", { n: newChapters })}
                 </Button>
               ) : (
                 <Button disabled title="Preview mode — import is coming soon.">
