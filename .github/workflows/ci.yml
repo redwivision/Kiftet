@@ -1,6 +1,6 @@
 name: CI
 
-# One workflow, three gates, no matrix. `main` is production, so this runs on
+# One workflow, four gates, no matrix. `main` is production, so this runs on
 # every push to it and on every PR that targets it. Branch protection requires
 # this check to pass before a PR can merge — see RUNBOOK §4.
 on:
@@ -47,10 +47,12 @@ jobs:
       - name: Typecheck
         run: bun run check-types
 
-      # The first automated tests in the repo. Cheaper than a build and they
-      # guard the two things we got wrong by hand: a per-concept level
-      # disappearing from the diagnosis, and a headline number that stops
-      # matching the weighted score the server stored.
+      # Cheaper than a build. The tests guard the things we actually got wrong
+      # by hand: a per-concept level disappearing from the diagnosis, a
+      # headline number that stops matching the stored weighted score, a study
+      # order that ignores mastery, and a source anchor that points at a
+      # mid-sentence fragment. The preload gives the suite an inert env, so no
+      # test can inherit a real Gemini credential or dial a real database.
       - name: Test
         run: bun run test
 

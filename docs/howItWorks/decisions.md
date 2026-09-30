@@ -102,3 +102,57 @@
     config, and config-file reformatting noise was reverted so the diff stays
     honest about what actually changed.
 
+
+13. **The unique constraint is the cache.** `guide_section` is keyed
+    `(chapter, concept, language)` and nothing else — no user, no session — for
+    one reason: a per-project Gemini quota is shared by every user, so the second
+    student on a chapter has to be free. The alternative designs were rejected
+    concretely, not on taste:
+
+    - *Key by session* (what `CachedLessonRow` still does) — cannot dedupe
+      across students even in principle. It was the existing precedent, which is
+      exactly why it is worth writing down that it is the wrong shape for
+      server-side content.
+    - *Regenerate when a section looks wrong* — a bad generation is sticky
+      forever. There is deliberately no regeneration path; delete the row.
+    - *Ask the model to order the guide* — ordering is the product's answer to
+      "what should I study", and it must not contradict the diagnosis screen the
+      student just looked at. It is computed from the same map, deterministically,
+      at zero cost.
+
+    Measured on a real chapter against a real database: first guide 4 AI calls,
+    second guide 0.
+
+14. **A fallback must not fake a capability it does not have.** The deterministic
+    path cannot translate. An early version copied the chapter's sentence into
+    `what`, which produced an English "section" inside a guide that had already
+    returned `language: "am"` — found end-to-end, not by reading the code. The
+    rule now: the fallback writes target-language scaffolding and carries the
+    book's own words in `sourceQuote`, where the UI labels them as a quotation.
+    The same instinct applies to the anchor: never ask a model for a page number,
+    compute it, and return nothing when there is nothing to point at.
+
+15. **Student-independent content lives in the server cache; the phone copy
+    still does not.** `CachedLessonRow` remains keyed by `sessionId`
+    (`apps/web/src/lib/store.ts:175`) and was deliberately left alone in 3b. It
+    costs nothing to be wrong about — the server cache is what spends the quota —
+    so fixing it was deferred rather than bundled into a change about the study
+    order. It is written down in the roadmap so it is not forgotten.
+
+16. **The model is chosen by measurement, and a busy model is not retried in
+    place.** The default for most of the project was `gemini-3.6-flash`, which
+    began returning `503 high demand` on every call. This is the worst kind of
+    AI failure: the UI still renders, the offline fallback still answers, and
+    nothing says the model was the reason. So the default is now
+    `gemini-2.5-flash` — the one that answered every probe — with
+    `MODEL_FALLBACKS` behind it, and the attempt loop walks that list on
+    429/503/timeout.
+
+    Two rules come out of it. **Model choice is a tested claim**, not a constant:
+    `apps/server/src/ai/model.test.ts` asserts the leader is the model that
+    measured working and that no retired (404) model is listed, so the list
+    cannot silently rot into a ladder of guaranteed failures. And **backoff is
+    reserved for retrying a model we know works** — a 503 is not a rate limit on
+    us, so waiting it out spends the student's 24s budget to no end. The
+    measured ceiling underneath all of it is 5 requests/minute on the free tier,
+    which is why the shared cache is load-bearing rather than an optimisation.

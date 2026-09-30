@@ -4,7 +4,34 @@ import { env } from "../env.server";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-export const DEFAULT_MODEL = "gemini-3.6-flash";
+/**
+ * The model, and the fallback order behind it.
+ *
+ * Chosen by measurement, not preference. `gemini-3.6-flash` (the previous
+ * default) returned `503 UNAVAILABLE — high demand` on *every* attempt while
+ * probing, and the 3.x flash family (3.5 / 3.7 / 3.8 / `flash-latest`) all did
+ * the same. `gemini-2.5-flash` answered every prompt and, through the real
+ * endpoints, graded a spoken transcript with 10/10 exact concept keys and
+ * correct levels, and wrote 8/10 guide sections in English and Amharic.
+ *
+ * The older `2.5-flash-lite`, `2.0-flash` and `1.5-flash` are gone — the API
+ * returns 404 "no longer available" for all three, so they are not options.
+ *
+ * The list is ordered by measured reliability, and the ladder is walked on a
+ * 429/503/timeout: one wasted call is cheaper than a student who gets the
+ * deterministic fallback because the model we picked was busy.
+ *
+ * Note the free tier is 5 requests/minute for this model, which is a real
+ * ceiling on a cold 10-concept guide — see the guide cache, which exists for
+ * exactly this reason.
+ */
+export const MODEL_FALLBACKS = [
+  "gemini-2.5-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+] as const;
+
+export const DEFAULT_MODEL = MODEL_FALLBACKS[0];
 
 const PLACEHOLDER_KEY = "placeholder-gemini-api-key";
 
@@ -50,6 +77,39 @@ export type MicroLesson = {
   text: string;
 };
 
+/**
+ * One concept's teaching section — the unit the whole phase is built on.
+ *
+ * Deliberately NOT a student: it depends on the concept, the chapter text and
+ * the language, and on nothing about who is asking. That is what lets it be
+ * generated once and shared by every student who ever opens the chapter, which
+ * is the only way this fits inside a per-project free-tier quota.
+ *
+ * `what` / `why` / `recall` replace the single lesson string so "the right
+ * length" stops being a vibe: a student reads them in order, and each part can
+ * be rendered or retested on its own later.
+ */
+export type GuideSection = {
+  /** One or two sentences: the idea itself. */
+  what: string;
+  /** One sentence: why it matters or what it connects to. */
+  why?: string;
+  /** One say-it-back prompt. This is the part a voice UI can hand to a mic. */
+  recall?: string;
+  /** Deterministic anchor into the chapter's raw text. */
+  sourceOffset?: number;
+  sourceQuote?: string;
+  /** True when built by the lexical fallback, not the model. */
+  estimated: boolean;
+};
+
+/** An ordered, personalised guide: sections in the order this student needs. */
+export type Guide = {
+  sections: GuideSection[];
+  /** Present when at least one section is a deterministic fallback. */
+  estimated: boolean;
+};
+
 export type RetestQuestion = {
   question: string;
   targetConcept?: string;
@@ -66,6 +126,16 @@ export type AiService = {
     concepts: ConceptChecklistItem[],
     language?: ContentLanguage,
   ): Promise<MicroLesson>;
+  /**
+   * Teach one concept. Student-independent by construction — it is not given
+   * any gap or mastery data, because if it were it could not be shared.
+   */
+  generateGuideSection(
+    conceptText: string,
+    chapterText: string,
+    language?: ContentLanguage,
+    options?: { skipAi?: boolean },
+  ): Promise<GuideSection>;
   generateRetestQuestions(
     gaps: GapAnalysis,
     concepts: ConceptChecklistItem[],
@@ -213,7 +283,16 @@ const keyOf = (conceptText: string) => conceptText.trim().toLowerCase();
 
 /** Read one concept's level, tolerating case/whitespace drift in the keys the
  *  model produced. Defaults to 0 ("not shown") — never to credit. */
-function levelOf(mastery: MasteryMap, conceptText: string): MasteryLevel {
+/**
+ * The one place a concept's level is read. Exported because the guide orders
+ * sections by it: if triage and the diagnosis screen each resolved a concept
+ * name their own way, a student could be told to revise an idea the screen had
+ * already called solid.
+ */
+export function levelOf(
+  mastery: MasteryMap,
+  conceptText: string,
+): MasteryLevel {
   const direct = mastery[keyOf(conceptText)];
   if (direct !== undefined) return direct;
   for (const [key, level] of Object.entries(mastery)) {
@@ -320,10 +399,139 @@ function fallbackQuestions(
   return targets.map((t) => ({
     question:
       language === "am"
-        ? `“${t}”ን በራስህ ቃላት ግለጽ — ጓደኛ እያስተማርክ እንደሆነ።`
+        ? `“${t}”ን በራስህ ቃላት ግለጽ — ጓደኛ እንደሆነ።`
         : `Explain “${t}” in your own words, as if teaching a friend.`,
     targetConcept: t,
   }));
+}
+
+// ────────────────────────────────────────────────────────────────
+// Guide sections: the student-independent half
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * Anchor a concept back to the exact place in the chapter text.
+ *
+ * A study plan is only useful if it can hand the student *out* to their own
+ * book, and that needs a location, not a vibe. This is computed, not asked of
+ * the model, so it costs nothing and cannot hallucinate a page number.
+ *
+ * Picks the chapter sentence with the strongest lexical overlap with the
+ * concept and returns its real character offset. Returns undefined when there
+ * is nothing to point at, which is the honest answer for a chapter whose text
+ * is empty or unrelated.
+ */
+export function sourceAnchor(
+  conceptText: string,
+  chapterText: string,
+): { offset: number; quote: string } | undefined {
+  if (!chapterText.trim() || !conceptText.trim()) return undefined;
+  const want = significantTokens(conceptText);
+  if (!want.size) return undefined;
+
+  let best: { offset: number; quote: string; score: number } | undefined;
+  // Newlines are NOT sentence boundaries. Textbook text is hard-wrapped, so
+  // splitting on them produced anchors like "Inside, the cytoplasm is a
+  // watery fluid that holds the" — a fragment that is useless both as a
+  // "go to this place in your book" link and as the section's own text.
+  // Split on terminal punctuation only, and render the quote with its internal
+  // whitespace collapsed while the offset still indexes the original text.
+  for (const match of chapterText.matchAll(/[^.!?]+[.!?]*/g)) {
+    const span = match[0];
+    // The regex keeps the whitespace that precedes a sentence. Trim the quote
+    // AND move the offset by however much was trimmed, or the anchor points at
+    // the space before the sentence and a "go to this place in your book" link
+    // lands one word early.
+    const quote = span.replace(/\s+/g, " ").trim();
+    if (quote.length < 24) continue;
+    const lead = span.length - span.trimStart().length;
+    const have = significantTokens(quote);
+    const shared = [...want].filter((t) => have.has(t)).length;
+    if (!shared) continue;
+    // Normalise by concept size: a long concept should not need a long chapter
+    // sentence to look relevant, and a one-word concept should not match
+    // everything. Ties go to the earliest mention, which reads as "introduced
+    // here".
+    const score = shared / Math.sqrt(want.size);
+    if (!best || score > best.score) {
+      best = { offset: (match.index ?? 0) + lead, quote, score };
+    }
+  }
+  return best ? { offset: best.offset, quote: best.quote } : undefined;
+}
+
+/**
+ * Step 2 of the reliability ladder: the section without the model.
+ *
+ * The deterministic path cannot translate and cannot teach, so it does not
+ * pretend to. Copying the chapter's sentence into `what` produced an ENGLISH
+ * "section" inside a guide that had already claimed `language: "am"` — the one
+ * thing an honest fallback must not do. So `what` is target-language scaffolding
+ * that points at the concept, and the book's own words are carried separately
+ * in `sourceQuote`, where the UI labels them as coming from the text. A
+ * student whose book is in another language still gets their scaffolding in
+ * their language and their book quoted verbatim.
+ *
+ * Marked `estimated` so the UI can say the wording is ours.
+ */
+function fallbackSection(
+  conceptText: string,
+  chapterText: string,
+  language: ContentLanguage = "en",
+): GuideSection {
+  const anchor = sourceAnchor(conceptText, chapterText);
+  return {
+    what:
+      language === "am"
+        ? `“${conceptText}” — ከዚህ ታች ባለው ክፍል ይሸፍናል።`
+        : `“${conceptText}” — the part of your book below covers it.`,
+    why:
+      language === "am"
+        ? "የመጽሐፍውን ተያያዝ አጥናጋይ በመንገር የራስህን ግለጽ።"
+        : "Find it in your book and say it back in your own words.",
+    recall:
+      language === "am"
+        ? `“${conceptText}”ን በራስህ ቃላት ግለጽ — ጓደኛ እንደሆነ።`
+        : `Explain “${conceptText}” in your own words, as if teaching a friend.`,
+    sourceOffset: anchor?.offset,
+    sourceQuote: anchor?.quote,
+    estimated: true,
+  };
+}
+
+/**
+ * Study order, from mastery. Deterministic on purpose: same map in, same guide
+ * out, with no AI call, so ordering can never disagree between two students who
+ * happen to have the same diagnosis, and it costs nothing.
+ *
+ * Misconceptions first — a wrong belief is the one thing re-reading does not
+ * fix. Then level 1, the cheapest win. Then untouched concepts by importance.
+ * A misconception checklist item is a *wrong belief*, not a concept, so it
+ * never gets a section of its own; it is addressed where it appears among the
+ * real concepts.
+ */
+export function triageConcepts(
+  concepts: ConceptChecklistItem[],
+  mastery: MasteryMap,
+): ConceptChecklistItem[] {
+  const rank = (c: ConceptChecklistItem) => levelOf(mastery, c.conceptText);
+  return concepts
+    .filter((c) => !c.isMisconception)
+    .map((concept, i) => ({ concept, i }))
+    .sort((a, b) => {
+      // Tier: 2 (wrong) → 1 (unraised) → 0 (untouched) → 3 (solid, last).
+      const tier = (l: MasteryLevel) =>
+        l === 2 ? 0 : l === 1 ? 1 : l === 0 ? 2 : 3;
+      const byTier = tier(rank(a.concept)) - tier(rank(b.concept));
+      if (byTier !== 0) return byTier;
+      // Within a tier, importance decides.
+      if (b.concept.weight !== a.concept.weight)
+        return b.concept.weight - a.concept.weight;
+      // Ties keep checklist order, so the guide is stable rather than
+      // reshuffling on an unstable sort between requests.
+      return a.i - b.i;
+    })
+    .map((x) => x.concept);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -359,13 +567,17 @@ function parseJson<T>(raw: string): T | null {
 const GEMINI_TIMEOUT_MS = 20_000;
 
 // Retries share ONE wall-clock budget rather than getting a fresh full timeout
-// each. Three 20s attempts would be 60s+ of hanging, which blows past the 30s
+// each. Four 20s attempts would be 80s+ of hanging, which blows past the 30s
 // client fetch timeout in `api.ts` and turns a transient blip into a hard error
 // page. Each attempt gets whatever is left of the budget, so the retry path
 // stays inside the client window (24s of calls + backoff vs 30s) with a little
 // headroom. Raise GEMINI_TOTAL_BUDGET_MS only if that client timeout moves.
 const GEMINI_TOTAL_BUDGET_MS = 24_000;
-const GEMINI_MAX_ATTEMPTS = 3;
+// The attempt list length, kept next to the budget comment because the two are
+// one decision: the budget bounds the wall clock, this bounds how many models
+// or retries we can try inside it. A 503 on one model is answered by the next
+// rather than by waiting.
+const GEMINI_MAX_ATTEMPTS = MODEL_FALLBACKS.length + 1;
 
 // Only transient conditions are retried. A 400 (malformed request) or 404 will
 // fail identically every time, and retrying it just burns quota we have per
@@ -413,6 +625,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // ~1-1.5k/day) and we are explicitly not paying until real users prove the
 // case, so our own per-user allowance is deliberately set below it.
 const aiTelemetry = {
+  /** Which model last answered, or "" if none has. Read at 2am to answer
+   *  "is this the model, or is it us?" without adding a log line per call. */
+  lastModel: "",
   attempts: 0,
   retries: 0,
   rateLimited: 0,
@@ -425,6 +640,37 @@ export function aiTelemetrySnapshot() {
   return { ...aiTelemetry };
 }
 
+/**
+ * Interleave the model list so a busy model is answered by another one rather
+ * than by waiting.
+ *
+ * Probing found 3.6 returning 503 "high demand" while 2.5 answered every
+ * prompt, so a student asking during a 3.6 outage should still get a written
+ * section instead of the deterministic fallback. The first model leads and
+ * gets a second turn, because it is the one measured working: a transient blip
+ * on it is worth retrying before trying anything else.
+ *
+ * Exported for tests — the order is a claim about reliability, so it is
+ * asserted rather than assumed.
+ */
+export function buildAttemptOrder(
+  models: readonly string[],
+  attempts: number,
+): string[] {
+  if (attempts <= 0) return [];
+  const [leader, ...alternates] = models;
+  if (!leader) return [];
+  // Leader first, then each alternate in order, then over again. So attempt 2
+  // is a different model (a busy leader is answered by another one, not by
+  // waiting), and the leader returns on attempt N+1 rather than being written
+  // off, so a single transient blip still gets the model we measured working.
+  const order: string[] = [];
+  while (order.length < attempts) {
+    order.push(leader, ...alternates);
+  }
+  return order.slice(0, attempts);
+}
+
 async function askJson(
   systemPrompt: string,
   userInput: string,
@@ -432,7 +678,9 @@ async function askJson(
   const deadline = Date.now() + GEMINI_TOTAL_BUDGET_MS;
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt++) {
+  const order = buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS);
+
+  for (const [index, model] of order.entries()) {
     const remaining = deadline - Date.now();
     // Out of wall clock: a timeout, not a provider fault. Fall back rather
     // than starting an attempt that cannot finish inside the client window.
@@ -444,7 +692,7 @@ async function askJson(
     try {
       const response = await withTimeout(
         genAI.models.generateContent({
-          model: DEFAULT_MODEL,
+          model,
           contents: [
             {
               role: "user",
@@ -455,17 +703,25 @@ async function askJson(
         }),
         Math.min(GEMINI_TIMEOUT_MS, remaining),
       );
+      aiTelemetry.lastModel = model;
       return response.text ?? "";
     } catch (error) {
       lastError = error;
-      if (!isRetryable(error) || attempt === GEMINI_MAX_ATTEMPTS) break;
+      if (!isRetryable(error) || index === order.length - 1) break;
       // Jitter matters here: many students hit the same per-project ceiling at
       // the same moment, and fixed backoff would have them all retry in
       // lockstep and re-trip the 429 immediately.
-      const delay =
-        RETRY_BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250;
+      //
+      // No delay when the NEXT attempt uses a DIFFERENT model: a busy model
+      // is not a rate limit on us, so backing off would waste wall clock we
+      // do not have. Back off only when we are retrying the same model.
+      const sameModel = order[index + 1] === model;
+      const delay = sameModel
+        ? RETRY_BASE_DELAY_MS * 2 ** index + Math.random() * 250
+        : 0;
       aiTelemetry.retries += 1;
-      await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
+      if (delay)
+        await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
     }
   }
 
@@ -653,6 +909,18 @@ const LESSON_SYSTEM =
   "no headers, no markdown, no bullet lists, 4-8 sentences total, one plain analogy, ends with a one-line recall prompt to the student. " +
   'Return STRICT JSON: {"text":"the lesson"}.';
 
+const SECTION_SYSTEM =
+  "You teach ONE concept to a Grade 12 student revising this chapter. " +
+  "Return STRICT JSON, no prose, no markdown: " +
+  '{"what":"1-2 sentences stating the idea itself, in plain words","why":"1 sentence on why it matters or what it connects to","recall":"1 question asking the student to say it back in their own words"}. ' +
+  "Rules that matter more than they look: " +
+  "- Every sentence will be READ ALOUD by a voice engine, so write for the ear: short clauses, no headers, no bullets, no symbols, no parentheses. " +
+  "- 'what' must stand alone. A student who reads only this line should be able to explain the concept to a friend. " +
+  "- 'recall' must ask for an explanation, not a yes/no or multiple choice. " +
+  "- Do not mention the student, their grade, their mistakes, or what they got wrong: this section is written ONCE and read by every student who opens this chapter, " +
+  "including students who have no gap here at all. Teach the concept; do not coach a specific person. " +
+  "- Do not invent facts, page numbers, or examples that are not in the text below.";
+
 const RETEST_SYSTEM =
   "Write 2-3 short spoken check questions that re-test exactly the missing/misconception items in the GapAnalysis. " +
   "Each question must ask the student to speak aloud an explanation, definition, or worked example — not pick an option. " +
@@ -793,6 +1061,51 @@ export const ai: AiService = {
       return malformed("generateMicroLesson", fallback);
     } catch (error) {
       return degraded("generateMicroLesson", error, fallback);
+    }
+  },
+
+  async generateGuideSection(
+    conceptText: string,
+    chapterText: string,
+    language: ContentLanguage = "en",
+    // Set when the caller has already spent this student's request budget on
+    // earlier concepts in the same response. The lexical fallback still comes
+    // back — a student asking for a chapter should get a chapter — but no
+    // provider call is made, so a cold guide cannot quietly spend ten requests
+    // behind one click.
+    options: { skipAi?: boolean } = {},
+  ): Promise<GuideSection> {
+    // The anchor is computed, not generated: a model asked for a location in
+    // the text invents one, and an invented page number is worse than none.
+    const anchor = sourceAnchor(conceptText, chapterText);
+    const fallback = (): GuideSection =>
+      fallbackSection(conceptText, chapterText, language);
+    if (options.skipAi) return fallback();
+    if (!isAiAvailable()) return fallback();
+    try {
+      const raw = await askJson(
+        SECTION_SYSTEM + outputInstruction(language),
+        `CONCEPT TO TEACH:\n${conceptText.trim()}\n\nCHAPTER TEXT (the only source of facts):\n${chapterText.trim()}`,
+      );
+      const data = parseJson<Record<string, unknown>>(raw);
+      const what =
+        data && typeof data.what === "string" ? data.what.trim() : "";
+      // A section is only worth storing if it teaches something. Without `what`
+      // we keep the lexical fallback rather than persisting a stub that every
+      // future student would then read as if it were a real lesson.
+      if (!what || !data) return malformed("generateGuideSection", fallback);
+      const clean = (v: unknown) =>
+        typeof v === "string" && v.trim() ? v.trim() : undefined;
+      return {
+        what,
+        why: clean(data.why),
+        recall: clean(data.recall),
+        sourceOffset: anchor?.offset,
+        sourceQuote: anchor?.quote,
+        estimated: false,
+      };
+    } catch (error) {
+      return degraded("generateGuideSection", error, fallback);
     }
   },
 

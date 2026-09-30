@@ -1,6 +1,6 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
@@ -42,7 +42,18 @@ type AiBudget = {
   limitPerMinute: number;
   callsThisMinute: number;
   remaining: number;
-  textbooksPerDay: number;
+  windowSeconds: number;
+  /** Epoch ms when the oldest call in the rolling window ages out, else null. */
+  resetAt: number | null;
+  /** Seconds until that happens; 0 when there is nothing to wait for. */
+  retryAfterSeconds: number;
+  books: {
+    demo: boolean;
+    used: number;
+    /** null = no cap today (signed-in), which is different from zero left. */
+    limit: number | null;
+    resetAt: string | null;
+  };
 };
 
 type MisconceptionRow = {
@@ -57,6 +68,22 @@ type MisconceptionMap = {
   subject: string | null;
   rows: MisconceptionRow[];
 };
+
+/**
+ * "How long until I can do this again", as something a person can act on.
+ * Returns "" once the moment has passed rather than counting into negatives —
+ * the poll will replace it with the real number within 15s anyway.
+ */
+function countdown(resetAt: number | null, now: number): string {
+  if (!resetAt) return "";
+  const seconds = Math.max(0, Math.ceil((resetAt - now) / 1000));
+  if (seconds <= 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60
+    ? `${minutes}m`
+    : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -74,10 +101,36 @@ export default function Dashboard() {
     null,
   );
 
-  const demo = Boolean(getDemoUser());
-
+  // The wait is the whole point of showing the number, so it counts down in the
+  // open instead of saying "a moment" and leaving the student to guess. It
+  // ticks only while actually blocked — a dashboard that updates every second
+  // to report that nothing changed is just battery.
+  const blocked = budget?.remaining === 0;
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!demo) return;
+    if (!blocked) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [blocked]);
+  const aiCountdown = useMemo(
+    () => countdown(budget?.resetAt ?? null, now),
+    [budget?.resetAt, now],
+  );
+  // Rendered in the student's own timezone on purpose: the server's clock is
+  // not theirs, so the hour it names is not when their day turns over.
+  const booksResetAt = budget?.books.resetAt
+    ? new Date(budget.books.resetAt).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "";
+
+  // Every visitor gets the pill, not just demo ones. The server already
+  // answers for signed-in students — the check used to short-circuit on demo
+  // and leave the only people who can actually run out of the only screen that
+  // would have told them. A count that refreshes is also the difference
+  // between "the app is broken" and "I'm out of requests".
+  useEffect(() => {
     const poll = () =>
       api<AiBudget>("/ai/budget")
         .then(setBudget)
@@ -85,7 +138,7 @@ export default function Dashboard() {
     poll();
     const id = setInterval(poll, 15_000);
     return () => clearInterval(id);
-  }, [demo]);
+  }, []);
 
   useEffect(() => {
     if (!sessionPending && !session && !getDemoUser()) {
@@ -239,17 +292,29 @@ export default function Dashboard() {
                 limitPerMinute: budget.limitPerMinute,
               })}
             </strong>
-            {budget.remaining === 0
-              ? t("budget-out")
-              : budget.remaining <= 2
-                ? t("budget-careful")
-                : ""}
+            {budget.remaining === 0 && aiCountdown
+              ? t("budget-out-in", { time: aiCountdown })
+              : budget.remaining === 0
+                ? t("budget-out")
+                : budget.remaining <= 2
+                  ? t("budget-careful")
+                  : ""}
           </span>
           <span>
             {t("new-textbooks-today")}{" "}
             <strong className="font-medium text-foreground">
-              {t("textbooks-max", { n: budget.textbooksPerDay })}
+              {budget.books.limit === null
+                ? t("textbooks-unlimited", { used: budget.books.used })
+                : t("textbooks-used-of", {
+                    used: budget.books.used,
+                    n: budget.books.limit,
+                  })}
             </strong>
+            {budget.books.limit !== null &&
+            budget.books.used >= budget.books.limit &&
+            booksResetAt
+              ? t("textbooks-reset-at", { time: booksResetAt })
+              : ""}
           </span>
         </div>
       )}

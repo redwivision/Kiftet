@@ -1,4 +1,11 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import {
+  joinOcrPages,
+  type OcrLanguage,
+  type OcrProgress,
+  ocrPageRange,
+} from "./ocr";
+import { ocrBookKey } from "./ocr-cache";
 
 type ExtractedItem = { str?: string; hasEOL?: boolean };
 
@@ -9,6 +16,17 @@ type ExtractedItem = { str?: string; hasEOL?: boolean };
 export type ImportChunk = {
   title: string;
   rawText: string;
+  /**
+   * Half-open page range this chunk covers, when the pages still need reading.
+   * Present exactly when `needsOcr` is true; the import flow fills `rawText`
+   * from these pages and never OCRs the whole book at once.
+   */
+  pages?: { start: number; end: number };
+  /**
+   * True when the PDF's text layer could not be read, so the body has to be
+   * recognized from the page image. `rawText` is empty until that happens.
+   */
+  needsOcr?: boolean;
 };
 
 export type ImportSource =
@@ -29,10 +47,36 @@ const MAX_CHAPTER_CHARS = 190_000;
 const HEADING_RE =
   /^\s*(?:chapter|unit|lesson|part|section|topic|module|boqonnaa|ምዕራፍ|ክፍል|ትምህርት)\s+(?:\d{1,3}|[IVXLCDM]{1,7}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i;
 
+/**
+ * Collapse a string that is one phrase drawn over and over.
+ *
+ * The Grade 10 Biology textbook writes its running header *five times* on the
+ * same page — five identical text items, no line break between them, same font
+ * (`g_d0_f6`). That is an artifact of whatever generated the file, not
+ * something the student sees. Left alone it welds into
+ * "Unit 2: PlantsUnit 2: PlantsUnit 2: PlantsUnit 2: PlantsUnit 2: Plants",
+ * which is both an ugly chapter name and long enough to be thrown away as a
+ * heading.
+ *
+ * Only a *pure* repetition is collapsed. One extra word ("Unit 2: Plants 17")
+ * means there is real content after the header, and cutting it short would
+ * throw away a heading that a normal reader would use.
+ */
+function collapseRepeats(text: string): string {
+  const n = text.length;
+  for (let len = 1; len * 2 <= n; len += 1) {
+    const unit = text.slice(0, len);
+    let rest = text;
+    while (rest.startsWith(unit)) rest = rest.slice(len);
+    if (rest.length === 0 && len < n) return unit;
+  }
+  return text;
+}
+
 function headingOf(text: string): string | null {
   const lines = text.split("\n");
   for (const raw of lines) {
-    const line = raw.trim();
+    const line = collapseRepeats(raw.trim());
     if (!line || line.length > 80) continue;
     if (HEADING_RE.test(line)) return line;
   }
@@ -49,7 +93,15 @@ function uniqueTitles(chunks: ImportChunk[]): ImportChunk[] {
   });
 }
 
-function withPartSplits(title: string, full: string): ImportChunk[] {
+/**
+ * Split one chapter's text into parts the server will accept.
+ *
+ * Exported because OCR produces text no chunker has bounded yet: a recognised
+ * 59-page unit lands as one string, and the ingest endpoint caps a chapter at
+ * 200k characters inside a 256kb body. Splitting here, at the same sentence
+ * boundary, means the split is invisible in the library — just "(part 2)".
+ */
+export function withPartSplits(title: string, full: string): ImportChunk[] {
   const out: ImportChunk[] = [];
   let rest = full;
   let part = 1;
@@ -76,6 +128,119 @@ function withPartSplits(title: string, full: string): ImportChunk[] {
 // ────────────────────────────────────────────────────────────────
 // PDF path — text is extracted on this device; the file never uploads.
 // ────────────────────────────────────────────────────────────────
+
+/**
+ * Some PDFs — including Ministry of Education textbooks — embed subsetted
+ * fonts with no Unicode mapping. A viewer renders them by glyph outline, so
+ * the pages *look* fine, but a text extractor gets back control characters
+ * instead of letters.
+ *
+ * Measured on the Grade 10 Biology student textbook (182 pages, bilingual):
+ * the body prose decodes to C0 control codes (U+0014–U+001E) and only the
+ * running headers ("Unit 4: Cell Reproduction") come through as real text.
+ *
+ * Those control characters are never legitimate in a textbook, so they are
+ * dropped here rather than passed on.
+ */
+export function stripUndecodableGlyphs(text: string): string {
+  // Keep \n and \t (we join text items with them); drop every other C0/C1
+  // control, which is what a missing ToUnicode map produces.
+  return text.replace(
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the whole point is to match the control codes a font with no Unicode map emits
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g,
+    "",
+  );
+}
+
+// A word is a run of two or more letters/digits. Amharic breaks on spaces
+// the way Latin does, so one count serves every language in the library.
+const WORD_RE = /[\p{L}\p{N}]{2,}/gu;
+
+function wordCount(text: string): number {
+  return (text.match(WORD_RE) ?? []).length;
+}
+
+/**
+ * A running header — "Unit 4: Cell Reproduction    47" — is about six words.
+ * A page of body text is 150–400. The whole distance between those two
+ * numbers is the signal that separates a book we can read from a book that
+ * only *looks* readable.
+ *
+ * Median words per page, measured across the books on hand: the Grade 10
+ * Biology textbook scores 27 (headers only), while every genuinely readable
+ * PDF scores 58 or higher. 40 sits in the gap, closer to the middle than to
+ * either side, and a book that trips it tells the user to paste the text —
+ * a recoverable inconvenience — instead of silently producing a confident,
+ * wrong checklist, which is the one failure this product cannot make.
+ */
+const MIN_MEDIAN_WORDS_PER_PAGE = 40;
+
+// A whole book of 1,000 letters is about half a page. Below that there is
+// nothing to chunk, whatever the file's byte count says.
+const MIN_READABLE_CHARS = 1_000;
+
+// A chunk under this many readable words is a heading and a page number, not
+// study material.
+const MIN_CHUNK_WORDS = 40;
+
+export type PdfUnreadableReason = "no-text" | "too-thin" | "header-only";
+
+export type PageTextAudit = {
+  /** Letters and digits across the whole book — the "is anything there" floor. */
+  readableChars: number;
+  /** Words on a typical page — the "is it a book or just headers" measure. */
+  medianWords: number;
+  /** null when the book passed. */
+  problem: PdfUnreadableReason | null;
+};
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2
+    ? sorted[mid]
+    : Math.floor((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+/**
+ * Decide whether a PDF's text is real prose or a book-shaped shell.
+ *
+ * The earlier check counted readable characters across the whole file and
+ * demanded 1,000. That sounds strict and measured nothing at all: the Grade
+ * 10 Biology book clears it with 30,444 characters, every one of them a
+ * running header repeated 182 times. Length cannot tell the difference,
+ * because a broken book is not short — it is *dense with nothing*.
+ */
+export function auditPageText(pages: string[]): PageTextAudit {
+  const readableChars = (pages.join(" ").match(/[\p{L}\p{N}]/gu) ?? []).length;
+  const medianWords = median(pages.map(wordCount));
+
+  let problem: PdfUnreadableReason | null = null;
+  if (readableChars < MIN_READABLE_CHARS) {
+    problem = readableChars === 0 ? "no-text" : "too-thin";
+  } else if (medianWords < MIN_MEDIAN_WORDS_PER_PAGE) {
+    problem = "header-only";
+  }
+  return { readableChars, medianWords, problem };
+}
+
+/**
+ * Thrown when a PDF's text cannot be trusted. Carries the measured numbers
+ * and a reason code rather than a finished sentence, so the route can render
+ * it in the student's language.
+ */
+export class PdfUnreadableError extends Error {
+  readonly reason: PdfUnreadableReason;
+  readonly audit: PageTextAudit;
+
+  constructor(audit: PageTextAudit) {
+    super(`PDF text is not readable (${audit.problem ?? "no-text"})`);
+    this.name = "PdfUnreadableError";
+    this.reason = audit.problem ?? "no-text";
+    this.audit = audit;
+  }
+}
 
 let pdfLibPromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
@@ -145,9 +310,32 @@ export function fileSizeError(file: File): string | null {
   return null;
 }
 
-async function extractPdfPages(
-  file: File,
-): Promise<{ pages: string[]; outline: OutlineEntry[] }> {
+/**
+ * Open a PDF and pull everything we can from its text layer.
+ *
+ * The document is deliberately left *loaded* when the text turns out to be
+ * unreadable: OCR needs to render the same pages later, and re-opening an
+ * 11 MB book costs seconds. The caller closes it via `close`.
+ */
+/**
+ * A run that decodes to nothing but control characters was *body text* — those
+ * codes are the letters, one per glyph. Leaving it inline welds its readable
+ * neighbours together, and on the Grade 10 Biology textbook that is exactly
+ * what turned a running header into "Unit 2: PlantsUnit 2: PlantsUnit 2:
+ * Plants". Breaking the line there keeps the survivors apart, and costs
+ * nothing: a broken run contributes no words either way.
+ */
+function isUndecodableRun(text: string): boolean {
+  return text.length > 0 && stripUndecodableGlyphs(text).trim().length === 0;
+}
+
+async function openPdf(file: File): Promise<{
+  doc: PDFDocumentProxy;
+  close: () => Promise<void>;
+  pages: string[];
+  outline: OutlineEntry[];
+  audit: PageTextAudit;
+}> {
   const sizeError = fileSizeError(file);
   if (sizeError) {
     throw new Error(sizeError);
@@ -158,40 +346,37 @@ async function extractPdfPages(
   const loadingTask = pdf.getDocument({ data });
   const doc = await loadingTask.promise;
 
-  try {
-    const pages: string[] = [];
-    for (let i = 1; i <= doc.numPages; i += 1) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const lines: string[] = [];
-      let line = "";
-      for (const item of content.items) {
-        if (!item || typeof item !== "object" || !("str" in item)) continue;
-        const { str, hasEOL } = item as ExtractedItem;
-        line += str ?? "";
-        if (hasEOL) {
-          if (line.trim()) lines.push(line);
-          line = "";
-        }
+  const pages: string[] = [];
+  for (let i = 1; i <= doc.numPages; i += 1) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const lines: string[] = [];
+    let line = "";
+    for (const item of content.items) {
+      if (!item || typeof item !== "object" || !("str" in item)) continue;
+      const { str, hasEOL } = item as ExtractedItem;
+      const text = str ?? "";
+      line += text;
+      if (hasEOL || isUndecodableRun(text)) {
+        if (line.trim()) lines.push(line);
+        line = "";
       }
-      if (line.trim()) lines.push(line);
-      pages.push(lines.join("\n").trim());
     }
-
-    const outline = await readOutline(doc);
-
-    const total = pages.join(" ").replace(/\s+/g, "").length;
-    if (total < 200) {
-      throw new Error(
-        "This PDF has no readable text (it may be scanned images). Try the paste path instead.",
-      );
-    }
-    return { pages, outline };
-  } finally {
-    // Free the PDF worker no matter how far extraction got — a throw mid-page
-    // must not leak the loading task for the rest of the browser session.
-    await loadingTask.destroy();
+    if (line.trim()) lines.push(line);
+    // Drop undecodable glyphs per page, so a page that is half headers and
+    // half control codes does not poison the chunk it lands in.
+    pages.push(stripUndecodableGlyphs(lines.join("\n")).trim());
   }
+
+  const outline = await readOutline(doc);
+
+  return {
+    doc,
+    pages,
+    outline,
+    audit: auditPageText(pages),
+    close: () => loadingTask.destroy(),
+  };
 }
 
 type PageSegment = { title: string; start: number; end: number };
@@ -262,6 +447,77 @@ function fallbackPages(pages: string[]): PageSegment[] {
 }
 
 // ────────────────────────────────────────────────────────────────
+// OCR path — chapters are found without reading the body at all.
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * A segment shorter than this is a divider or a contents page, not a unit.
+ *
+ * When the chapter list has to come from a running header (see
+ * `segmentsForOcrBook`) the *first* page of each unit often carries a short
+ * variant of the unit's name while the pages after it carry the full one —
+ * "Unit 1: S" on the contents page, "Unit One: Sub-fields of Biology" in the
+ * header. Cutting on both produces a one-page chunk that is really just a
+ * title page, so a cut that lands this soon after the previous one is folded
+ * into the chapter that follows.
+ */
+const MIN_OCR_SEGMENT_PAGES = 2;
+
+/**
+ * Derive chapters from a book whose body text cannot be extracted.
+ *
+ * This is the trick that makes on-device OCR usable at all. Measured on the
+ * Grade 10 Biology textbook: 90% of its characters are in a font with no
+ * Unicode map, but the remaining 10% — unit headers, figure captions,
+ * "Review Questions" — extracts cleanly. That 10% is enough to find where each
+ * unit starts, so the chapter list appears in about a second instead of the
+ * ~16 minutes it would take to recognize all 182 pages up front. The body is
+ * read later, one chapter at a time, on demand.
+ *
+ * The subtlety is that these headings are *running headers*: "Unit One:
+ * Sub-fields of Biology" prints on all 15 pages of Unit One. Cutting on every
+ * occurrence would yield 175 one-page chunks. So a heading only starts a new
+ * chapter when it differs from the one currently in force.
+ */
+export function segmentsForOcrBook(pages: string[]): PageSegment[] {
+  const segments: PageSegment[] = [];
+  let current: PageSegment | null = null;
+  let inForce = "";
+
+  for (let i = 0; i < pages.length; i += 1) {
+    const heading = headingOf(pages[i]);
+    if (!heading) continue;
+    const key = heading.toLowerCase();
+    // Same header as the page before: still inside the current chapter.
+    if (key === inForce) continue;
+    inForce = key;
+
+    if (!current) {
+      // Front matter — cover, contents — before the first real heading. It is
+      // not a unit, so it is skipped the way `chunkByOutline` skips it.
+      if (i > 0) current = { title: heading, start: i, end: pages.length };
+      continue;
+    }
+
+    const span = i - current.start;
+    if (span < MIN_OCR_SEGMENT_PAGES) {
+      // Too short to be its own chapter: keep going and take the better title.
+      // The longer of the two is nearly always the real one — "Unit One:
+      // Sub-fields of Biology" beats a truncated "Unit 1: S".
+      if (heading.length > current.title.length) current.title = heading;
+      continue;
+    }
+
+    current.end = i;
+    segments.push(current);
+    current = { title: heading, start: i, end: pages.length };
+  }
+
+  if (current) segments.push(current);
+  return segments;
+}
+
+// ────────────────────────────────────────────────────────────────
 // Pasted-text path — same chunking, over raw text instead of pages.
 // ────────────────────────────────────────────────────────────────
 
@@ -312,24 +568,174 @@ function segmentText(text: string): { title: string; text: string }[] {
 // Public plan — the list of chunks the user confirms before importing.
 // ────────────────────────────────────────────────────────────────
 
-export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
-  let chunks: ImportChunk[];
+/**
+ * Reads the body of one chapter, on demand, from the page images.
+ *
+ * Held by the import screen rather than resolved during planning, because
+ * recognizing a whole book costs ~16 minutes and the student should see the
+ * chapter list long before that. One chapter is ~20 pages, so ~2 minutes — and
+ * the result is cached per page, so it happens once per book, ever.
+ */
+export type OcrChunkReader = {
+  /** Identity of the book in the OCR cache (name + byte length). */
+  bookKey: string;
+  /** True once every page of every planned chunk has been recognized. */
+  isComplete: (chunk: ImportChunk) => boolean;
+  read: (
+    chunk: ImportChunk,
+    onProgress?: (p: OcrProgress) => void,
+  ) => Promise<string>;
+  close: () => Promise<void>;
+};
 
-  if (source.kind === "pdf") {
-    const { pages, outline } = await extractPdfPages(source.file);
+export type ImportPlan = {
+  chunks: ImportChunk[];
+  /** Present only when the book has to be read from page images. */
+  reader: OcrChunkReader | null;
+  /** Why OCR is needed, for the message shown to the student. */
+  ocrReason: PdfUnreadableReason | null;
+};
+
+function ocrLanguage(language: string): OcrLanguage {
+  return language === "am" ? "amh" : "eng";
+}
+
+/**
+ * Turn a chosen file into the chapter list the student confirms.
+ *
+ * A readable PDF is split here and now, exactly as before — extraction is
+ * instant and free. A PDF whose text layer is broken takes the OCR path: the
+ * chapters are still identified immediately, from the readable fraction of the
+ * text, but their bodies arrive later via `reader`.
+ */
+export async function planImport(
+  source: ImportSource,
+  language = "en",
+): Promise<ImportPlan> {
+  if (source.kind !== "pdf") {
+    const chunks = await planChunks(source);
+    return { chunks, reader: null, ocrReason: null };
+  }
+
+  const { doc, pages, outline, audit, close } = await openPdf(source.file);
+  let open = true;
+  const closeOnce = async () => {
+    if (!open) return;
+    open = false;
+    await close();
+  };
+
+  try {
+    if (!audit.problem) {
+      // The normal path: real text, no OCR, nothing left open.
+      await closeOnce();
+      let segments =
+        outline.length >= 2
+          ? chunkByOutline(pages, outline)
+          : segmentPages(pages);
+      if (segments.length <= 1) segments = fallbackPages(pages);
+      const chunks = segments
+        .flatMap((s) => {
+          const full = pages.slice(s.start, s.end).join("\n\n").trim();
+          return full ? withPartSplits(s.title, full) : [];
+        })
+        // A book can pass the audit overall and still have a section that is
+        // nothing but a heading and a page number. Importing that as a chapter
+        // would have the model diagnose a page it never actually read.
+        .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
+      return { chunks: uniqueTitles(chunks), reader: null, ocrReason: null };
+    }
+
+    // The text layer is unreadable. Find the chapters from whatever *is*
+    // readable, and read the bodies later.
+    let segments = segmentsForOcrBook(pages);
+    if (segments.length === 0) segments = fallbackPages(pages);
+
+    const chunks = uniqueTitles(
+      segments.map((s) => ({
+        title: s.title,
+        rawText: "",
+        pages: { start: s.start, end: s.end },
+        needsOcr: true,
+      })),
+    );
+
+    const bookKey = ocrBookKey(source.name, source.file.size);
+    const done = new Set<string>();
+    const pagesOf = (chunk: ImportChunk): number[] => {
+      if (!chunk.needsOcr || !chunk.pages) return [];
+      const { start, end } = chunk.pages;
+      return Array.from({ length: end - start }, (_, k) => start + k);
+    };
+    const reader: OcrChunkReader = {
+      bookKey,
+      isComplete: (chunk) => {
+        if (!chunk.needsOcr) return true;
+        // Already read into memory by an earlier call.
+        if (chunk.rawText.trim()) return true;
+        const pages = pagesOf(chunk);
+        return (
+          pages.length > 0 && pages.every((i) => done.has(keyOf(bookKey, i)))
+        );
+      },
+      read: async (chunk, onProgress) => {
+        if (!chunk.needsOcr || !chunk.pages) return chunk.rawText;
+        if (chunk.rawText.trim()) return chunk.rawText;
+        const { start, end } = chunk.pages;
+        for (let i = start; i < end; i += 1) done.add(keyOf(bookKey, i));
+        const results = await ocrPageRange(
+          doc,
+          bookKey,
+          start,
+          end,
+          ocrLanguage(language),
+          onProgress,
+        );
+        return joinOcrPages(results);
+      },
+      close: closeOnce,
+    };
+
+    return { chunks, reader, ocrReason: audit.problem };
+  } catch (err) {
+    await closeOnce();
+    throw err;
+  }
+}
+
+const keyOf = (bookKey: string, pageIndex: number) => `${bookKey}#${pageIndex}`;
+
+/**
+ * The chapter list on its own, with no OCR reader.
+ *
+ * Kept for the pasted-text path and for tests that only care about chunking.
+ * A PDF that needs OCR cannot be planned this way — there is no body text to
+ * return — so it reports the measured reason instead.
+ */
+export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
+  if (source.kind === "text") {
+    const segments = segmentText(source.text);
+    return uniqueTitles(
+      segments.flatMap((s) => withPartSplits(s.title, s.text)),
+    );
+  }
+
+  const { pages, outline, audit, close } = await openPdf(source.file);
+  try {
+    if (audit.problem) throw new PdfUnreadableError(audit);
     let segments =
       outline.length >= 2
         ? chunkByOutline(pages, outline)
         : segmentPages(pages);
     if (segments.length <= 1) segments = fallbackPages(pages);
-    chunks = segments.flatMap((s) => {
-      const full = pages.slice(s.start, s.end).join("\n\n").trim();
-      return full ? withPartSplits(s.title, full) : [];
-    });
-  } else {
-    const segments = segmentText(source.text);
-    chunks = segments.flatMap((s) => withPartSplits(s.title, s.text));
+    const chunks = segments
+      .flatMap((s) => {
+        const full = pages.slice(s.start, s.end).join("\n\n").trim();
+        return full ? withPartSplits(s.title, full) : [];
+      })
+      .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
+    return uniqueTitles(chunks);
+  } finally {
+    await close();
   }
-
-  return uniqueTitles(chunks);
 }

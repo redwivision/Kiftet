@@ -124,7 +124,9 @@ running, re-apply it: **repo → Settings → Branches → Add rule** (or
 
 ## 5. The release path — the only way to production
 
-1. Do all work on a feature branch (currently `vibe-v2`).
+1. Do all work on a feature branch named for the change. Never commit to
+   `main` — branch protection requires the CI check, and a direct push has
+   been used to skip it in the past, which is exactly what the gate is for.
 2. Run the §4 gates locally; fix until green.
 3. Merge to `main` (production). Today `main` fast-forwards cleanly:
    ```bash

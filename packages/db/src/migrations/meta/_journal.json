@@ -36,6 +36,13 @@
       "when": 1790012345678,
       "tag": "0004_quiet_heron",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790012400000,
+      "tag": "0005_keen_lantern",
+      "breakpoints": true
     }
   ]
 }

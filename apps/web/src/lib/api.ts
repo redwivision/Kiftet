@@ -45,19 +45,33 @@ export class ApiError extends Error {
 // Human copy for a response that failed without a server-provided message.
 // 401/403/404/429 come up a lot in the study flow, so the student sees a real
 // sentence instead of the raw status.
+// Every branch names what happened AND what to do about it. A bare status code
+// is the shape of this message we are trying to retire: "Request failed (503)"
+// tells a student nothing they can act on, and sending them to guess is how a
+// temporary blip becomes a lost chapter of work.
 function statusMessage(status: number): string {
   switch (status) {
+    case 400:
+      return "We couldn't read that request. Check the details and try again.";
     case 401:
-      return "Your session expired. Please sign in again.";
+      return "Your session expired. Sign in again to pick up where you left off.";
     case 403:
-      return "You're not allowed to do that.";
+      return "You don't have access to that. If it's your account, sign in again.";
     case 404:
-      return "That can't be found anymore.";
+      return "We couldn't find that — it may have been deleted. Go back and pick another.";
+    case 409:
+      return "That conflicts with something already saved. Reload and try again.";
+    case 413:
+      return "That's too big to accept. Try a smaller file, or one chapter at a time.";
     case 429:
-      return "That's too many requests right now. Give it a moment.";
+      return "You've used all your requests for this minute. Your dashboard counts down when more are available.";
     default:
-      return `Request failed (${status}). Please try again.`;
+      break;
   }
+  if (status >= 500) {
+    return "Kiftet ran into a problem on our side. Wait a moment and try again — nothing you saved is lost.";
+  }
+  return "That didn't work. Try again in a moment.";
 }
 
 function describeNetworkError(error: unknown): string {
@@ -67,7 +81,7 @@ function describeNetworkError(error: unknown): string {
     error !== null &&
     (error as { name?: unknown }).name === "AbortError"
   ) {
-    return "That took too long. Check your connection and try again.";
+    return "That took longer than expected. Try again, or import one chapter at a time.";
   }
   const message = error instanceof Error ? error.message : String(error);
   if (
@@ -75,9 +89,14 @@ function describeNetworkError(error: unknown): string {
       message,
     )
   ) {
-    return "Can't reach Kiftet. Check your connection and try again.";
+    return "Can't reach Kiftet — you're offline, or the connection dropped. Reconnect and try again; your work is saved on this device.";
   }
-  return message || "Something went wrong on our side. Please try again.";
+  // An unrecognised failure is nearly always our bug, and its message reads
+  // like "Cannot read properties of undefined" — developer language that tells a
+  // student nothing and invites a bug report they can't file. It goes to the
+  // console for us; they get the retry.
+  console.error("[api] unexpected failure", error);
+  return "Something went wrong on our side. Try again in a moment.";
 }
 
 export async function api<T = unknown>(
@@ -117,5 +136,5 @@ export async function api<T = unknown>(
 export function apiError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error && err.message) return describeNetworkError(err);
-  return "Something went wrong. Please try again.";
+  return "Something went wrong. Try again in a moment.";
 }

@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -111,6 +112,55 @@ export const conceptNode = pgTable(
   (table) => [index("concept_node_chapterId_idx").on(table.chapterId)],
 );
 
+/**
+ * One concept's teaching section, generated once per (chapter, concept,
+ * language) and shared by every student.
+ *
+ * This is the whole phase in one table. A guide section depends on the chapter
+ * text and the language, never on the student, so the Gemini free tier (a
+ * per-project quota, not a per-key one) is paid once per concept instead of
+ * once per session. Ordering, "focus here" and "already solid" are derived from
+ * mastery at read time.
+ *
+ * `whatText` / `whyText` / `recallText` replace the single lesson string: a
+ * student can read the parts in order, and each one can be retested on its own
+ * later. `sourceOffset` / `sourceQuote` anchor the section back into
+ * `chapter.rawText` so the guide can route a student to the exact place in
+ * their own book. `estimated` marks a section built by the deterministic
+ * fallback rather than the model.
+ */
+export const guideSection = pgTable(
+  "guide_section",
+  {
+    id: text("id").primaryKey(),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapter.id, { onDelete: "cascade" }),
+    conceptText: text("concept_text").notNull(),
+    language: text("language").default("en").notNull(),
+    whatText: text("what_text").notNull(),
+    whyText: text("why_text"),
+    recallText: text("recall_text"),
+    sourceOffset: integer("source_offset"),
+    sourceQuote: text("source_quote"),
+    estimated: boolean("estimated").default(false).notNull(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    // The dedupe that makes the cache possible: one row per
+    // (chapter, concept, language), so two students on the same chapter cost
+    // one call, not two.
+    unique("guide_section_chapter_concept_language_unique").on(
+      table.chapterId,
+      table.conceptText,
+      table.language,
+    ),
+    index("guide_section_chapterId_idx").on(table.chapterId),
+  ],
+);
+
 export const studySession = pgTable(
   "study_session",
   {
@@ -195,6 +245,13 @@ export const chapterRelations = relations(chapter, ({ one, many }) => ({
 export const conceptNodeRelations = relations(conceptNode, ({ one }) => ({
   chapter: one(chapter, {
     fields: [conceptNode.chapterId],
+    references: [chapter.id],
+  }),
+}));
+
+export const guideSectionRelations = relations(guideSection, ({ one }) => ({
+  chapter: one(chapter, {
+    fields: [guideSection.chapterId],
     references: [chapter.id],
   }),
 }));
