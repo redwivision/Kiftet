@@ -247,3 +247,46 @@ Voxide for capture, native `speechSynthesis` for read-back, a voice-state ring,
 and a `/voice-test` route. The seam rule from day one: **voice is the
 interface, Gemini + text are load-bearing** — so the loop never bets on a
 vendor's speech layer being correct.
+**Then: that book, read anyway — on the device, from the page image.** The
+check above refuses a book whose words will not come out. For most real files
+that is still the right answer, but for *this* class of file it refused the
+books students actually own, so the refusal now has a way through: the page is
+drawn to a canvas and recognized by Tesseract running as WebAssembly **in the
+browser**. The textbook still never leaves the device — only the page bitmap
+is ever in memory, and nothing is uploaded.
+
+Recognizing all 182 pages up front measured **~16 minutes**, which is not
+something to ask a student to sit through, so it is never done. The trick is
+that the unreadable book is not unreadable *everywhere*: **90% of its
+characters** sit in the broken font, but the remaining 10% — unit headers,
+figure captions, "Review Questions" — extracts cleanly, and that is enough to
+find where each unit starts. The chapter list therefore appears in about
+**4 seconds**, and each chapter's body is recognized **only when that chapter
+is imported**. One chapter is ~20–35 pages.
+
+Measured on the Grade 10 Biology textbook in Chrome: chapter list in 4.3 s,
+OCR at ~7 s/page, 90% confidence, returning real prose ("Learning competencies
+2.1. Characteristics of plants…"). Every page's text is cached in IndexedDB by
+book and page, so a book is read **once, ever** — a retry, a re-import or a
+second visit reads the text back instead of re-recognizing.
+
+Two things this had to get right that are not obvious:
+
+- **A header that repeats is not a chapter per page.** The book prints its unit
+  header on every page, and on some pages writes it *five times in a row* in
+  the same font. Cutting on each occurrence yields 175 one-page chunks; taken
+  literally, the name becomes "Unit 2: PlantsUnit 2: PlantsUnit 2: Plants".
+  Headings are now deduplicated and the repetition collapsed, giving 6 units at
+  the right page boundaries.
+- **The OCR engine is not part of the install.** Three WASM cores (~12 MB) ship
+  but are excluded from the service worker's precache, because on the low-end
+  phones this app is built for that is the difference between installing and
+  not. They are fetched the first time a book needs reading and cached from
+  then on, so the *second* book works with no network at all.
+
+> **Not yet true:** import is still behind `TEXTBOOK_IMPORT_ENABLED`, so this
+> is not reachable from the UI yet. **Amharic is unverified** — no Amharic-dense
+> PDF was available to measure against, so every Amharic OCR figure quoted so
+> far is untested, and the Amharic model is only selected, never proven. Pages
+> that open with a decorative graphic can still return a line of noise ahead of
+> the real text, which the model would have to read around.

@@ -4,7 +4,7 @@ import { Label } from "@kiftet/ui/components/label";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { ChevronDown } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { setChapter, setSession } from "@/components/assistant";
@@ -18,8 +18,9 @@ import {
   fileSizeError,
   type ImportChunk,
   MAX_FILE_MB,
-  PdfUnreadableError,
-  planChunks,
+  type OcrChunkReader,
+  type PdfUnreadableReason,
+  planImport,
 } from "@/lib/textbook";
 import type { Route } from "./+types/textbooks";
 
@@ -49,10 +50,13 @@ type SourceMode = "pdf" | "text";
 type Stage = {
   key: number;
   title: string;
-  state: "skip" | "queued" | "ingesting" | "done" | "error";
+  state: "skip" | "queued" | "reading" | "ingesting" | "done" | "error";
 };
 
 type ImportStep = "form" | "planning" | "review" | "importing";
+
+// Progress of the on-device reader, for the one chapter being read.
+type OcrProgressView = { done: number; total: number } | null;
 
 // UI-only push: the import flow is fully visible (device-side splitting
 // preview included) but the actual ingest + AI extraction stays off until the
@@ -77,6 +81,12 @@ export default function Textbooks() {
   const [planned, setPlanned] = useState<ImportChunk[] | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Held for the life of the review screen: it keeps the PDF loaded so pages
+  // can be rendered on demand, and it is the only thing that knows how to turn
+  // a chapter's pages into text.
+  const readerRef = useRef<OcrChunkReader | null>(null);
+  const [ocrReason, setOcrReason] = useState<PdfUnreadableReason | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<OcrProgressView>(null);
 
   const fetchLibrary = useCallback(() => {
     api<LibraryTextbook[]>("/textbooks")
@@ -108,22 +118,22 @@ export default function Textbooks() {
     setStep("planning");
     setError(null);
     try {
-      const chunks =
+      const result = await planImport(
         mode === "pdf" && pdfFile
-          ? await planChunks({
-              kind: "pdf",
-              name: pdfFile.name,
-              file: pdfFile,
-            })
-          : await planChunks({
-              kind: "text",
-              name: "pasted",
-              text: pastedText,
-            });
-      if (!chunks.length) throw new Error(t("nothing-to-import"));
-      setPlanned(chunks);
+          ? { kind: "pdf", name: pdfFile.name, file: pdfFile }
+          : { kind: "text", name: "pasted", text: pastedText },
+        language,
+      );
+      if (!result.chunks.length) throw new Error(t("nothing-to-import"));
+      // A second plan replaces the first reader, so close the old one rather
+      // than leaking a loaded PDF and its WASM heaps.
+      await readerRef.current?.close();
+      readerRef.current = result.reader;
+      setOcrReason(result.ocrReason);
+      setOcrProgress(null);
+      setPlanned(result.chunks);
       setStages(
-        chunks.map((c, i) => ({
+        result.chunks.map((c, i) => ({
           key: i,
           title: c.title,
           state: existingChapters.has(c.title.trim()) ? "skip" : "queued",
@@ -131,31 +141,43 @@ export default function Textbooks() {
       );
       setStep("review");
     } catch (err) {
-      // An unreadable PDF is the one failure we must explain rather than
-      // report: the student picked a real book and deserves to know which
-      // part of it we could not read, in their own language.
-      if (err instanceof PdfUnreadableError) {
-        setError(
-          t(
-            err.reason === "no-text"
-              ? "pdf-no-text"
-              : err.reason === "too-thin"
-                ? "pdf-too-thin"
-                : "pdf-header-only",
-            { n: err.audit.readableChars },
-          ),
-        );
-      } else {
-        setError(apiError(err));
-      }
+      setError(apiError(err));
       setStep("form");
     }
   };
 
   const importChapter = async (
-    chapter: { title: string; rawText: string },
+    chapter: ImportChunk,
     key: number,
   ): Promise<void> => {
+    const reader = readerRef.current;
+    // A chapter from a book whose text layer is broken carries no text yet —
+    // read it from the page image on this device before sending anything.
+    let rawText = chapter.rawText;
+    if (chapter.needsOcr && reader) {
+      setStages((prev) =>
+        prev.map((s) => (s.key === key ? { ...s, state: "reading" } : s)),
+      );
+      try {
+        rawText = await reader.read(chapter, ({ done, total }) =>
+          setOcrProgress({ done, total }),
+        );
+      } catch {
+        setStages((prev) =>
+          prev.map((s) => (s.key === key ? { ...s, state: "error" } : s)),
+        );
+        throw new Error(t("ocr-unavailable"));
+      } finally {
+        setOcrProgress(null);
+      }
+      if (!rawText.trim()) {
+        setStages((prev) =>
+          prev.map((s) => (s.key === key ? { ...s, state: "error" } : s)),
+        );
+        throw new Error(t("ocr-read-nothing"));
+      }
+    }
+
     setStages((prev) =>
       prev.map((s) => (s.key === key ? { ...s, state: "ingesting" } : s)),
     );
@@ -167,7 +189,7 @@ export default function Textbooks() {
           subject: subject.trim(),
           language,
           title: chapter.title,
-          rawText: chapter.rawText,
+          rawText,
         }),
       });
       setStages((prev) =>
@@ -229,6 +251,11 @@ export default function Textbooks() {
   };
 
   const resetForm = () => {
+    // Free the loaded PDF before dropping it on the floor.
+    void readerRef.current?.close();
+    readerRef.current = null;
+    setOcrReason(null);
+    setOcrProgress(null);
     setBookTitle("");
     setSubject("");
     setLanguage("en");
@@ -240,6 +267,14 @@ export default function Textbooks() {
     setError(null);
     setStep("form");
   };
+
+  // Navigating away mid-review must not leave an 11 MB document loaded.
+  useEffect(
+    () => () => {
+      void readerRef.current?.close();
+    },
+    [],
+  );
 
   const startChapter = async (chapterId: string) => {
     try {
@@ -380,6 +415,8 @@ export default function Textbooks() {
         setPlanned={setPlanned}
         stages={stages}
         setStages={setStages}
+        ocrReason={ocrReason}
+        ocrProgress={ocrProgress}
         error={error}
         setError={setError}
         onImport={runImport}
@@ -414,6 +451,8 @@ function AddTextbook({
   setPlanned,
   stages,
   setStages,
+  ocrReason,
+  ocrProgress,
   error,
   setError,
   onImport,
@@ -443,6 +482,8 @@ function AddTextbook({
   setPlanned: (c: ImportChunk[] | null) => void;
   stages: Stage[];
   setStages: (s: Stage[]) => void;
+  ocrReason: PdfUnreadableReason | null;
+  ocrProgress: OcrProgressView;
   error: string | null;
   setError: (e: string | null) => void;
   onImport: () => void;
@@ -487,6 +528,12 @@ function AddTextbook({
             </Button>
           )}
         </div>
+
+        {ocrReason && (
+          <p className="mt-4 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
+            {t("ocr-notice")}
+          </p>
+        )}
 
         {importing && total > 0 && (
           <div className="mt-4">
@@ -560,6 +607,12 @@ function AddTextbook({
                       </Button>
                     )}
                   </div>
+                ) : stage === "reading" ? (
+                  <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
+                    {ocrProgress
+                      ? t("ocr-reading-page", ocrProgress)
+                      : t("ocr-read-chapter")}
+                  </span>
                 ) : stage === "ingesting" ? (
                   <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
                     {t("building-checklist")}

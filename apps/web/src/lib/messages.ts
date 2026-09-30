@@ -313,6 +313,18 @@ export const en = {
   "pdf-header-only":
     "This PDF opens, but its words will not come out. All we could read were page headers, which means the pages themselves are images or use fonts this browser cannot read. Paste the chapter text instead and the study loop works the same.",
 
+  // A book whose words will not come out is not a dead end any more: the
+  // chapter list is still found from the readable headings, and each chapter's
+  // body is read from the page image on this device when you import it.
+  "ocr-notice":
+    "This book's words do not come out of the file, so we will read them from the page image — on this device, exactly as the file is never uploaded. Each chapter takes about two minutes the first time, and only once.",
+  "ocr-reading-page": "Reading page {done} of {total}…",
+  "ocr-read-chapter": "Reading this chapter from the page image",
+  "ocr-unavailable":
+    "This device could not start the on-device reader. Paste the chapter text instead and the study loop works the same.",
+  "ocr-read-nothing":
+    "We could not read any words from these pages, so there is nothing to study here. Try a different chapter, or paste the text.",
+
   // ── Voice-test harness ───────────────────────────────────────
   "vt-nothing": "Nothing to see here",
   "vt-nothing-text":
@@ -821,6 +833,15 @@ export const am: Record<MessageKey, string> = {
     "ከዚህ PDF {n} ፊደሎችን ብቻ ማንበት ተቻለ — ለመጥናት በቂ አይደለም። ፊደሎቹ ስለማይነበሩ ወይም ገጾቹ በመስተግበር የተያዙ ናቸው። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው።",
   "pdf-header-only":
     "ይህ PDF ይከፍታል፣ ግን ቃላቱ አይወጡም። የገጹ ላይኛው አርማዎችን ብቻ ማንበት ተቻለ — ይህም ገጾቹ ምስሎች እና በዚህ አሳሳሪው የማይችል ፊደል የተጠበቀ ቋንቋ እንደሆነው ያሳያል። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
+
+  "ocr-notice":
+    "የዚህ መጽሐፍ ቃላት ከፋይሉ አይወጡም፤ ስለዚህ እነሱን ከገጹ ምስል — በዚህ መሣሪያ ላይ፣ ልክ በሆነ መጽሐፉ ሲል ማንለት። እያንዳንዱ ምዕራፍ በመጀመሪያዎ በወርቅ ሁለት ደቂቃ ይያዛል፣ ግን አንድ ጊዜ ብቻ ነው።",
+  "ocr-reading-page": "ገጾች {done} ከ{total} በኋላ እየተነበᥨ ነው…",
+  "ocr-read-chapter": "ይህን ምዕራፍ ከገጹ ምስል እየነበረ ነው",
+  "ocr-unavailable":
+    "በዚህ መሣሪያ ላይ የሚገኝ አንባቢ ልሩ ማስጀመር አልተቻለም። የምዕራፉን ጽሑፍ ሰርተር ገልብጠው — የጥናት ዑደቱ እንደሳለ ይሆናል።",
+  "ocr-read-nothing":
+    "ከእነዚህ ገጾች ምንም ቃል ማንበት አልተቻለም፤ ስለዚህ እዚህ ለመጥናት የለም። ሌላ ምዕራፍ ይሞክሩ ወይም ጽሑፉን ሰርተር ገልብጠው።",
 
   // ── Voice-test harness ───────────────────────────────────────
   "vt-nothing": "እዚህ የሚታይ ነገር የለም",
