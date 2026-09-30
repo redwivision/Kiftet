@@ -10,6 +10,13 @@ and the [roadmap](docs/howItWorks/roadmap.md).
 
 ## 2026-09-30
 
+- **23:33+03:00 — Save textbooks as books; choose chapters from the TOC tree.**
+  Replace the flat processing-chunk review with a nested, selectable contents
+  tree. Save the owner-scoped textbook and outline before import, keep original
+  source files only in device-local IndexedDB, group long-chapter splits behind
+  their visible chapter, and retain imported-chapter status in the account
+  library. Add the `textbook` metadata/TOC migration and update the API,
+  privacy, product, and testing docs.
 - **Work began 21:57+03:00 — OCR contents become the source of textbook hierarchy.** Parse
   real contents-page OCR into units and nested numbered topics, validate
   printed-page offsets against detected chapter starts, show topics in the

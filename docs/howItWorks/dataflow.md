@@ -62,13 +62,11 @@ Some rules that keep this simple:
 
 ### 5.2 Chapter ingest — putting content into the system
 
-Before any studying can happen, a chapter must be loaded in. Ingest runs **once
-per chunk** and its result (the concept checklist) is cached and reused by
-every later session — it is never re-run live during a study loop.
-
-The unit we cut and send to the AI is a **chunk**, not a chapter: one
-table-of-contents section at a time (e.g. "Chapter 1 · 1.2 Reflection"), so
-each Gemini extraction call reads a small, navigable piece of the book.
+The student saves the **whole textbook record and its table of contents first**,
+then selects chapters from a user-facing hierarchy. Internal text-size splits
+are hidden from that tree: one selected chapter can become multiple ingest
+rows, but the student sees and chooses the book's chapter, not processing
+chunks.
 
 Two ways content gets in:
 
@@ -82,26 +80,34 @@ Two ways content gets in:
   unit topics and, when printed-page alignment is corroborated by detected
   chapter starts, chapter page ranges. If contents OCR or alignment is not
   trustworthy, the importer falls back to headings extracted from the book.
-  Readable PDFs continue to use their outline/bookmarks and text headings.
+  Readable PDFs continue to use their outline/bookmarks and text headings. The
+  account stores the textbook metadata and nested TOC before any chapter is
+  imported. The original PDF stays in browser IndexedDB on that device; if it
+  is unavailable later or the student uses another device, they reselect it.
+  Only a selected chapter's extracted text and optional topic labels are sent
+  for ingest. Imported chapters remain in the account library and appear as
+  already added in the TOC.
 
 ```mermaid
 flowchart LR
-  A["1 · student's file<br/>(PDF / pasted text)"] --> B["2 · read TOC + extract text<br/>on the device"]
-  B --> C["3 · slice into chunks<br/>one per TOC section"]
-  C --> D["4 · POST a chunk's<br/>raw text"]
-  D --> E["5 · save textbook<br/>+ chunk rows"]
-  E --> F["6 · Gemini builds the<br/>concept checklist"]
-  F --> G["7 · reply with the ids"]
+  A["1 · student's source<br/>(PDF / pasted text)"] --> B["2 · read the TOC<br/>on the device"]
+  B --> C["3 · POST textbook metadata<br/>+ nested TOC"]
+  C --> D["4 · save source locally<br/>in browser IndexedDB"]
+  D --> E["5 · student selects<br/>chapters in the tree"]
+  E --> F["6 · POST selected chapter<br/>text + topics"]
+  F --> G["7 · save chapter rows<br/>+ build checklist"]
 ```
 
-> **Trace:** file → device reads the TOC + extracts text → chunk per TOC
-> section (heading/part-split fallbacks) → raw text → saved rows → Gemini
-> extracts concepts → concepts saved → ids returned.
+> **Trace:** file → device reads the TOC and extracts text → `POST /textbooks`
+> saves the owned book and tree → original source stays in local IndexedDB →
+> student selects chapters → `POST /chapters/ingest` sends only selected text
+> and topics → chapter rows and checklists persist for future sessions.
 
 ```
-Sending:   { textbookTitle, subject, language, title, rawText, topics? }
-Receiving: { textbookId, chapterId, conceptsExtracted, seededFromContents?, reused }
-Data kept: textbook (1) → chapter/chunk (1) → concept_node (5-12)
+Save book: { title, subject, language, sourceName, sourceSize, toc }
+Response:  { textbookId }
+Ingest:    { textbookTitle, subject, language, title, rawText, topics? }
+Data kept: textbook (1 + nested toc) → chapter (1+) → concept_node (5-12 each)
 ```
 
 When `topics` are supplied from a book's contents, their titles and numbering

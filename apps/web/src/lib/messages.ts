@@ -249,7 +249,7 @@ export const en = {
   "your-textbooks": "Your textbooks",
   "byob-title-full": "Bring your own book.",
   "textbooks-text":
-    "Upload a PDF (up to {max} MB) or paste text. It's read on your device — the file never leaves your phone — and the book's own table of contents is split into chunks, each becoming its own study loop.",
+    "Save a textbook and its contents to your account, then choose the chapters you want to study. PDFs stay on this device; only selected chapter text is sent for processing.",
   chunk: "{n} chunk",
   "no-chunks": "No chunks yet.",
   "reading-device": "Reading your book on this device…",
@@ -263,7 +263,7 @@ export const en = {
   "building-checklist": "Building checklist…",
   "new-label": "New",
   "import-hint":
-    "Chunks import one at a time, and finished ones are skipped if you leave and come back. Weak connection? Small text only — never the file.",
+    "Your textbook and contents stay in your account. The PDF stays on this device; if you open the book elsewhere, choose its PDF again to import more chapters.",
   "nothing-new": "Nothing new to import",
   "retry-failed": "Retry {n} failed chunk",
   "retry-failed-many": "Retry {n} failed chunks",
@@ -279,6 +279,36 @@ export const en = {
   "add-textbook-label": "Add a textbook",
   "next-book": "The next book you study could be yours.",
   "book-title": "Book title",
+  "textbook-contents": "Your table of contents",
+  "choose-from-toc": "Choose chapters to add to your study library",
+  "select-available": "Select available",
+  "clear-selection": "Clear selection",
+  "select-chapter": "Select {title}",
+  "saved-book-device-note":
+    "The textbook and its contents are saved to your account. The PDF stays on this device; selected chapter text is sent for study processing.",
+  "save-textbook": "Save textbook",
+  "textbook-saved": "Textbook and contents saved.",
+  "textbook-saved-local-error":
+    "The textbook was saved to your account, but its PDF could not be kept on this device. Choose the PDF again next time you import.",
+  "reselect-textbook-source":
+    "This device no longer has the source file. Choose the original PDF again to continue.",
+  "reselect-textbook-text":
+    "This device no longer has the pasted text. Paste the original text again to import more chapters.",
+  "textbook-file-mismatch":
+    "This file does not match the saved textbook source. Choose the original PDF to avoid importing the wrong chapters.",
+  "textbook-source-conflict":
+    "This title already belongs to a different textbook source with imported chapters. Use a new title to keep both books separate.",
+  "saved-toc-chapters": "{n} chapters in its contents",
+  "view-book-contents": "View table of contents · {n} chapters",
+  "imported-chapters": "{n} chapters imported",
+  "no-chapters-imported": "No chapters imported yet.",
+  "study-section": "Study section {n} of {total}",
+  "chapter-section": "Section {n}",
+  "choose-chapters": "Choose chapters",
+  "select-to-import": "Choose chapters to import",
+  "chapter-progress": "{progress} of {total} chapters",
+  "import-chapter-n": "Import {n} chapter",
+  "import-chapters-n": "Import {n} chapters",
   "grade-example": "e.g. Grade 9 Physics",
   "subject-label": "Subject",
   "physics-example": "e.g. Physics",
@@ -293,14 +323,15 @@ export const en = {
   "choose-pdf": "Choose a PDF",
   "pdf-chosen": "{size} MB — read on this device, up to {max} MB",
   "pdf-scan-note":
-    "PDFs up to {max} MB. Scanned (image-only) PDFs have no text to study — paste the text instead.",
+    "PDFs up to {max} MB. Scanned pages are read on this device; select a chapter to recognize it when you import.",
   "paste-placeholder":
-    "Paste the book's text here (a few chunks' worth at a time). Headings like \u201CUnit 1\u201D or \u201Cምዕራፍ 2\u201D split it into study chunks for you.",
+    "Paste the book's text here (a few chapters' worth at a time). Headings like \u201CUnit 1\u201D or \u201Cምዕራፍ 2\u201D are used to find chapters.",
   characters: "{n} characters",
   "headings-detect":
     "Chapter headings like \u201CUnit 1\u201D or \u201Cምዕራፍ 2\u201D are detected automatically.",
-  "scan-chunks": "Scan into chunks",
-  "plan-confirm": "You'll confirm the chunks before anything is imported.",
+  "scan-chunks": "Read the table of contents",
+  "plan-confirm":
+    "Review the book's contents, then save the textbook before importing chapters.",
   "demo-budget":
     "This room runs on a small request budget — your dashboard shows exactly what's left and when it refills. Signing in raises the limit and removes the daily book cap.",
   "book-on-shelf": "\u201C{title}\u201D is on the shelf.",
@@ -777,7 +808,7 @@ export const am: Record<MessageKey, string> = {
   "your-textbooks": "የመማሪያ መጽሐፎችህ",
   "byob-title-full": "የራስህን መጽሐፍ አምጣ።",
   "textbooks-text":
-    "PDF (እስከ {max} MB) ጫን ወይም ጽሑፍ ገልብጥ። በመሣሪያህ ላይ ይነበባል — ፋይሉ ከስልክህ ፈጽሞ አይወጣም — የመጽሐፉ የይዘት ማውጫም ወደ ክፍሎች ይከፈላል፣ እያንዳንዱም የራሱ የጥናት ዑደት ይሆናል።",
+    "የመጽሐፍህን ይዘት በመለያህ ላይ አስቀምጥ፣ ከዚያም ማጥናት የምትፈልጋቸውን ምዕራፎች ምረጥ። PDF ፋይሉ በዚህ መሣሪያ ላይ ይቆያል፤ የመረጥከው የምዕራፍ ጽሑፍ ብቻ ለማስኬድ ይላካል።",
   chunk: "{n} ክፍል",
   "no-chunks": "ገና ክፍሎች የሉም።",
   "reading-device": "መጽሐፍህ በዚህ መሣሪያ ላይ እየተነበበ ነው…",
@@ -791,7 +822,7 @@ export const am: Record<MessageKey, string> = {
   "building-checklist": "ዝርዝር እየተዘጋጀ ነው…",
   "new-label": "አዲስ",
   "import-hint":
-    "ክፍሎቹ በአንድ በአንድ ይገባሉ፣ የጨረስካቸው ደግሞ ሄደህ ተመልሰህ ስትመጣ ይዘለላሉ። ደካማ ግንኙነት? አነስተኛ ጽሑፍ ብቻ — ፋይሉ ፈጽሞ አይላክም።",
+    "መጽሐፉና ይዘቱ በመለያህ ላይ ይቀመጣሉ። PDF ፋይሉ በዚህ መሣሪያ ላይ ይቆያል፤ በሌላ መሣሪያ ላይ ተጨማሪ ምዕራፎችን ለማስገባት PDF ፋይሉን እንደገና ምረጥ።",
   "nothing-new": "የሚገባ አዲስ ነገር የለም",
   "retry-failed": "ያልተሳካውን {n} ክፍል እንደገና ሞክር",
   "retry-failed-many": "ያልተሳኩትን {n} ክፍሎች እንደገና ሞክር",
@@ -807,6 +838,36 @@ export const am: Record<MessageKey, string> = {
   "add-textbook-label": "የመማሪያ መጽሐፍ ጨምር",
   "next-book": "የሚቀጥለው የምታጠናው መጽሐፍ የራስህ ሊሆን ይችላል።",
   "book-title": "የመጽሐፍ ርዕስ",
+  "textbook-contents": "የመጽሐፉ ይዘት",
+  "choose-from-toc": "ወደ ጥናት መዝገብህ የሚጨመሩ ምዕራፎችን ምረጥ",
+  "select-available": "ሁሉንም ምረጥ",
+  "clear-selection": "ምርጫውን አጽዳ",
+  "select-chapter": "{title} ምረጥ",
+  "saved-book-device-note":
+    "መጽሐፉና ይዘቱ በመለያህ ላይ ተቀምጠዋል። PDF ፋይሉ በዚህ መሣሪያ ላይ ይቆያል፤ የተመረጠው ምዕራፍ ጽሑፍ ለጥናት ማስኬድ ይላካል።",
+  "save-textbook": "መጽሐፉን አስቀምጥ",
+  "textbook-saved": "መጽሐፉና ይዘቱ ተቀምጠዋል።",
+  "textbook-saved-local-error":
+    "መጽሐፉ በመለያህ ላይ ተቀምጧል፣ ግን PDF ፋይሉን በዚህ መሣሪያ ላይ ማስቀመጥ አልተቻለም። በሚቀጥለው ጊዜ ለማስገባት PDF ፋይሉን እንደገና ምረጥ።",
+  "reselect-textbook-source":
+    "ይህ መሣሪያ የመጀመሪያውን ፋይል አያስቀምጠውም። ለመቀጠል የመጀመሪያውን PDF እንደገና ምረጥ።",
+  "reselect-textbook-text":
+    "ይህ መሣሪያ የተለጠፈውን ጽሑፍ አያስቀምጠውም። ተጨማሪ ምዕራፎችን ለማስገባት የመጀመሪያውን ጽሑፍ እንደገና ለጥፍ።",
+  "textbook-file-mismatch":
+    "ይህ ፋይል ከተቀመጠው የመጽሐፍ ምንጭ ጋር አይዛመድም። የተሳሳቱ ምዕራፎችን እንዳታስገባ የመጀመሪያውን PDF ምረጥ።",
+  "textbook-source-conflict":
+    "ይህ ርዕስ ከሌላ የመጽሐፍ ምንጭ ጋር ተያይዞ ምዕራፎች ቀድሞ ገብተዋል። ሁለቱንም መጽሐፎች ለመለየት አዲስ ርዕስ ተጠቀም።",
+  "saved-toc-chapters": "በይዘቱ ውስጥ {n} ምዕራፎች",
+  "view-book-contents": "የመጽሐፉን ይዘት አሳይ · {n} ምዕራፎች",
+  "imported-chapters": "{n} ምዕራፎች ገብተዋል",
+  "no-chapters-imported": "ገና ምዕራፎች አልገቡም።",
+  "study-section": "የጥናት ክፍል {n} ከ {total}",
+  "chapter-section": "ክፍል {n}",
+  "choose-chapters": "ምዕራፎችን ምረጥ",
+  "select-to-import": "ለማስገባት ምዕራፎችን ምረጥ",
+  "chapter-progress": "{progress} ከ {total} ምዕራፎች",
+  "import-chapter-n": "{n} ምዕራፍ አስገባ",
+  "import-chapters-n": "{n} ምዕራፎችን አስገባ",
   "grade-example": "ለምሳሌ 9ኛ ክፍል ፊዚክስ",
   "subject-label": "ትምህርት",
   "physics-example": "ለምሳሌ ፊዚክስ",
@@ -821,14 +882,14 @@ export const am: Record<MessageKey, string> = {
   "choose-pdf": "PDF ምረጥ",
   "pdf-chosen": "{size} MB — በዚህ መሣሪያ ላይ ይነበባል፣ እስከ {max} MB",
   "pdf-scan-note":
-    "PDF እስከ {max} MB። በስካን (ምስል ብቻ) የተገኙ PDF የሚጠና ጽሑፍ የላቸውም — ይልቁንም ጽሑፉን ገልብጥ።",
+    "PDF እስከ {max} MB። የተስካኑ ገጾች በዚህ መሣሪያ ላይ ይነበባሉ፤ ሲያስገቡ ለማንበብ ምዕራፍ ይምረጡ።",
   "paste-placeholder":
-    "የመጽሐፉን ጽሑፍ እዚህ ገልብጥ (በአንድ ጊዜ ጥቂት ክፍሎች)። እንደ \u201CUnit 1\u201D ወይም \u201Cምዕራፍ 2\u201D ያሉ አርዕስቶች ወደ ጥናት ክፍሎች ለአንተ ይከፍሉታል።",
+    "የመጽሐፉን ጽሑፍ እዚህ ገልብጥ (በአንድ ጊዜ ጥቂት ምዕራፎች)። እንደ \u201CUnit 1\u201D ወይም \u201Cምዕራፍ 2\u201D ያሉ አርዕስቶች ምዕራፎችን ለመለየት ይረዳሉ።",
   characters: "{n} ቁምፊዎች",
   "headings-detect":
     "እንደ \u201CUnit 1\u201D ወይም \u201Cምዕራፍ 2\u201D ያሉ የምዕራፍ አርዕስቶች በራሳቸው ይታወቃሉ።",
-  "scan-chunks": "ወደ ክፍሎች ቃኝ",
-  "plan-confirm": "ማንኛውም ነገር ከመግባቱ በፊት ክፍሎቹን ያረጋግጣሉ።",
+  "scan-chunks": "የመጽሐፉን ይዘት አንብብ",
+  "plan-confirm": "የመጽሐፉን ይዘት መርምር፣ ከዚያም ምዕራፎችን ከማስገባትህ በፊት መጽሐፉን አስቀምጥ።",
   "demo-budget":
     "ይህ ክፍል በአነስተኛ የጥሪ በጀት ይሰራል — ዋና ገጽህ ምን ቀርቷልና መቼ ይሞላል በግልጽ ያሳያል። በመለያ ማስገባት ገደቡን ያሳድጋል፤ የቀኑንም የመጽሐፍ ገደብ ያነሳል።",
   "book-on-shelf": "\u201C{title}\u201D በመደርደሪያው ላይ ነው።",

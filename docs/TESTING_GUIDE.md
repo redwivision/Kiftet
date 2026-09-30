@@ -500,7 +500,7 @@ half-finished stream drive what we grade or read back.
 
 ## Phase 6 — Your own textbook (import → study)
 
-> **Status:** **open.** Import, device-side OCR, and AI extraction are all
+> **Status:** **shipped.** Import, device-side OCR, and AI extraction are all
 > live. The 15 MB file cap applies, and every caller is charged the same
 > per-minute budget (demo 3, signed-in 8) plus the demo 3-textbooks/day cap.
 > Set `TEXTBOOK_IMPORT_ENABLED = false` in `apps/web/src/routes/textbooks.tsx`
@@ -508,35 +508,41 @@ half-finished stream drive what we grade or read back.
 
 ### How to test
 
-1. Down a real PDF with a text layer (any textbook excerpt), or just copy-paste
-   chapter text. Confirm:
+1. Use a real PDF with a text layer (any textbook excerpt), or paste chapter
+   text. Confirm:
    - a PDF **over 15 MB** is rejected with a clear message (no extraction runs);
    - a scanned/image-only PDF is recognized locally when it has readable
      chapter headings or a contents page; the original PDF is never uploaded.
-2. In the app: **Add your textbook** → name it, pick subject + language, attach
-   the PDF (or choose "paste text"). The PDF is read **on the device** — the
-   file is never uploaded.
-3. **Contents and boundaries:** readable PDFs use their outline/bookmarks and
-   extracted headings. For scanned PDFs, inspect the proposed unit list and
-   expandable numbered topics; printed-page alignment is only used when it
-   agrees with detected chapter starts. If OCR/alignment cannot be trusted,
-   the importer falls back to detected headings. Pasted text uses heading
-   detection (`Unit 1`, `ምዕራፍ 2`, …), then even text chunks.
+2. In the app: **Add your textbook** → name it, choose subject + language, and
+   attach a PDF or paste text. PDF text, bookmarks, contents OCR and chapter
+   OCR are read **on-device**; the original file is never uploaded.
+3. **Contents and hierarchy:** readable PDFs use their outline/bookmarks and
+   extracted headings. For scanned PDFs, inspect the tree of units and nested
+   numbered topics; printed-page alignment is only used when it agrees with
+   detected chapter starts. If OCR/alignment cannot be trusted, the importer
+   falls back to detected headings. Pasted text uses heading detection
+   (`Unit 1`, `ምዕራፍ 2`, …), then even text chunks. Very long internal ingest
+   splits must remain grouped under one visible textbook chapter.
    The repository fixture for the real Grade 10 Biology contents is
    `apps/web/src/lib/toc.fixture.ts`; the parser tests assert six units and all
    53 numbered topics, including wrapped titles and OCR-split numbering.
-4. Review and edit chunk titles → in and out of the flow and back in
-   **resumes** where it stopped (already-done chunks are skipped with
-   `reused: true`, never re-ingested, never re-spending AI).
-5. Each chunk is POSTed one at a time to `/api/chapters/ingest`; TOC topics
-   seed the checklist in their original order, and the model can add concepts
-   and misconceptions from the chapter text. Watch for per-chunk progress, and a
-   clear failure/retry on any single chunk (weak-wifi friendly: small text
-   payloads, no giant upload).
-6. Ingested chunks show up in the dashboard like the seeded chapters — start a
-   study session on your own chunk and run recall → gaps → lesson → retest
-   against **its** checklist.
-7. **Quotas:** `GET /api/ai/budget` returns the current-minute AI budget
+4. **Save before importing:** click **Save textbook**. Confirm `POST
+   /api/textbooks` contains only metadata and the nested TOC, and that the
+   source is retained only in this browser's IndexedDB. Reload the page; the
+   saved book and its outline should still appear in the account library.
+5. Select one chapter from the tree and import it. Only that chapter's text
+   and optional numbered topics are POSTed to `/api/chapters/ingest`. The
+   resulting checklist keeps TOC order, while the model can add distinct
+   concepts and misconceptions. Verify progress, single-chapter retry, and
+   that no unselected chapter is imported.
+6. Reopen the book after reload: the imported chapter must be marked as already
+   added, while unimported chapters remain selectable. Open the account in a
+   second browser/device; its saved TOC should remain, but importing more
+   chapters requires selecting the original PDF again. A different-name or
+   different-size file must be rejected rather than attached to the outline.
+7. Start a study session on an imported chapter and run recall → gaps → lesson
+   → retest against its checklist.
+8. **Quotas:** `GET /api/ai/budget` returns the current-minute AI budget
    (`remaining`, `resetAt`, `retryAfterSeconds`) and the daily book usage
    (`books.used`, `books.limit`, `books.resetAt`). The dashboard pill shows
    both to **every** visitor, signed-in or demo, and counts the wait down when
@@ -555,12 +561,15 @@ half-finished stream drive what we grade or read back.
 1. Dev: `bun run --cwd apps/server dev` + `bun run --cwd apps/web dev`, open
    http://localhost:5173. (The lazy-loaded PDF engine only downloads on first
    use — confirm the base bundle doesn't grow when this feature is closed.)
-2. Dashboard empty state shows **Add your textbook**; the flow works end-to-end
-   with a real PDF of a few pages (fast) and a long PDF (progress + resume).
+2. Open **Your textbooks**, save a book and its TOC before importing, then
+   select one or more tree nodes. A real PDF of a few pages should complete
+   quickly; a long OCR chapter should show chapter-level progress without
+   exposing its internal text-size splits as separate choices.
 3. With a `GEMINI_API_KEY` absent, ingest must still complete via the
    deterministic fallback (concepts of lower fidelity but never a hard failure).
-4. Kill the wifi mid-import on one chunk → that chunk shows failed/retry and
-   the next tap resumes without re-sending finished chunks.
+4. Kill the wifi mid-import on one selected chapter → that chapter shows
+   failed/retry. Return to the saved book and retry it; already-imported
+   chapters remain marked and are not sent through AI again.
 
 ### How to test — error presentation (hardening pass)
 

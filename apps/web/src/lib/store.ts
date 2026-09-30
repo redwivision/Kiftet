@@ -1,5 +1,5 @@
 // Bet 3 (STRATEGY.md): the offline-first loop's local data layer — a tiny
-// promise IndexedDB store, no dependencies. Five object stores:
+// promise IndexedDB store, no dependencies. Seven object stores:
 //
 //   chapters   — the owned-chapter list, keyed by chapter id
 //   checklist  — a chapter's concept checklist, keyed by chapter id
@@ -10,6 +10,9 @@
 //                session id (see lib/study-cache.ts)
 //   ocr        — recognized text for one page of one textbook, keyed by
 //                book + page (see lib/ocr-cache.ts)
+//   textbook-files — source PDFs or pasted text, stored on this device only;
+//                     account metadata and the saved table of contents sync
+//                     separately, never the original file
 //
 // Everything is SSR-safe: in a server build (or a browser without IndexedDB)
 // every call resolves to a no-op/empty result instead of throwing.
@@ -29,7 +32,7 @@ export type CachedQuestion = {
 };
 
 const DB_NAME = "kiftet-store";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORES = [
   "chapters",
   "checklist",
@@ -37,6 +40,7 @@ const STORES = [
   "lesson",
   "questions",
   "ocr",
+  "textbook-files",
 ] as const;
 
 type StoreName = (typeof STORES)[number];
@@ -250,5 +254,45 @@ export async function getCachedQuestions(
     "questions",
     "readonly",
     (s) => s.get(sessionId) as IDBRequest<CachedQuestionsRow | undefined>,
+  ).then((v) => v ?? null);
+}
+
+// ── On-device textbook sources ─────────────────────────────────
+
+export type LocalTextbookSource = {
+  textbookId: string;
+  name: string;
+  type: "application/pdf" | "text/plain";
+  blob: Blob;
+  savedAt: number;
+};
+
+export async function saveLocalTextbookSource(
+  textbookId: string,
+  name: string,
+  blob: Blob,
+): Promise<void> {
+  if (!dbAvailable()) throw new Error("This browser cannot store textbooks.");
+  await putStore(
+    "textbook-files",
+    {
+      textbookId,
+      name,
+      type: blob.type === "application/pdf" ? "application/pdf" : "text/plain",
+      blob,
+      savedAt: Date.now(),
+    } satisfies LocalTextbookSource,
+    textbookId,
+  );
+}
+
+export async function getLocalTextbookSource(
+  textbookId: string,
+): Promise<LocalTextbookSource | null> {
+  if (!dbAvailable()) return null;
+  return tx(
+    "textbook-files",
+    "readonly",
+    (s) => s.get(textbookId) as IDBRequest<LocalTextbookSource | undefined>,
   ).then((v) => v ?? null);
 }

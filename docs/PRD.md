@@ -79,10 +79,11 @@ assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
 - Full gamification, 3D models, avatar/character layer.
 - Spaced-repetition scheduling across sessions/days.
 
-> The demo seed is still limited, but Phase 6 is shipped: students can upload a
-> PDF or paste text, inspect the proposed chapters and import them into their
-> library. PDF text, contents parsing and OCR run on-device; only chapter text
-> and optional numbered topics are sent to the ingest API.
+> The demo seed is still limited, but Phase 6 is shipped: students save a
+> textbook and its nested contents to their account, then choose chapters from
+> the tree to import into their study library. PDF text, contents parsing and
+> OCR run on-device; the original PDF remains in local browser storage, while
+> only selected chapter text and optional numbered topics are sent to ingest.
 
 ## 6. Non-functional requirements
 

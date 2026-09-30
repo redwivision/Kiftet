@@ -25,6 +25,8 @@ type ExtractedItem = { str?: string; hasEOL?: boolean };
 export type ImportChunk = {
   title: string;
   rawText: string;
+  /** User-facing chapter title when this internal ingest chunk is one of parts. */
+  parentTitle?: string;
   /**
    * Half-open page range this chunk covers, when the pages still need reading.
    * Present exactly when `needsOcr` is true; the import flow fills `rawText`
@@ -46,6 +48,73 @@ export type ImportChunk = {
    */
   topics?: string[];
 };
+
+export type ImportTocNode = {
+  id: string;
+  title: string;
+  start: number | null;
+  end: number | null;
+  children: ImportTocNode[];
+  /** Internal ingest rows represented by this user-facing chapter. */
+  chunkIndexes?: number[];
+};
+
+export function visibleChapterTitle(title: string): {
+  title: string;
+  section: number | null;
+} {
+  const match = /^(.*?) \(part (\d+)\)$/.exec(title);
+  return match
+    ? { title: match[1] ?? title, section: Number(match[2]) }
+    : { title, section: null };
+}
+
+function topicsAsTree(topics: string[], parentId: string): ImportTocNode[] {
+  const roots: ImportTocNode[] = [];
+  const stack: { depth: number; node: ImportTocNode }[] = [];
+  topics.forEach((topic, index) => {
+    const pathParts = topic.split(" · ");
+    const title = pathParts.at(-1) ?? topic;
+    const prefix = /^(\d+(?:\.\d+)*)\b/.exec(title)?.[1];
+    const numberDepth = prefix ? prefix.split(".").length : 1;
+    const depth = Math.max(pathParts.length, numberDepth);
+    const node: ImportTocNode = {
+      id: `${parentId}-topic-${index}`,
+      title,
+      start: null,
+      end: null,
+      children: [],
+    };
+    while ((stack.at(-1)?.depth ?? 0) >= depth) stack.pop();
+    const parent = stack.at(-1)?.node;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+    stack.push({ depth, node });
+  });
+  return roots;
+}
+
+export function importTocTree(chunks: ImportChunk[]): ImportTocNode[] {
+  const roots = new Map<string, ImportTocNode>();
+  chunks.forEach((chunk, index) => {
+    const title = chunk.parentTitle ?? chunk.title;
+    let root = roots.get(title);
+    if (!root) {
+      const id = `chapter-${index}`;
+      root = {
+        id,
+        title,
+        start: chunk.pages?.start ?? null,
+        end: chunk.pages?.end ?? null,
+        children: topicsAsTree(chunk.topics ?? [], id),
+        chunkIndexes: [],
+      };
+      roots.set(title, root);
+    }
+    root.chunkIndexes?.push(index);
+  });
+  return [...roots.values()];
+}
 
 export type ImportSource =
   | { kind: "pdf"; name: string; file: File }
@@ -125,6 +194,7 @@ export function withPartSplits(
   topics?: string[],
 ): ImportChunk[] {
   const out: ImportChunk[] = [];
+  const split = full.length > MAX_CHAPTER_CHARS;
   let rest = full;
   let part = 1;
   while (rest.length > MAX_CHAPTER_CHARS) {
@@ -135,6 +205,7 @@ export function withPartSplits(
     out.push({
       title: `${title} (part ${part})`,
       rawText: rest.slice(0, cut).trim(),
+      parentTitle: split ? title : undefined,
       // Keep the chapter outline on one part; repeating it creates duplicate
       // checklist items across the split chapters.
       topics: part === 1 ? topics : undefined,
@@ -146,6 +217,7 @@ export function withPartSplits(
     out.push({
       title: part === 1 ? title : `${title} (part ${part})`,
       rawText: rest,
+      parentTitle: split ? title : undefined,
       topics: part === 1 ? topics : undefined,
     });
   return out;
@@ -435,6 +507,48 @@ function chunkByOutline(
     segments.push({ title: cuts[i].path, start, end });
   }
   return segments;
+}
+
+function chaptersFromOutline(
+  pages: string[],
+  outline: OutlineEntry[],
+): ImportChunk[] | null {
+  const valid = outline
+    .filter((entry) => entry.pageIndex > 0 && entry.pageIndex < pages.length)
+    .sort((a, b) => a.pageIndex - b.pageIndex);
+  const topLevel = valid.filter((entry) => !entry.path.includes(" · "));
+  let chapters = topLevel.length >= 2 ? topLevel : [];
+  if (chapters.length < 2) {
+    const secondLevel = valid.filter(
+      (entry) => entry.path.split(" · ").length === 2,
+    );
+    if (secondLevel.length >= 2) chapters = secondLevel;
+  }
+  const cuts = chapters.filter(
+    (entry, index) =>
+      index === 0 || entry.pageIndex !== chapters[index - 1]?.pageIndex,
+  );
+  if (cuts.length < 2) return null;
+
+  const chunks = cuts.flatMap((entry, index) => {
+    const start = entry.pageIndex;
+    const end = cuts[index + 1]?.pageIndex ?? pages.length;
+    const body = pages.slice(start, end).join("\n\n").trim();
+    if (!body) return [];
+    const prefix = `${entry.path} · `;
+    const topics = valid
+      .filter(
+        (candidate) =>
+          candidate.path.startsWith(prefix) &&
+          candidate.pageIndex >= start &&
+          candidate.pageIndex < end,
+      )
+      .map((candidate) => candidate.path.slice(prefix.length));
+    return withPartSplits(entry.title, body, topics);
+  });
+  return uniqueTitles(
+    chunks.filter((chunk) => wordCount(chunk.rawText) >= MIN_CHUNK_WORDS),
+  );
 }
 
 function segmentPages(pages: string[]): PageSegment[] {
@@ -738,6 +852,7 @@ export type OcrChunkReader = {
 
 export type ImportPlan = {
   chunks: ImportChunk[];
+  toc: ImportTocNode[];
   /** Present only when the book has to be read from page images. */
   reader: OcrChunkReader | null;
   /** Why OCR is needed, for the message shown to the student. */
@@ -762,7 +877,12 @@ export async function planImport(
 ): Promise<ImportPlan> {
   if (source.kind !== "pdf") {
     const chunks = await planChunks(source);
-    return { chunks, reader: null, ocrReason: null };
+    return {
+      chunks,
+      toc: importTocTree(chunks),
+      reader: null,
+      ocrReason: null,
+    };
   }
 
   const { doc, pages, outline, audit, close } = await openPdf(source.file);
@@ -777,21 +897,31 @@ export async function planImport(
     if (!audit.problem) {
       // The normal path: real text, no OCR, nothing left open.
       await closeOnce();
-      let segments =
-        outline.length >= 2
-          ? chunkByOutline(pages, outline)
-          : segmentPages(pages);
-      if (segments.length <= 1) segments = fallbackPages(pages);
-      const chunks = segments
-        .flatMap((s) => {
-          const full = pages.slice(s.start, s.end).join("\n\n").trim();
-          return full ? withPartSplits(s.title, full) : [];
-        })
-        // A book can pass the audit overall and still have a section that is
-        // nothing but a heading and a page number. Importing that as a chapter
-        // would have the model diagnose a page it never actually read.
-        .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
-      return { chunks: uniqueTitles(chunks), reader: null, ocrReason: null };
+      let chunks =
+        outline.length >= 2 ? chaptersFromOutline(pages, outline) : null;
+      if (!chunks) {
+        let segments =
+          outline.length >= 2
+            ? chunkByOutline(pages, outline)
+            : segmentPages(pages);
+        if (segments.length <= 1) segments = fallbackPages(pages);
+        chunks = segments
+          .flatMap((s) => {
+            const full = pages.slice(s.start, s.end).join("\n\n").trim();
+            return full ? withPartSplits(s.title, full) : [];
+          })
+          // A book can pass the audit overall and still have a section that is
+          // nothing but a heading and a page number. Importing that as a chapter
+          // would have the model diagnose a page it never actually read.
+          .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
+      }
+      const unique = uniqueTitles(chunks);
+      return {
+        chunks: unique,
+        toc: importTocTree(unique),
+        reader: null,
+        ocrReason: null,
+      };
     }
 
     // The text layer is unreadable. Find the chapters from whatever *is*
@@ -896,7 +1026,12 @@ export async function planImport(
       close: closeOnce,
     };
 
-    return { chunks, reader, ocrReason: audit.problem };
+    return {
+      chunks,
+      toc: importTocTree(chunks),
+      reader,
+      ocrReason: audit.problem,
+    };
   } catch (err) {
     await closeOnce();
     throw err;
@@ -923,17 +1058,21 @@ export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
   const { pages, outline, audit, close } = await openPdf(source.file);
   try {
     if (audit.problem) throw new PdfUnreadableError(audit);
-    let segments =
-      outline.length >= 2
-        ? chunkByOutline(pages, outline)
-        : segmentPages(pages);
-    if (segments.length <= 1) segments = fallbackPages(pages);
-    const chunks = segments
-      .flatMap((s) => {
-        const full = pages.slice(s.start, s.end).join("\n\n").trim();
-        return full ? withPartSplits(s.title, full) : [];
-      })
-      .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
+    let chunks =
+      outline.length >= 2 ? chaptersFromOutline(pages, outline) : null;
+    if (!chunks) {
+      let segments =
+        outline.length >= 2
+          ? chunkByOutline(pages, outline)
+          : segmentPages(pages);
+      if (segments.length <= 1) segments = fallbackPages(pages);
+      chunks = segments
+        .flatMap((s) => {
+          const full = pages.slice(s.start, s.end).join("\n\n").trim();
+          return full ? withPartSplits(s.title, full) : [];
+        })
+        .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
+    }
     return uniqueTitles(chunks);
   } finally {
     await close();

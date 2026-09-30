@@ -60,8 +60,11 @@ The authoritative schema and migration history are in
    numbered topic entries are preserved, and printed page numbers are aligned
    against detected unit starts before defining chapter ranges. If contents
    OCR/alignment is not reliable, the importer falls back to detected headings.
-   Only chapter text and optional topic labels are sent to the server; the PDF
-   itself never uploads.
+   The student saves the textbook record and nested TOC to the account before
+   selecting chapters. The browser keeps the source in IndexedDB on that device
+   only; only selected chapter text and optional topic labels are sent to the
+   server. The saved TOC and imported chapters remain available from the
+   account library.
 2. **Build the checklist.** The API merges contents-page topics, in book
    order, with concepts and misconceptions extracted from chapter prose.
    Duplicate ideas are reconciled, and the result is stored once per chapter.
@@ -87,6 +90,8 @@ Core routes include:
 
 ```
 POST /chapters/ingest             — chapter text + optional numbered topics
+POST /textbooks                   — save owned textbook metadata + nested TOC
+GET  /textbooks                   — owned books, saved TOCs + imported chapters
 GET  /chapters/:id/concepts       — chapter checklist
 POST /sessions/:id/recall         — transcript → per-concept diagnosis
 GET  /chapters/:id/guide          — mastery-ordered, cached guide sections
@@ -94,7 +99,6 @@ POST /sessions/:id/microlesson    — legacy/current short-lesson flow
 POST /sessions/:id/retest         — generate retest questions
 POST /sessions/:id/retest/answer  — grade a retest response
 GET  /sessions/:id/result         — before/after result
-GET  /textbooks                   — owned textbook library
 GET  /ai/budget                   — current AI window and daily book allowance
 ```
 

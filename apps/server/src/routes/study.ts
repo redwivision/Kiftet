@@ -6,6 +6,7 @@ import {
   misconceptionHit,
   studySession,
   syllabusUnit,
+  type TextbookTocNode,
   textbook,
 } from "@kiftet/db/schema";
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
@@ -287,6 +288,71 @@ const ingestSchema = z.object({
     .optional(),
 });
 
+const saveTextbookSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  subject: z.string().trim().min(1).max(120),
+  language: z.string().trim().min(1).max(24).default("en"),
+  sourceName: z.string().trim().min(1).max(255).optional(),
+  sourceSize: z.number().int().positive().optional(),
+  toc: z.array(z.unknown()).min(1).max(200),
+});
+
+function isTocPage(value: unknown): value is number | null {
+  return (
+    value === null ||
+    (typeof value === "number" && Number.isInteger(value) && value >= 0)
+  );
+}
+
+function isTextbookToc(value: unknown): value is TextbookTocNode[] {
+  if (!Array.isArray(value)) return false;
+  const pending = value.map((node) => ({ node, depth: 1 }));
+  const ids = new Set<string>();
+  let nodeCount = 0;
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item || item.depth > 12 || ++nodeCount > 2_000) return false;
+    if (
+      typeof item.node !== "object" ||
+      item.node === null ||
+      Array.isArray(item.node)
+    ) {
+      return false;
+    }
+    const node = item.node as Record<string, unknown>;
+    if (
+      typeof node.id !== "string" ||
+      !node.id.trim() ||
+      node.id.length > 200 ||
+      ids.has(node.id) ||
+      typeof node.title !== "string" ||
+      !node.title.trim() ||
+      node.title.length > 300 ||
+      !isTocPage(node.start) ||
+      !isTocPage(node.end) ||
+      !Array.isArray(node.children) ||
+      node.children.length > 100
+    ) {
+      return false;
+    }
+    ids.add(node.id);
+    pending.push(
+      ...node.children.map((child) => ({ node: child, depth: item.depth + 1 })),
+    );
+  }
+  return true;
+}
+
+function saveableTextbookToc(nodes: TextbookTocNode[]): TextbookTocNode[] {
+  return nodes.map(({ id, title, start, end, children }) => ({
+    id,
+    title,
+    start,
+    end,
+    children: saveableTextbookToc(children),
+  }));
+}
+
 async function textbookIdFor(
   owner: string,
   title: string,
@@ -474,6 +540,38 @@ router.get("/textbooks", async (req, res) => {
       chapters: chapterRows.filter((c) => c.textbookId === t.id),
     })),
   );
+});
+
+router.post("/textbooks", async (req, res) => {
+  const parsed = saveTextbookSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  const submittedToc = parsed.data.toc;
+  if (!isTextbookToc(submittedToc))
+    return err(res, "The table of contents is too large or invalid.");
+  const { title, subject, language, sourceName, sourceSize } = parsed.data;
+  const toc = saveableTextbookToc(submittedToc);
+  const owner = ownerId(req);
+  let textbookId: string;
+  try {
+    textbookId = await textbookIdFor(
+      owner,
+      title,
+      subject,
+      language,
+      isDemo(req),
+    );
+  } catch (e) {
+    if (e instanceof DailyBookLimitError)
+      return err(res, e.message, 429, e.resetAt);
+    throw e;
+  }
+  await db()
+    .update(textbook)
+    .set({ subject, language, sourceName, sourceSize, toc })
+    .where(and(eq(textbook.id, textbookId), eq(textbook.ownerId, owner)));
+
+  ok(res, { textbookId }, 201);
 });
 
 router.get("/chapters", async (req, res) => {
