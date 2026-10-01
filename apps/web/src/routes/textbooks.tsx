@@ -11,6 +11,7 @@ import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import { InkPage } from "@/components/ink-page";
 import { useLanguage } from "@/components/language-provider";
+import { TocPicker } from "@/components/toc-picker";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
@@ -20,10 +21,14 @@ import {
   type ImportChunk,
   type ImportTocNode,
   importTocTree,
+  indexToc,
   MAX_FILE_MB,
   type OcrChunkReader,
   type PdfUnreadableReason,
   planImport,
+  type TocJob,
+  tocJobs,
+  topicLabel,
   visibleChapterTitle,
   withPartSplits,
 } from "@/lib/textbook";
@@ -55,8 +60,16 @@ type LibraryTextbook = {
 
 type SourceMode = "pdf" | "text";
 
-type Stage = {
-  key: number;
+/**
+ * How far one visible line of the book has got.
+ *
+ * Keyed by TOC node id rather than chunk index, because the two views now let a
+ * student tick a *topic* — "1.1.1 The nucleus" — which is not a chunk at all. It
+ * is a page range, and its progress has to be tracked the same way a unit's is or
+ * the badge beside it would flicker between states it never passed through.
+ */
+type NodeStage = {
+  id: string;
   title: string;
   state: "skip" | "queued" | "reading" | "ingesting" | "done" | "error";
 };
@@ -104,7 +117,7 @@ export default function Textbooks() {
 
   const [step, setStep] = useState<ImportStep>("form");
   const [planned, setPlanned] = useState<ImportChunk[] | null>(null);
-  const [stages, setStages] = useState<Stage[]>([]);
+  const [nodeStages, setNodeStages] = useState<NodeStage[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Held for the life of the review screen: it keeps the PDF loaded so pages
   // can be rendered on demand, and it is the only thing that knows how to turn
@@ -164,12 +177,30 @@ export default function Textbooks() {
     setOcrReason(result.ocrReason);
     setOcrProgress(null);
     setPlanned(result.chunks);
-    setStages(
-      result.chunks.map((c, i) => ({
-        key: i,
-        title: c.title,
-        state: imported.has(c.title.trim()) ? "skip" : "queued",
-      })),
+    const toc = importTocTree(result.chunks);
+    // One stage per visible line, keyed by node id, and one for *every* line —
+    // not just the six units. A topic is importable on its own now, and a stage
+    // array without its row cannot be updated by setNodeState, so its badge
+    // would sit on "queued" forever and its retry button would never appear.
+    // A unit is "skip" only when every chunk it covers is already in the
+    // library; a half-imported unit is still worth offering, and its missing
+    // parts are what the student wants.
+    const flat = indexToc(toc);
+    setNodeStages(
+      flat.order.flatMap((id) => {
+        const node = flat.byId.get(id);
+        if (!node) return [];
+        const landed = (node.chunkIndexes ?? []).every((chunkIndex) =>
+          imported.has((result.chunks[chunkIndex]?.title ?? "").trim()),
+        );
+        return [
+          {
+            id,
+            title: node.title,
+            state: node.chunkIndexes && landed ? "skip" : "queued",
+          },
+        ];
+      }),
     );
     setTocSelection(new Set());
     setSavedTextbookId(savedId);
@@ -344,41 +375,64 @@ export default function Textbooks() {
     }
   };
 
-  const importChapter = async (
-    chapter: ImportChunk,
-    key: number,
-  ): Promise<void> => {
-    const reader = readerRef.current;
-    // A chapter from a book whose text layer is broken carries no text yet —
-    // read it from the page image on this device before sending anything.
-    let rawText = chapter.rawText;
-    if (chapter.needsOcr && reader) {
-      setStages((prev) =>
-        prev.map((s) => (s.key === key ? { ...s, state: "reading" } : s)),
-      );
-      try {
-        rawText = await reader.read(chapter, ({ done, total }) =>
-          setOcrProgress({ done, total }),
-        );
-      } catch {
-        setStages((prev) =>
-          prev.map((s) => (s.key === key ? { ...s, state: "error" } : s)),
-        );
-        throw new Error(t("ocr-unavailable"));
-      } finally {
-        setOcrProgress(null);
-      }
-      if (!rawText.trim()) {
-        setStages((prev) =>
-          prev.map((s) => (s.key === key ? { ...s, state: "error" } : s)),
-        );
-        throw new Error(t("ocr-read-nothing"));
-      }
-    }
-
-    setStages((prev) =>
-      prev.map((s) => (s.key === key ? { ...s, state: "ingesting" } : s)),
+  const setNodeState = (id: string, state: NodeStage["state"]) =>
+    setNodeStages((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, state } : s)),
     );
+
+  /**
+   * Read one ticked line and ingest it.
+   *
+   * A unit goes through its chunks in order. A topic goes through the pages
+   * between its own number and the next one, carried as a synthetic chunk with
+   * `needsOcr` set — so the on-device reader reads exactly the pages of "1.1.1
+   * The nucleus" and never a page more.
+   *
+   * The chapter is titled with its unit, because a chapter called only "1.1.1 The
+   * nucleus" would land on the shelf with no way to tell which of the six units
+   * it came from.
+   */
+  const importJob = async (job: TocJob): Promise<void> => {
+    const reader = readerRef.current;
+    setNodeState(job.nodeId, "reading");
+    try {
+      if (job.kind === "unit") {
+        for (const index of job.chunkIndexes) {
+          const chunk = planned?.[index];
+          if (!chunk) continue;
+          if (existingChapters.has(chunk.title.trim())) {
+            setNodeState(job.nodeId, "skip");
+            continue;
+          }
+          await sendChunk(job.nodeId, chunk, chunk.rawText);
+        }
+        return;
+      }
+      const slice: ImportChunk = {
+        title: `${job.unit} · ${job.title}`,
+        rawText: "",
+        pages: job.pages,
+        needsOcr: Boolean(reader),
+      };
+      const rawText = reader
+        ? await reader.read(slice, ({ done, total }) =>
+            setOcrProgress({ done, total }),
+          )
+        : "";
+      if (!rawText.trim()) throw new Error(t("ocr-read-nothing"));
+      await sendChunk(job.nodeId, slice, rawText);
+    } catch (err) {
+      setNodeState(job.nodeId, "error");
+      throw err instanceof Error ? err : new Error(t("ocr-unavailable"));
+    }
+  };
+
+  const sendChunk = async (
+    nodeId: string,
+    chapter: ImportChunk,
+    rawText: string,
+  ) => {
+    setNodeState(nodeId, "ingesting");
     try {
       // A recognised chapter is no longer bounded by the readable headings that
       // carved it up: 59 OCR'd pages of dense biology runs well past what the
@@ -398,17 +452,13 @@ export default function Textbooks() {
             language,
             title: part.title,
             rawText: part.rawText,
-            topics: part.topics,
+            topics: part.topics?.map(topicLabel),
           }),
         });
       }
-      setStages((prev) =>
-        prev.map((s) => (s.key === key ? { ...s, state: "done" } : s)),
-      );
+      setNodeState(nodeId, "done");
     } catch (err) {
-      setStages((prev) =>
-        prev.map((s) => (s.key === key ? { ...s, state: "error" } : s)),
-      );
+      setNodeState(nodeId, "error");
       throw apiError(err);
     }
   };
@@ -416,26 +466,13 @@ export default function Textbooks() {
   const runImport = async () => {
     if (!planned || !savedTextbookId || !TEXTBOOK_IMPORT_ENABLED) return;
     setStep("importing");
-    const selectedIndexes = new Set(
-      activeToc
-        .filter((node) => tocSelection.has(node.id))
-        .flatMap((node) => node.chunkIndexes ?? []),
+    const jobs = tocJobs(activeToc, tocSelection).filter(
+      (job) => nodeStages.find((s) => s.id === job.nodeId)?.state !== "skip",
     );
-    const snapshot = planned
-      .map((c, i) => ({ ...c, key: i }))
-      .filter((chapter) => selectedIndexes.has(chapter.key));
     let failed = 0;
-    for (const chapter of snapshot) {
-      if (existingChapters.has(chapter.title.trim())) {
-        setStages((prev) =>
-          prev.map((s) =>
-            s.key === chapter.key ? { ...s, state: "skip" } : s,
-          ),
-        );
-        continue;
-      }
+    for (const job of jobs) {
       try {
-        await importChapter(chapter, chapter.key);
+        await importJob(job);
       } catch {
         failed += 1;
       }
@@ -454,18 +491,17 @@ export default function Textbooks() {
     }
   };
 
-  const retryOne = async (key: number) => {
+  const retryOne = async (nodeId: string) => {
     if (!planned || !TEXTBOOK_IMPORT_ENABLED) return;
-    const chapter = planned[key];
-    if (!chapter) return;
     setStep("importing");
     try {
-      await importChapter(chapter, key);
+      const job = tocJobs(activeToc, new Set([nodeId]))[0];
+      if (job) await importJob(job);
       fetchLibrary();
-      setStep("review");
     } catch {
-      setStep("review");
+      // The stage is already "error"; the badge and its retry button say so.
     }
+    setStep("review");
   };
 
   const resetForm = () => {
@@ -481,7 +517,7 @@ export default function Textbooks() {
     setPdfFile(null);
     setPastedText("");
     setPlanned(null);
-    setStages([]);
+    setNodeStages([]);
     setTocSelection(new Set());
     setSavedTextbookId(null);
     setPendingResumeBook(null);
@@ -514,14 +550,17 @@ export default function Textbooks() {
     }
   };
 
-  const selectedRoots = activeToc.filter((node) => tocSelection.has(node.id));
-  const progress = selectedRoots.filter((node) =>
-    (node.chunkIndexes ?? []).every((index) => {
-      const state = stages[index]?.state;
-      return state === "done" || state === "skip";
-    }),
-  ).length;
-  const total = selectedRoots.length;
+  // Progress is counted over jobs, not over units, so ticking three topics
+  // inside one unit reports 3 of 3 and not 1 of 1. A unit that is already in the
+  // library counts as settled the moment it is picked, matching the badge beside
+  // it — otherwise the bar would sit at zero while the screen says "Already here".
+  const pendingJobs = tocJobs(activeToc, tocSelection);
+  const settled = (nodeId: string) => {
+    const state = nodeStages.find((s) => s.id === nodeId)?.state;
+    return state === "done" || state === "skip";
+  };
+  const progress = pendingJobs.filter((job) => settled(job.nodeId)).length;
+  const total = pendingJobs.length;
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -706,13 +745,9 @@ export default function Textbooks() {
           setTocSelection(
             new Set(
               activeToc
-                .filter((node) =>
-                  (node.chunkIndexes ?? []).some(
-                    (index) =>
-                      !existingChapters.has(
-                        planned?.[index]?.title.trim() ?? "",
-                      ),
-                  ),
+                .filter(
+                  (node) =>
+                    nodeStages.find((s) => s.id === node.id)?.state !== "skip",
                 )
                 .map((node) => node.id),
             ),
@@ -720,7 +755,7 @@ export default function Textbooks() {
         }
         onClearSelection={() => setTocSelection(new Set())}
         savedTextbookId={savedTextbookId}
-        stages={stages}
+        nodeStages={nodeStages}
         ocrReason={ocrReason}
         ocrProgress={ocrProgress}
         error={error}
@@ -729,7 +764,6 @@ export default function Textbooks() {
         onRetryOne={retryOne}
         progress={progress}
         total={total}
-        skipped={existingChapters}
         onCancel={resetForm}
       />
       <input
@@ -743,27 +777,6 @@ export default function Textbooks() {
         }}
       />
     </main>
-  );
-}
-
-function TocChild({ node }: { node: ImportTocNode }) {
-  return (
-    <li className="text-muted-foreground text-xs leading-5">
-      {node.children.length > 0 ? (
-        <details>
-          <summary className="cursor-pointer hover:text-foreground">
-            {node.title}
-          </summary>
-          <ul className="mt-1 space-y-1 border-border/60 border-l pl-3">
-            {node.children.map((child) => (
-              <TocChild key={child.id} node={child} />
-            ))}
-          </ul>
-        </details>
-      ) : (
-        node.title
-      )}
-    </li>
   );
 }
 
@@ -826,7 +839,7 @@ function AddTextbook({
   onClearSelection,
   savedTextbookId,
   onSaveBook,
-  stages,
+  nodeStages,
   ocrReason,
   ocrProgress,
   error,
@@ -835,7 +848,6 @@ function AddTextbook({
   onRetryOne,
   progress,
   total,
-  skipped,
   onCancel,
 }: {
   step: ImportStep;
@@ -862,16 +874,15 @@ function AddTextbook({
   onClearSelection: () => void;
   savedTextbookId: string | null;
   onSaveBook: () => void;
-  stages: Stage[];
+  nodeStages: NodeStage[];
   ocrReason: PdfUnreadableReason | null;
   ocrProgress: OcrProgressView;
   error: string | null;
   setError: (e: string | null) => void;
   onImport: () => void;
-  onRetryOne: (key: number) => void;
+  onRetryOne: (nodeId: string) => void;
   progress: number;
   total: number;
-  skipped: Set<string>;
   onCancel: () => void;
 }) {
   const { t } = useLanguage();
@@ -886,20 +897,20 @@ function AddTextbook({
 
   if (step === "review" || step === "importing") {
     if (!planned) return null;
-    const selectedChapters = toc.filter((node) => selection.has(node.id));
-    const newChapters = selectedChapters.filter((node) =>
-      (node.chunkIndexes ?? []).some((index) => {
-        const chunk = planned[index];
-        return chunk !== undefined && !skipped.has(chunk.title.trim());
-      }),
-    ).length;
     const importing = step === "importing";
-    const selectedChunkIndexes = new Set(
-      selectedChapters.flatMap((node) => node.chunkIndexes ?? []),
+    const stateOf = (node: ImportTocNode) =>
+      nodeStages.find((s) => s.id === node.id)?.state ?? "queued";
+    const selectedIds = new Set(
+      tocJobs(toc, selection).map((job) => job.nodeId),
     );
-    const failed = stages.filter(
-      (stage) => selectedChunkIndexes.has(stage.key) && stage.state === "error",
+    const newChapters = [...selectedIds].filter(
+      (id) => nodeStages.find((s) => s.id === id)?.state !== "skip",
     ).length;
+    const failed = [...selectedIds].filter(
+      (id) => nodeStages.find((s) => s.id === id)?.state === "error",
+    ).length;
+    const isImported = (node: ImportTocNode) =>
+      stateOf(node) === "skip" && (node.chunkIndexes ?? []).length > 0;
 
     return (
       <section className="surface p-5 sm:p-6">
@@ -940,121 +951,19 @@ function AddTextbook({
           </div>
         )}
 
-        <div className="mt-5 rounded-2xl border border-border/70 bg-card/40 p-3 sm:p-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-border/60 border-b pb-3">
-            <p className="font-medium text-sm">{t("choose-from-toc")}</p>
-            {!importing && (
-              <div className="flex gap-2">
-                <Button variant="ghost" size="xs" onClick={onSelectAll}>
-                  {t("select-available")}
-                </Button>
-                <Button variant="ghost" size="xs" onClick={onClearSelection}>
-                  {t("clear-selection")}
-                </Button>
-              </div>
-            )}
-          </div>
-          <ul className="space-y-1">
-            {toc.map((node, i) => {
-              const chunkIndexes = node.chunkIndexes ?? [i];
-              const partStages = chunkIndexes.map(
-                (index) => stages[index]?.state ?? "queued",
-              );
-              const stage = partStages.includes("error")
-                ? "error"
-                : partStages.includes("reading")
-                  ? "reading"
-                  : partStages.includes("ingesting")
-                    ? "ingesting"
-                    : partStages.every(
-                          (state) => state === "done" || state === "skip",
-                        )
-                      ? partStages.every((state) => state === "skip")
-                        ? "skip"
-                        : "done"
-                      : "queued";
-              const isNew = chunkIndexes.some((index) => {
-                const chunk = planned[index];
-                return chunk !== undefined && !skipped.has(chunk.title.trim());
-              });
-              const retryKey =
-                chunkIndexes.find(
-                  (index) => stages[index]?.state === "error",
-                ) ??
-                chunkIndexes[0] ??
-                i;
-              return (
-                <li
-                  key={node.id}
-                  className="rounded-lg px-2 py-2 transition-colors hover:bg-muted/40"
-                >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      className="mt-1 size-4 accent-gold"
-                      checked={!isNew || selection.has(node.id)}
-                      disabled={!isNew || importing}
-                      onChange={(event) =>
-                        onToggleSelection(node.id, event.currentTarget.checked)
-                      }
-                      aria-label={t("select-chapter", { title: node.title })}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm leading-6">
-                        {node.title}
-                      </p>
-                      {node.children.length > 0 && (
-                        <ul className="mt-1 space-y-1 border-gold/25 border-l pl-3">
-                          {node.children.map((child) => (
-                            <TocChild key={child.id} node={child} />
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    {stage === "done" || (!isNew && stage === "skip") ? (
-                      <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
-                        {importing ? t("already-in") : t("already-here")}
-                      </span>
-                    ) : stage === "skip" ? (
-                      <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
-                        {t("landed")}
-                      </span>
-                    ) : stage === "error" ? (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="rounded-full border border-rust/40 bg-rust/10 px-2.5 py-1 font-medium text-[0.78rem] text-rust">
-                          {t("failed")}
-                        </span>
-                        {!importing && (
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => onRetryOne(retryKey)}
-                          >
-                            {t("retry")}
-                          </Button>
-                        )}
-                      </div>
-                    ) : stage === "reading" ? (
-                      <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
-                        {ocrProgress
-                          ? t("ocr-reading-page", ocrProgress)
-                          : t("ocr-read-chapter")}
-                      </span>
-                    ) : stage === "ingesting" ? (
-                      <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold">
-                        {t("building-checklist")}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 font-medium text-[0.78rem] text-muted-foreground">
-                        {t("new-label")}
-                      </span>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <TocPicker
+          className="mt-5"
+          toc={toc}
+          selection={selection}
+          onToggle={onToggleSelection}
+          onSelectAll={onSelectAll}
+          onClear={onClearSelection}
+          stageFor={stateOf}
+          isImported={isImported}
+          importing={importing}
+          onRetry={onRetryOne}
+          ocrProgress={ocrProgress}
+        />
 
         {error && (
           <p className="mt-4 rounded-lg border border-rust/40 bg-rust/10 px-3 py-2 text-rust text-sm">
@@ -1081,8 +990,8 @@ function AddTextbook({
                         ? t("retry-failed", { n: failed })
                         : t("retry-failed-many", { n: failed })
                       : newChapters === 1
-                        ? t("import-chapter-n", { n: newChapters })
-                        : t("import-chapters-n", { n: newChapters })}
+                        ? t("import-entry-n", { n: newChapters })
+                        : t("import-entries-n", { n: newChapters })}
                 </Button>
               ) : (
                 <Button disabled title="Preview mode — import is coming soon.">

@@ -46,8 +46,34 @@ export type ImportChunk = {
    * instead of being inferred from prose by a model that has never seen the
    * table of contents.
    */
-  topics?: string[];
+  topics?: TopicEntry[];
 };
+
+/**
+ * One numbered line of the book's contents, with the page it begins on.
+ *
+ * The page is what lets a student tick "1.1.1 The nucleus" instead of the whole
+ * unit it sits in: a numbered line plus its page is a range, because the next
+ * line's page is where this one stops. Dropping the page earlier left every
+ * topic as a label with nothing behind it.
+ */
+export type TopicEntry = {
+  /**
+   * Nesting as the book's own outline spells it, " · " joined:
+   * `"1.1 · 1.1.1 The nucleus"`. The chain is kept because it is what says
+   * whether a line is a first-level topic or a third-level one — the number
+   * alone cannot, on a book that numbers its units per chapter.
+   */
+  path: string;
+  title: string;
+  /** PDF page index this topic begins on, or null when the book did not say. */
+  page: number | null;
+};
+
+/** The topic as the ingest endpoint and the book both spell it. */
+export function topicLabel(topic: TopicEntry): string {
+  return topic.path;
+}
 
 export type ImportTocNode = {
   id: string;
@@ -59,6 +85,97 @@ export type ImportTocNode = {
   chunkIndexes?: number[];
 };
 
+/**
+ * The printed number a TOC line carries, and the label left once it is removed.
+ *
+ * Splitting these two is what lets the contents render like a contents page: the
+ * number sits in its own aligned column and the titles line up under each other,
+ * which is how a student reads a book — "1.1.1" is an address, not a sentence.
+ *
+ * A unit is written "Unit 2: Plants", so its number is "Unit 2" and the colon is
+ * left on the title rather than being swallowed.
+ */
+export function splitTocNumber(title: string): {
+  number: string | null;
+  label: string;
+} {
+  const unit = /^Unit\s+(\d+)\s*[:.-]?\s*(.+)$/i.exec(title);
+  if (unit) return { number: `Unit ${unit[1]}`, label: unit[2] ?? title };
+  const dotted = /^(\d+(?:\.\d+)*)\.?\s+(\S.*)$/.exec(title);
+  if (dotted) return { number: dotted[1] ?? null, label: dotted[2] ?? title };
+  return { number: null, label: title };
+}
+
+/**
+ * How many numbering levels a line carries: "Unit 2" is one, "2.3" is two,
+ * "2.3.1" is three.
+ *
+ * This is only ever used to line the number up in the contents column — the
+ * tree itself nests on `children`, which the parser already got right. A line
+ * the book never numbered returns 0, and the renderer falls back to its place
+ * in the tree.
+ */
+export function numberDepth(title: string): number {
+  const { number } = splitTocNumber(title);
+  return number ? number.split(".").length : 0;
+}
+
+/**
+ * Everything the contents tree needs, computed once per tree in the UI.
+ *
+ * Counting is done here rather than in the renderer because the two numbers are
+ * easy to get wrong together: how many entries the book holds in total, and how
+ * many sit under a given branch. A unit's own count is what the checklist shows
+ * next to its checkbox, and it has to include the sub-topics — a unit with two
+ * topics and five sub-topics reads as seven, not two.
+ */
+export type TocIndex = {
+  /** Every node by id, so a tick anywhere can find its unit. */
+  byId: Map<string, ImportTocNode>;
+  /** Every id in reading order — the order a keyboard walks the tree in. */
+  order: string[];
+  /** Total entries in the book, units included. */
+  total: number;
+  /** Entries under a node, sub-topics included, excluding the node itself. */
+  descendants: Map<string, number>;
+  /** Nearest ancestor that carries `chunkIndexes` — the unit a node belongs to. */
+  unitOf: Map<string, ImportTocNode>;
+};
+
+export function indexToc(nodes: ImportTocNode[]): TocIndex {
+  const byId = new Map<string, ImportTocNode>();
+  const unitOf = new Map<string, ImportTocNode>();
+  const order: string[] = [];
+  const walk = (list: ImportTocNode[], unit: ImportTocNode | null) => {
+    for (const node of list) {
+      order.push(node.id);
+      byId.set(node.id, node);
+      const owner = node.chunkIndexes ? node : unit;
+      unitOf.set(node.id, owner ?? node);
+      walk(node.children, owner ?? null);
+    }
+  };
+  walk(nodes, null);
+  const descendants = new Map<string, number>();
+  const count = (node: ImportTocNode): number => {
+    const n = node.children.reduce((sum, child) => sum + count(child), 0);
+    descendants.set(node.id, n);
+    return n + 1;
+  };
+  for (const node of nodes) count(node);
+  return { byId, order, total: order.length, descendants, unitOf };
+}
+
+/** True when this node's own pages are known well enough to import alone. */
+export function isSelectableTopic(node: ImportTocNode): boolean {
+  return (
+    !node.chunkIndexes &&
+    node.start !== null &&
+    node.end !== null &&
+    node.end > node.start
+  );
+}
+
 export function visibleChapterTitle(title: string): {
   title: string;
   section: number | null;
@@ -69,19 +186,23 @@ export function visibleChapterTitle(title: string): {
     : { title, section: null };
 }
 
-function topicsAsTree(topics: string[], parentId: string): ImportTocNode[] {
+function topicsAsTree(
+  topics: TopicEntry[],
+  parentId: string,
+  chapterEnd: number,
+): ImportTocNode[] {
   const roots: ImportTocNode[] = [];
   const stack: { depth: number; node: ImportTocNode }[] = [];
   topics.forEach((topic, index) => {
-    const pathParts = topic.split(" · ");
-    const title = pathParts.at(-1) ?? topic;
+    const pathParts = topic.path.split(" · ");
+    const title = pathParts.at(-1) ?? topic.path;
     const prefix = /^(\d+(?:\.\d+)*)\b/.exec(title)?.[1];
     const numberDepth = prefix ? prefix.split(".").length : 1;
     const depth = Math.max(pathParts.length, numberDepth);
     const node: ImportTocNode = {
       id: `${parentId}-topic-${index}`,
       title,
-      start: null,
+      start: topic.page,
       end: null,
       children: [],
     };
@@ -91,7 +212,101 @@ function topicsAsTree(topics: string[], parentId: string): ImportTocNode[] {
     else roots.push(node);
     stack.push({ depth, node });
   });
+  // Reading order, flattened. A topic's own pages run until the next line at
+  // the same depth or shallower — a sub-topic sits *inside* its parent's
+  // range, so counting every following line would end a unit at its own first
+  // page and leave the rest of the book unclaimed.
+  const flat: { depth: number; node: ImportTocNode }[] = [];
+  const walk = (nodes: ImportTocNode[], depth: number) => {
+    for (const node of nodes) {
+      flat.push({ depth, node });
+      walk(node.children, depth + 1);
+    }
+  };
+  walk(roots, 1);
+  flat.forEach((entry, i) => {
+    const next = flat.slice(i + 1).find((later) => later.depth <= entry.depth);
+    entry.node.end = Math.max(
+      next?.node.start ?? chapterEnd,
+      (entry.node.start ?? chapterEnd) + 1,
+    );
+  });
   return roots;
+}
+
+/**
+ * One thing to read, in the order the book teaches it.
+ *
+ * A unit is one job covering all of its chunks, including the "(part n)" splits
+ * an oversized chapter is carved into. A topic is one job covering exactly the
+ * pages between its own number and the next line at the same depth or shallower.
+ */
+export type TocJob =
+  | { kind: "unit"; nodeId: string; title: string; chunkIndexes: number[] }
+  | {
+      kind: "topic";
+      nodeId: string;
+      title: string;
+      unit: string;
+      number: string | null;
+      pages: { start: number; end: number };
+    };
+
+/**
+ * Turn a set of ticked node ids into the list of things to read.
+ *
+ * A ticked unit swallows its topics rather than queueing alongside them:
+ * reading Unit 1 whole already covers the pages of 1.1 and 1.1.1, so honouring
+ * both would OCR every page of the unit twice and ingest the same text under
+ * two chapter names.
+ *
+ * A ticked topic under an *unticked* unit does stand on its own, which is the
+ * point — a student who only wants 1.1.1 gets 1.1.1's pages and nothing else.
+ */
+export function tocJobs(
+  toc: ImportTocNode[],
+  selection: Set<string>,
+): TocJob[] {
+  const jobs: TocJob[] = [];
+  const walk = (nodes: ImportTocNode[], unitTitle: string | null) => {
+    for (const node of nodes) {
+      const isUnit = Boolean(node.chunkIndexes);
+      if (selection.has(node.id)) {
+        if (isUnit) {
+          jobs.push({
+            kind: "unit",
+            nodeId: node.id,
+            title: node.title,
+            chunkIndexes: node.chunkIndexes ?? [],
+          });
+          continue;
+        }
+        if (isSelectableTopic(node) && unitTitle !== null) {
+          const { number } = splitTocNumber(node.title);
+          jobs.push({
+            kind: "topic",
+            nodeId: node.id,
+            title: node.title,
+            unit: unitTitle,
+            number,
+            pages: { start: node.start ?? 0, end: node.end ?? 0 },
+          });
+          continue;
+        }
+        // Ticked but unreadable alone (no page range): fall through to its
+        // children so ticking a branch with one broken line still reads the
+        // lines beneath it.
+      }
+      walk(node.children, isUnit ? node.title : unitTitle);
+    }
+  };
+  walk(toc, null);
+  return jobs;
+}
+
+/** Entries in the selection a student can count on being read. */
+export function selectedCount(toc: ImportTocNode[], selection: Set<string>) {
+  return tocJobs(toc, selection).length;
 }
 
 export function importTocTree(chunks: ImportChunk[]): ImportTocNode[] {
@@ -106,7 +321,11 @@ export function importTocTree(chunks: ImportChunk[]): ImportTocNode[] {
         title,
         start: chunk.pages?.start ?? null,
         end: chunk.pages?.end ?? null,
-        children: topicsAsTree(chunk.topics ?? [], id),
+        children: topicsAsTree(
+          chunk.topics ?? [],
+          id,
+          chunk.pages?.end ?? chunk.pages?.start ?? 0,
+        ),
         chunkIndexes: [],
       };
       roots.set(title, root);
@@ -191,7 +410,7 @@ function uniqueTitles(chunks: ImportChunk[]): ImportChunk[] {
 export function withPartSplits(
   title: string,
   full: string,
-  topics?: string[],
+  topics?: TopicEntry[],
 ): ImportChunk[] {
   const out: ImportChunk[] = [];
   const split = full.length > MAX_CHAPTER_CHARS;
@@ -543,7 +762,11 @@ function chaptersFromOutline(
           candidate.pageIndex >= start &&
           candidate.pageIndex < end,
       )
-      .map((candidate) => candidate.path.slice(prefix.length));
+      .map((candidate) => ({
+        path: candidate.path.slice(prefix.length),
+        title: candidate.title,
+        page: candidate.pageIndex,
+      }));
     return withPartSplits(entry.title, body, topics);
   });
   return uniqueTitles(
@@ -752,7 +975,14 @@ export function chaptersFromContents(
   chapters: TocChapter[],
   offset: number,
   pageCount: number,
-): { title: string; start: number; end: number; topics: string[] }[] | null {
+):
+  | {
+      title: string;
+      start: number;
+      end: number;
+      topics: TopicEntry[];
+    }[]
+  | null {
   if (chapters.length === 0) return null;
   const out = chapters.map((chapter, i) => {
     const next = chapters[i + 1];
@@ -764,9 +994,14 @@ export function chaptersFromContents(
       end: Math.min(end, pageCount),
       // The number is kept: "2.3.1" carries that it is a third-level idea, and
       // it is what lets the checklist be read in the order the book teaches it.
-      topics: chapter.topics.map(
-        (topic) => `${topic.path.join(".")} ${topic.title}`,
-      ),
+      // The printed page becomes a page index with the same offset the units
+      // used, so a topic's range and its unit's range are in one coordinate
+      // system — mixing the two would put 1.1.1 outside the unit holding it.
+      topics: chapter.topics.map((topic) => ({
+        path: `${topic.path.join(".")} ${topic.title}`,
+        title: topic.title,
+        page: topic.page + offset,
+      })),
     };
   });
   const sane = out.every(
@@ -864,6 +1099,37 @@ function ocrLanguage(language: string): OcrLanguage {
 }
 
 /**
+ * A reader for a book whose text was already extracted.
+ *
+ * A readable PDF is read and closed during planning, so at import time there is
+ * no document left to open — and yet the pages still have to be servable,
+ * because "1.1.1 The nucleus" is not a chunk of its own. It is pages 6 to 8 of
+ * a chapter that is, and a student who ticks the sub-topic wants those pages
+ * and not the twenty around them. So the per-page text is held and a slice is
+ * handed back.
+ *
+ * The text is already in memory either way — every chunk carries its own pages
+ * as one string — so this holds a second reference to the same words rather
+ * than keeping the PDF's WASM heap and font tables alive for the session.
+ */
+export function textLayerReader(pages: string[]): OcrChunkReader {
+  return {
+    bookKey: "text-layer",
+    isComplete: (chunk) =>
+      Boolean(chunk.rawText.trim()) ||
+      (chunk.pages !== undefined && chunk.pages.end > chunk.pages.start),
+    read: async (chunk) => {
+      if (chunk.rawText.trim()) return chunk.rawText;
+      if (!chunk.pages) return "";
+      const start = Math.max(chunk.pages.start, 0);
+      const end = Math.min(chunk.pages.end, pages.length);
+      return pages.slice(start, end).join("\n\n").trim();
+    },
+    close: async () => {},
+  };
+}
+
+/**
  * Turn a chosen file into the chapter list the student confirms.
  *
  * A readable PDF is split here and now, exactly as before — extraction is
@@ -919,7 +1185,7 @@ export async function planImport(
       return {
         chunks: unique,
         toc: importTocTree(unique),
-        reader: null,
+        reader: textLayerReader(pages),
         ocrReason: null,
       };
     }
@@ -941,7 +1207,7 @@ export async function planImport(
           title: string;
           start: number;
           end: number;
-          topics: string[];
+          topics: TopicEntry[];
         }[]
       | null = null;
     const tocStart = pages.findIndex(
