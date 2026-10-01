@@ -2,12 +2,19 @@ import { expect, test } from "bun:test";
 import {
   auditPageText,
   chaptersFromContents,
+  type ImportChunk,
   type ImportSource,
   importTocTree,
+  indexToc,
+  isSelectableTopic,
+  numberDepth,
   PdfUnreadableError,
   planChunks,
   segmentsForOcrBook,
+  splitTocNumber,
   stripUndecodableGlyphs,
+  textLayerReader,
+  tocJobs,
   tocPageOffset,
   visibleChapterTitle,
   withPartSplits,
@@ -28,13 +35,220 @@ function prosePage(words: number, seed = 0): string {
 // textbook, plus a page number — six words where prose has hundreds.
 const headerOnly = "Unit 5: Human Biology";
 
+// The book the user described: 6 units, topics, and sub-topics under those.
+function sixUnitBook(): ImportChunk[] {
+  return [
+    {
+      title: "Unit 1: Cells",
+      rawText: "",
+      pages: { start: 3, end: 20 },
+      needsOcr: true,
+      topics: [
+        { path: "1.1 Cell structure", title: "Cell structure", page: 4 },
+        {
+          path: "1.1 · 1.1.1 The nucleus",
+          title: "The nucleus",
+          page: 6,
+        },
+        {
+          path: "1.1 · 1.1.2 The cell membrane",
+          title: "The cell membrane",
+          page: 8,
+        },
+        { path: "1.2 Cell division", title: "Cell division", page: 12 },
+      ],
+    },
+    {
+      title: "Unit 2: Plants",
+      rawText: "",
+      pages: { start: 20, end: 55 },
+      needsOcr: true,
+      topics: [
+        {
+          path: "2.1 Characteristics of plants",
+          title: "Characteristics of plants",
+          page: 21,
+        },
+        {
+          path: "2.2 Structure and function of plant parts",
+          title: "Structure and function of plant parts",
+          page: 30,
+        },
+      ],
+    },
+    {
+      title: "Unit 3: Biochemical Molecules",
+      rawText: "",
+      pages: { start: 55, end: 86 },
+      needsOcr: true,
+    },
+    {
+      title: "Unit 4: Cell Reproduction",
+      rawText: "",
+      pages: { start: 86, end: 99 },
+      needsOcr: true,
+    },
+    {
+      title: "Unit 5: Human Biology",
+      rawText: "",
+      pages: { start: 99, end: 158 },
+      needsOcr: true,
+    },
+    {
+      title: "Unit 6: Ecological Interaction",
+      rawText: "",
+      pages: { start: 158, end: 182 },
+      needsOcr: true,
+    },
+  ];
+}
+
+test("all 6 units of a 6-unit book are offered, and each keeps its own topics", () => {
+  const toc = importTocTree(sixUnitBook());
+  expect(toc).toHaveLength(6);
+  expect(toc.map((unit) => splitTocNumber(unit.title).number)).toEqual([
+    "Unit 1",
+    "Unit 2",
+    "Unit 3",
+    "Unit 4",
+    "Unit 5",
+    "Unit 6",
+  ]);
+  // A unit the book listed no topics for is still a chapter worth studying, so it
+  // must not be dropped from the tree the way an empty unit used to be.
+  expect(toc[2]?.children).toEqual([]);
+  const index = indexToc(toc);
+  expect(index.total).toBe(6 + 4 + 2);
+  expect(index.descendants.get(toc[0]?.id ?? "")).toBe(4);
+});
+
+test("a sub-topic's pages stop where the next sibling starts, not at its parent", () => {
+  const toc = importTocTree(sixUnitBook());
+  const cell = toc[0];
+  const structure = cell?.children[0];
+  const nucleus = structure?.children[0];
+  const membrane = structure?.children[1];
+  const division = cell?.children[1];
+
+  // 1.1 Cell structure runs from its own page to the page of 1.2 — not to the
+  // page of its own first child, which would end the unit at page 6.
+  expect(structure?.start).toBe(4);
+  expect(structure?.end).toBe(12);
+  // Each sub-topic stops at the next sub-topic.
+  expect(nucleus?.start).toBe(6);
+  expect(nucleus?.end).toBe(8);
+  expect(membrane?.start).toBe(8);
+  // The last topic in a unit runs to the unit's last page.
+  expect(division?.start).toBe(12);
+  expect(division?.end).toBe(20);
+});
+
+test("the contents number is split out so titles line up like a contents page", () => {
+  expect(splitTocNumber("Unit 2: Plants")).toEqual({
+    number: "Unit 2",
+    label: "Plants",
+  });
+  expect(splitTocNumber("2.3.1 The internal structure of a leaf")).toEqual({
+    number: "2.3.1",
+    label: "The internal structure of a leaf",
+  });
+  // A line the book never numbered keeps its whole text as the title.
+  expect(splitTocNumber("Review questions")).toEqual({
+    number: null,
+    label: "Review questions",
+  });
+  // Depth comes from the number, which is what a contents page is read by.
+  expect(numberDepth("Unit 2: Plants")).toBe(1);
+  expect(numberDepth("2.3 Structure")).toBe(2);
+  expect(numberDepth("2.3.1 The internal structure of a leaf")).toBe(3);
+});
+
+test("ticking a topic imports that topic's pages, under its unit's name", () => {
+  const toc = importTocTree(sixUnitBook());
+  const nucleus = toc[0]?.children[0]?.children[0];
+  const jobs = tocJobs(toc, new Set([nucleus?.id ?? ""]));
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0]).toMatchObject({
+    kind: "topic",
+    number: "1.1.1",
+    pages: { start: 6, end: 8 },
+  });
+  // The job carries the unit as well as the topic. The chapter gets titled
+  // "Unit 1: Cells · 1.1.1 The nucleus": a chapter called only "1.1.1 The
+  // nucleus" would land on the shelf with no way to tell which of the six units
+  // it came from.
+  expect(jobs[0]?.kind === "topic" && jobs[0].unit).toBe("Unit 1: Cells");
+  expect(jobs[0]?.title).toBe("1.1.1 The nucleus");
+});
+
+test("ticking a unit brings its topics with it rather than reading pages twice", () => {
+  const toc = importTocTree(sixUnitBook());
+  const unit = toc[0];
+  const nucleus = unit?.children[0]?.children[0];
+  // The whole unit is ticked, and so is one of its sub-topics.
+  const jobs = tocJobs(toc, new Set([unit?.id ?? "", nucleus?.id ?? ""]));
+  expect(jobs).toHaveLength(1);
+  expect(jobs[0]).toMatchObject({ kind: "unit", chunkIndexes: [0] });
+});
+
+test("several topics in one unit import as several chapters of their own", () => {
+  const toc = importTocTree(sixUnitBook());
+  const cell = toc[0];
+  const structure = cell?.children[0];
+  const nucleus = structure?.children[0];
+  const division = cell?.children[1];
+  const jobs = tocJobs(toc, new Set([nucleus?.id ?? "", division?.id ?? ""]));
+  expect(jobs.map((job) => job.kind)).toEqual(["topic", "topic"]);
+  expect(jobs[0]).toMatchObject({ pages: { start: 6, end: 8 } });
+  expect(jobs[1]).toMatchObject({ pages: { start: 12, end: 20 } });
+});
+
+test("a topic with no page range cannot be ticked on its own", () => {
+  const toc = importTocTree([
+    {
+      title: "Unit 1: Cells",
+      rawText: "",
+      pages: { start: 3, end: 20 },
+      // A heading the book gave a number but no page for.
+      topics: [
+        { path: "1.1 Cell structure", title: "Cell structure", page: null },
+      ],
+    },
+  ]);
+  const topic = toc[0]?.children[0];
+  expect(topic?.start).toBeNull();
+  expect(isSelectableTopic(topic ?? ({} as never))).toBe(false);
+  // Ticking it falls through to its children rather than silently importing
+  // nothing, which is what a checkbox that appears to work but does not would do.
+  expect(tocJobs(toc, new Set([topic?.id ?? ""]))).toEqual([]);
+});
+
+test("a tick inside a unit is read as that unit's chapters, in order", () => {
+  const toc = importTocTree([
+    { title: "Unit 1 (part 1)", parentTitle: "Unit 1", rawText: "one" },
+    { title: "Unit 1 (part 2)", parentTitle: "Unit 1", rawText: "two" },
+  ]);
+  expect(tocJobs(toc, new Set([toc[0]?.id ?? ""]))[0]).toMatchObject({
+    kind: "unit",
+    chunkIndexes: [0, 1],
+  });
+});
+
 test("the user-facing table of contents preserves nested topic hierarchy", () => {
   const toc = importTocTree([
     {
       title: "Unit 1: Cells",
       rawText: "",
       pages: { start: 3, end: 15 },
-      topics: ["1.1 Cell structure", "1.1.1 The nucleus", "1.2 Cell division"],
+      topics: [
+        { path: "1.1 Cell structure", title: "Cell structure", page: 4 },
+        {
+          path: "1.1 · 1.1.1 The nucleus",
+          title: "The nucleus",
+          page: 6,
+        },
+        { path: "1.2 Cell division", title: "Cell division", page: 10 },
+      ],
     },
   ]);
 
@@ -323,7 +537,14 @@ test("printed page numbers are aligned to PDF pages by cross-checking headers", 
     ["Unit 5: Human Biology", 99, 158],
     ["Unit 6: Ecological Interaction", 158, 182],
   ]);
-  expect(out?.[1].topics).toEqual(["2.1 Characteristics of plants"]);
+  // The page is carried through as a PDF page index — 17 printed + 5 offset.
+  expect(out?.[1].topics).toEqual([
+    {
+      path: "2.1 Characteristics of plants",
+      title: "Characteristics of plants",
+      page: 22,
+    },
+  ]);
 });
 
 test("an offset only two coincidences support is refused, not guessed", () => {
@@ -355,10 +576,49 @@ test("a page range that runs off the book is refused rather than imported", () =
 
 test("contents topics are attached only to the first part of a split chapter", () => {
   const parts = withPartSplits("Unit 2: Plants", "a".repeat(190_001), [
-    "2.1 Characteristics of plants",
+    { path: "2.1 Characteristics of plants", title: "2.1", page: 22 },
   ]);
-  expect(parts.map((part) => part.topics)).toEqual([
+  expect(parts.map((part) => part.topics?.map((topic) => topic.path))).toEqual([
     ["2.1 Characteristics of plants"],
     undefined,
   ]);
+});
+
+test("a readable book still serves a topic's own pages, and nothing beside them", async () => {
+  // The text layer was already read during planning, so there is no document
+  // left to open — but "1.1.1 The nucleus" is pages 6 to 8 of a chapter that is,
+  // and a student who ticks the sub-topic wants those three pages.
+  const pages = Array.from({ length: 10 }, (_, i) => `page ${i}`);
+  const reader = textLayerReader(pages);
+  const slice = await reader.read({
+    title: "Unit 1: Cells · 1.1.1 The nucleus",
+    rawText: "",
+    pages: { start: 6, end: 9 },
+    needsOcr: true,
+  });
+  expect(slice).toBe("page 6\n\npage 7\n\npage 8");
+  expect(
+    reader.isComplete({
+      title: "1.1.1 The nucleus",
+      rawText: "",
+      pages: { start: 6, end: 9 },
+      needsOcr: true,
+    }),
+  ).toBe(true);
+  // A chapter that already carries its own text is served from that text.
+  expect(
+    await reader.read({
+      title: "Unit 1: Cells",
+      rawText: "the whole unit",
+      pages: { start: 3, end: 20 },
+    }),
+  ).toBe("the whole unit");
+  // And a range past the last page is clipped, not padded with nothing.
+  expect(
+    await reader.read({
+      title: "Unit 6: Ecological Interaction",
+      rawText: "",
+      pages: { start: 9, end: 40 },
+    }),
+  ).toBe("page 9");
 });
