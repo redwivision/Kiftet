@@ -100,10 +100,15 @@ export default function SocialButtons() {
   };
 
   return (
-    <div className="space-y-3">
+    // The gap above is the point: this sits directly after the submit button,
+    // and with no margin the "or continue with" rule landed flush against the
+    // bottom edge of a 44px button — the two read as one broken control.
+    <div className="mt-6 space-y-3">
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-border" />
-        <span className="text-mist text-xs">{t("auth-or-continue-with")}</span>
+        <span className="shrink-0 text-mist text-xs">
+          {t("auth-or-continue-with")}
+        </span>
         <span className="h-px flex-1 bg-border" />
       </div>
       {providers.map((provider) => (

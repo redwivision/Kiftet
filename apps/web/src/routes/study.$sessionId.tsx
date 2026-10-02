@@ -236,10 +236,10 @@ function SessionHeader({
       : Math.max(1, STEPS.findIndex((s) => s.phase === phase) + 1);
 
   return (
-    <header className="border-border/60 border-b px-6 pt-6 pb-5 dark:border-white/10">
+    <header className="border-border/60 border-b px-4 pt-5 pb-5 sm:px-6 sm:pt-6 dark:border-white/10">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <div className="min-w-0 space-y-1">
             <p className="k-label">{subject}</p>
             <h1 className="font-display font-semibold text-2xl text-foreground tracking-[-0.02em] sm:text-3xl">
               {title}

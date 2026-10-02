@@ -454,13 +454,19 @@ function UnitCard({
                     {ch.textbookTitle}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Three controls in one unwrapped row: the coverage pill, a
+                    Study button and a native select whose option text is
+                    "Unit {n} — {title}". A real chapter title runs 200px+, so
+                    the row was ~410px inside a 311px card and the select ran
+                    off the edge. Wrapping plus a width cap on the select keeps
+                    all three reachable without a horizontal scroll. */}
+                <div className="flex flex-wrap items-center gap-2">
                   {covered ? (
-                    <span className="rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 font-medium text-[0.78rem] text-sage">
+                    <span className="shrink-0 rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 font-medium text-[0.78rem] text-sage">
                       {ch.coverage?.before ?? "—"}% → {ch.coverage?.after}%
                     </span>
                   ) : (
-                    <span className="px-2.5 py-0.5 text-[0.78rem] text-muted-foreground">
+                    <span className="shrink-0 px-2.5 py-0.5 text-[0.78rem] text-muted-foreground">
                       {t("not-studied")}
                     </span>
                   )}
@@ -506,7 +512,7 @@ function UnitSelect({
       disabled={saving}
       aria-label={t("map-aria")}
       onChange={(e) => onChange(e.target.value || null)}
-      className="rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-[0.78rem] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50"
+      className="max-w-full rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-[0.78rem] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50 sm:max-w-[16rem]"
     >
       <option value="">{t("no-unit")}</option>
       {units.map((u) => (

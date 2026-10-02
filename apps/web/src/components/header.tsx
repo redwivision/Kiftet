@@ -1,3 +1,5 @@
+import { BookOpen, House } from "lucide-react";
+import type { ComponentType } from "react";
 import { NavLink } from "react-router";
 
 import { BrandMark } from "./brand-mark";
@@ -10,8 +12,11 @@ import UserMenu from "./user-menu";
 function Brand() {
   const { t } = useLanguage();
   return (
-    <div className="flex items-center gap-3">
-      <BrandMark size={36} className="rounded-full ring-1 ring-gold/40" />
+    <div className="flex items-center gap-2.5 sm:gap-3">
+      <BrandMark
+        size={36}
+        className="shrink-0 rounded-full ring-1 ring-gold/40"
+      />
       <div className="min-w-0 leading-tight">
         <div className="font-display font-semibold text-[1.06rem] text-foreground tracking-tight">
           Kiftet
@@ -27,44 +32,60 @@ function Brand() {
   );
 }
 
+// A phone has 343px to work with once the page gutter is paid, and the header
+// has to hold a brand, two nav links and three controls inside it. Measured at
+// 14px Inter that is roughly 456px of content — so the row used to overflow and
+// the controls sat on top of the nav links. Both text runs yield instead of the
+// brand, because both are repeats of something already on screen: the link's
+// own accessible name and the account name inside the menu that opens from it.
+const NAV = [
+  { to: "/", labelKey: "nav-home", Icon: House },
+  { to: "/dashboard", labelKey: "nav-study", Icon: BookOpen },
+] as const satisfies readonly {
+  to: string;
+  labelKey: string;
+  Icon: ComponentType<{ className?: string }>;
+}[];
+
 export default function Header() {
   const { t } = useLanguage();
-  const links = [
-    { to: "/", label: t("nav-home") },
-    { to: "/dashboard", label: t("nav-study") },
-  ] as const;
 
   return (
     // bg-panel, not a literal: this used to be #0f1523, a blue-black from
     // before the room system existed, so every one of the eight tinted rooms
     // inherited a header that belonged to none of them.
     <header className="sticky top-0 z-30 border-border/70 border-b bg-panel/85 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <NavLink
             to="/"
-            className="min-w-0 rounded-full focus:outline-none focus-visible:outline-2 focus-visible:outline-gold/80"
+            className="min-w-0 shrink rounded-full focus:outline-none focus-visible:outline-2 focus-visible:outline-gold/80"
           >
             <Brand />
           </NavLink>
           <nav
             aria-label={t("nav-primary")}
-            className="flex items-center gap-0.5 sm:gap-1"
+            className="flex shrink items-center gap-0.5 sm:gap-1"
           >
-            {links.map(({ to, label }) => (
+            {NAV.map(({ to, labelKey, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={to === "/"}
+                aria-label={t(labelKey)}
                 className={({ isActive }) =>
-                  `rounded-full px-2 py-1.5 text-sm transition-colors duration-200 sm:px-3 ${
+                  `flex items-center gap-1.5 rounded-full px-2 py-1.5 text-sm transition-colors duration-200 sm:px-3 ${
                     isActive
                       ? "bg-gold/12 font-medium text-gold"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   }`
                 }
               >
-                {label}
+                <Icon
+                  className="size-4 shrink-0 sm:hidden"
+                  aria-hidden="true"
+                />
+                <span className="hidden sm:inline">{t(labelKey)}</span>
               </NavLink>
             ))}
           </nav>

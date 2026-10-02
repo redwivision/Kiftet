@@ -85,8 +85,13 @@ function GuideSectionCard({
         section.level === 0 && "border-border bg-card",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-semibold text-[0.95rem] text-foreground leading-6">
+      {/* Stacked on a phone, side by side from sm. "So close — one sentence
+          from you" is ~175px at the pill's size, so sharing a row left the
+          concept title about 100px and the two collided at 375px. The pill is
+          short and the title is the point, so the title keeps the first line
+          and the pill drops under it. */}
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <p className="min-w-0 font-semibold text-[0.95rem] text-foreground leading-6">
           {section.conceptText}
         </p>
         <StatePill level={section.level} />
@@ -155,7 +160,7 @@ function StatePill({ level }: { level: GuideSection["level"] }) {
   return (
     <span
       className={cn(
-        "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 font-medium text-[0.68rem] tracking-wide",
+        "max-w-full rounded-full px-2 py-0.5 font-medium text-[0.68rem] tracking-wide sm:shrink-0 sm:whitespace-nowrap",
         level === 2 && "bg-rust/15 text-rust",
         level === 1 && "bg-gold/15 text-gold",
         level === 0 && "bg-muted text-muted-foreground",
