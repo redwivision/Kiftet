@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   auditPageText,
   chaptersFromContents,
+  chaptersFromOutline,
   type ImportChunk,
   type ImportSource,
   importTocTree,
@@ -552,6 +553,52 @@ test("page-numbered headers no longer cost the book its topics", () => {
   expect(built?.[0].end).toBe(16);
   expect(built?.[0].topics).toHaveLength(2);
   expect(built?.[0].topics[0].path).toBe("3.1 The cell cycle");
+});
+
+test("a unit that opens on the book's first page keeps its place at the top", () => {
+  // A book whose bookmarks point Unit 1 at page 0. Dropping that entry as
+  // "front matter" leaves one top-level unit, one too few to trust the top
+  // level, and the whole tree is then built from 1.1/1.2/2.1 — the units
+  // vanish and the student's contents shows no units at all.
+  const pages = Array.from({ length: 12 }, (_, i) => prosePage(120, i));
+  const outline = [
+    { title: "Unit 1: Cells", path: "Unit 1: Cells", pageIndex: 0 },
+    {
+      title: "1.1 Cell structure",
+      path: "Unit 1: Cells · 1.1 Cell structure",
+      pageIndex: 1,
+    },
+    {
+      title: "1.1.1 The nucleus",
+      path: "Unit 1: Cells · 1.1 Cell structure · 1.1.1 The nucleus",
+      pageIndex: 2,
+    },
+    {
+      title: "1.2 Cell division",
+      path: "Unit 1: Cells · 1.2 Cell division",
+      pageIndex: 7,
+    },
+    { title: "Unit 2: Plants", path: "Unit 2: Plants", pageIndex: 9 },
+    {
+      title: "2.1 Characteristics of plants",
+      path: "Unit 2: Plants · 2.1 Characteristics of plants",
+      pageIndex: 10,
+    },
+  ];
+  const chunks = chaptersFromOutline(pages, outline);
+  expect(chunks?.map((c) => c.title)).toEqual([
+    "Unit 1: Cells",
+    "Unit 2: Plants",
+  ]);
+  // Everything nested under a unit stays under it. The path carries the depth,
+  // which is how a third-level idea is told from a first-level one.
+  expect(chunks?.[0].topics?.map((t) => t.path)).toEqual([
+    "1.1 Cell structure",
+    "1.1 Cell structure · 1.1.1 The nucleus",
+    "1.2 Cell division",
+  ]);
+  const tree = importTocTree(chunks ?? []);
+  expect(tree.map((n) => n.title)).toEqual(["Unit 1: Cells", "Unit 2: Plants"]);
 });
 
 test("a scanned book with no headings at all yields nothing to segment", () => {
