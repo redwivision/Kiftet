@@ -630,7 +630,7 @@ export const en = {
   "auth-promise":
     "Speak a chapter out loud, see exactly which ideas didn't land.",
   "auth-quote": "Say what you remember. The gaps do the rest.",
-  "auth-foot": "Ethiopian students · National exam",
+  "auth-foot": "Nobody starts from zero.",
   "choose-theme": "Choose a theme",
 } as const;
 
@@ -1213,7 +1213,7 @@ export const am: Record<MessageKey, string> = {
   "auth-eyebrow": "ክፍተቱን ዝጋ",
   "auth-promise": "ምዕራፍ በድምጽ ስለርህ፣ የትኞቹ ሃሳቦች አላጨቡበትም በግልጽ እይታ።",
   "auth-quote": "ያስታውስክትን ተናገር። ክፍተቶቹ ሌላውን ያደርጋሉ።",
-  "auth-foot": "የኢትዮጵያ ተማሪዎች · ብሔራዊ ፈተና",
+  "auth-foot": "አንድም ከዜሮ አይጀምሩም።",
   "choose-theme": "ገምት ምረጥ",
 };
 
