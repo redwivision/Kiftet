@@ -3,10 +3,14 @@ import * as schema from "@kiftet/db/schema/auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
+import { sendEmail } from "./email";
+
 export type AuthConfig = {
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   CORS_ORIGIN: string;
+  REQUIRE_EMAIL_VERIFICATION: boolean;
+  AUTH_EMAIL_TRANSPORT: string;
 };
 
 export function createAuth(
@@ -20,7 +24,75 @@ export function createAuth(
       schema,
     }),
     trustedOrigins: [env.CORS_ORIGIN, ...desktopOrigins],
-    emailAndPassword: { enabled: true },
+    emailAndPassword: {
+      enabled: true,
+      // The sign-up form already refuses a shorter password; this is the server
+      // refusing it too, because the form is a convenience, not a boundary.
+      minPasswordLength: 8,
+      // scrypt hashes the whole input, so an unbounded password is free CPU for
+      // anyone who can reach /sign-up/email. This is the only reason to cap it;
+      // a cap low enough to bother a real student would be the wrong trade.
+      maxPasswordLength: 256,
+      requireEmailVerification: env.REQUIRE_EMAIL_VERIFICATION,
+      resetPasswordTokenExpiresIn: 60 * 30,
+      // Someone who reset a password did so because they did not control the
+      // account. Leaving the thief's session alive would make the reset a
+      // suggestion rather than a remedy.
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail(env, {
+          to: user.email,
+          subject: "Reset your password",
+          text: [
+            "Someone asked to reset the password on this account.",
+            "",
+            url,
+            "",
+            "The link works once, and expires in 30 minutes.",
+            "",
+            "If that was not you, nothing has changed — you can ignore this, and the account is still yours.",
+          ].join("\n"),
+        });
+      },
+    },
+    emailVerification: {
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendEmail(env, {
+          to: user.email,
+          subject: "Confirm your email address",
+          text: [
+            "Confirm this address to finish setting up your account.",
+            "",
+            url,
+            "",
+            "The link expires in 24 hours. If you did not sign up, ignore this.",
+          ].join("\n"),
+        });
+      },
+    },
+    rateLimit: {
+      enabled: true,
+      // In-memory on purpose: there is one long-running Express server, and the
+      // rateLimit table does not exist in the schema. Memory means a restart
+      // clears the counters, which is an acceptable price for not carrying a
+      // table whose only job is to throttle credential stuffing.
+      storage: "memory",
+      window: 60,
+      max: 60,
+      // Better Auth's default for sensitive endpoints is 3 requests per 10
+      // seconds, keyed by IP. These are deliberately more generous, because in
+      // this audience the shared address is the normal case rather than the
+      // attack: a school behind one NAT, or a carrier CGNAT, hands the same
+      // public IP to every student on it, and a limit tuned to stop guessing
+      // ends up locking out a class that is signing in correctly. A student
+      // who cannot log in has no flow to fall back on, so the dial is set
+      // toward the lockout, and raised further if the noise shows it needs to be.
+      customRules: {
+        "/api/auth/sign-in/email": { window: 60, max: 30 },
+        "/api/auth/sign-up/email": { window: 60, max: 10 },
+        "/api/auth/request-password-reset": { window: 60, max: 5 },
+      },
+    },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     advanced: {
