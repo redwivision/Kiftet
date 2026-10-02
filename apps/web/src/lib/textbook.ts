@@ -868,6 +868,49 @@ function fallbackPages(pages: string[]): PageSegment[] {
 const MIN_OCR_SEGMENT_PAGES = 2;
 
 /**
+ * The identity of a heading: what it says the chapter *is*, ignoring the parts
+ * that change page to page.
+ *
+ * Text extraction hands back the running header exactly as the page printed it,
+ * so "Unit 3: Cell Reproduction 47" and "Unit 3: Cell Reproduction 48" are
+ * different strings and different chapters — one unit became five. Dropping the
+ * trailing page number, punctuation and case makes the comparison answer the
+ * question the caller is actually asking: is this the same chapter again?
+ */
+function headingKey(heading: string): string {
+  return cleanHeading(heading).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/** A heading without its trailing page number, which is not part of its name. */
+function cleanHeading(heading: string): string {
+  const cleaned = heading
+    .trim()
+    .replace(/[\s:.,;–—-]+$/, "")
+    .replace(/\s+(?:p(?:age)?\.?\s*)?\d{1,4}$/i, "")
+    .trim();
+  // Never strip a heading down to nothing — "Unit 4" must survive.
+  return cleaned || heading.trim();
+}
+
+/**
+ * The last page of the front matter: the cover and the book's own contents.
+ *
+ * A contents page lists every unit title with its page number, so a heading read
+ * there is a listing rather than a unit. Counting it as the start of a chapter
+ * is not only wasted work — it shifts that unit's range onto the contents page
+ * and shifts the printed-page offset that the whole cross-check depends on.
+ * Nothing is OCR'd to learn this: the extracted text already says "contents".
+ */
+function frontMatterEnd(pages: string[]): number {
+  let last = -1;
+  const window = Math.min(pages.length, TOC_SEARCH_PAGES);
+  for (let i = 0; i < window; i += 1) {
+    if (looksLikeTocPage(pages[i])) last = i;
+  }
+  return last;
+}
+
+/**
  * Derive chapters from a book whose body text cannot be extracted.
  *
  * This is the trick that makes on-device OCR usable at all. Measured on the
@@ -885,21 +928,36 @@ const MIN_OCR_SEGMENT_PAGES = 2;
  */
 export function segmentsForOcrBook(pages: string[]): PageSegment[] {
   const segments: PageSegment[] = [];
+  const front = frontMatterEnd(pages);
   let current: PageSegment | null = null;
   let inForce = "";
+  let currentKey = "";
 
   for (let i = 0; i < pages.length; i += 1) {
     const heading = headingOf(pages[i]);
     if (!heading) continue;
-    const key = heading.toLowerCase();
+    // The cover carries no unit, and page 0 of a scanned book is as likely to be
+    // a title page as a chapter. Asked before the heading is remembered, not
+    // after: a heading that is refused here must not mark the unit that follows
+    // it as already seen, or the whole of that unit is skipped as a repeat.
+    if (!current && i === 0) continue;
+    if (i <= front) continue;
+    const key = headingKey(heading);
     // Same header as the page before: still inside the current chapter.
     if (key === inForce) continue;
     inForce = key;
 
     if (!current) {
-      // Front matter — cover, contents — before the first real heading. It is
-      // not a unit, so it is skipped the way `chunkByOutline` skips it.
-      if (i > 0) current = { title: heading, start: i, end: pages.length };
+      current = { title: cleanHeading(heading), start: i, end: pages.length };
+      currentKey = key;
+      continue;
+    }
+
+    // The same unit seen again, further in. Only its header changed — a new page
+    // number, or a second line that fell above it. Still one chapter.
+    if (key === currentKey) {
+      const title = cleanHeading(heading);
+      if (title.length > current.title.length) current.title = title;
       continue;
     }
 
@@ -908,17 +966,35 @@ export function segmentsForOcrBook(pages: string[]): PageSegment[] {
       // Too short to be its own chapter: keep going and take the better title.
       // The longer of the two is nearly always the real one — "Unit One:
       // Sub-fields of Biology" beats a truncated "Unit 1: S".
-      if (heading.length > current.title.length) current.title = heading;
+      const title = cleanHeading(heading);
+      if (title.length > current.title.length) {
+        current.title = title;
+        currentKey = key;
+      }
       continue;
     }
 
     current.end = i;
     segments.push(current);
-    current = { title: heading, start: i, end: pages.length };
+    current = { title: cleanHeading(heading), start: i, end: pages.length };
+    currentKey = key;
   }
 
   if (current) segments.push(current);
-  return segments;
+
+  // Neighbours that resolve to the same unit are one chapter. A book whose
+  // running header alternates between two renderings of one name would
+  // otherwise still yield a chapter per pair of pages.
+  const merged: PageSegment[] = [];
+  for (const segment of segments) {
+    const previous = merged.at(-1);
+    if (previous && headingKey(previous.title) === headingKey(segment.title)) {
+      previous.end = segment.end;
+      continue;
+    }
+    merged.push({ ...segment });
+  }
+  return merged;
 }
 
 // ────────────────────────────────────────────────────────────────
