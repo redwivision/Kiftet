@@ -59,6 +59,9 @@ const SECTION_RE = new RegExp(
 const UNIT_RE = /^Unit\s+(\d+)\s*[:.-]?\s*(.+?)\s+(\d{1,3})$/i;
 const STARTS_LIKE_ENTRY_RE = new RegExp(String.raw`^${NUMBER_SOURCE}\s+\S`);
 
+/** A unit line, which is an entry start that does not begin with a digit. */
+const UNIT_STARTS_RE = /^Unit\s+\d/i;
+
 /**
  * Decoration can imitate an entry: a flourish reading "2 ; —" begins with a
  * digit, and "… OX Na " - 7" ends with one. A real title is overwhelmingly
@@ -81,13 +84,18 @@ function endsWithPageNumber(line: string): boolean {
 }
 
 function takeEntry(line: string, into: TocEntry[]): boolean {
+  // A leader that lands immediately before the page number survives the
+  // run-collapsing above, because on its own it is not a run — leaving it as a
+  // stray glyph welded to the end of the title ("Behaviour �").
+  const tidy = (title: string) => title.trim().replace(/[\s.·…_�]+$/, "");
+
   const unit = line.match(UNIT_RE);
   if (unit) {
     if (!titleLooksReal(unit[2])) return false;
     into.push({
       kind: "unit",
       unit: Number(unit[1]),
-      title: unit[2].trim(),
+      title: tidy(unit[2]),
       page: Number(unit[3]),
     });
     return true;
@@ -104,12 +112,33 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
     into.push({
       kind: "section",
       path,
-      title: section[2].trim(),
+      title: tidy(section[2]),
       page: Number(section[3]),
     });
     return true;
   }
   return false;
+}
+
+/**
+ * Leaders between a contents entry and its page number.
+ *
+ * A contents page fills the gap between a title and its page with repeated
+ * dots — the most recent Ethiopian textbooks encode them as U+FFFD, one per
+ * leader, so the run arrives as "Behaviour � � � � 1" rather than
+ * "Behaviour ..... 1". Either way the entry does not end in a page number as far
+ * as the patterns above are concerned, so it is not an entry at all: a book's
+ * contents can be sitting right there, plainly readable, and parse to nothing.
+ *
+ * Only runs of two or more are collapsed. A single dot is not decoration but
+ * numbering — "1.2" and the trailing "1.2." are both one dot each — and removing
+ * those would merge a section's number into its title.
+ */
+const LEADER_RUN = /(?:\s*[.·…_�]\s*){2,}/g;
+
+/** One contents line, with its leaders collapsed and its spacing normalized. */
+function normalizeTocLine(line: string): string {
+  return line.replace(/\s+/g, " ").replace(LEADER_RUN, " ").trim();
 }
 
 /**
@@ -119,16 +148,13 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
  * falls back to scanning page headings, which is worse but still works.
  */
 export function parseToc(text: string): TocEntry[] {
-  const lines = text
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+  const lines = text.split("\n").map(normalizeTocLine).filter(Boolean);
   const entries: TocEntry[] = [];
   let held: string | null = null;
 
   for (const line of lines) {
     if (held !== null) {
-      const merged: string = `${held} ${line}`;
+      const merged = normalizeTocLine(`${held} ${line}`);
       if (takeEntry(merged, entries)) {
         held = null;
         continue;
@@ -142,8 +168,12 @@ export function parseToc(text: string): TocEntry[] {
     // ends in a number but failed the title test is decoration pretending to
     // be an entry: dropping it is what stops it being glued onto the next real
     // line and swallowing a whole unit.
+    //
+    // A unit counts as an entry start too, and has to: this book's leaders are
+    // emitted one per line, so "Unit 1: …" arrives with its page number several
+    // lines below it and nothing else would hold the two together.
     if (
-      STARTS_LIKE_ENTRY_RE.test(line) &&
+      (STARTS_LIKE_ENTRY_RE.test(line) || UNIT_STARTS_RE.test(line)) &&
       !endsWithPageNumber(line) &&
       hasWords(line)
     ) {
@@ -191,7 +221,7 @@ export function looksLikeTocPage(text: string): boolean {
  * Contents run to a handful of pages. Capped so a book with no contents costs a
  * fixed few seconds rather than a scan of the whole file.
  */
-export const TOC_SEARCH_PAGES = 12;
+export const TOC_SEARCH_PAGES = 15;
 
 /**
  * How many pages to recognize before stopping.
@@ -203,6 +233,14 @@ export const TOC_SEARCH_PAGES = 12;
  * whose contents genuinely are longer.
  */
 export const TOC_MAX_PAGES = 6;
+
+/**
+ * How many pages of a readable book to read looking for the contents.
+ *
+ * Reading a text layer is free and instant, unlike OCR, so this is bounded only
+ * by where a contents page plausibly ends rather than by what a student waits.
+ */
+export const TOC_TEXT_PAGES = 4;
 
 /**
  * A page that yields fewer than this many entries is not a contents page.
