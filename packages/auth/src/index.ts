@@ -44,7 +44,7 @@ export function createAuth(
     // sends a slash-less origin and "https://app.example/" is otherwise a
     // different origin to the one that was configured.
     trustedOrigins: [
-      ...env.CORS_ORIGIN.split(",")
+      ...(env.CORS_ORIGIN?.split(",") ?? [])
         .map((origin) => origin.trim().replace(/\/+$/, ""))
         .filter(Boolean),
       ...desktopOrigins,

@@ -14,7 +14,22 @@ import { env } from "../env.server";
 const router = Router();
 
 router.get("/auth-providers", (_req: Request, res: Response) => {
-  res.json({ providers: enabledSocialProviders(env) });
+  // Answering is more load-bearing than it looks: the browser draws the social
+  // buttons from this, so a 500 here does not merely hide a button — it is an
+  // error on the sign-in page itself, for a stranger, before they have an
+  // account. Password sign-in is fully independent of it, so the honest failure
+  // is an empty list plus a log line naming the cause, never a 500 that takes
+  // the page down with it.
+  try {
+    res.json({ providers: enabledSocialProviders(env) });
+  } catch (error) {
+    console.error(
+      `[auth-providers] could not read the configured providers: ${
+        error instanceof Error ? (error.stack ?? error.message) : String(error)
+      }`,
+    );
+    res.json({ providers: [] });
+  }
 });
 
 export default router;
