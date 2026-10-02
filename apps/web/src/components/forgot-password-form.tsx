@@ -2,59 +2,41 @@ import { Button } from "@kiftet/ui/components/button";
 import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { useForm } from "@tanstack/react-form";
-import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
-import { clearDemoUser } from "@/lib/demo";
 
 import AuthShell from "./auth-shell";
 import { useLanguage } from "./language-provider";
 import Loader from "./loader";
 
-export default function SignInForm({
-  onSwitchToSignUp,
-  onForgotPassword,
-}: {
-  onSwitchToSignUp: () => void;
-  onForgotPassword: () => void;
-}) {
-  const navigate = useNavigate();
+/** Absolute, because better-auth checks redirectTo against trusted origins. */
+function resetRedirect(): string {
+  return `${window.location.origin}/reset-password`;
+}
+
+export default function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const { t } = useLanguage();
   const { isPending } = authClient.useSession();
 
   const form = useForm({
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "" },
     onSubmit: async ({ value }) => {
-      await authClient.signIn.email(
-        {
-          email: value.email,
-          password: value.password,
-        },
-        {
-          onSuccess: () => {
-            clearDemoUser();
-            navigate("/dashboard");
-            toast.success(t("auth-welcome-back"));
-          },
-          onError: (error) => {
-            toast.error(
-              error.error?.message ||
-                error.error?.statusText ||
-                t("auth-signin-error"),
-            );
-          },
-        },
-      );
+      const { error } = await authClient.requestPasswordReset({
+        email: value.email,
+        redirectTo: resetRedirect(),
+      });
+
+      // The same message whether or not the address has an account. Anything
+      // else turns this form into a way to find out who is using the app, and
+      // an unverified guess is cheaper to send than to rate-limit properly.
+      if (error) toast.error(t("auth-signin-error"));
+      else toast.success(t("auth-forgot-sent"));
     },
     validators: {
       onSubmit: z.object({
-        email: z.email(t("auth-invalid-email")),
-        password: z.string().min(8, t("auth-password-too-short")),
+        email: z.email(t("auth-forgot-invalid-email")),
       }),
     },
   });
@@ -65,15 +47,15 @@ export default function SignInForm({
 
   return (
     <AuthShell
-      title={t("auth-welcome-back")}
-      subtitle={t("auth-signin-subtitle")}
+      title={t("auth-forgot-title")}
+      subtitle={t("auth-forgot-subtitle")}
       footer={
         <Button
           variant="link"
-          onClick={onSwitchToSignUp}
+          onClick={onBack}
           className="text-gold transition-colors duration-200 hover:text-gold-soft"
         >
-          {t("need-account")} {t("sign-up")}
+          {t("auth-forgot-back")}
         </Button>
       }
     >
@@ -110,38 +92,6 @@ export default function SignInForm({
           </form.Field>
         </div>
 
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>{t("auth-password-label")}</Label>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  type="password"
-                  autoComplete="current-password"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-rust text-sm">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
-
-        <Button
-          variant="link"
-          onClick={onForgotPassword}
-          className="px-0 text-mist transition-colors duration-200 hover:text-gold"
-        >
-          {t("auth-forgot-password")}
-        </Button>
-
         <form.Subscribe
           selector={(state) => ({
             canSubmit: state.canSubmit,
@@ -155,7 +105,7 @@ export default function SignInForm({
               disabled={!canSubmit}
               loading={isSubmitting}
             >
-              {t("auth-signin-cta")}
+              {t("auth-forgot-cta")}
             </Button>
           )}
         </form.Subscribe>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ForgotPasswordForm from "@/components/forgot-password-form";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 import type { Route } from "./+types/login";
@@ -14,12 +15,22 @@ export function meta(_args: Route.MetaArgs) {
   ];
 }
 
-export default function Login() {
-  const [showSignIn, setShowSignIn] = useState(true);
+type View = "sign-in" | "sign-up" | "forgot";
 
-  return showSignIn ? (
-    <SignInForm onSwitchToSignUp={() => setShowSignIn(false)} />
+export default function Login() {
+  const [view, setView] = useState<View>("sign-in");
+  const toSignIn = () => setView("sign-in");
+
+  if (view === "forgot") {
+    return <ForgotPasswordForm onBack={toSignIn} />;
+  }
+
+  return view === "sign-in" ? (
+    <SignInForm
+      onSwitchToSignUp={() => setView("sign-up")}
+      onForgotPassword={() => setView("forgot")}
+    />
   ) : (
-    <SignUpForm onSwitchToSignIn={() => setShowSignIn(true)} />
+    <SignUpForm onSwitchToSignIn={toSignIn} />
   );
 }

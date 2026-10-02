@@ -2,6 +2,7 @@ import { Button } from "@kiftet/ui/components/button";
 import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { useForm } from "@tanstack/react-form";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import z from "zod";
@@ -21,6 +22,9 @@ export default function SignUpForm({
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { isPending } = authClient.useSession();
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState<
+    string | null
+  >(null);
 
   const form = useForm({
     defaultValues: {
@@ -29,27 +33,39 @@ export default function SignUpForm({
       name: "",
     },
     onSubmit: async ({ value }) => {
-      await authClient.signUp.email(
-        {
-          email: value.email,
-          password: value.password,
-          name: value.name,
-        },
-        {
-          onSuccess: () => {
-            clearDemoUser();
-            navigate("/dashboard");
-            toast.success(t("auth-account-created"));
-          },
-          onError: (error) => {
-            toast.error(
-              error.error?.message ||
-                error.error?.statusText ||
-                "Couldn't create your account right now. Try again.",
-            );
-          },
-        },
-      );
+      const { data, error } = await authClient.signUp.email({
+        email: value.email,
+        password: value.password,
+        name: value.name,
+        // Absolute, and on the web origin: better-auth checks callbackURL
+        // against trusted origins, so a bare "/login" would be rejected on
+        // every origin but one.
+        callbackURL: `${window.location.origin}/login`,
+      });
+
+      if (error) {
+        toast.error(
+          error.message ||
+            error.statusText ||
+            "Couldn't create your account right now. Try again.",
+        );
+        return;
+      }
+
+      clearDemoUser();
+
+      // A null token is how better-auth says "no session": with verification
+      // required it withholds one and returns token: null. There is no
+      // requireVerification field on this response — checking that field would
+      // silently never fire. Going to the dashboard without a session just
+      // bounces back to sign-in with nothing explained.
+      if (data.token === null) {
+        setAwaitingConfirmation(value.email);
+        return;
+      }
+
+      navigate("/dashboard");
+      toast.success(t("auth-account-created"));
     },
     validators: {
       onSubmit: z.object({
@@ -62,6 +78,19 @@ export default function SignUpForm({
 
   if (isPending) {
     return <Loader />;
+  }
+
+  if (awaitingConfirmation !== null) {
+    return (
+      <AuthShell
+        title={t("auth-check-email-title")}
+        subtitle={t("auth-signup-subtitle")}
+      >
+        <p className="text-mist text-sm">
+          {t("auth-check-email-body", { email: awaitingConfirmation })}
+        </p>
+      </AuthShell>
+    );
   }
 
   return (

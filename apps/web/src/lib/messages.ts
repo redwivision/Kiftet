@@ -584,6 +584,26 @@ export const en = {
   "auth-password-label": "Password",
   "auth-invalid-email": "Invalid email address",
   "auth-password-too-short": "Password must be at least 8 characters",
+  "auth-check-email-title": "Check your email",
+  "auth-check-email-body":
+    "We sent a link to {email}. Open it to finish setting up your account.",
+  "auth-forgot-password": "Forgot your password?",
+  "auth-forgot-title": "Reset your password",
+  "auth-forgot-subtitle":
+    "Tell us your email and we'll send you a link to set a new one.",
+  "auth-forgot-cta": "Send reset link",
+  "auth-forgot-sent":
+    "If that address has an account, a reset link is on its way.",
+  "auth-forgot-invalid-email": "Enter the email you signed up with",
+  "auth-forgot-back": "Back to sign in",
+  "auth-reset-title": "Choose a new password",
+  "auth-reset-subtitle": "Pick something you haven't used here before.",
+  "auth-reset-cta": "Set new password",
+  "auth-reset-done": "Password updated. You can sign in with it now.",
+  "auth-reset-no-token":
+    "This reset link is incomplete. Ask for a new one from the sign-in page.",
+  "auth-reset-failed": "That link has expired or already been used.",
+  "auth-new-password-label": "New password",
   // The study ring pushes to talk, so its captions can't reuse the `vt-*`
   // strings: those describe an always-on agent that you interrupt, this one
   // describes a held recording that you finish. Same states, other verbs.
@@ -1153,6 +1173,22 @@ export const am: Record<MessageKey, string> = {
   "auth-password-label": "የይለፍ ቃል",
   "auth-invalid-email": "የተሳሳተ የኢሜይል አድራሻ",
   "auth-password-too-short": "የይለፍ ቃል ቢያንስ 8 ፊደል ማድረግ አለበት",
+  "auth-check-email-title": "ኢሜይልዎን ይመልከቱ",
+  "auth-check-email-body": "ወደ {email} አድራሻ ልኮታል። ሂደትዎን ለማጠናቀቅ አገኙውን ይክፈቱ።",
+  "auth-forgot-password": "የይለፍ ቃል ይርሳል?",
+  "auth-forgot-title": "የይለፍ ቃል ይቀይሩ",
+  "auth-forgot-subtitle": "ኢሜይልዎን ይስጡን፣ አዲስ የይለፍ ቃል ለማስቀመጥ አገኙ ያለውን እንልካለን።",
+  "auth-forgot-cta": "የመለስ አገንባር ላክ",
+  "auth-forgot-sent": "ያለ መለያ ካለው በሆነ፣ የመለስ አገንባር በመንገድ ላይ ነው።",
+  "auth-forgot-invalid-email": "በየተመዘጉት ኢሜይል ያስገቡ",
+  "auth-forgot-back": "ወደ ግባት ተመለስ",
+  "auth-reset-title": "አዲስ የይለፍ ቃል ይምረጡ",
+  "auth-reset-subtitle": "እዚህ በይለፍ ቃል አስቀድሞ ያገለገልት የሆነ ነገር ይምረጡ።",
+  "auth-reset-cta": "አዲስ የይለፍ ቃል አስቀምጥ",
+  "auth-reset-done": "የይለፍ ቃሉ ተዘምኗል። አሁን በዚያ በግባት መግባት ይችላሉ።",
+  "auth-reset-no-token": "የመለስ አገንባሩ ያልተሟላ ነው። ከግባት ገጹ አዲስ ይጠይቁ።",
+  "auth-reset-failed": "አገኙ የተሰአ ወይም ቀደም የተጠቀመ አገንባር ነው።",
+  "auth-new-password-label": "አዲስ የይለፍ ቃል",
   "st-recall-idle":
     "ቀለበቱን ንካ ከዚያ ስለዚህ ምዕራፍ የሚስታውስክህን ነገር በአፍት ተናገር። ማንኛውንም ማስታወሻ የለም — ተንብርና ሐቅሓት ያላቸው ለሚፈለግ ነው። ሲቻልቱ በድጋሚ ንካ።",
   "st-answer-idle":
