@@ -288,6 +288,19 @@ verify via §9.5.
 | `DATABASE_URL` | **pooled** Neon string (hostname has `-pooler`) | server crashes on boot |
 | `DATABASE_URL_DIRECT` | **unpooled** Neon string (no `-pooler`) | migrations fall back to pooled (still works) or fail on session ops |
 | `GEMINI_API_KEY` | real key from Google AI Studio | grading returns empty placeholders; lessons fall back to templates |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | both, from Google Cloud Console | Google button hidden (only one half = not a provider) |
+| `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | both, from Meta app settings | Facebook button hidden (only one half = not a provider) |
+| `REQUIRE_EMAIL_VERIFICATION` | `false` until a real mail transport ships | `true` on the console transport locks out every signup |
+| `AUTH_EMAIL_TRANSPORT` | `console` — the only member of its enum | password-reset links go to the server log, not the student |
+
+**Social providers are optional.** Leave all four unset and password sign-in
+works exactly as before — the buttons are simply absent. Setting only one half
+of a pair is treated as not configured on purpose: offering a button there sends
+the student to the provider to be refused, which looks like our bug.
+
+Full provider setup — Google and Meta consoles, the exact redirect URIs, the
+Development-vs-Live switch that locks Facebook out, and a failure table — is in
+[`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.
 
 ### 8.3 The web app's build-time variables (Vercel/host: web app)
 
@@ -323,6 +336,21 @@ Run in order; expected result in parentheses.
    the page source (§8.1) — it must be `https://…`.
 7. **Rate limit sanity** — 30+ rapid AI calls in a minute → `429` (expected,
    not a fault).
+8. **Auth provider discovery** — `curl -s https://<your-site>/api/auth-providers`
+   → `{"providers":[…]}`. This reads the same function that built the auth
+   config, so it is the ground truth for which buttons should render. `[]` means
+   no provider pair is complete, or the env never reached the API service.
+9. **Social sign-in** — only if step 8 lists a provider. On a real phone or a
+   private window: click the button → the provider's genuine consent screen
+   appears → you land on `/dashboard` signed in. Then sign in **with a password**
+   too — both paths share one account, and a social-only check would hide a
+   broken password flow.
+
+> **If step 9 fails**, the provider console is almost always the answer, not
+> Kiftet: Google rejects accounts not in **Test users** while the consent screen
+> is in *Testing*, and Meta rejects everyone who is not an app role/admin while
+> the app is in *Development*. See the failure table in
+> [`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.6.
 
 ---
 
@@ -355,6 +383,12 @@ Run in order; expected result in parentheses.
 | API process dies every boot | `DATABASE_URL` missing, malformed, or pointing at the wrong Neon project | set pooled URL (`-pooler`); check the Neon console for the right project |
 | Migrations fail on boot ("already exists") | stale DB schema vs. migration journal (e.g. after a manual schema edit) | do not hand-edit schema; `git revert` unschema changes and redeploy, or ask before touching the DB |
 | Stale UI after a deploy | cached by the service worker | hard refresh; it self-heals on next load (autoUpdate) |
+| No Google/Facebook button | provider pair incomplete, or set on the wrong service | `curl /api/auth-providers`; set both halves on the **API** service and redeploy |
+| Social button → provider → Kiftet error page | redirect URI mismatch (trailing slash, `www`, or `http` vs `https`) | fix the URI character by character; add both spellings to the provider's allow-list |
+| "Access blocked" (Google) | consent screen still in **Testing** | publish it, or add the account as a test user |
+| "This app isn't available right now" (Facebook) | app still in **Development** mode | Meta → app settings → switch to **Live** |
+| Everyone silently signed out after a deploy | `BETTER_AUTH_URL` or `BETTER_AUTH_SECRET` changed | restore the previous value; the cookie is `HttpOnly`, so nothing on the page can explain it |
+| Password reset "does nothing" | `AUTH_EMAIL_TRANSPORT=console` — the link is in the server log, not the student's inbox | expected today; needs a transport shipped in `packages/auth/src/email.ts` |
 | Offline page on every load | web app can't reach the API *or* no network | check §9.1 health; check the client's connectivity |
 | Server boots but locals see 500s while you don't | node/bun version drift | `nvm use` to 22.23.2, `bun install`, restart |
 | varlock/env errors after pulling | `.env.schema` changed | `bun run env:generate` then rebuild |
