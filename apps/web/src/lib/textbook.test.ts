@@ -423,7 +423,10 @@ test("a one-page stub is folded into the chapter it introduces", () => {
   expect(segments).toHaveLength(1);
   // The longer of the two names is the real one.
   expect(segments[0].title).toBe("Unit One: Sub-fields of Biology");
-  expect(segments[0].start).toBe(1);
+  // Starting on the contents page would read the contents as part of the unit,
+  // and would shift this unit's range against the offset the topics are placed
+  // by — so the chapter starts where the unit does.
+  expect(segments[0].start).toBe(2);
   expect(segments[0].end).toBe(5);
 });
 
@@ -437,6 +440,118 @@ test("the cover and contents before the first heading are not a chapter", () => 
   const segments = segmentsForOcrBook(pages);
   expect(segments).toHaveLength(1);
   expect(segments[0].start).toBe(2);
+});
+
+test("a running header that carries its own page number is still one chapter", () => {
+  // Plenty of textbooks set the unit name and the page number on one line, so
+  // every page's header is a different string. Cutting on those differences
+  // turned a two-unit book into eleven chapters, most of them the same unit
+  // again — and, because that scan is what the contents page is checked
+  // against, it also cost the book every topic it had.
+  const page = (header: string, n: number) =>
+    `${header} ${n}\n${prosePage(30, n)}`;
+  const pages = [
+    "Grade 11 Biology",
+    "Student Book",
+    "Contents\nUnit 3: Cell Reproduction ....... 3",
+    ...Array.from({ length: 13 }, (_, i) =>
+      page("Unit 3: Cell Reproduction", 3 + i),
+    ),
+    ...Array.from({ length: 9 }, (_, i) =>
+      page("Unit 4: Human Biology", 16 + i),
+    ),
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(2);
+  // The page number is not part of the unit's name.
+  expect(segments[0].title).toBe("Unit 3: Cell Reproduction");
+  expect(segments[0].start).toBe(3);
+  expect(segments[0].end).toBe(16);
+  expect(segments[1].title).toBe("Unit 4: Human Biology");
+  expect(segments[1].start).toBe(16);
+});
+
+test("a book whose first unit starts on page 1 still keeps that unit", () => {
+  // Page 0 is treated as front matter, so this unit is found one page in. It
+  // used to disappear entirely: the heading on page 0 was refused, but still
+  // recorded as the header "in force", so every page that followed matched it
+  // and was skipped as a repeat.
+  const pages = [
+    ...Array.from(
+      { length: 6 },
+      (_, i) => `Unit One: Sub-fields of Biology ${2 + i}\n${prosePage(30, i)}`,
+    ),
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(1);
+  expect(segments[0].title).toBe("Unit One: Sub-fields of Biology");
+  expect(segments[0].start).toBe(1);
+});
+
+test("page-numbered headers no longer cost the book its topics", () => {
+  // The whole point of the heading scan is to locate the units well enough to
+  // translate the printed page numbers the contents states. Scan twice as many
+  // chapters as the book has units and that translation fails, the contents is
+  // discarded, and a student sees every unit with nothing under it.
+  const page = (header: string, n: number) =>
+    `${header} ${n}\n${prosePage(30, n)}`;
+  // Three pages of front matter, then two units whose printed page numbers
+  // equal their page indices — so the offset a correct scan finds is 0.
+  const pages = [
+    "Grade 11 Biology",
+    "Student Book",
+    "Contents\nUnit 3: Cell Reproduction ....... 3\n3.1 The cell cycle ....... 5",
+    ...Array.from({ length: 13 }, (_, i) =>
+      page("Unit 3: Cell Reproduction", 3 + i),
+    ),
+    ...Array.from({ length: 9 }, (_, i) =>
+      page("Unit 4: Human Biology", 16 + i),
+    ),
+  ];
+  const chapters = [
+    {
+      unit: 3,
+      title: "Cell Reproduction",
+      page: 3,
+      topics: [
+        {
+          kind: "section" as const,
+          path: ["3", "1"],
+          title: "The cell cycle",
+          page: 5,
+        },
+        {
+          kind: "section" as const,
+          path: ["3", "2"],
+          title: "Meiosis",
+          page: 9,
+        },
+      ],
+    },
+    {
+      unit: 4,
+      title: "Human Biology",
+      page: 16,
+      topics: [
+        {
+          kind: "section" as const,
+          path: ["4", "1"],
+          title: "The human body",
+          page: 18,
+        },
+      ],
+    },
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(2);
+  const offset = tocPageOffset(chapters, segments);
+  expect(offset).toBe(0);
+  const built = chaptersFromContents(chapters, offset ?? -1, pages.length);
+  expect(built).not.toBeNull();
+  expect(built?.[0].start).toBe(3);
+  expect(built?.[0].end).toBe(16);
+  expect(built?.[0].topics).toHaveLength(2);
+  expect(built?.[0].topics[0].path).toBe("3.1 The cell cycle");
 });
 
 test("a scanned book with no headings at all yields nothing to segment", () => {
