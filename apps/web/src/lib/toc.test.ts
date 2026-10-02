@@ -40,6 +40,42 @@ test("all 59 entries survive, with nothing invented", () => {
   expect(parseToc(REAL_TOC_OCR)).toHaveLength(59);
 });
 
+test("a contents whose leaders arrive one glyph per line is still read", () => {
+  // The Grade 10 Economics textbook, extracted rather than recognized: its dot
+  // leaders are U+FFFD, and the extractor emits each one as its own line, so
+  // "Unit 1: …" arrives with its page number several lines below it. Nothing
+  // about that page is unreadable to a person — the whole contents was simply
+  // being discarded, and the book's eight units read as ~150 fragments.
+  const economics = [
+    "III",
+    "Table of Contents",
+    "Content ",
+    "Page",
+    "Unit 1: Theory of Consumer Behaviour \uFFFD ",
+    "\uFFFD ",
+    "\uFFFD ",
+    "1",
+    "1.1 The Concept of Utility . . . . . . . 2",
+    "1.2 The Cardinal Utility Theory . . . . . 6",
+    "Unit 2: Theories of Demand and Supply \uFFFD ",
+    "\uFFFD ",
+    "17",
+    "2.1 Theory of Demand . . . . . . . . . . 19",
+    "2.2 Theory of Supply . . . . . . . . . . . 31",
+  ].join("\n");
+  const found = chaptersFromToc(parseToc(economics));
+  expect(found.map((c) => [c.unit, c.title, c.page])).toEqual([
+    [1, "Theory of Consumer Behaviour", 1],
+    [2, "Theories of Demand and Supply", 17],
+  ]);
+  expect(found[0].topics.map((t) => t.title)).toEqual([
+    "The Concept of Utility",
+    "The Cardinal Utility Theory",
+  ]);
+  // No leader glyph is left welded to a title.
+  expect(found.some((c) => c.title.includes("\uFFFD"))).toBe(false);
+});
+
 test("a title that wrapped onto the next line is rejoined", () => {
   const wrapped = chapters()[0].topics.find((t) => t.path.join(".") === "1.4");
   expect(wrapped?.title).toBe(

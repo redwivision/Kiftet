@@ -13,6 +13,7 @@ import {
   TOC_MAX_PAGES,
   TOC_MIN_ENTRIES_PER_PAGE,
   TOC_SEARCH_PAGES,
+  TOC_TEXT_PAGES,
   type TocChapter,
 } from "./toc";
 
@@ -894,13 +895,60 @@ function headingKey(heading: string): string {
 
 /** A heading without its trailing page number, which is not part of its name. */
 function cleanHeading(heading: string): string {
-  const cleaned = heading
+  const trimmed = heading
     .trim()
     .replace(/[\s:.,;–—-]+$/, "")
+    .trim();
+  const withoutPage = trimmed
     .replace(/\s+(?:p(?:age)?\.?\s*)?\d{1,4}$/i, "")
     .trim();
-  // Never strip a heading down to nothing — "Unit 4" must survive.
-  return cleaned || heading.trim();
+  // "Unit 6" is the whole heading, and its 6 is what says which unit this is —
+  // strip that and every unit in the book collapses to the single key "unit",
+  // so the scan merges the entire textbook into one chapter.
+  if (withoutPage.split(/\s+/).length > 1) return withoutPage;
+  return trimmed;
+}
+
+/**
+ * The book's own contents, read from the text layer.
+ *
+ * A book with no bookmarks is not a book without a contents page — most
+ * textbooks print one, and when the text extracts it can simply be read, with
+ * no OCR and no waiting. This is the cheapest possible source of the real
+ * hierarchy: the book stating its own units, topics and page numbers, verbatim.
+ */
+function readTextContents(pages: string[]): {
+  tocStart: number;
+  text: string;
+  pagesRead: number;
+  chapters: TocChapter[];
+} | null {
+  const tocStart = pages.findIndex(
+    (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
+  );
+  if (tocStart < 0) return null;
+
+  // Page at a time, and stop where the contents stops. This book's contents run
+  // to two pages; the third is the first page of Unit 1, which repeats its own
+  // title and number and would otherwise be read as a ninth unit — a duplicate
+  // of the first, with the book's real Unit 1 sitting above it.
+  let text = "";
+  let chapters: TocChapter[] = [];
+  let pagesRead = 0;
+  const limit = Math.min(tocStart + TOC_TEXT_PAGES, pages.length);
+  for (let page = tocStart; page < limit; page += 1) {
+    const grown = chaptersFromToc(parseToc(`${text}\n${pages[page]}`));
+    if (
+      chapters.length > 0 &&
+      grown.length - chapters.length < TOC_MIN_ENTRIES_PER_PAGE
+    ) {
+      break;
+    }
+    text += `\n${pages[page]}`;
+    chapters = grown;
+    pagesRead += 1;
+  }
+  return chapters.length > 0 ? { tocStart, text, chapters, pagesRead } : null;
 }
 
 /**
@@ -1241,6 +1289,7 @@ export type ImportDiagnostics = {
   source:
     | "pasted-text"
     | "pdf-outline"
+    | "pdf-contents"
     | "pdf-text-layer"
     | "ocr-contents"
     | "ocr-headings";
@@ -1397,21 +1446,58 @@ export async function planImport(
       let chunks =
         outline.length >= 2 ? chaptersFromOutline(pages, outline) : null;
       if (!chunks) {
-        let segments =
-          outline.length >= 2
-            ? chunkByOutline(pages, outline)
-            : segmentPages(pages);
+        // No bookmarks. A book that still has a readable text layer states its
+        // own structure outright on its contents page, and reading that is free
+        // and instant — strictly better than guessing chapters out of headings.
+        const found = readTextContents(pages);
+        report.contentsPage = found ? found.tocStart : null;
+        // Where each unit actually starts, which is what turns the printed page
+        // numbers on the contents into page indices. Tolerant of a running
+        // header repeating down the unit, which is what a textbook does.
+        let segments = segmentsForOcrBook(pages);
         if (segments.length <= 1) segments = fallbackPages(pages);
-        chunks = segments
-          .flatMap((s) => {
-            const full = pages.slice(s.start, s.end).join("\n\n").trim();
-            return full
-              ? withPartSplits(s.title, full, undefined, {
-                  start: s.start,
-                  end: s.end,
-                })
-              : [];
-          })
+        report.segments = segments.map((s) => ({
+          title: s.title,
+          start: s.start,
+          end: s.end,
+        }));
+
+        let built: ReturnType<typeof chaptersFromContents> = null;
+        if (found) {
+          report.contentsPagesRead = found.pagesRead;
+          report.contentsText = trimForReport(found.text);
+          report.contentsEntries = found.chapters.map((c) => ({
+            unit: c.unit,
+            title: c.title,
+            page: c.page,
+          }));
+          const offset = tocPageOffset(found.chapters, segments);
+          report.pageOffset = offset;
+          if (offset !== null) {
+            built = chaptersFromContents(found.chapters, offset, pages.length);
+          }
+        }
+
+        chunks = (
+          built
+            ? built.flatMap((c) =>
+                withPartSplits(
+                  c.title,
+                  pages.slice(c.start, c.end).join("\n\n").trim(),
+                  c.topics,
+                  { start: c.start, end: c.end },
+                ),
+              )
+            : segments.flatMap((s) => {
+                const full = pages.slice(s.start, s.end).join("\n\n").trim();
+                return full
+                  ? withPartSplits(s.title, full, undefined, {
+                      start: s.start,
+                      end: s.end,
+                    })
+                  : [];
+              })
+        )
           // A book can pass the audit overall and still have a section that is
           // nothing but a heading and a page number. Importing that as a chapter
           // would have the model diagnose a page it never actually read.
@@ -1420,9 +1506,11 @@ export async function planImport(
       const unique = uniqueTitles(chunks);
       const toc = importTocTree(unique);
       report.source =
-        unique.length > 0 && outline.length >= 2
-          ? "pdf-outline"
-          : "pdf-text-layer";
+        report.pageOffset !== null
+          ? "pdf-contents"
+          : unique.length > 0 && outline.length >= 2
+            ? "pdf-outline"
+            : "pdf-text-layer";
       report.tree = flatTree(toc);
       logHierarchy(report);
       return {
