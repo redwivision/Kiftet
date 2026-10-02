@@ -4,6 +4,15 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
 import { sendEmail } from "./email";
+import { socialProviderConfig } from "./providers";
+
+// Re-exported so the server can answer "which providers are on?" from the same
+// function that decided which providers are on.
+export {
+  enabledSocialProviders,
+  type SocialProviderEnv,
+  type SocialProviderId,
+} from "./providers";
 
 export type AuthConfig = {
   BETTER_AUTH_URL: string;
@@ -11,6 +20,10 @@ export type AuthConfig = {
   CORS_ORIGIN: string;
   REQUIRE_EMAIL_VERIFICATION: boolean;
   AUTH_EMAIL_TRANSPORT: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  FACEBOOK_CLIENT_ID?: string;
+  FACEBOOK_CLIENT_SECRET?: string;
 };
 
 export function createAuth(
@@ -24,6 +37,7 @@ export function createAuth(
       schema,
     }),
     trustedOrigins: [env.CORS_ORIGIN, ...desktopOrigins],
+    socialProviders: socialProviderConfig(env),
     emailAndPassword: {
       enabled: true,
       // The sign-up form already refuses a shorter password; this is the server
@@ -91,6 +105,18 @@ export function createAuth(
         "/api/auth/sign-in/email": { window: 60, max: 30 },
         "/api/auth/sign-up/email": { window: 60, max: 10 },
         "/api/auth/request-password-reset": { window: 60, max: 5 },
+      },
+    },
+    account: {
+      // A student who signs up with Facebook and later tries Google with the
+      // same address must land on the account they already have, not a second
+      // one with their study history missing. Trusting the providers covers
+      // that; allowDifferentEmails stays off so an unverified address can never
+      // be used to walk into an existing account.
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google", "facebook", "email-password"],
+        allowDifferentEmails: false,
       },
     },
     secret: env.BETTER_AUTH_SECRET,

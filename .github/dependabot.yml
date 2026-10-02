@@ -1,0 +1,47 @@
+# Bumps arrive as pull requests, never as a silent install.
+#
+# Better Auth is the reason this file exists. It is pinned to an exact version
+# because its option surface changes between minors (a renamed option fails at
+# boot, not at compile time), and Kiftet guards that with resolved-config tests
+# in packages/auth/src/index.test.ts. Those tests only help if something is
+# actually proposing the upgrade — an exact pin never floats on its own, so
+# without this the repo would sit on 1.7.3 forever and quietly fall behind on
+# security patches.
+version: 2
+
+updates:
+  # Grouped: auth and its database driver move together. A Better Auth bump that
+  # pairs with a Drizzle bump is one review and one test run, not two.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      auth-stack:
+        patterns:
+          - better-auth
+          - "@kiftet/auth"
+          - drizzle-orm
+          - drizzle-kit
+          - "@neondatabase/serverless"
+        update-types:
+          - minor
+          - patch
+      web-stack:
+        patterns:
+          - react
+          - react-dom
+          - react-router
+          - "@kiftet/ui"
+          - tailwindcss
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci

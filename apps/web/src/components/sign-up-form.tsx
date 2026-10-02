@@ -13,6 +13,7 @@ import { clearDemoUser } from "@/lib/demo";
 import AuthShell from "./auth-shell";
 import { useLanguage } from "./language-provider";
 import Loader from "./loader";
+import SocialButtons from "./social-buttons";
 
 export default function SignUpForm({
   onSwitchToSignIn,
@@ -205,6 +206,7 @@ export default function SignUpForm({
           )}
         </form.Subscribe>
       </form>
+      <SocialButtons />
     </AuthShell>
   );
 }
