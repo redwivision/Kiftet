@@ -406,11 +406,17 @@ function uniqueTitles(chunks: ImportChunk[]): ImportChunk[] {
  * 59-page unit lands as one string, and the ingest endpoint caps a chapter at
  * 200k characters inside a 256kb body. Splitting here, at the same sentence
  * boundary, means the split is invisible in the library — just "(part 2)".
+ *
+ * `pages` rides along onto every part. The span describes the chapter, not the
+ * individual part, and it is what the contents tree needs: without it a topic's
+ * range has no end to stop at, so the last topic of a unit came out a page short
+ * of the unit's own last page.
  */
 export function withPartSplits(
   title: string,
   full: string,
   topics?: TopicEntry[],
+  pages?: { start: number; end: number },
 ): ImportChunk[] {
   const out: ImportChunk[] = [];
   const split = full.length > MAX_CHAPTER_CHARS;
@@ -425,6 +431,7 @@ export function withPartSplits(
       title: `${title} (part ${part})`,
       rawText: rest.slice(0, cut).trim(),
       parentTitle: split ? title : undefined,
+      pages,
       // Keep the chapter outline on one part; repeating it creates duplicate
       // checklist items across the split chapters.
       topics: part === 1 ? topics : undefined,
@@ -437,6 +444,7 @@ export function withPartSplits(
       title: part === 1 ? title : `${title} (part ${part})`,
       rawText: rest,
       parentTitle: split ? title : undefined,
+      pages,
       topics: part === 1 ? topics : undefined,
     });
   return out;
@@ -582,6 +590,47 @@ async function getPdfLib() {
 
 type OutlineEntry = { title: string; path: string; pageIndex: number };
 
+/**
+ * The page an outline entry lands on.
+ *
+ * Two shapes of destination exist, and pdfjs only resolves one of them.
+ * `getDestination` looks up a *named* destination by string and rejects anything
+ * else. The array form — `[pageRef, /XYZ, left, top, zoom]` — carries the page
+ * reference itself as `{ num, gen }`, and `getPageIndex` takes that shape
+ * directly. Word, LaTeX, Acrobat, PyMuPDF and pypdf all write the array form, so
+ * sending it to `getDestination` threw on every entry, the error was swallowed,
+ * and the whole outline came back empty: a readable book with bookmarks was cut
+ * up by heading detection instead, with no topics and no page ranges.
+ */
+async function outlinePageIndex(
+  doc: PDFDocumentProxy,
+  dest: unknown,
+): Promise<number | null> {
+  const ref = (candidate: unknown) =>
+    typeof candidate === "object" &&
+    candidate !== null &&
+    typeof (candidate as { num?: unknown }).num === "number" &&
+    typeof (candidate as { gen?: unknown }).gen === "number"
+      ? (candidate as { num: number; gen: number })
+      : null;
+
+  try {
+    if (typeof dest === "string") {
+      const resolved = await doc.getDestination(dest);
+      const named = ref(resolved?.[0]);
+      return named ? await doc.getPageIndex(named) : null;
+    }
+    if (Array.isArray(dest)) {
+      const direct = ref(dest[0]);
+      return direct ? await doc.getPageIndex(direct) : null;
+    }
+    return null;
+  } catch {
+    // Unresolvable destination — the entry simply isn't a cut point.
+    return null;
+  }
+}
+
 // The PDF's outline is its table of contents. Flatten the tree in reading
 // order, keeping each heading's full path (`Chapter 1 · 1.2 Reflection`) and
 // the page it lands on. That path is what we slice chunks with.
@@ -593,18 +642,10 @@ async function readOutline(doc: PDFDocumentProxy): Promise<OutlineEntry[]> {
   const walk = async (nodes: OutlineNode[], parentPath: string) => {
     for (const node of nodes) {
       const title = (node?.title ?? "").trim();
-      let pageIndex: number | null = null;
-      if (node?.dest != null) {
-        try {
-          const dest = await doc.getDestination(
-            node.dest as Parameters<PDFDocumentProxy["getDestination"]>[0],
-          );
-          const ref = dest?.[0] as { num: number; gen: number } | undefined;
-          if (ref?.num != null) pageIndex = await doc.getPageIndex(ref);
-        } catch {
-          // Unresolvable destination — the entry simply isn't a cut point.
-        }
-      }
+      const pageIndex =
+        node?.dest == null
+          ? null
+          : await outlinePageIndex(doc, node.dest as never);
       const path = parentPath ? `${parentPath} · ${title}` : title;
       if (title && pageIndex != null) {
         entries.push({ title, path, pageIndex });
@@ -767,7 +808,7 @@ function chaptersFromOutline(
         title: candidate.title,
         page: candidate.pageIndex,
       }));
-    return withPartSplits(entry.title, body, topics);
+    return withPartSplits(entry.title, body, topics, { start, end });
   });
   return uniqueTitles(
     chunks.filter((chunk) => wordCount(chunk.rawText) >= MIN_CHUNK_WORDS),
@@ -1174,7 +1215,12 @@ export async function planImport(
         chunks = segments
           .flatMap((s) => {
             const full = pages.slice(s.start, s.end).join("\n\n").trim();
-            return full ? withPartSplits(s.title, full) : [];
+            return full
+              ? withPartSplits(s.title, full, undefined, {
+                  start: s.start,
+                  end: s.end,
+                })
+              : [];
           })
           // A book can pass the audit overall and still have a section that is
           // nothing but a heading and a page number. Importing that as a chapter
@@ -1335,7 +1381,12 @@ export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
       chunks = segments
         .flatMap((s) => {
           const full = pages.slice(s.start, s.end).join("\n\n").trim();
-          return full ? withPartSplits(s.title, full) : [];
+          return full
+            ? withPartSplits(s.title, full, undefined, {
+                start: s.start,
+                end: s.end,
+              })
+            : [];
         })
         .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
     }
