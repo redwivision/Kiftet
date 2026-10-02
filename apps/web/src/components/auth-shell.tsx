@@ -21,16 +21,19 @@ export default function AuthShell({
 }) {
   const { t } = useLanguage();
   return (
-    <main className="mx-auto grid w-full max-w-5xl place-items-center px-4 py-12 sm:px-6">
+    <main className="mx-auto grid w-full max-w-5xl place-items-center px-4 py-8 sm:px-6 sm:py-12">
       <div className="grid w-full gap-10 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-16">
         <div className="mx-auto w-full max-w-md">
-          <div className="surface p-7 sm:p-9">
-            <div className="mb-7 flex items-center gap-3">
+          {/* Padding steps down with the width. A fixed p-7 spends 56 of the
+              343px a 375px phone has on the card, leaving 287px for an email
+              field — which is where the form felt cramped rather than calm. */}
+          <div className="surface p-5 sm:p-7 lg:p-9">
+            <div className="mb-6 flex items-center gap-3 sm:mb-7">
               <BrandMark
                 size={30}
-                className="rounded-full ring-1 ring-gold/40"
+                className="shrink-0 rounded-full ring-1 ring-gold/40"
               />
-              <div className="leading-tight">
+              <div className="min-w-0 leading-tight">
                 <p className="font-display font-semibold text-[1.06rem] text-foreground tracking-tight">
                   Kiftet
                 </p>
@@ -40,7 +43,7 @@ export default function AuthShell({
               </div>
             </div>
 
-            <div className="mb-7 space-y-1.5">
+            <div className="mb-6 space-y-1.5 sm:mb-7">
               <h1 className="font-display font-semibold text-2xl text-foreground tracking-[-0.02em] sm:text-3xl">
                 {title}
               </h1>

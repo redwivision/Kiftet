@@ -609,16 +609,19 @@ export default function Textbooks() {
         <section className="mb-10 space-y-4">
           {textbooks.map((book) => (
             <div key={book.id} className="surface p-5 sm:p-6">
+              {/* A book title is whatever the filename said, so it can be any
+                  length. justify-between with nothing shrinkable on the left
+                  pushed the chapter-count pill past the card edge. */}
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium text-[0.78rem] text-gold">
                     {book.subject}
                   </p>
-                  <h2 className="font-display font-semibold text-xl tracking-tight">
+                  <h2 className="truncate font-display font-semibold text-xl tracking-tight">
                     {book.title}
                   </h2>
                 </div>
-                <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
+                <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
                   {t("imported-chapters", { n: book.chapters.length })}
                 </span>
               </div>
@@ -801,8 +804,11 @@ function TocPreview({
   );
   return (
     <li className="text-sm leading-6">
+      {/* TOC titles arrive from a scanned PDF, so they are as long as the
+          textbook's own headings run. min-w-0 + break-words lets them wrap
+          instead of shoving the "already here" pill off the row. */}
       <div className="flex items-start justify-between gap-3">
-        <span>{node.title}</span>
+        <span className="min-w-0 break-words">{node.title}</span>
         {imported && (
           <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 font-medium text-[0.7rem] text-gold">
             {t("already-here")}
@@ -923,16 +929,21 @@ function AddTextbook({
     return (
       <section className="surface p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="k-label">
               {importing ? t("importing-room") : t("textbook-contents")}
             </p>
-            <h2 className="font-display font-semibold text-lg tracking-tight">
+            <h2 className="truncate font-display font-semibold text-lg tracking-tight">
               {bookTitle.trim()}
             </h2>
           </div>
           {!importing && (
-            <Button variant="ghost" size="sm" onClick={onCancel}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              onClick={onCancel}
+            >
               {t("cancel")}
             </Button>
           )}
@@ -1165,11 +1176,14 @@ function AddTextbook({
         </p>
       )}
 
-      <div className="mt-5 flex items-center gap-3">
+      {/* Stacks under sm. A nowrap primary button beside a two-sentence
+          explainer left it 60px wide and wrapped the copy into a narrow
+          ribbon four lines deep. */}
+      <div className="mt-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
         <Button onClick={onPlan} disabled={!canPlan}>
           {t("scan-chunks")}
         </Button>
-        <p className="text-muted-foreground text-xs leading-5">
+        <p className="min-w-0 text-muted-foreground text-xs leading-5">
           {t("plan-confirm")}
         </p>
       </div>

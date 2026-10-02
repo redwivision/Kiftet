@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@kiftet/ui/components/dropdown-menu";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
+import { User } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
 import { useLanguage } from "@/components/language-provider";
@@ -20,7 +21,12 @@ export default function UserMenu() {
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
-    return <Skeleton className="h-11 w-24 rounded-full" />;
+    // Sized to match the trigger it stands in for, at both widths — a 24rem
+    // placeholder is wider than the real control on a phone and is what made
+    // the header jump once the session resolved.
+    return (
+      <Skeleton className="size-10 shrink-0 rounded-full sm:h-9 sm:w-24" />
+    );
   }
 
   if (!session) {
@@ -38,16 +44,37 @@ export default function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="sm" aria-label={t("my-account")} />
+          // The name is the widest thing in the header and it is user-supplied,
+          // so it is the part that has to yield: an icon below sm, and a
+          // truncated name above it. The shared Button is nowrap by default, so
+          // without max-w + truncate a long name pushes the nav off the row
+          // instead of shortening.
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={t("my-account")}
+            className="sm:h-9 sm:w-auto sm:gap-1.5 sm:px-4 sm:text-sm"
+          />
         }
       >
-        {session.user.name}
+        <User className="size-4 shrink-0 sm:hidden" aria-hidden="true" />
+        <span className="hidden max-w-32 truncate sm:inline">
+          {session.user.name}
+        </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        // Not w-full of a 40px icon trigger: on a phone the anchor is narrower
+        // than the address it has to show, so the panel sets its own floor and
+        // stays inside the viewport when the address is long.
+        className="w-auto min-w-56 max-w-[calc(100vw-2rem)]"
+      >
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t("my-account")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
+          <DropdownMenuItem className="block truncate">
+            {session.user.email}
+          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             onClick={() => {

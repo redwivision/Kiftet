@@ -410,16 +410,20 @@ export default function Home() {
         </div>
 
         <div className="surface p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
+          {/* min-w-0 on the text block and a truncated heading: the pair was
+              justify-between with no shrinkable child, so a long chapter name
+              pushed the chunk pill off the card rather than shortening the
+              name. */}
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="font-medium text-[0.78rem] text-gold">
                 Physics · Grade 11
               </p>
-              <h3 className="font-display font-semibold text-xl tracking-tight">
+              <h3 className="truncate font-display font-semibold text-xl tracking-tight">
                 Waves and Optics
               </h3>
             </div>
-            <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
+            <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
               {t("chunks", { n: 7 })}
             </span>
           </div>
