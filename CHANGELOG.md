@@ -8,6 +8,31 @@ commits are intentionally consolidated; the complete record is `git log`.
 Current implementation details live in [`docs/howItWorks/`](docs/howItWorks/README.md)
 and the [roadmap](docs/howItWorks/roadmap.md).
 
+## 2026-10-02
+
+- **17:00+03:00 — Make the production auth path operable, and trust one origin
+  list everywhere.** Split `CORS_ORIGIN` on commas when building Better Auth's
+  `trustedOrigins`, matching what the CORS layer and the auth middleware already
+  did — a multi-origin split deploy was otherwise let through by the edge and
+  then refused by Better Auth's own origin check, which reaches the student as a
+  login that fails for no stated reason. Add an operator guide for turning auth
+  on in production: both provider consoles step by step, derived redirect URIs,
+  the Google consent-screen and Meta Development-mode traps, a failure table, and
+  the deliberate state of the two settings that are off. Update the runbook's env
+  table, verification checklist and incident playbook.
+- **Offer a second way in, with Google and Facebook beside the password**
+  (`29bfbb7`). Add optional social sign-in that appears only when a provider's
+  credentials are fully present, with Facebook held to a lower bar because Meta
+  omits the email address for phone-only accounts — ordinary in this market.
+  Pin Better Auth exactly and let Dependabot propose the bump weekly, with
+  resolved-config tests so a renamed option fails at boot rather than silently
+  disappearing.
+- **Stop the header from lying on top of the nav, and let text yield**
+  (`6b771fe`). With a long signed-in name the header overlapped its own
+  navigation by up to 112px at 320px. Replace the cramped nav and account
+  controls with an icon rail below `sm`, truncate the name above it, and let
+  long titles, syllabus rows and auth spacing yield rather than push.
+
 ## 2026-09-30
 
 - **23:33+03:00 — Save textbooks as books; choose chapters from the TOC tree.**

@@ -36,7 +36,19 @@ export function createAuth(
       provider: "pg",
       schema,
     }),
-    trustedOrigins: [env.CORS_ORIGIN, ...desktopOrigins],
+    // Split on commas, like the CORS layer and the auth middleware already do.
+    // These three read one env var, and if only two of them honour a list then
+    // a comma-separated CORS_ORIGIN passes the edge and is then rejected by
+    // Better Auth's own origin check — which reads as a login that fails for no
+    // stated reason. Normalising trailing slashes here too, because a browser
+    // sends a slash-less origin and "https://app.example/" is otherwise a
+    // different origin to the one that was configured.
+    trustedOrigins: [
+      ...env.CORS_ORIGIN.split(",")
+        .map((origin) => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean),
+      ...desktopOrigins,
+    ],
     socialProviders: socialProviderConfig(env),
     emailAndPassword: {
       enabled: true,

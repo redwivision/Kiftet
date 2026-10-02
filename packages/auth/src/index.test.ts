@@ -115,6 +115,45 @@ test("no credentials means no buttons, so Kiftet still ships with auth", () => {
   expect(enabledSocialProviders(BASE_ENV)).toEqual([]);
 });
 
+test("every origin CORS_ORIGIN trusts is also trusted by Better Auth", async () => {
+  // The CORS layer and the auth middleware both split CORS_ORIGIN on commas.
+  // If trustedOrigins took the raw string, a multi-origin config would pass the
+  // edge and then be refused by Better Auth's own origin check — a login that
+  // fails for no stated reason, on exactly the split deploy that needs the list.
+  const { trustedOrigins } = (
+    await auth({
+      CORS_ORIGIN: "https://app.example.com/, https://app.ethiodeploy.com",
+    }).$context
+  ).options;
+
+  expect(trustedOrigins).toEqual([
+    "https://app.example.com",
+    "https://app.ethiodeploy.com",
+  ]);
+  // A trailing slash is a different origin to a browser, and a lone comma must
+  // not become an empty trusted entry.
+  expect(trustedOrigins).not.toContain("");
+});
+
+test("desktop origins join the same list rather than replacing it", async () => {
+  const { trustedOrigins } = (
+    await auth({ CORS_ORIGIN: "https://app.example.com" }).$context
+  ).options;
+  expect(trustedOrigins).toEqual(["https://app.example.com"]);
+
+  const withDesktop = createAuth(
+    { ...BASE_ENV, CORS_ORIGIN: "https://app.example.com" },
+    {} as Database,
+    ["capacitor://localhost", "http://localhost"],
+  );
+  const { trustedOrigins: both } = (await withDesktop.$context).options;
+  expect(both).toEqual([
+    "https://app.example.com",
+    "capacitor://localhost",
+    "http://localhost",
+  ]);
+});
+
 test("half a pair is not a provider", () => {
   // An id with no secret is the shape of a deploy where someone pasted the
   // public half of the credentials and stopped. Offering a button there sends
