@@ -584,6 +584,38 @@ test("contents topics are attached only to the first part of a split chapter", (
   ]);
 });
 
+test("a chapter's page span survives the split, so a topic's range has an end", () => {
+  // The span is what the contents tree stops a topic at. Without it the last
+  // topic of a unit came out a page short of the unit's own last page.
+  const topics = [
+    { path: "1.2 Cell division", title: "1.2 Cell division", page: 8 },
+  ];
+  const [one] = withPartSplits("Unit 1: Cells", "a".repeat(1_000), topics, {
+    start: 1,
+    end: 10,
+  });
+  expect(one?.pages).toEqual({ start: 1, end: 10 });
+  const tree = one ? importTocTree([one]) : [];
+  expect(tree[0]?.start).toBe(1);
+  expect(tree[0]?.end).toBe(10);
+  expect(tree[0]?.children[0]?.end).toBe(10);
+  // Every part of a split carries the chapter's span, so a part does not look
+  // like it ends where the chapter does.
+  const split = withPartSplits(
+    "Unit 1: Cells",
+    "a".repeat(380_001),
+    undefined,
+    {
+      start: 1,
+      end: 10,
+    },
+  );
+  expect(split.length).toBeGreaterThan(1);
+  expect(split.filter((part) => part.pages?.end === 10)).toHaveLength(
+    split.length,
+  );
+});
+
 test("a readable book still serves a topic's own pages, and nothing beside them", async () => {
   // The text layer was already read during planning, so there is no document
   // left to open — but "1.1.1 The nucleus" is pages 6 to 8 of a chapter that is,
