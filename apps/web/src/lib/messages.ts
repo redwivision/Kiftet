@@ -592,6 +592,8 @@ export const en = {
   "auth-forgot-subtitle":
     "Tell us your email and we'll send you a link to set a new one.",
   "auth-forgot-cta": "Send reset link",
+  "auth-or-continue-with": "or continue with",
+  "auth-continue-with": "Continue with {provider}",
   "auth-forgot-sent":
     "If that address has an account, a reset link is on its way.",
   "auth-forgot-invalid-email": "Enter the email you signed up with",
@@ -1179,6 +1181,8 @@ export const am: Record<MessageKey, string> = {
   "auth-forgot-title": "የይለፍ ቃል ይቀይሩ",
   "auth-forgot-subtitle": "ኢሜይልዎን ይስጡን፣ አዲስ የይለፍ ቃል ለማስቀመጥ አገኙ ያለውን እንልካለን።",
   "auth-forgot-cta": "የመለስ አገንባር ላክ",
+  "auth-or-continue-with": "ወይም ይቀጥሉ",
+  "auth-continue-with": "በ{provider} ይቀጥሉ",
   "auth-forgot-sent": "ያለ መለያ ካለው በሆነ፣ የመለስ አገንባር በመንገድ ላይ ነው።",
   "auth-forgot-invalid-email": "በየተመዘጉት ኢሜይል ያስገቡ",
   "auth-forgot-back": "ወደ ግባት ተመለስ",

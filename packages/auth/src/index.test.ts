@@ -1,9 +1,16 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Database } from "@kiftet/db";
 import { sendEmail } from "./email";
-import { createAuth } from "./index";
+import { type AuthConfig, createAuth } from "./index";
+import {
+  enabledSocialProviders,
+  type SocialProviderId,
+  socialProviderConfig,
+} from "./providers";
 
-const BASE_ENV = {
+const BASE_ENV: AuthConfig = {
   BETTER_AUTH_URL: "http://localhost:3000",
   BETTER_AUTH_SECRET: "test-secret-not-used-in-tests-test-secret",
   CORS_ORIGIN: "http://localhost:3000",
@@ -11,7 +18,7 @@ const BASE_ENV = {
   AUTH_EMAIL_TRANSPORT: "console",
 };
 
-function auth(env: Partial<typeof BASE_ENV> = {}) {
+function auth(env: Partial<AuthConfig> = {}) {
   return createAuth({ ...BASE_ENV, ...env }, {} as Database, []);
 }
 
@@ -102,3 +109,186 @@ test("an unimplemented transport fails loudly instead of dropping mail", async (
     ),
   ).rejects.toThrow(/no transport/);
 });
+
+test("no credentials means no buttons, so Kiftet still ships with auth", () => {
+  expect(enabledSocialProviders({})).toEqual([]);
+  expect(enabledSocialProviders(BASE_ENV)).toEqual([]);
+});
+
+test("half a pair is not a provider", () => {
+  // An id with no secret is the shape of a deploy where someone pasted the
+  // public half of the credentials and stopped. Offering a button there sends
+  // the student to the provider to be refused, which looks like our bug.
+  expect(
+    enabledSocialProviders({
+      GOOGLE_CLIENT_ID: "id.apps.googleusercontent.com",
+    }),
+  ).toEqual([]);
+  expect(enabledSocialProviders({ FACEBOOK_CLIENT_SECRET: "shh" })).toEqual([]);
+});
+
+test("a provider appears the moment both halves are present", () => {
+  expect(
+    enabledSocialProviders({
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+    }),
+  ).toEqual(["google"]);
+  expect(
+    enabledSocialProviders({
+      FACEBOOK_CLIENT_ID: "id",
+      FACEBOOK_CLIENT_SECRET: "secret",
+    }),
+  ).toEqual(["facebook"]);
+  expect(
+    enabledSocialProviders({
+      GOOGLE_CLIENT_ID: "id",
+      GOOGLE_CLIENT_SECRET: "secret",
+      FACEBOOK_CLIENT_ID: "id",
+      FACEBOOK_CLIENT_SECRET: "secret",
+    }),
+  ).toEqual(["google", "facebook"]);
+});
+
+test("the button list and the auth config can never disagree", () => {
+  // The endpoint the browser asks and the provider list Better Auth builds are
+  // the same function; this asserts both still agree after any edit.
+  const env = {
+    GOOGLE_CLIENT_ID: "id",
+    GOOGLE_CLIENT_SECRET: "secret",
+    FACEBOOK_CLIENT_ID: "id",
+    FACEBOOK_CLIENT_SECRET: "secret",
+  };
+  expect(enabledSocialProviders(env)).toEqual(
+    Object.keys(socialProviderConfig(env)) as SocialProviderId[],
+  );
+});
+
+test("a Facebook phone-only account still becomes a user", async () => {
+  const { mapProfileToUser } = await facebookConfig();
+  if (!mapProfileToUser) throw new Error("mapProfileToUser missing");
+
+  // The ordinary case: Meta returned an address.
+  const withEmail = await mapProfileToUser({
+    id: "1",
+    name: "Abebe",
+    email: "abebe@example.com",
+    picture: { data: { height: 0, is_silhouette: true, url: "", width: 0 } },
+  });
+  expect(withEmail).toEqual({
+    email: "abebe@example.com",
+    name: "Abebe",
+  });
+
+  // The case this exists for. FacebookGraphProfile types `email` as optional —
+  // Meta omits it for phone-only accounts and revoked consent, both ordinary
+  // here — so there is no address to read and the sign-in must still complete.
+  const phoneOnly = await mapProfileToUser({
+    id: "fb.7712",
+    name: "Kidame",
+    picture: { data: { height: 0, is_silhouette: true, url: "", width: 0 } },
+  });
+  expect(phoneOnly.email).toContain("fb.7712");
+  expect(phoneOnly.email).toMatch(/^[^@\s]+@[^@\s]+$/);
+
+  // Two phone-only students must not land on the same user row.
+  const other = await mapProfileToUser({
+    id: "fb.9999",
+    name: "Selam",
+    picture: { data: { height: 0, is_silhouette: true, url: "", width: 0 } },
+  });
+  expect(other.email).not.toBe(phoneOnly.email);
+
+  // The union's other arm: limited-login profiles identify by `sub`, not `id`.
+  // Reading only `id` here would produce "undefined@facebook.invalid" and
+  // silently merge every limited-login account into one user.
+  const limited = await mapProfileToUser({
+    sub: "fb.4242",
+    email: "limited@example.com",
+    name: "Marta",
+    picture: "",
+  });
+  expect(limited.email).toBe("limited@example.com");
+
+  const limitedNoEmail = await mapProfileToUser({
+    sub: "fb.4243",
+    email: "",
+    name: "Yonas",
+    picture: "",
+  });
+  expect(limitedNoEmail.email).toContain("fb.4243");
+});
+
+test("Facebook is never asked to verify an address it cannot prove", async () => {
+  const facebook = await facebookConfig();
+  // Graph exposes no email_verified flag, so requiring it would block every
+  // Facebook sign-in. Google is the provider to gate when verification is on.
+  expect("requireEmailVerification" in facebook).toBe(false);
+});
+
+test("a student who switches providers keeps one account", async () => {
+  const ctx = await auth({
+    GOOGLE_CLIENT_ID: "id",
+    GOOGLE_CLIENT_SECRET: "secret",
+    FACEBOOK_CLIENT_ID: "id",
+    FACEBOOK_CLIENT_SECRET: "secret",
+  }).$context;
+
+  const linking = ctx.options.account?.accountLinking as
+    | {
+        enabled?: boolean;
+        trustedProviders?: string[];
+        allowDifferentEmails?: boolean;
+      }
+    | undefined;
+  // Without this, Facebook-then-Google is two accounts and the study history
+  // in the first one is invisible in the app.
+  expect(linking?.enabled).toBe(true);
+  expect(linking?.trustedProviders).toEqual([
+    "google",
+    "facebook",
+    "email-password",
+  ]);
+  // Linking on an unverified address would let anyone walk into an account.
+  expect(linking?.allowDifferentEmails).toBe(false);
+});
+
+test("the installed Better Auth is the exact version the catalog promises", () => {
+  // The pin in package.json is the whole upgrade guard: no caret means an
+  // install cannot float to a version whose option names have moved. This
+  // asserts that promise still holds, so widening the pin to a range — the one
+  // edit that quietly disables it — fails here instead of at the next deploy.
+  const root = JSON.parse(
+    readFileSync(join(import.meta.dir, "../../../package.json"), "utf8"),
+  ) as { workspaces?: { catalog?: Record<string, string> } };
+  const pinned = root.workspaces?.catalog?.["better-auth"] ?? "";
+
+  expect(pinned).toBe("1.7.3");
+  // An exact version, not "1.7.3" with a range character in front of it.
+  expect(pinned).toMatch(/^\d+\.\d+\.\d+$/);
+
+  const installed = JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dir,
+        "../../../apps/web/node_modules/better-auth/package.json",
+      ),
+      "utf8",
+    ),
+  ) as { version: string };
+  expect(installed.version).toBe(pinned);
+});
+
+/**
+ * Resolve the Facebook provider's options. Better Auth types a provider value
+ * as a (possibly async) factory, so the tests call it the same way the runtime
+ * does rather than casting the factory to an options object.
+ */
+async function facebookConfig() {
+  const entry = socialProviderConfig({
+    FACEBOOK_CLIENT_ID: "id",
+    FACEBOOK_CLIENT_SECRET: "secret",
+  }).facebook;
+  if (typeof entry !== "function") throw new Error("facebook misconfigured");
+  return await entry();
+}

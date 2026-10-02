@@ -12,6 +12,7 @@ import { clearDemoUser } from "@/lib/demo";
 import AuthShell from "./auth-shell";
 import { useLanguage } from "./language-provider";
 import Loader from "./loader";
+import SocialButtons from "./social-buttons";
 
 export default function SignInForm({
   onSwitchToSignUp,
@@ -160,6 +161,9 @@ export default function SignInForm({
           )}
         </form.Subscribe>
       </form>
+      {/* Password stays the only path that needs nothing configured; these
+          render only when the server says a provider is live. */}
+      <SocialButtons />
     </AuthShell>
   );
 }

@@ -15,6 +15,7 @@ import {
   errorMiddleware,
   installProcessGuards,
 } from "./error-handler";
+import authProvidersRouter from "./routes/auth-providers";
 import demoRouter from "./routes/demo";
 import studyRouter from "./routes/study";
 import syllabusRouter from "./routes/syllabus";
@@ -83,6 +84,10 @@ app.use(
 );
 
 app.all("/api/auth{/*path}", toNodeHandler(auth));
+
+// Before the auth gate: this is what an anonymous stranger needs in order to
+// see the sign-in page at all.
+app.use("/api", authProvidersRouter);
 
 app.use(express.json({ limit: "256kb" }));
 
