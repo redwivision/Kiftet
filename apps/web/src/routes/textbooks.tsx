@@ -9,6 +9,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
+import { HierarchyReport } from "@/components/hierarchy-report";
 import { InkPage } from "@/components/ink-page";
 import { useLanguage } from "@/components/language-provider";
 import { TocPicker } from "@/components/toc-picker";
@@ -19,6 +20,7 @@ import { getLocalTextbookSource, saveLocalTextbookSource } from "@/lib/store";
 import {
   fileSizeError,
   type ImportChunk,
+  type ImportDiagnostics,
   type ImportTocNode,
   importTocTree,
   indexToc,
@@ -124,6 +126,7 @@ export default function Textbooks() {
   // a chapter's pages into text.
   const readerRef = useRef<OcrChunkReader | null>(null);
   const [ocrReason, setOcrReason] = useState<PdfUnreadableReason | null>(null);
+  const [report, setReport] = useState<ImportDiagnostics | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OcrProgressView>(null);
 
   const fetchLibrary = useCallback(() => {
@@ -175,6 +178,7 @@ export default function Textbooks() {
   ) => {
     readerRef.current = result.reader;
     setOcrReason(result.ocrReason);
+    setReport(result.diagnostics);
     setOcrProgress(null);
     setPlanned(result.chunks);
     const toc = importTocTree(result.chunks);
@@ -509,6 +513,7 @@ export default function Textbooks() {
     void readerRef.current?.close();
     readerRef.current = null;
     setOcrReason(null);
+    setReport(null);
     setOcrProgress(null);
     setBookTitle("");
     setSubject("");
@@ -757,6 +762,7 @@ export default function Textbooks() {
         savedTextbookId={savedTextbookId}
         nodeStages={nodeStages}
         ocrReason={ocrReason}
+        report={report}
         ocrProgress={ocrProgress}
         error={error}
         setError={setError}
@@ -841,6 +847,7 @@ function AddTextbook({
   onSaveBook,
   nodeStages,
   ocrReason,
+  report,
   ocrProgress,
   error,
   setError,
@@ -876,6 +883,7 @@ function AddTextbook({
   onSaveBook: () => void;
   nodeStages: NodeStage[];
   ocrReason: PdfUnreadableReason | null;
+  report: ImportDiagnostics | null;
   ocrProgress: OcrProgressView;
   error: string | null;
   setError: (e: string | null) => void;
@@ -964,6 +972,8 @@ function AddTextbook({
           onRetry={onRetryOne}
           ocrProgress={ocrProgress}
         />
+
+        <HierarchyReport report={report} className="mt-3" />
 
         {error && (
           <p className="mt-4 rounded-lg border border-rust/40 bg-rust/10 px-3 py-2 text-rust text-sm">

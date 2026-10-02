@@ -769,12 +769,23 @@ function chunkByOutline(
   return segments;
 }
 
-function chaptersFromOutline(
+/**
+ * The book as its own bookmarks describe it: one chunk per top-level entry,
+ * with everything nested under it kept as that entry's topics.
+ *
+ * Exported because the level this picks is a judgement worth pinning — see the
+ * test for the book whose first unit opens on page 0.
+ */
+export function chaptersFromOutline(
   pages: string[],
   outline: OutlineEntry[],
 ): ImportChunk[] | null {
   const valid = outline
-    .filter((entry) => entry.pageIndex > 0 && entry.pageIndex < pages.length)
+    // `>= 0`, not `> 0`: a book whose first unit opens on its own first page
+    // puts that unit at index 0, and dropping it leaves one top-level entry —
+    // one too few to trust the top level, so the whole hierarchy collapses onto
+    // the second level and the units disappear from the tree.
+    .filter((entry) => entry.pageIndex >= 0 && entry.pageIndex < pages.length)
     .sort((a, b) => a.pageIndex - b.pageIndex);
   const topLevel = valid.filter((entry) => !entry.path.includes(" · "));
   let chapters = topLevel.length >= 2 ? topLevel : [];
@@ -1018,9 +1029,10 @@ async function readContentsPages(
   start: number,
   pageCount: number,
   language: OcrLanguage,
-): Promise<TocChapter[]> {
+): Promise<{ chapters: TocChapter[]; text: string; pagesRead: number }> {
   let text = "";
   let chapters: TocChapter[] = [];
+  let pagesRead = 0;
   const limit = Math.min(start + TOC_MAX_PAGES, pageCount);
   for (let page = start; page < limit; page += 1) {
     const [recognized] = await ocrPageRange(
@@ -1030,6 +1042,7 @@ async function readContentsPages(
       page + 1,
       language,
     );
+    pagesRead += 1;
     const grown = parseToc(joinOcrPages([recognized]));
     // One thin page mid-contents — a blank verso, a fold — should not be read as
     // the end of it, so only stop once the walk has found something to lose.
@@ -1037,7 +1050,7 @@ async function readContentsPages(
     text += `\n${recognized?.text ?? ""}`;
     chapters = chaptersFromToc(parseToc(text));
   }
-  return chapters;
+  return { chapters, text, pagesRead };
 }
 
 /**
@@ -1209,7 +1222,83 @@ export type ImportPlan = {
   reader: OcrChunkReader | null;
   /** Why OCR is needed, for the message shown to the student. */
   ocrReason: PdfUnreadableReason | null;
+  /**
+   * What this function understood of the book, in the order it worked it out.
+   *
+   * A student looking at a contents tree cannot tell a bad reading of the book
+   * from a bad display of a good reading — both are just "the units look wrong".
+   * This is the receipt: which source produced the list, whether the contents
+   * page was found and what it said, what was parsed off it, what the heading
+   * scan found, whether the page offset could be trusted, and the tree the
+   * screen is about to show. It is deliberately plain data so it can be pasted
+   * somewhere and read.
+   */
+  diagnostics: ImportDiagnostics;
 };
+
+export type ImportDiagnostics = {
+  /** The path that produced this list — the first thing to look at. */
+  source:
+    | "pasted-text"
+    | "pdf-outline"
+    | "pdf-text-layer"
+    | "ocr-contents"
+    | "ocr-headings";
+  file: string;
+  pageCount: number;
+  /** Entries in the PDF's own bookmark tree, when it has one. */
+  outlineEntries: number;
+  /** Why the text layer was rejected, when it was. */
+  auditProblem: PdfUnreadableReason | null;
+  /** Page the word "contents" was found on, or null. */
+  contentsPage: number | null;
+  /** How many pages were recognized looking for the contents. */
+  contentsPagesRead: number;
+  /** What those pages said, so a parse that found nothing can be read. */
+  contentsText: string;
+  /** Entries as parsed off the contents, in the order the book lists them. */
+  contentsEntries: { unit: number; title: string; page: number }[];
+  /** Units the heading scan found, with the pages each one covers. */
+  segments: { title: string; start: number; end: number }[];
+  /** Printed page number → PDF page index. Null when it could not be trusted. */
+  pageOffset: number | null;
+  /** The tree the screen will draw, as flat text. */
+  tree: string[];
+};
+
+/** Trim a recognized page so a pasted report stays readable. */
+function trimForReport(text: string, limit = 3000): string {
+  const flat = text.replace(/\n{3,}/g, "\n\n").trim();
+  return flat.length > limit ? `${flat.slice(0, limit)}\n…` : flat;
+}
+
+/** The tree as indented lines — what the screen is about to draw, readable. */
+export function flatTree(toc: ImportTocNode[], depth = 0): string[] {
+  const lines: string[] = [];
+  for (const node of toc) {
+    lines.push(`${"  ".repeat(depth)}${node.title}`);
+    lines.push(...flatTree(node.children, depth + 1));
+  }
+  return lines;
+}
+
+/**
+ * Print what was understood of the book, in the order it was worked out.
+ *
+ * One object, one prefix, easy to copy out of a browser console and easy to
+ * read: the source that produced the list, whether the contents page was found
+ * and what it said, what was parsed off it, what the heading scan found, and
+ * whether the page offset was trusted. The tree comes last so it can be compared
+ * against the earlier lines without scrolling back.
+ */
+function logHierarchy(report: ImportDiagnostics): void {
+  const { contentsText, ...rest } = report;
+  console.info(
+    `[textbook] hierarchy — ${report.file} (${report.source})`,
+    { ...rest, contentsText: contentsText || "(none read)" },
+    report.tree,
+  );
+}
 
 function ocrLanguage(language: string): OcrLanguage {
   return language === "am" ? "amh" : "eng";
@@ -1258,17 +1347,42 @@ export async function planImport(
   source: ImportSource,
   language = "en",
 ): Promise<ImportPlan> {
+  // Filled in as the work proceeds and handed back with the plan, so a reading
+  // that looks wrong on screen can be told apart from a display of a good
+  // reading. Every field has a value before the plan is returned, including on
+  // the paths that bail out early.
+  const report: ImportDiagnostics = {
+    source: "pasted-text",
+    file: source.name,
+    pageCount: 0,
+    outlineEntries: 0,
+    auditProblem: null,
+    contentsPage: null,
+    contentsPagesRead: 0,
+    contentsText: "",
+    contentsEntries: [],
+    segments: [],
+    pageOffset: null,
+    tree: [],
+  };
+
   if (source.kind !== "pdf") {
     const chunks = await planChunks(source);
+    const toc = importTocTree(chunks);
+    report.tree = flatTree(toc);
+    logHierarchy(report);
     return {
       chunks,
-      toc: importTocTree(chunks),
+      toc,
       reader: null,
       ocrReason: null,
+      diagnostics: report,
     };
   }
 
   const { doc, pages, outline, audit, close } = await openPdf(source.file);
+  report.pageCount = pages.length;
+  report.outlineEntries = outline.length;
   let open = true;
   const closeOnce = async () => {
     if (!open) return;
@@ -1304,18 +1418,32 @@ export async function planImport(
           .filter((c) => wordCount(c.rawText) >= MIN_CHUNK_WORDS);
       }
       const unique = uniqueTitles(chunks);
+      const toc = importTocTree(unique);
+      report.source =
+        unique.length > 0 && outline.length >= 2
+          ? "pdf-outline"
+          : "pdf-text-layer";
+      report.tree = flatTree(toc);
+      logHierarchy(report);
       return {
         chunks: unique,
-        toc: importTocTree(unique),
+        toc,
         reader: textLayerReader(pages),
         ocrReason: null,
+        diagnostics: report,
       };
     }
 
     // The text layer is unreadable. Find the chapters from whatever *is*
     // readable, and read the bodies later.
+    report.auditProblem = audit.problem;
     let segments = segmentsForOcrBook(pages);
     if (segments.length === 0) segments = fallbackPages(pages);
+    report.segments = segments.map((s) => ({
+      title: s.title,
+      start: s.start,
+      end: s.end,
+    }));
 
     const bookKey = ocrBookKey(source.name, source.file.size);
     const language_ = ocrLanguage(language);
@@ -1335,22 +1463,31 @@ export async function planImport(
     const tocStart = pages.findIndex(
       (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
     );
+    report.contentsPage = tocStart >= 0 ? tocStart : null;
     if (tocStart >= 0) {
       try {
         // Read the contents one page at a time and stop at the first page that
         // is not one. The book's contents run to two pages; the third is the
         // first chapter, which also lists numbered lines but no page numbers,
         // so it ends the walk in three recognitions instead of six.
-        const found = await readContentsPages(
+        const read = await readContentsPages(
           doc,
           bookKey,
           tocStart,
           pages.length,
           language_,
         );
-        const offset = tocPageOffset(found, segments);
+        report.contentsPagesRead = read.pagesRead;
+        report.contentsText = trimForReport(read.text);
+        report.contentsEntries = read.chapters.map((c) => ({
+          unit: c.unit,
+          title: c.title,
+          page: c.page,
+        }));
+        const offset = tocPageOffset(read.chapters, segments);
+        report.pageOffset = offset;
         if (offset !== null) {
-          contents = chaptersFromContents(found, offset, pages.length);
+          contents = chaptersFromContents(read.chapters, offset, pages.length);
         }
       } catch (error) {
         // No contents, or they would not recognize. The heading scan below
@@ -1378,6 +1515,9 @@ export async function planImport(
             needsOcr: true,
           })),
     );
+    report.source = contents ? "ocr-contents" : "ocr-headings";
+    report.tree = flatTree(importTocTree(chunks));
+    logHierarchy(report);
 
     const done = new Set<string>();
     const pagesOf = (chunk: ImportChunk): number[] => {
@@ -1419,6 +1559,7 @@ export async function planImport(
       toc: importTocTree(chunks),
       reader,
       ocrReason: audit.problem,
+      diagnostics: report,
     };
   } catch (err) {
     await closeOnce();
