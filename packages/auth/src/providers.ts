@@ -13,13 +13,15 @@ import type { BetterAuthOptions } from "better-auth";
 // real name is a build failure instead of a runtime surprise.
 type SocialProviders = NonNullable<BetterAuthOptions["socialProviders"]>;
 
-export type SocialProviderId = "google" | "facebook";
+export type SocialProviderId = "google" | "facebook" | "github";
 
 export type SocialProviderEnv = {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   FACEBOOK_CLIENT_ID?: string;
   FACEBOOK_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
 };
 
 /**
@@ -45,6 +47,7 @@ export function enabledSocialProviders(
   if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) enabled.push("google");
   if (env.FACEBOOK_CLIENT_ID && env.FACEBOOK_CLIENT_SECRET)
     enabled.push("facebook");
+  if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) enabled.push("github");
   return enabled;
 }
 
@@ -87,6 +90,14 @@ export function socialProviderConfig(env: SocialProviderEnv): SocialProviders {
           name: profile.name ?? "Student",
         };
       },
+    });
+  }
+
+  if (env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
+    socialProviders.github = () => ({
+      clientId: env.GITHUB_CLIENT_ID as string,
+      clientSecret: env.GITHUB_CLIENT_SECRET as string,
+      scopes: ["read:user", "user:email"],
     });
   }
 
