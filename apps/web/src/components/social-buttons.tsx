@@ -6,7 +6,7 @@ import { authClient } from "@/lib/auth-client";
 
 import { useLanguage } from "./language-provider";
 
-export type SocialProviderId = "google" | "facebook";
+export type SocialProviderId = "google" | "facebook" | "github";
 
 /**
  * The social buttons to offer, as told by the server.
@@ -41,6 +41,7 @@ function useSocialProviders(): SocialProviderId[] {
 const LABELS: Record<SocialProviderId, string> = {
   google: "Google",
   facebook: "Facebook",
+  github: "GitHub",
 };
 
 /** Drawn rather than fetched: two marks the app already ships, working offline. */
@@ -51,6 +52,16 @@ function ProviderMark({ provider }: { provider: SocialProviderId }) {
         <path
           fill="#1877F2"
           d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.09 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.7 4.53-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.09 24 18.1 24 12.07"
+        />
+      </svg>
+    );
+  }
+  if (provider === "github") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 shrink-0">
+        <path
+          fill="currentColor"
+          d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.12.82-.26.82-.57 0-.28-.02-1.04-.02-2.04-3.34.72-4.04-1.6-4.04-1.6-.52-1.32-1.28-1.68-1.28-1.68-1.04-.72.08-.7.08-.7 1.16.08 1.76 1.2 1.76 1.2 1.02 1.76 2.68 1.26 3.34.96.1-.74.4-1.26.72-1.54-2.66-.3-5.46-1.34-5.46-5.96 0-1.32.46-2.4 1.22-3.24-.12-.3-.52-1.52.12-3.16 0 0 1-.32 3.3 1.24a11.5 11.5 0 0 1 6 0C17.3 5.42 18.3 5.74 18.3 5.74c.64 1.64.24 2.86.12 3.16.76.84 1.22 1.92 1.22 3.24 0 4.62-2.8 5.66-5.48 5.96.42.36.8 1.08.8 2.18 0 1.58-.02 2.86-.02 3.24 0 .32.22.7.84.58A12 12 0 0 0 24 12c0-6.63-5.37-12-12-12"
         />
       </svg>
     );
