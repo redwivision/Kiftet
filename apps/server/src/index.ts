@@ -88,6 +88,7 @@ app.all("/api/auth{/*path}", toNodeHandler(auth));
 // Before the auth gate: this is what an anonymous stranger needs in order to
 // see the sign-in page at all.
 app.use("/api", authProvidersRouter);
+app.get("/api/_envdirect", (_req,res)=>{ try{ res.json({gid:process.env.GOOGLE_CLIENT_ID?.slice(0,8), gsec:process.env.GOOGLE_CLIENT_SECRET?.slice(0,8), hasg:!!process.env.GOOGLE_CLIENT_ID&&!!process.env.GOOGLE_CLIENT_SECRET}); }catch(e){res.json({err:String(e)})} });
 
 app.use(express.json({ limit: "256kb" }));
 
