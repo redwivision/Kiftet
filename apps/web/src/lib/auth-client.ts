@@ -4,23 +4,14 @@ import { createAuthClient } from "better-auth/react";
 // so VITE_SERVER_URL must come from import.meta.env (Vite wires .env there)
 // or fall back to the page origin / a dev default — never crash on undefined.
 function getServerUrl(): string {
-  const clientUrl =
-    typeof window !== "undefined"
-      ? (import.meta.env.VITE_SERVER_URL as string | undefined)
-      : undefined;
-
-  if (clientUrl) {
-    const normalized = clientUrl.endsWith("/")
-      ? clientUrl.slice(0, -1)
-      : clientUrl;
-    if (!normalized.startsWith("/")) return normalized;
-    if (typeof window !== "undefined")
-      return `${window.location.origin}${normalized}`;
-  }
-
   if (typeof window !== "undefined") {
-    if (window.location.hostname.includes("ethiodeploy.com"))
+    const h = window.location.hostname;
+    if (h === "kiftet.ethiodeploy.com" || h.endsWith(".ethiodeploy.com")) {
       return "https://kiftet.ethiodeploy.com";
+    }
+    if (h === "localhost" || h === "127.0.0.1") {
+      return window.location.origin;
+    }
     return window.location.origin;
   }
 
@@ -44,11 +35,12 @@ function getServerUrl(): string {
     const origin = vercelUrl.startsWith("http")
       ? vercelUrl
       : `https://${vercelUrl}`;
-    return origin;
+    return origin.endsWith("/") ? origin.slice(0, -1) : origin;
   }
 
   return "http://localhost:3000";
 }
+
 console.log("[auth-client] baseURL will resolve from:", getServerUrl());
 export const authClient = createAuthClient({
   // better-auth derives its route-matching base from this URL's path, so the
