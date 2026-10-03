@@ -51,4 +51,16 @@ router.get("/auth-debug", (_req: Request, res: Response) => {
     res.status(500).json({ error: String(e) });
   }
 });
+router.get("/auth-debug2", (_req: Request, res: Response) => {
+  try {
+    res.json({
+      hasGoogleId: Boolean(process.env.GOOGLE_CLIENT_ID),
+      hasGoogleSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
+      googleIdLen: process.env.GOOGLE_CLIENT_ID?.length ?? 0,
+      googleSecretLen: process.env.GOOGLE_CLIENT_SECRET?.length ?? 0,
+    });
+  } catch (e) {
+    res.json({ err: String(e) });
+  }
+});
 export default router;
