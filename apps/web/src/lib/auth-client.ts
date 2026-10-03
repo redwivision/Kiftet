@@ -1,18 +1,13 @@
 import { createAuthClient } from "better-auth/react";
+import { resolveBrowserServerRoot } from "./server-url";
 
-// varlock's env proxy reads process.env, which does not exist in the browser,
-// so VITE_SERVER_URL must come from import.meta.env (Vite wires .env there)
-// or fall back to the page origin / a dev default — never crash on undefined.
 function getServerUrl(): string {
   if (typeof window !== "undefined") {
-    const h = window.location.hostname;
-    if (h === "kiftet.ethiodeploy.com" || h.includes("ethiodeploy.com")) {
-      return "https://kiftet.ethiodeploy.com";
-    }
-    if (h === "localhost" || h === "127.0.0.1") {
-      return window.location.origin;
-    }
-    return window.location.origin;
+    return resolveBrowserServerRoot(
+      window.location.hostname,
+      window.location.origin,
+      import.meta.env.VITE_SERVER_URL as string | undefined,
+    );
   }
 
   const processEnv = (
