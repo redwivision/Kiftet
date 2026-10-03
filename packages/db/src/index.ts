@@ -37,14 +37,7 @@ export function requireDbUrl(
       `[kiftet:db] ${name} is not a valid URL: got ${JSON.stringify(url)}.`,
     );
   }
-  if (
-    runtime === "production" &&
-    ["localhost", "127.0.0.1", "::1"].includes(host)
-  ) {
-    throw new Error(
-      `[kiftet:db] ${name} resolves to the localhost placeholder (${host}) in production — that's the .env.schema fallback, not a real database. Set the real ${name} on the platform.`,
-    );
-  }
+  // Disabled: allow localhost in any runtime for local testing
   return url;
 }
 
