@@ -44,10 +44,12 @@ export function enabledSocialProviders(
   env: SocialProviderEnv,
 ): SocialProviderId[] {
   const enabled: SocialProviderId[] = [];
-  if (env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim()) enabled.push("google");
+  if (env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim())
+    enabled.push("google");
   if (env.FACEBOOK_CLIENT_ID?.trim() && env.FACEBOOK_CLIENT_SECRET?.trim())
     enabled.push("facebook");
-  if (env.GITHUB_CLIENT_ID?.trim() && env.GITHUB_CLIENT_SECRET?.trim()) enabled.push("github");
+  if (env.GITHUB_CLIENT_ID?.trim() && env.GITHUB_CLIENT_SECRET?.trim())
+    enabled.push("github");
   return enabled;
 }
 

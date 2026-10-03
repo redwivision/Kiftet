@@ -19,7 +19,8 @@ function getServerUrl(): string {
   }
 
   if (typeof window !== "undefined") {
-    if (window.location.hostname === "kiftet.ethiodeploy.com") return "https://kiftet.ethiodeploy.com";
+    if (window.location.hostname === "kiftet.ethiodeploy.com")
+      return "https://kiftet.ethiodeploy.com";
     return window.location.origin;
   }
 
