@@ -2,11 +2,27 @@
 
 Chronological record of the major product, architecture, UI, and quality
 milestones from the repository's first commits onward. Times are Git author
-timestamps in **Africa/Addis Ababa (UTC+03:00)**, except the latest working-tree
-entry, which is marked with the time this task began. Small fixes and follow-up
+timestamps in **Africa/Addis Ababa (UTC+03:00)**. Small fixes and follow-up
 commits are intentionally consolidated; the complete record is `git log`.
 Current implementation details live in [`docs/howItWorks/`](docs/howItWorks/README.md)
 and the [roadmap](docs/howItWorks/roadmap.md).
+
+## 2026-10-03
+
+- **10:54+03:00 — Add GitHub as a social sign-in option** (`ed72102`). Add
+  GitHub OAuth alongside Google and Facebook as a provider that works on
+  deployment domains Google rejects for lacking Public Suffix List entries.
+- **14:07–15:10+03:00 — Make auth and environment failures easier to diagnose.**
+  Add boot-time environment checks, harden optional provider configuration, and
+  remove temporary auth-debug endpoints after the investigation.
+- **16:53–20:46+03:00 — Keep authentication on the deployed origin.** Ensure
+  the auth client prefers Kiftet's deployed origin on EthioDeploy domains,
+  rather than an injected preview or local URL.
+- **20:45–22:50+03:00 — Make textbook access work on phones** (`769be94`,
+  `1cec301`). Keep the add-textbook action visible while dashboard data loads,
+  give it a full-width touch target on narrow screens, and account for the
+  iPhone safe area. Align Better Auth with the API client's configured server
+  URL so phone testing can use the computer's LAN address; document the setup.
 
 ## 2026-10-02
 
