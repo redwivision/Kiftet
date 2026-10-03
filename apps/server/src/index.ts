@@ -112,6 +112,7 @@ app.use("/api", (_req, res) => {
 // as a failing health check instead of a 200 while the app is quietly
 // broken. A POOL-less boot already exits before the listener is up, and a
 // pool that can't reach the DB answers 503 within the 5s connect timeout.
+app.get("/api/__env", (_req,res)=>{ res.json({gid:process.env.GOOGLE_CLIENT_ID?.slice(0,6), gsec:process.env.GOOGLE_CLIENT_SECRET?.slice(0,6), ok:!!process.env.GOOGLE_CLIENT_ID&&!!process.env.GOOGLE_CLIENT_SECRET}); });
 app.get("/health", async (_req, res) => {
   try {
     await getDb().execute(sql`select 1`);
