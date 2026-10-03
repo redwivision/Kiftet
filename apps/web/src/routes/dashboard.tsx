@@ -261,7 +261,7 @@ export default function Dashboard() {
           </p>
         </div>
         {chapters && chapters.length > 0 && (
-          <div className="hidden shrink-0 flex-col items-end gap-2 sm:flex">
+          <div className="shrink-0 flex flex-col items-end gap-2 sm:flex-row sm:items-center">
             <Link
               to="/syllabus"
               className={buttonVariants({ variant: "outline", size: "sm" })}
