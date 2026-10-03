@@ -49,7 +49,7 @@ function getServerUrl(): string {
 
   return "http://localhost:3000";
 }
-console.log('[auth-client] baseURL will resolve from:', getServerUrl());
+console.log("[auth-client] baseURL will resolve from:", getServerUrl());
 export const authClient = createAuthClient({
   // better-auth derives its route-matching base from this URL's path, so the
   // public auth path must equal the server-side mount (/api/auth everywhere)
