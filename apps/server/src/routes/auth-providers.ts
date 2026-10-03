@@ -33,17 +33,22 @@ router.get("/auth-providers", (_req: Request, res: Response) => {
 });
 
 router.get("/auth-debug", (_req: Request, res: Response) => {
-  res.json({
-    hasGoogleId: Boolean(env.GOOGLE_CLIENT_ID),
-    hasGoogleSecret: Boolean(env.GOOGLE_CLIENT_SECRET),
-    googleIdLen: env.GOOGLE_CLIENT_ID?.length ?? 0,
-    googleSecretLen: env.GOOGLE_CLIENT_SECRET?.length ?? 0,
-    hasGithubId: Boolean(env.GITHUB_CLIENT_ID),
-    hasGithubSecret: Boolean(env.GITHUB_CLIENT_SECRET),
-    githubIdLen: env.GITHUB_CLIENT_ID?.length ?? 0,
-    githubSecretLen: env.GITHUB_CLIENT_SECRET?.length ?? 0,
-    cors: env.CORS_ORIGIN,
-    baseUrl: env.BETTER_AUTH_URL,
-  });
+  try {
+    res.json({
+      hasGoogleId: Boolean(env.GOOGLE_CLIENT_ID),
+      hasGoogleSecret: Boolean(env.GOOGLE_CLIENT_SECRET),
+      googleIdLen: env.GOOGLE_CLIENT_ID?.length ?? 0,
+      googleSecretLen: env.GOOGLE_CLIENT_SECRET?.length ?? 0,
+      hasGithubId: Boolean(env.GITHUB_CLIENT_ID),
+      hasGithubSecret: Boolean(env.GITHUB_CLIENT_SECRET),
+      githubIdLen: env.GITHUB_CLIENT_ID?.length ?? 0,
+      githubSecretLen: env.GITHUB_CLIENT_SECRET?.length ?? 0,
+      cors: env.CORS_ORIGIN,
+      baseUrl: env.BETTER_AUTH_URL,
+    });
+  } catch (e) {
+    console.error('[auth-debug] error', e);
+    res.status(500).json({ error: String(e) });
+  }
 });
 export default router;
