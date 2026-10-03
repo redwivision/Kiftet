@@ -34,10 +34,14 @@ router.get("/auth-providers", (_req: Request, res: Response) => {
 
 router.get("/_envcheck", (_req: Request, res: Response) => {
   res.json({
-    hasGoogleId: !!process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_ID.trim().length > 0,
-    hasGoogleSecret: !!process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_CLIENT_SECRET.trim().length > 0,
-    gid: process.env.GOOGLE_CLIENT_ID?.slice(0,8),
-    gsec: process.env.GOOGLE_CLIENT_SECRET?.slice(0,8),
+    hasGoogleId:
+      !!process.env.GOOGLE_CLIENT_ID &&
+      process.env.GOOGLE_CLIENT_ID.trim().length > 0,
+    hasGoogleSecret:
+      !!process.env.GOOGLE_CLIENT_SECRET &&
+      process.env.GOOGLE_CLIENT_SECRET.trim().length > 0,
+    gid: process.env.GOOGLE_CLIENT_ID?.slice(0, 8),
+    gsec: process.env.GOOGLE_CLIENT_SECRET?.slice(0, 8),
   });
 });
 export default router;
