@@ -7,9 +7,20 @@ const env = new Proxy(ENV, {
   get(target, prop, receiver) {
     if (typeof prop === "string") {
       const raw = process.env[prop];
-      if (raw && raw.length > 0) return raw;
+      if (raw !== undefined && raw !== "") return raw;
+      try {
+        const val = Reflect.get(target, prop, receiver);
+        if (val !== undefined && val !== "") return val;
+      } catch {
+        return undefined;
+      }
+      return undefined;
     }
-    return Reflect.get(target, prop, receiver);
+    try {
+      return Reflect.get(target, prop, receiver);
+    } catch {
+      return undefined;
+    }
   },
 });
 
