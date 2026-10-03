@@ -6,7 +6,7 @@ import { createAuthClient } from "better-auth/react";
 function getServerUrl(): string {
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
-    if (h === "kiftet.ethiodeploy.com" || h.endsWith(".ethiodeploy.com")) {
+    if (h === "kiftet.ethiodeploy.com" || h.includes("ethiodeploy.com")) {
       return "https://kiftet.ethiodeploy.com";
     }
     if (h === "localhost" || h === "127.0.0.1") {
