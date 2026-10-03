@@ -18,7 +18,10 @@ function getServerUrl(): string {
       return `${window.location.origin}${normalized}`;
   }
 
-  if (typeof window !== "undefined") return window.location.origin;
+  if (typeof window !== "undefined") {
+    if (window.location.hostname === "kiftet.ethiodeploy.com") return "https://kiftet.ethiodeploy.com";
+    return window.location.origin;
+  }
 
   const processEnv = (
     globalThis as {
