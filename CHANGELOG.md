@@ -10,16 +10,8 @@ and the [roadmap](docs/howItWorks/roadmap.md).
 
 ## 2026-10-02
 
-- **17:00+03:00 — Make the production auth path operable, and trust one origin
-  list everywhere.** Split `CORS_ORIGIN` on commas when building Better Auth's
-  `trustedOrigins`, matching what the CORS layer and the auth middleware already
-  did — a multi-origin split deploy was otherwise let through by the edge and
-  then refused by Better Auth's own origin check, which reaches the student as a
-  login that fails for no stated reason. Add an operator guide for turning auth
-  on in production: both provider consoles step by step, derived redirect URIs,
-  the Google consent-screen and Meta Development-mode traps, a failure table, and
-  the deliberate state of the two settings that are off. Update the runbook's env
-  table, verification checklist and incident playbook.
+- **17:00+03:00 — Make the production auth path operable, and trust one origin list everywhere.** Split `CORS_ORIGIN` on commas when building Better Auth's `trustedOrigins`, matching what the CORS layer and the auth middleware already did — a multi-origin split deploy was otherwise let through by the edge and refused by Better Auth's own origin check, which reaches the student as a login that fails for no stated reason. Add an operator guide for turning auth on in production: both provider consoles step by step, derived redirect URIs, the Google consent-screen and Meta Development-mode traps, a failure table, and the deliberate state of the two settings that are off. Update the runbook's env table, verification checklist and incident playbook.
+- **21:00+03:00 — Add GitHub social login as a workaround for Google OAuth domain restrictions.** Google OAuth consent screen rejects subdomains on hosts not on the Public Suffix List (e.g. ethioDeploy.com), blocking Google sign-in on the current deployment. Add GitHub OAuth provider end-to-end (server env/schema, auth config, UI button/icon/labels). GitHub has no such PSL/domain validation issues for redirect URIs, so it provides an immediate working social login path. Google remains configured and can be re-enabled when a proper custom domain is in place.
 - **Offer a second way in, with Google and Facebook beside the password**
   (`29bfbb7`). Add optional social sign-in that appears only when a provider's
   credentials are fully present, with Facebook held to a lower bar because Meta
