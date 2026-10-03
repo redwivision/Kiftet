@@ -54,7 +54,7 @@ export default function Header() {
     // bg-panel, not a literal: this used to be #0f1523, a blue-black from
     // before the room system existed, so every one of the eight tinted rooms
     // inherited a header that belonged to none of them.
-    <header className="sticky top-0 z-30 border-border/70 border-b bg-panel/85 backdrop-blur-md">
+    <header className="safe-area-top sticky top-0 z-30 border-border/70 border-b bg-panel/85 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <NavLink

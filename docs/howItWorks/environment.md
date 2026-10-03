@@ -16,7 +16,7 @@ wrong.
 | `DATABASE_URL` | Server (Postgres only) | Postgres connection string | Server crashes on boot |
 | `DATABASE_URL_DIRECT` | DB package | Direct (non-pooled) Postgres connection for migrations | Migrations fail, schema stale |
 | `GEMINI_API_KEY` | Server | Google Gemini API key | Grading returns empty placeholders; lessons fallback to templates |
-| `VITE_SERVER_URL` | Web (client) | Root URL of the API (no `/api` suffix); falls back to `localhost:3000` in dev | All API calls 404; loud console warning in production |
+| `VITE_SERVER_URL` | Web (client) | Root URL of the API (no `/api` suffix); defaults to same-origin behavior when unset or when a remote device sees a `localhost` value | API calls go to the wrong host |
 | `VITE_SITE_URL` | Web (client) | Public origin of the web app (e.g. `https://app.kiftet.com`); makes `og:image`/`twitter:image` absolute | Relative share images — social previews may not render |
 | `VITE_VOXIDE_KEY` | Web (client) | Voxide publishable key | Voice features disabled; typed fallback activates |
 
@@ -75,4 +75,3 @@ built from a commit older than `cf68afe` and must be rebuilt from the latest
 source.
 
 ---
-

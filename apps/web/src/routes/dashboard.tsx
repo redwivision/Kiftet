@@ -250,8 +250,8 @@ export default function Dashboard() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div className="max-w-2xl space-y-2">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0 max-w-2xl space-y-2">
           <p className="k-label">{t("study-room")}</p>
           <h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
             {t("dash-title")}
@@ -260,22 +260,29 @@ export default function Dashboard() {
             {t("dash-text")}
           </p>
         </div>
-        {chapters && chapters.length > 0 && (
-          <div className="shrink-0 flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+        <div className="grid w-full gap-2 sm:w-auto sm:shrink-0 sm:auto-cols-max sm:grid-flow-col sm:items-center">
+          <Link
+            to="/textbooks"
+            className={buttonVariants({
+              size: "default",
+              className: "w-full sm:w-auto",
+            })}
+          >
+            {t("add-textbook")}
+          </Link>
+          {chapters && chapters.length > 0 && (
             <Link
               to="/syllabus"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={buttonVariants({
+                variant: "outline",
+                size: "default",
+                className: "w-full sm:w-auto",
+              })}
             >
               {t("study-by-syllabus")}
             </Link>
-            <Link
-              to="/textbooks"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              {t("add-textbook")}
-            </Link>
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
       {!session && getDemoUser() && (

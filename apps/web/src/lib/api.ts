@@ -1,4 +1,5 @@
 import { getDemoUser } from "@/lib/demo";
+import { resolveBrowserServerRoot } from "@/lib/server-url";
 
 const API = (import.meta.env.VITE_SERVER_URL as string) || "";
 
@@ -9,17 +10,11 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 function resolveServerRoot(): string {
   if (typeof window === "undefined") return API || "/api";
-  const envRoot = API.replace(/\/api\/?$/, "").replace(/\/+$/, "");
-  const isLocalOverride = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(
-    envRoot,
+  return resolveBrowserServerRoot(
+    window.location.hostname,
+    window.location.origin,
+    API,
   );
-  const onLocalHost =
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1";
-  // A localhost VITE_SERVER_URL (from a dev .env) must never hijack requests
-  // from a real host — the app and API ship together, so same-origin wins.
-  if (envRoot && !(isLocalOverride && !onLocalHost)) return envRoot;
-  return window.location.origin;
 }
 
 const serverRoot = resolveServerRoot();

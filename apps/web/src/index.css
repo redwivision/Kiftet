@@ -544,6 +544,10 @@
 }
 
 @layer base {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
