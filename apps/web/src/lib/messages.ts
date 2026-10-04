@@ -412,6 +412,15 @@ export const en = {
   "vt-executing": "Running the action… tap the ring again to cancel.",
   "vt-error": "Something went wrong. Tap to retry.",
 
+  // What the voice agent says when it has nothing better to offer: the page
+  // drives the loop and it only reads things back. Read to the student, so it
+  // has to be in their language.
+  "voice-agent-greeting":
+    "The study loop on screen — the recall, the diagnosis, the short version, the retest — is driven by the page, and I help by reading things back in a natural voice. Recite the chapter out loud or answer the question on screen, and when you're finished just tell me and I'll close the session.",
+  "voice-agent-done": "I'm done for now",
+  "voice-agent-close": "Close the session",
+  "voice-agent-dashboard": "Take me back to the dashboard",
+
   // ── Home / landing page ──────────────────────────────────────
   "hero-eyebrow": "Kiftet · spoken study review for Ethiopian students",
   "diag-eyebrow": "What it actually sees",
@@ -1011,6 +1020,12 @@ export const am: Record<MessageKey, string> = {
   "vt-speaking": "በመናገር ላይ… ለማቋረጥ ቀለበቱን እንደገና ንካ።",
   "vt-executing": "ድርጊቱን በማስኬድ ላይ… ለመሰረዝ ቀለበቱን እንደገና ንካ።",
   "vt-error": "አንድ ነገር ተሳስቷል። ለመድገም ንካ።",
+
+  "voice-agent-greeting":
+    "በስክሪኑ ላይ ያለው የትምህርት ዞላ — ማስታወሻው፣ ክፍተቱ፣ አጭሩ ማብራሪያው፣ እንደገና ምልክቱ — በገጹ ትኩረት ይመራል፤ እኔም በተፈጥሮ ድምጽ አስተካክሎ እረት ላቀርም። ምዕራፉን በአፖድ አንብብ ወይም በስክሩ ላይ ያለውን ጥያቄ አስቀምጥ፤ ሲጠናቀቅህም በላይ ብቻ አሳውጥኝ፣ ክፍሉንም ዝጋለሁ።",
+  "voice-agent-done": "ለአሁን አልቋለሁ",
+  "voice-agent-close": "ክፍሉን ዝጋ",
+  "voice-agent-dashboard": "ወደ ዳሽባርድ መልስኝ",
 
   // ── Home / landing page ──────────────────────────────────────
   "hero-eyebrow": "ኪፍተት · ለኢትዮጵያ ተማሪዎች በድምጽ የሚደረግ የትምህርት ግምገማ",

@@ -14,6 +14,7 @@ import { Link, useNavigate } from "react-router";
 
 import { useLanguage } from "@/components/language-provider";
 import { authClient } from "@/lib/auth-client";
+import { clearDemoUser } from "@/lib/demo";
 
 export default function UserMenu() {
   const navigate = useNavigate();
@@ -81,6 +82,13 @@ export default function UserMenu() {
               authClient.signOut({
                 fetchOptions: {
                   onSuccess: () => {
+                    // Signing out has to drop the demo identity too. The auth
+                    // middleware honours X-Demo-User-Id *before* a real session,
+                    // so a demo id left in localStorage keeps re-granting a
+                    // study room after sign-out and the student lands back in
+                    // the demo instead of being signed out. Sign-in and sign-up
+                    // already clear it; this was the one path that didn't.
+                    clearDemoUser();
                     navigate("/");
                   },
                 },

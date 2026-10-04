@@ -26,7 +26,7 @@ import { VoxideRing } from "@/components/voxide-ring";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
-import { findBoundaryEnd, leadingText } from "@/lib/intent";
+import { countWords, findBoundaryEnd, leadingText } from "@/lib/intent";
 import type { ConceptMeta } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
 import {
@@ -405,13 +405,14 @@ function VoiceCapture({
     const spoken = transcriptOf(voice.messages, baseRef.current);
     const marker = findBoundaryEnd(spoken);
     if (!marker) return;
-    // A cue mid-sentence ("I'm done with the electron carriers") is not an
-    // ending — only fire when the cue is in the last words of the turn.
-    const remainder = spoken
-      .slice(marker.index + marker.phrase.length)
-      .replace(/[^a-z0-9\s]/gi, " ")
-      .trim();
-    if (remainder.split(/\s+/).filter(Boolean).length > 6) return;
+    // A cue mid-sentence ("I'm done with the electron carriers", "በኢልትሮኖን ካሪየርስ ጠናቋለሁ") is not an
+    // ending — only fire when the cue is in the last words of the turn. Counted
+    // with countWords so the remainder is measured in the language spoken; the
+    // ASCII strip this replaced deleted every Ethiopic codepoint first, which
+    // left the guard permanently reading zero words in Amharic.
+    if (countWords(spoken.slice(marker.index + marker.phrase.length)) > 6) {
+      return;
+    }
     const finished = leadingText(spoken, marker.index);
     submittedRef.current = true;
     setCaptureActive(false);

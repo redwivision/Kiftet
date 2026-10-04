@@ -4,6 +4,12 @@ import { VoxideClient } from "@voxide/react";
 
 import { api } from "@/lib/api";
 import { detectSessionEnd } from "@/lib/intent";
+import { t as translate } from "@/lib/messages";
+import {
+  getVoiceLanguage,
+  onVoiceLanguageChange,
+  voiceLocale,
+} from "@/lib/voice";
 
 let activeSessionId: string | null = null;
 let activeChapterId: string | null = null;
@@ -54,12 +60,49 @@ export function hasVoxideKey(): boolean {
 // ── Client (lazy, browser-only) ─────────────────────────────────
 let clientCache: VoxideClient | null = null;
 
+// Instructions sent *to* the agent rather than shown to the student, so they
+// live here instead of messages.ts. They follow the language pref because the
+// agent reads them to decide how to speak: an English instruction in front of
+// an Amharic passage is how you get an Amharic lesson read aloud in an English
+// voice.
+const READ_PROMPT = {
+  en: (text: string) =>
+    `Please read the short piece below to the student aloud with your natural voice, exactly as written, slowly and clearly, then stop without adding anything:\n\n${text}`,
+  am: (text: string) =>
+    `ከዚህ በታች ያለውን አጭሩ ክፍል በተፈጥሮዎን ድምጽ በደግሞ ለተማሪው በአፖድ አንብብ፤ በትክክል እንደተጻፈው፣ በዝግታ እና በግልጽ በመናገር፤ ከዚያ ግን ምንም ሳትጨምር ያቁም።\n\n${text}`,
+};
+
+const STOP_PROMPT = {
+  en: "Stop reading right now and stay quiet.",
+  am: "አሁን የሚቀርብህን ሁልጊ አቁምና ጸጥታ ቀምብ።",
+};
+
+// The agent's fallback is spoken aloud, so it is user-facing copy and goes
+// through the same message table as the rest of the UI.
+function applyFallback(client: VoxideClient): void {
+  const lang = getVoiceLanguage();
+  client.setFallback({
+    message: translate(lang, "voice-agent-greeting"),
+    suggestions: [
+      translate(lang, "voice-agent-done"),
+      translate(lang, "voice-agent-close"),
+      translate(lang, "voice-agent-dashboard"),
+    ],
+  });
+}
+
 export function getVoxideClient(): VoxideClient | null {
   if (typeof window === "undefined") return null;
   if (clientCache) return clientCache;
   const key = (import.meta.env.VITE_VOXIDE_KEY as string) ?? "";
   if (!key.trim()) return null;
-  clientCache = new VoxideClient({ publicKey: key.trim() });
+  // The language is set here and nowhere else, so without it the SDK falls back
+  // to en-US for both recognition and speech — which is how an Amharic student
+  // ended up with a fully Amharic screen and an English voice.
+  clientCache = new VoxideClient({
+    publicKey: key.trim(),
+    language: voiceLocale(),
+  });
   registerCapabilities(clientCache);
   clientCache.bindState(() => ({
     currentPage: typeof location !== "undefined" ? location.pathname : "/",
@@ -69,14 +112,13 @@ export function getVoxideClient(): VoxideClient | null {
   clientCache.registerState({
     studyContext: () => studyContext ?? {},
   });
-  clientCache.setFallback({
-    message:
-      "The study loop on screen — the recall, the diagnosis, the short version, the retest — is driven by the page, and I help by reading things back in a natural voice. Recite the chapter out loud or answer the question on screen, and when you're finished just tell me and I'll close the session.",
-    suggestions: [
-      "I'm done for now",
-      "Close the session",
-      "Take me back to the dashboard",
-    ],
+  applyFallback(clientCache);
+  // The client is cached for the life of the page, so a student who switches to
+  // አማርኛ mid-session would otherwise keep being heard in en-US until a reload.
+  // No unsubscribe: the cache is never discarded.
+  onVoiceLanguageChange(() => {
+    clientCache?.setLanguage(voiceLocale());
+    if (clientCache) applyFallback(clientCache);
   });
   // End the whole session when the student says goodbye — no tap needed.
   clientCache.on("message", (payload: unknown) => {
@@ -142,9 +184,8 @@ export async function speakViaVoxide(text: string): Promise<boolean> {
     if (!client.isInitialized) await client.init();
     if (!client.isInitialized) return false;
     await client.connect();
-    await client.sendText(
-      `Please read the short piece below to the student aloud with your natural voice, exactly as written, slowly and clearly, then stop without adding anything:\n\n${text}`,
-    );
+    const lang = getVoiceLanguage();
+    await client.sendText(READ_PROMPT[lang](text));
     return true;
   } catch (err) {
     console.error("[Voxide] natural speech read-out failed:", err);
@@ -159,7 +200,7 @@ export function stopVoiceNarration(): void {
   const client = clientCache;
   if (!client) return;
   try {
-    client.sendText("Stop reading right now and stay quiet.");
+    client.sendText(STOP_PROMPT[getVoiceLanguage()]);
     client.disconnect();
   } catch {
     // Best-effort: narration has no API to ask the agent to halt.

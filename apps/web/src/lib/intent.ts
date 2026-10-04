@@ -5,6 +5,23 @@
 // These helpers let the app recognise the student's own "I'm done" cues and
 // close the turn itself — no tap needed — and separate them from real
 // farewells ("bye", "I'm done studying") that should end the whole session.
+//
+// Both English and Amharic cues are always live, whichever language the pref is
+// on. The pref decides what the *recognizer* hears, not what counts as a cue:
+// a student whose pref is አማርኛ still says "that's all", and one studying in
+// English still says "ያለቀለም". Matching both is the forgiving reading, and a
+// missed cue costs a tap while a false one only ends a turn a moment early.
+//
+// Note the deliberate absence of `\b` on the Amharic patterns: JS `\w` is
+// ASCII-only even with the `u` flag, so word boundaries do not exist between
+// Ethiopic codepoints and would match the wrong places. The Amharic phrases are
+// distinctive enough to match as plain literals.
+//
+// Equally deliberate: no `g` flag. These are module-level regexes reused across
+// every call, and `g` makes `exec` stateful — `lastIndex` carries over from one
+// student's turn to the next, so the second identical cue in a session starts
+// its search partway through the string and silently fails to match. `u` alone
+// is what Ethiopic needs; `g` is what broke it.
 
 export interface EndMarker {
   /** The phrase that matched, lowercased, as found in `text`. */
@@ -32,10 +49,27 @@ const BOUNDARY_PATTERNS: RegExp[] = [
   /that'?s my answer/i,
   /next question/i,
   /okay? (?:i'?m |i am )?done/i,
+  // አማርኛ — "that is all / I'm finished".
+  /ያለቀለም/u,
+  /ያለቀለም ምንም/u,
+  /ተጠናቋለሁ/u,
+  /ተጠናቋል/u,
+  /ጨርሻቼ የለም/u,
+  /ሌላ የለም/u,
+  /ሌላ ሰራም የለም/u,
+  /ምንም አልገለም/u,
+  /የምንም አልገለም/u,
+  /ቀጣይ ጥያቄ/u,
+  /ይህም ምላሽ/u,
+  /ተጠናቋለሁ ለአሁን/u,
 ];
 
 // Phrases that mean "I'm leaving / I'm done for the session" — the whole study
 // session should be closed and the student sent back to the dashboard.
+//
+// "ሰላም" (selam) is intentionally absent: it is the everyday Amharic greeting
+// *and* a parting word, and a student who opens an answer with it would lose
+// the whole session. The unambiguous farewells below carry the same meaning.
 const SESSION_END_PATTERNS: RegExp[] = [
   /\bbye\b/i,
   /\bgoodbye/i,
@@ -48,6 +82,14 @@ const SESSION_END_PATTERNS: RegExp[] = [
   /end (?:the |this )?session/i,
   /stop (?:the |this )?session/i,
   /(?:that'?s|that is) (?:it|all) for (?:today|now|the day)/i,
+  // አማርኛ — "goodbye / I am leaving / I am done".
+  /ደህና ሁን/u,
+  /ስብርስ/u,
+  /እየሄድ ነው/u,
+  /ለነዚህ ጊዜ አልቋል/u,
+  /ለዛሬ አልቋል/u,
+  /ጭርቻውን ዝጋ/u,
+  /ድር ጨርሽ/u,
 ];
 
 function firstMatch(text: string, patterns: RegExp[]): EndMarker | null {
@@ -81,4 +123,20 @@ export function detectSessionEnd(text: string): boolean {
 /** Everything in `text` that comes before a closing cue's `index`. */
 export function leadingText(text: string, index: number): string {
   return text.slice(0, index).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Word count that works on any script.
+ *
+ * The guard that uses this wants "is there more after the cue?", so it has to
+ * count Ethiopic words too. The ASCII class it replaced (`[^a-z0-9\s]`) deleted
+ * every Amharic codepoint *before* counting, which made the remainder read as
+ * zero words — so the guard could never tell a mid-sentence cue from a closing
+ * one in Amharic, and an "ያለቀለም" buried mid-answer would end the answer.
+ *
+ * Amharic separates words with spaces, so \p{L} runs are the right unit. The
+ * \p{M} continuation covers combining marks that attach to a base letter.
+ */
+export function countWords(text: string): number {
+  return (text.match(/\p{L}[\p{L}\p{M}]*/gu) ?? []).length;
 }

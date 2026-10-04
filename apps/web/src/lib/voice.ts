@@ -1,4 +1,52 @@
+import type { Language } from "./messages";
+
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
+
+// ── Language ────────────────────────────────────────────────────
+// The voice layer is plain modules, not React, so it cannot read the language
+// pref from context. <LanguageProvider> pushes the current pref in here on
+// mount and on every change; everything below reads it at the moment it builds
+// an utterance or starts recognition, so switching EN/አማርኛ takes effect on the
+// next thing the student says rather than needing a reload.
+let activeLanguage: Language = "en";
+
+// Listeners let the voice *vendor* adapters follow the pref without the React
+// provider having to import them. Importing assistant.tsx (and with it the
+// whole Voxide SDK) into <LanguageProvider> would put that bundle on the
+// landing page and every signed-out route, so the dependency runs the other
+// way: the adapter subscribes, the provider only announces.
+const languageListeners = new Set<(lang: Language) => void>();
+
+export function onVoiceLanguageChange(
+  fn: (lang: Language) => void,
+): () => void {
+  languageListeners.add(fn);
+  return () => {
+    languageListeners.delete(fn);
+  };
+}
+
+export function setVoiceLanguage(lang: Language): void {
+  if (activeLanguage === lang) return;
+  activeLanguage = lang;
+  for (const fn of languageListeners) fn(lang);
+}
+
+export function getVoiceLanguage(): Language {
+  return activeLanguage;
+}
+
+// BCP-47 tags for the two supported languages. Amharic is "am-ET" (Amharic,
+// Ethiopia) — a bare "am" is Amharic too but vendors and the Web Speech API are
+// consistent about accepting the region-qualified form.
+const VOICE_LOCALE: Record<Language, string> = {
+  en: "en-US",
+  am: "am-ET",
+};
+
+export function voiceLocale(lang: Language = activeLanguage): string {
+  return VOICE_LOCALE[lang];
+}
 
 // Browsers populate speechSynthesis voices asynchronously. Touch the list once
 // on load so pickNaturalVoice has real voices by the time a read-back button
@@ -57,7 +105,12 @@ export function speakAloud(
   synth.cancel();
   synth.resume?.();
 
-  const voice = pickNaturalVoice(synth);
+  // Read the pref once, at the start of the read, so every chunk of one
+  // passage is spoken in one language even if the student flips the toggle
+  // mid-sentence.
+  const lang = activeLanguage;
+  const locale = VOICE_LOCALE[lang];
+  const voice = pickNaturalVoice(synth, lang);
   const chunks = chunkSentences(text);
   let i = 0;
   let finished = false;
@@ -93,7 +146,7 @@ export function speakAloud(
     onChunk?.(i);
     i += 1;
     const u = new SpeechSynthesisUtterance(chunk);
-    u.lang = voice?.lang ?? "en-US";
+    u.lang = voice?.lang ?? locale;
     u.voice = voice ?? null;
     u.rate = 0.97;
     u.onend = next;
@@ -122,32 +175,58 @@ export function speakAloud(
 // neural voices on en locales), falling back to the platform default. The
 // robotic voice is still available underneath — speechSynthesis is only ever
 // invoked from explicit buttons, never automatically.
-function pickNaturalVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
+//
+// The curated name list only means anything for English. For any other
+// language we match on the BCP-47 primary subtag, because voice *names* are
+// vendor- and locale-specific ("Google አማርኛ" on Chrome, "Amharic (Ethiopia)"
+// elsewhere) and a hardcoded English name list silently matches nothing — which
+// is what left an Amharic reader being read aloud in an English voice.
+function pickNaturalVoice(
+  synth: SpeechSynthesis,
+  lang: Language = activeLanguage,
+): SpeechSynthesisVoice | null {
   const voices = synth.getVoices();
   if (!voices.length) return null;
-  const preferred = [
-    "google uk english female",
-    "google us english",
-    "samantha",
-    "karen",
-    "serena",
-    "aria",
-    "libby",
-    "uygur",
-    "daniel",
-    "zira",
-    "en-gb",
-  ];
-  for (const name of preferred) {
-    const hit = voices.find(
-      (v) =>
-        v.lang.toLowerCase().startsWith("en") && v.name.toLowerCase() === name,
+  const base = VOICE_LOCALE[lang].split("-")[0].toLowerCase();
+
+  if (lang === "en") {
+    const preferred = [
+      "google uk english female",
+      "google us english",
+      "samantha",
+      "karen",
+      "serena",
+      "aria",
+      "libby",
+      "uygur",
+      "daniel",
+      "zira",
+      "en-gb",
+    ];
+    for (const name of preferred) {
+      const hit = voices.find(
+        (v) =>
+          v.lang.toLowerCase().startsWith(base) &&
+          v.name.toLowerCase() === name,
+      );
+      if (hit) return hit;
+    }
+    const en = voices.find(
+      (v) => v.lang.toLowerCase() === "en-gb" && !v.default,
     );
-    if (hit) return hit;
+    if (en) return en;
+    return voices.find((v) => v.lang.toLowerCase().startsWith(base)) ?? null;
   }
-  const en = voices.find((v) => v.lang.toLowerCase() === "en-gb" && !v.default);
-  if (en) return en;
-  return voices.find((v) => v.lang.toLowerCase().startsWith("en")) ?? null;
+
+  // Non-English: an exact regional match first (am-ET over a generic am), then
+  // any voice sharing the primary subtag, then a non-default voice so we never
+  // hand an Ethiopic passage to the platform default English voice.
+  const regional = VOICE_LOCALE[lang].toLowerCase();
+  return (
+    voices.find((v) => v.lang.toLowerCase() === regional) ??
+    voices.find((v) => v.lang.toLowerCase().startsWith(base)) ??
+    null
+  );
 }
 
 // Chrome's speechSynthesis truncates long utterances and sometimes stops
@@ -266,7 +345,9 @@ class WebSpeechVoiceClient implements VoiceClient {
       throw new Error("Web Speech recognition is unavailable");
     }
     this.recognition = new SpeechRecognition();
-    this.recognition.lang = "en-US";
+    // Seeded from the pref; startListening() re-reads it so a language change
+    // mid-session applies to the next utterance instead of needing a reload.
+    this.recognition.lang = VOICE_LOCALE[activeLanguage];
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
 
@@ -305,6 +386,10 @@ class WebSpeechVoiceClient implements VoiceClient {
     if (this.accumulating) return;
     this.accumulating = true;
     this.spokenTranscript = "";
+    // The recognizer is constructed once and reused, so the language is set per
+    // turn. Chrome rejects a lang change mid-recognition, but this only runs on
+    // the idle → listening edge, where it is safe.
+    this.recognition.lang = VOICE_LOCALE[activeLanguage];
     this.callbacks.onStateChange?.("listening");
     try {
       this.recognition.start();
@@ -335,6 +420,10 @@ class WebSpeechVoiceClient implements VoiceClient {
     }
     synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
+    // Was left unset, so this inherited the browser default and read Amharic in
+    // an English voice regardless of the pref.
+    utterance.lang = VOICE_LOCALE[activeLanguage];
+    utterance.voice = pickNaturalVoice(synth, activeLanguage);
     this.callbacks.onStateChange?.("speaking");
     await new Promise<void>((resolve) => {
       utterance.onend = () => resolve();

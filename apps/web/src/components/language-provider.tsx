@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { type Language, type MessageKey, t as translate } from "@/lib/messages";
+import { setVoiceLanguage } from "@/lib/voice";
 
 export const LANGUAGE_STORAGE_KEY = "kiftet-language";
 
@@ -34,6 +35,15 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = lang;
+  }, [lang]);
+
+  // The voice layer is not React, so it can't read this context. Announce the
+  // pref here and it follows: recognition switches to am-ET, read-aloud picks an
+  // Ethiopic voice, and the agent's spoken greeting is re-sent in the new
+  // language. Runs on mount too, so a student who stored አማርኛ gets an Amharic
+  // voice without touching the toggle.
+  useEffect(() => {
+    setVoiceLanguage(lang);
   }, [lang]);
 
   const setLang = useCallback((next: Language) => {
