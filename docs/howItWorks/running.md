@@ -21,6 +21,9 @@ The server applies pending migrations automatically on boot, then listens. The
 database is Postgres; `DATABASE_URL` / `DATABASE_URL_DIRECT` come from your
 `.env` (a local Postgres in development, Neon in production).
 
+For a phone-on-Wi-Fi test, use the mobile setup below instead of opening a
+`localhost` URL on the phone.
+
 ### Testing from a phone on the same network
 
 `localhost` on a phone points to the phone, not this computer. Set the

@@ -12,11 +12,16 @@ wrong.
 | `BETTER_AUTH_SECRET` | Server | Random string (≥32 chars), the master signing key for session tokens | Sessions rejected, every login 500s |
 | `BETTER_AUTH_URL` | Server | The public URL of the API (e.g. `https://api.kiftet.com`) | Session cookie points to the wrong domain |
 | `CORS_ORIGIN` | Server | Comma-separated trusted origins (e.g. `https://app.kiftet.com`) | Browser silently blocks every POST, login loop |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Server | Optional Google OAuth credentials; both must be set | Google sign-in button is not shown |
+| `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | Server | Optional Facebook OAuth credentials; both must be set | Facebook sign-in button is not shown |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Server | Optional GitHub OAuth credentials; both must be set | GitHub sign-in button is not shown |
+| `REQUIRE_EMAIL_VERIFICATION` | Server | Whether password sign-in requires a verified email; off by default | Enabling it without real email delivery can lock users out |
+| `AUTH_EMAIL_TRANSPORT` | Server | Currently `console`; reset/verification links are written to server logs | Users do not receive password reset or verification emails |
 | `DATABASE_FILE` | Server (SQLite only) | Path to the `.db` file (e.g. `./kiftet-dev.db`) | Server crashes on boot |
 | `DATABASE_URL` | Server (Postgres only) | Postgres connection string | Server crashes on boot |
 | `DATABASE_URL_DIRECT` | DB package | Direct (non-pooled) Postgres connection for migrations | Migrations fail, schema stale |
 | `GEMINI_API_KEY` | Server | Google Gemini API key | Grading returns empty placeholders; lessons fallback to templates |
-| `VITE_SERVER_URL` | Web (client) | Root URL of the API (no `/api` suffix); defaults to same-origin behavior when unset or when a remote device sees a `localhost` value | API calls go to the wrong host |
+| `VITE_SERVER_URL` | Web (client) | API origin without `/api`; use a LAN-reachable API address for phone testing | API calls go to the web dev server or the phone's own `localhost` |
 | `VITE_SITE_URL` | Web (client) | Public origin of the web app (e.g. `https://app.kiftet.com`); makes `og:image`/`twitter:image` absolute | Relative share images — social previews may not render |
 | `VITE_VOXIDE_KEY` | Web (client) | Voxide publishable key | Voice features disabled; typed fallback activates |
 

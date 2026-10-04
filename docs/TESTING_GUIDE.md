@@ -570,6 +570,12 @@ half-finished stream drive what we grade or read back.
 4. Kill the wifi mid-import on one selected chapter → that chapter shows
    failed/retry. Return to the saved book and retry it; already-imported
    chapters remain marked and are not sent through AI again.
+5. **Phone layout:** follow the LAN setup in
+   [`howItWorks/running.md`](howItWorks/running.md), then open the web app on a
+   phone on the same Wi-Fi. On the dashboard, confirm **Add your textbook**
+   appears as a full-width action before the chapter list finishes loading and
+   remains easy to tap without horizontal scrolling. Confirm the sticky header
+   clears the iPhone status-bar/notch area when installed or opened in Safari.
 
 ### How to test — error presentation (hardening pass)
 

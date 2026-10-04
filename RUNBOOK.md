@@ -49,6 +49,10 @@ bun run dev:server         # terminal 1 — API on http://localhost:3000 (hot re
 bun run dev:web            # terminal 2 — web app
 ```
 
+- **Phone on the same Wi-Fi:** use the computer's LAN address, not
+  `localhost`, on the phone. Configure the web API root and server auth/CORS
+  origins, then bind the web dev server to `0.0.0.0`. Follow the exact
+  `.env` example in [`docs/howItWorks/running.md`](docs/howItWorks/running.md).
 - No `.env` files are required locally — the `.env.schema` files ship dev-safe
   placeholders and generate `src/env.ts` types on install.
 - The **server runs migrations automatically on boot** — `migrateDb` in
@@ -290,23 +294,25 @@ verify via §9.5.
 | `GEMINI_API_KEY` | real key from Google AI Studio | grading returns empty placeholders; lessons fall back to templates |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | both, from Google Cloud Console | Google button hidden (only one half = not a provider) |
 | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | both, from Meta app settings | Facebook button hidden (only one half = not a provider) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | both, from a GitHub OAuth App | GitHub button hidden (only one half = not a provider) |
 | `REQUIRE_EMAIL_VERIFICATION` | `false` until a real mail transport ships | `true` on the console transport locks out every signup |
 | `AUTH_EMAIL_TRANSPORT` | `console` — the only member of its enum | password-reset links go to the server log, not the student |
 
-**Social providers are optional.** Leave all four unset and password sign-in
-works exactly as before — the buttons are simply absent. Setting only one half
-of a pair is treated as not configured on purpose: offering a button there sends
-the student to the provider to be refused, which looks like our bug.
+**Social providers are optional.** Leave all six provider credentials unset
+and password sign-in works exactly as before — the buttons are simply absent.
+Setting only one half of a pair is treated as not configured on purpose:
+offering a button there sends the student to the provider to be refused, which
+looks like our bug.
 
-Full provider setup — Google and Meta consoles, the exact redirect URIs, the
-Development-vs-Live switch that locks Facebook out, and a failure table — is in
-[`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.
+Full provider setup — Google, Meta and GitHub consoles, the exact redirect
+URIs, the Google Testing / Facebook Development restrictions, and a failure
+table — is in [`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.
 
 ### 8.3 The web app's build-time variables (Vercel/host: web app)
 
 | Variable | Value in prod | Wrong / missing = |
 |---|---|---|
-| `VITE_SERVER_URL` | API root without `/api` (e.g. `https://api.kiftet.com`) | every API call 404; loud console warning |
+| `VITE_SERVER_URL` | API root without `/api` (e.g. `https://api.kiftet.com`); required for split hosting and phone-on-LAN dev | requests go to the wrong host |
 | `VITE_SITE_URL` | web origin — see §8.1 | relative `og:image` (Vercel fallback usually covers) |
 | `VITE_VOXIDE_KEY` | Voxide publishable key (optional) | voice features off; typed + browser-speech fallback activate |
 
@@ -340,17 +346,19 @@ Run in order; expected result in parentheses.
    → `{"providers":[…]}`. This reads the same function that built the auth
    config, so it is the ground truth for which buttons should render. `[]` means
    no provider pair is complete, or the env never reached the API service.
-9. **Social sign-in** — only if step 8 lists a provider. On a real phone or a
-   private window: click the button → the provider's genuine consent screen
-   appears → you land on `/dashboard` signed in. Then sign in **with a password**
-   too — both paths share one account, and a social-only check would hide a
-   broken password flow.
+9. **Social sign-in** — only if step 8 lists a provider. Test each configured
+   provider on a real phone or in a private window:
+   click the button → the provider's genuine consent screen appears → you land
+   on `/dashboard` signed in. Separately verify password sign-in; Google and
+   Facebook may link under the trusted-provider rules, but GitHub is not
+   configured as a trusted linking provider.
 
-> **If step 9 fails**, the provider console is almost always the answer, not
+> **If step 9 fails**, the provider console is often the answer, not
 > Kiftet: Google rejects accounts not in **Test users** while the consent screen
 > is in *Testing*, and Meta rejects everyone who is not an app role/admin while
-> the app is in *Development*. See the failure table in
-> [`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.6.
+> the app is in *Development*. Check the selected provider's callback URL too.
+> See the failure table in
+> [`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.7.
 
 ---
 
@@ -376,14 +384,14 @@ Run in order; expected result in parentheses.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Login loops; every auth call 401 | `CORS_ORIGIN` missing/wrong on the API | set it to the exact web origin and redeploy |
-| All API calls 404 | `VITE_SERVER_URL` wrong/missing at web build time | set it, rebuild the web app |
+| API calls reach the wrong host | `VITE_SERVER_URL` wrong/missing (or a phone is using `localhost`) | set the API root; for a phone on Wi-Fi, use the computer's LAN address per [`docs/howItWorks/running.md`](docs/howItWorks/running.md) |
 | Any login 500s | `BETTER_AUTH_SECRET` mismatch or too short (`< 32`) | set a stable secret, redeploy API |
 | Empty "graded" output / template lessons | `GEMINI_API_KEY` missing/invalid | set key, redeploy; check the server log |
 | `429 Too Many Requests` | AI rate limit (30/min/user) — working as designed | wait a minute; don't throttle-cap it |
 | API process dies every boot | `DATABASE_URL` missing, malformed, or pointing at the wrong Neon project | set pooled URL (`-pooler`); check the Neon console for the right project |
 | Migrations fail on boot ("already exists") | stale DB schema vs. migration journal (e.g. after a manual schema edit) | do not hand-edit schema; `git revert` unschema changes and redeploy, or ask before touching the DB |
 | Stale UI after a deploy | cached by the service worker | hard refresh; it self-heals on next load (autoUpdate) |
-| No Google/Facebook button | provider pair incomplete, or set on the wrong service | `curl /api/auth-providers`; set both halves on the **API** service and redeploy |
+| No Google, Facebook or GitHub button | provider pair incomplete, or set on the wrong service | `curl /api/auth-providers`; set both halves on the **API** service and redeploy |
 | Social button → provider → Kiftet error page | redirect URI mismatch (trailing slash, `www`, or `http` vs `https`) | fix the URI character by character; add both spellings to the provider's allow-list |
 | "Access blocked" (Google) | consent screen still in **Testing** | publish it, or add the account as a test user |
 | "This app isn't available right now" (Facebook) | app still in **Development** mode | Meta → app settings → switch to **Live** |

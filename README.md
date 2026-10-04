@@ -50,6 +50,9 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 - **Feedback colours that mean the same everywhere.** Sage `#5C7A5E` = solid/covered, Rust `#B54A2C` = gap/needs work (including what you stated wrong) — the same two fixed colours in diagnosis and retest, every room.
 - **PWA, offline-first.** Installable, service-worker cached, a branded offline page, and work queued on the phone when the signal drops. Connectivity is judged **against our own platform, never the browser's `navigator.onLine`** — the app probes the server's `/health` (a real Postgres ping), so a "No connection" message is always literally true, and the signed work re-flushes the moment the platform answers again.
 - **Your textbook, kept as a book.** Save its TOC hierarchy to your account, choose chapters from the tree, and return later to import more. Imported chapters stay in your library; the original PDF remains on this device and is never uploaded.
+- **Password and optional social sign-in.** Use email/password or configure
+  Google, Facebook and GitHub OAuth; provider buttons appear only when both
+  server credentials are present.
 - **Ownership & isolation.** Every textbook, chapter, and session is scoped to its owner; no request ever lists all rows.
 - **Guardrails built in.** AI rate limiting, idempotent submissions, per-user AI budgets, typed environment variables with dev-safe placeholders.
 
@@ -60,7 +63,7 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 | Runtime & package manager | **Bun** | runs TS directly, fast installs, one tool for everything |
 | Frontend | **React 19** + **React Router 8** + **Tailwind v4** + shadcn-style UI | SSR + client, installable PWA, styled system matching the design brief |
 | Backend | **Express** (mounted with the web app as one production process) | one service, same origin, no CORS/cookie headaches |
-| Auth | **Better Auth** — email & password, sessions, rate limiting | batteries included; typed via the schema |
+| Auth | **Better Auth** — email & password, optional Google/Facebook/GitHub OAuth, sessions, rate limiting | batteries included; typed via the schema |
 | Database | **Neon** — serverless Postgres via **Drizzle ORM** | persistent, survives redeploys, pooled + direct connection strings |
 | AI | **Google Gemini** (one seam: `apps/server/src/ai/gemini.ts`) | concept extraction, gap diagnosis, lesson + retest generation |
 | Voice | **Voxide** (optional) | speech-to-text + text-to-speech; typed/browser-speech fallback |

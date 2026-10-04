@@ -99,11 +99,11 @@ guard redirects to `/login`. No data is deleted — just the current session.
 
 ---
 
-### 8.7 Signing in with Google or Facebook
+### 8.7 Signing in with Google, Facebook or GitHub
 
-Two ways in, not one. The password form above is the floor — it needs nothing
-configured and is the only path that works on a brand-new install. Social
-buttons appear **only** when the server reports that provider configured:
+Password sign-in is the baseline and needs no provider credentials. Google,
+Facebook and GitHub are optional ways in; each social button appears **only**
+when the server reports both credentials for that provider:
 
 ```mermaid
 flowchart LR
@@ -121,6 +121,14 @@ Auth provider list, so registering credentials makes a button appear with no
 frontend edit, and a half-configured provider (an id with no secret) is treated
 as absent rather than as a button that bounces a student to a provider error.
 
+**Why GitHub is offered.** Google rejects OAuth apps on some deployment
+domains that are not on the Public Suffix List, including the current
+EthioDeploy domain. GitHub OAuth does not impose that same domain restriction
+and can provide a working social-login path there. It requests `read:user` and
+`user:email`; configure both `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` on
+the API service. Its callback is
+`<BETTER_AUTH_URL>/api/auth/callback/github`.
+
 **Why Facebook is the important one here.** Meta's own figures put Facebook
 accounts in Ethiopia at 9.8M against 29.5M internet users nationwide — it is
 the account a student is most likely to already have, and it costs nothing to
@@ -130,14 +138,16 @@ offer. Two Facebook-specific details are handled in `providers.ts`:
   consent, both ordinary in this market. `mapProfileToUser` falls back to the
   profile id so the sign-in completes instead of failing.
 - Meta's Graph API exposes **no per-email verification flag**, so Facebook is
-  deliberately not gated on `requireEmailVerification`. Google *does* report it
-  and is the provider to gate the day email verification is switched on.
+  deliberately not gated on `requireEmailVerification`. Google reports
+  `email_verified`; do not assume the same verification signal or policy for
+  another provider without checking its profile mapping.
 
-`accountLinking` trusts both providers so a student who signs up with Facebook
-and later tries Google with the same address lands on the one account rather
-than a fresh one with their study history missing. `allowDifferentEmails` stays
-`false` so an unverified address can never be used to walk into an existing
-account.
+`accountLinking` trusts Google, Facebook and `email-password`; a student who
+signs up with Facebook and later uses Google with the same address lands on one
+account. GitHub is not currently in that trusted-provider list, so do not
+promise automatic linking between a GitHub login and an existing account.
+`allowDifferentEmails` stays `false` so a different address cannot be used to
+walk into an existing account.
 
 ### 8.8 Upgrading Better Auth
 
@@ -162,11 +172,11 @@ Three things hold that line, and all three are load-bearing:
 
 When a bump arrives, the procedure is: read the release notes for breaking
 changes → bump the pin → run `bun run test` → run `bun run check-types` and
-`bun run dev` → sign in with **password, Google, and Facebook** → only then
-merge. The social paths are the ones an upgrade is most likely to break
-silently, because they depend on provider-shaped profile data that no type
-check sees. Do not merge a bump that has only been proven to work by logging in
-with a password.
+`bun run dev` → sign in with **password and each configured social provider**
+→ only then merge. The social paths are the ones an upgrade is most likely to
+break silently, because they depend on provider-shaped profile data that no
+type check sees. Do not merge a bump that has only been proven to work by
+logging in with a password.
 
 ---
 
@@ -175,9 +185,9 @@ with a password.
 This is the operator's checklist. The mechanics are in §8; this is the order to
 do things in, and what each failure actually looks like when you get it wrong.
 
-### 9.1 The four things that must be true
+### 9.1 The things that must be true
 
-Auth "works in production" means all four of these, in this order. Each one
+Auth "works in production" means the first four of these, in this order. Each one
 depends on the one above it, so a failure at step *n* looks like a failure at
 step *n+1*.
 
@@ -199,11 +209,12 @@ Steps 1–4 are what makes **password** sign-in work. Step 5 is what makes a
 
 ### 9.2 Deriving the redirect URI
 
-Both providers use one callback, and it is derived — never typed by hand:
+Each provider callback is derived from `BETTER_AUTH_URL` — never typed by hand:
 
 ```
 <BETTER_AUTH_URL>/api/auth/callback/google
 <BETTER_AUTH_URL>/api/auth/callback/facebook
+<BETTER_AUTH_URL>/api/auth/callback/github
 ```
 
 In the recommended combined deployment (`RUNBOOK.md` §6) that is just your
@@ -212,6 +223,7 @@ site's own origin:
 ```
 https://kiftet.ethiodeploy.com/api/auth/callback/google
 https://kiftet.ethiodeploy.com/api/auth/callback/facebook
+https://kiftet.ethiodeploy.com/api/auth/callback/github
 ```
 
 Get this **exactly** right — no trailing slash, no `www` mismatch, no `http`
@@ -271,7 +283,17 @@ from the profile id, so the sign-in completes instead of failing. If you ever se
 a student land on a profile with an `@facebook.invalid` address, that is this
 path working as designed, not a bug.
 
-### 9.5 Setting it, and proving it took
+### 9.5 GitHub, step by step
+
+1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
+2. Set the application name and homepage URL to the public Kiftet site.
+3. Set **Authorization callback URL** to the `/callback/github` URI from §9.2.
+4. Create the app, then generate a client secret if one is not already shown.
+   Set the app's client ID and secret as `GITHUB_CLIENT_ID` and
+   `GITHUB_CLIENT_SECRET` on the **API service**.
+5. Redeploy and verify that `github` appears in `/api/auth-providers`.
+
+### 9.6 Setting it, and proving it took
 
 Add the credentials to the **API service's** environment (RUNBOOK §8.2), not the
 web build's, then redeploy. Verify in this order — each step isolates one
@@ -291,29 +313,33 @@ built the auth config, so it is the ground truth for "will a button appear":
 | Output | Meaning | Do this |
 |---|---|---|
 | `{"providers":[]}` | no pair is complete, or the env never reached the server | check for a typo; confirm you set it on the **API** service and **redeployed** |
-| `{"providers":["google"]}` | Google is live | sign in with Google (§9.6) |
-| `{"providers":["google","facebook"]}` | both live | sign in with both |
+| `{"providers":["google"]}` | Google is live | sign in with Google |
+| `{"providers":["google","facebook","github"]}` | all three are live | sign in with each configured provider |
+| `{"providers":["github"]}` | GitHub is live | sign in with GitHub (§9.5) |
 
 Then in the browser, on a **real phone or a private window** (not an incognito
 tab with a stale service worker):
 
 1. Sign-in page shows the button → the frontend half is done.
-2. Click it → you land on Google's (or Meta's) real consent screen, not a
+2. Click it → you land on the selected provider's real consent screen, not a
    Kiftet error. This is where a wrong redirect URI shows up.
 3. You return to `/dashboard`, signed in.
 4. Check the header shows your name and a real address (see §9.4 on
    `@facebook.invalid`).
-5. Sign out. Sign in **with a password**. Both paths must work — they share one
-   account, and a social-only deploy would hide a broken password flow.
+5. Sign out and verify **password sign-in** independently; enabling social
+   sign-in must not hide a broken password flow. Google and Facebook can link
+   to the same account under the trusted-provider rules above; do not assume
+   GitHub automatically links to an existing account.
 
-### 9.6 What each failure looks like
+### 9.7 What each failure looks like
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| No button at all | pair incomplete, or env not on the deployed service | `curl` §9.5 step 2; `bun run env:generate` locally after a `.env.schema` change |
+| No button at all | pair incomplete, or env not on the deployed service | `curl` §9.6 step 2; `bun run env:generate` locally after a `.env.schema` change |
 | Button → provider → Kiftet error page | redirect URI mismatch | §9.2, character by character |
 | "Access blocked" / "app isn't available" (Google) | consent screen still in **Testing** | §9.3 step 3 — publish it |
 | "This app isn't available right now" (Facebook) | app still in **Development** mode | §9.4 step 5 — switch to Live |
+| No GitHub button | GitHub credentials missing or set on the wrong service | set both GitHub credentials on the API service and redeploy |
 | Login loops / every POST 401s | `CORS_ORIGIN` wrong | it must be the web origin, slash-less |
 | Everyone silently signed out after a deploy | `BETTER_AUTH_URL` or `BETTER_AUTH_SECRET` changed | restore the previous value; there is no in-app recovery for this |
 | Every login 500s | `BETTER_AUTH_SECRET` missing or < 32 chars | §RUNBOOK 8.2 |
@@ -322,14 +348,14 @@ tab with a stale service worker):
 
 **On the second account.** Account linking trusts Google, Facebook and
 `email-password`, so signing up with Facebook and later using Google *with the
-same address* lands on the one account. But `allowDifferentEmails` is `false`,
-so a **different** address is a genuinely different account — that is the
-security property, not a bug. A student who signs up with a phone-only Facebook
-account gets an `@facebook.invalid` address (no real address to match on) and
-will not merge with a later password account. If that matters, the fix is real
-email delivery, not a linking change.
+same address* lands on the one account. GitHub is not in the trusted-provider
+list. `allowDifferentEmails` is `false`, so a **different** address cannot be
+used to walk into an existing account. A student who signs up with a phone-only
+Facebook account gets an `@facebook.invalid` address (no real address to match
+on) and will not merge with a later password account. If that matters, the fix
+is real email delivery, not a linking change.
 
-### 9.7 Two settings that are deliberately off
+### 9.8 Two settings that are deliberately off
 
 Both of these are the *same* decision, and it is not ours to make:
 
@@ -350,7 +376,7 @@ self-recover. In this audience that is a real gap, not a cosmetic one. Facebook
 is currently the practical answer for a locked-out student — which is a further
 reason §8.7 treats it as the button that matters most.
 
-### 9.8 Security notes for this configuration
+### 9.9 Security notes for this configuration
 
 - The `trustedOrigins` list is built by splitting `CORS_ORIGIN` on commas and
   stripping trailing slashes, exactly as the CORS layer and the auth middleware
@@ -358,8 +384,8 @@ reason §8.7 treats it as the button that matters most.
   string a multi-origin split deploy would pass the edge and then be refused by
   Better Auth's own origin check — a login that fails for no stated reason.
 - Facebook is deliberately **not** gated on `requireEmailVerification` (§8.7).
-  Google *does* report `email_verified`, so Google is the provider to gate the
-  day verification is switched on.
+  Google reports `email_verified`; verify the profile contract before applying
+  an email-verification gate to any other provider.
 - Rate limits are per-IP and deliberately generous (30 sign-ins/min) because a
   school behind one NAT hands the same public IP to a whole class. Do not lower
   these without reading the comment in `packages/auth/src/index.ts` first — a
