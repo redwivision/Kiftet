@@ -4,7 +4,7 @@ import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { cn } from "@kiftet/ui/lib/utils";
 import { useForm } from "@tanstack/react-form";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import z from "zod";
 import { apiUrl } from "@/lib/api";
@@ -111,6 +111,16 @@ export default function WaitlistForm() {
   // hydration, which is a mismatch warning on precisely the returning visitor.
   const [knownId, setKnownId] = useState<string | null>(null);
   useEffect(() => setKnownId(readStoredId()), []);
+
+  // An error that only changes colour is not an error to a screen reader, and
+  // one that stays off-screen is not an error to anyone on a phone. The notice
+  // is the only channel the form has for a failed submit, so it announces
+  // itself and takes focus — the student just pressed the button and is
+  // waiting to be told what happened.
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (notice) noticeRef.current?.focus();
+  }, [notice]);
   const promise = usePromise();
 
   const check = async () => {
@@ -284,7 +294,16 @@ export default function WaitlistForm() {
           </Button>
         </div>
 
-        {notice && <p className="text-rust text-sm">{notice}</p>}
+        {notice && (
+          <p
+            ref={noticeRef}
+            role="alert"
+            tabIndex={-1}
+            className="text-rust text-sm focus:outline-none"
+          >
+            {notice}
+          </p>
+        )}
       </div>
     );
   }
@@ -316,7 +335,11 @@ export default function WaitlistForm() {
               onChange={(e) => field.handleChange(e.target.value)}
             />
             {field.state.meta.errors.map((error) => (
-              <p key={error?.message} className="text-rust text-sm">
+              <p
+                key={error?.message}
+                role="alert"
+                className="text-rust text-sm"
+              >
                 {error?.message}
               </p>
             ))}
@@ -343,7 +366,11 @@ export default function WaitlistForm() {
               {t("waitlist-phone-hint")}
             </p>
             {field.state.meta.errors.map((error) => (
-              <p key={error?.message} className="text-rust text-sm">
+              <p
+                key={error?.message}
+                role="alert"
+                className="text-rust text-sm"
+              >
                 {error?.message ?? t("waitlist-invalid-phone")}
               </p>
             ))}

@@ -422,7 +422,7 @@ export const en = {
   "voice-agent-dashboard": "Take me back to the dashboard",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "Kiftet · spoken study review for Ethiopian students",
+  "hero-eyebrow": "Spoken study review for Ethiopian students",
   "diag-eyebrow": "What it actually sees",
   "diag-title": "Not a score. A list of exactly what to fix.",
   "diag-sub":
@@ -455,14 +455,11 @@ export const en = {
   "demo-card-c-4": "Ribosomes and protein synthesis",
   "demo-card-c-5": "How organelles stay in their compartments",
   "hero-gap": "Close the gap.",
-  "hero-87":
-    "87 in every 100 students fail the national exam. Trying harder isn't the answer — knowing which gaps are yours is.",
   "hero-sub":
     "Kiftet listens to what you remember out loud, finds the specific ideas that didn't stick, teaches only those in a short spoken lesson — then retests what stayed. Not another question bank. A diagnosis.",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
-  "no-account": "No account?",
-  "demo-jump": "Jump straight into the live demo",
+  "no-account": "Ready to use it for real?",
   "stat-87a":
     "of the {count} students who sat the 2026 national exam were still failed by the system — in the best result the country has recorded.",
   "stat-87b": "{schools} schools had zero students pass.",
@@ -1064,7 +1061,7 @@ export const am: Record<MessageKey, string> = {
   "voice-agent-dashboard": "ወደ ዳሽባርድ መልስኝ",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "ኪፍተት · ለኢትዮጵያ ተማሪዎች በድምጽ የሚደረግ የትምህርት ግምገማ",
+  "hero-eyebrow": "ለኢትዮጵያ ተማሪዎች በድምጽ የሚደረግ የትምህርት ግምገማ",
   "diag-eyebrow": "በእውነት የሚያየው",
   "diag-title": "ውጤት አይደለም። በትክክል የሚስተካከል ዝርዝር።",
   "diag-sub":
@@ -1095,14 +1092,11 @@ export const am: Record<MessageKey, string> = {
   "demo-card-c-4": "ሪቦሶሞችና የፕሮቴን ማስፈርጌት",
   "demo-card-c-5": "አካላቶች በምትሎቻቸው የሚቆዩበት መንገድ",
   "hero-gap": "ክፍተቱን ዝጋ።",
-  "hero-87":
-    "ከ100 ተማሪዎች 87ቱ በብሔራዊ ፈተና ይወድቃሉ። የበለጠ መጣር መልሱ አይደለም — የትኞቹ ክፍተቶች የአንተ እንደሆኑ ማወቅ ነው።",
   "hero-sub":
     "ኪፍተት ጮክ ብለህ የምታስታውሰውን ያዳምጣል፣ ያልተረጋገጡትን ሀሳቦች ያገኛል፣ እነዚያን ብቻ በአጭር የድምጽ ትምህርት ያስተምራል — ከዚያም የተረጋገጠውን እንደገና ይፈትናል። ሌላ የጥያቄ ባንክ አይደለም። ምርመራ ነው።",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
-  "no-account": "መለያ የለህም?",
-  "demo-jump": "ወደ የቀጥታ ማሳያው በቀጥታ ሂድ",
+  "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
   "stat-87a":
     "የ2026 ብሔራዊ ፈተናን ከተፈተኑት {count} ተማሪዎች ውስጥ አሁንም በስርዓቱ ወድቀዋል — አገሪቱ በመዘገበችው ምርጥ ውጤትም ቢሆን።",
   "stat-87b": "{schools} ትምህርት ቤቶች ውስጥ አንድም ተማሪ አላለፈም።",

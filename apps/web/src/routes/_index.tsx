@@ -126,10 +126,10 @@ export default function Home() {
           <h1 className="relative isolate space-y-3 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
             <span aria-hidden="true" className="halo" />
             <span className="block">
-              <Words text={t("hero-gap")} className="text-gold" />
+              <Words text="Kiftet" className="text-gold" />
             </span>
             <span className="block">
-              <Words text={t("hero-87")} offset={3} gap={30} />
+              <Words text={t("hero-gap")} offset={1} />
             </span>
           </h1>
 
@@ -144,15 +144,15 @@ export default function Home() {
             className="kft-rise flex flex-col gap-3 sm:flex-row sm:flex-wrap"
             style={{ "--kft-i": "400ms" } as CSSProperties}
           >
-            <Link
-              to="/dashboard"
+            <a
+              href="#demo"
               className={cn(
                 buttonVariants({ size: "lg" }),
                 "w-full font-medium sm:w-auto",
               )}
             >
-              {t("start-closing")}
-            </Link>
+              {t("demo-try")}
+            </a>
             <a
               href="#how"
               className={cn(
@@ -168,12 +168,12 @@ export default function Home() {
             style={{ "--kft-i": "480ms" } as CSSProperties}
           >
             {t("no-account")}{" "}
-            <a
-              href="#demo"
+            <Link
+              to="/dashboard"
               className="font-medium text-gold underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
             >
-              {t("demo-jump")}
-            </a>
+              {t("start-closing")}
+            </Link>
           </p>
         </div>
 
@@ -561,12 +561,15 @@ function DemoCard() {
       </div>
 
       <div className="border-border/60 border-t px-6 py-4 dark:border-white/10">
-        <Link
-          to="/dashboard"
-          className={cn(buttonVariants(), "w-full justify-center font-medium")}
+        <a
+          href="#demo"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "w-full justify-center font-medium",
+          )}
         >
           {t("see-your-chapter")}
-        </Link>
+        </a>
       </div>
     </div>
   );
@@ -931,7 +934,11 @@ function DemoButton({
             ? t("demo-start")
             : t("demo-try")}
       </Button>
-      {failure && <p className="text-rust text-xs">{failure}</p>}
+      {failure && (
+        <p role="alert" className="text-rust text-xs">
+          {failure}
+        </p>
+      )}
     </div>
   );
 }
