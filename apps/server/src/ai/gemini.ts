@@ -1,6 +1,11 @@
 import { GoogleGenAI } from "@google/genai";
-
 import { env } from "../env.server";
+import {
+  type AiOutcome,
+  admissionSnapshot,
+  admitAiCall,
+  isAiBusy,
+} from "./admission";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
@@ -598,6 +603,19 @@ function isRetryable(error: unknown): boolean {
   return status !== undefined && RETRYABLE_STATUS.has(status);
 }
 
+/**
+ * The provider declining a request *we* got wrong, as opposed to failing us.
+ *
+ * 400/401/403/404/422 mean our request was unacceptable — a malformed prompt,
+ * a bad image, an oversized payload. Retrying is pointless and, worse, counting
+ * it against the global breaker takes AI away from every other student because
+ * one chapter's prompt was malformed. 429 is deliberately excluded: that one is
+ * the provider under load, which is exactly what the breaker exists to see.
+ */
+function isCallerError(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 429;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -637,7 +655,11 @@ const aiTelemetry = {
 };
 
 export function aiTelemetrySnapshot() {
-  return { ...aiTelemetry };
+  // Admission is nested rather than flattened so "was the model bad, or did we
+  // refuse to ask?" stays a one-glance question: `sheds` non-zero with
+  // `attempts` flat means we shed on purpose, and `rateLimited` climbing with
+  // `admitted` climbing means the ceiling is genuinely too low.
+  return { ...aiTelemetry, admission: admissionSnapshot() };
 }
 
 /**
@@ -675,54 +697,81 @@ async function askJson(
   systemPrompt: string,
   userInput: string,
 ): Promise<string> {
+  // Admission happens ONCE per logical call, not per attempt: the retry ladder
+  // below is one student's request and must consume one unit of the shared
+  // allowance, not four. It sits above the loop so a shed fails fast with
+  // `AiBusyError` and never burns a single Gemini call.
+  const admission = await admitAiCall();
+  let outcome: AiOutcome = "provider-failure";
+
   const deadline = Date.now() + GEMINI_TOTAL_BUDGET_MS;
   let lastError: unknown;
 
   const order = buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS);
 
-  for (const [index, model] of order.entries()) {
-    const remaining = deadline - Date.now();
-    // Out of wall clock: a timeout, not a provider fault. Fall back rather
-    // than starting an attempt that cannot finish inside the client window.
-    if (remaining <= 0) {
-      lastError = new Error("Gemini retry budget exhausted");
-      break;
+  try {
+    for (const [index, model] of order.entries()) {
+      const remaining = deadline - Date.now();
+      // Out of wall clock: a timeout, not a provider fault. Fall back rather
+      // than starting an attempt that cannot finish inside the client window.
+      if (remaining <= 0) {
+        lastError = new Error("Gemini retry budget exhausted");
+        break;
+      }
+      aiTelemetry.attempts += 1;
+      try {
+        const response = await withTimeout(
+          genAI.models.generateContent({
+            model,
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
+              },
+            ],
+            config: { responseMimeType: "application/json", temperature: 0.4 },
+          }),
+          Math.min(GEMINI_TIMEOUT_MS, remaining),
+        );
+        aiTelemetry.lastModel = model;
+        outcome = "success";
+        return response.text ?? "";
+      } catch (error) {
+        lastError = error;
+        // Classify here rather than at the bottom: a 4xx is the provider
+        // declining a request we sent badly, and it must not be allowed to
+        // reach the global breaker. 429 is the exception — that one genuinely
+        // is the provider under load, and it is the failure mode this whole
+        // module exists for.
+        if (
+          statusOf(error) !== undefined &&
+          isCallerError(statusOf(error) as number)
+        )
+          outcome = "caller-error";
+        if (!isRetryable(error) || index === order.length - 1) break;
+        // Jitter matters here: many students hit the same per-project ceiling at
+        // the same moment, and fixed backoff would have them all retry in
+        // lockstep and re-trip the 429 immediately.
+        //
+        // No delay when the NEXT attempt uses a DIFFERENT model: a busy model
+        // is not a rate limit on us, so backing off would waste wall clock we
+        // do not have. Back off only when we are retrying the same model.
+        const sameModel = order[index + 1] === model;
+        const delay = sameModel
+          ? RETRY_BASE_DELAY_MS * 2 ** index + Math.random() * 250
+          : 0;
+        aiTelemetry.retries += 1;
+        if (delay)
+          await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
+      }
     }
-    aiTelemetry.attempts += 1;
-    try {
-      const response = await withTimeout(
-        genAI.models.generateContent({
-          model,
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
-            },
-          ],
-          config: { responseMimeType: "application/json", temperature: 0.4 },
-        }),
-        Math.min(GEMINI_TIMEOUT_MS, remaining),
-      );
-      aiTelemetry.lastModel = model;
-      return response.text ?? "";
-    } catch (error) {
-      lastError = error;
-      if (!isRetryable(error) || index === order.length - 1) break;
-      // Jitter matters here: many students hit the same per-project ceiling at
-      // the same moment, and fixed backoff would have them all retry in
-      // lockstep and re-trip the 429 immediately.
-      //
-      // No delay when the NEXT attempt uses a DIFFERENT model: a busy model
-      // is not a rate limit on us, so backing off would waste wall clock we
-      // do not have. Back off only when we are retrying the same model.
-      const sameModel = order[index + 1] === model;
-      const delay = sameModel
-        ? RETRY_BASE_DELAY_MS * 2 ** index + Math.random() * 250
-        : 0;
-      aiTelemetry.retries += 1;
-      if (delay)
-        await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
-    }
+  } finally {
+    // One decision, one place. `outcome` is the breaker's input and is set
+    // exactly once per call: success on the return above, caller-error or
+    // provider-failure on the break out of the retry loop. A thrown AiBusyError
+    // never reaches here having taken a slot, because admission throws before
+    // acquire.
+    admission.settle(outcome);
   }
 
   const status = statusOf(lastError);
@@ -996,6 +1045,16 @@ function malformed<T>(operation: string, fallback: () => T): T {
  *  and no counter, which meant a student being served the deterministic
  *  fallback — and us paying for nothing — looked identical to success. */
 function degraded<T>(operation: string, error: unknown, fallback: () => T): T {
+  // A shed is NOT a degradation, and this is the whole reason admission is
+  // checked before the fallback: if we refused to call the model because the
+  // shared allowance or the open circuit said no, then the deterministic
+  // fallback is not a lesser answer — it is a *false* one, indistinguishable
+  // from a real diagnosis to the student reading it. Re-throw so the route
+  // returns an honest "busy, try in N seconds" instead. Swallowing it here
+  // would re-introduce exactly the bug the 2026-09-27 entry describes, one
+  // layer above where it was fixed.
+  if (isAiBusy(error)) throw error;
+
   const status = statusOf(error);
   const reason =
     status === 429

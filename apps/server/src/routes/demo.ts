@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { chapter, conceptNode, textbook, user } from "@kiftet/db/schema";
 import { and, eq, like } from "drizzle-orm";
 import { type Request, Router } from "express";
+import { env } from "../env.server";
+import { createDemoGate } from "../lib/demo-gate";
 import { getDb } from "../services";
 
 // Demo visitors are anonymous. /demo/start fabricates a throwaway user +
@@ -68,32 +70,74 @@ const DEMO_CONCEPTS = [
   "The cell wall provides structural support and protection in plant cells",
 ];
 
-// /demo/start is the one endpoint an anonymous stranger may call, so it is
-// throttled by IP: at most a few fabricated demo identities per minute, per
-// address. Generous for real visitors, stingy to a script minting accounts.
+// /demo/start is the one endpoint an anonymous stranger may call, and it is the
+// only write path on the main pool that no paying student is waiting behind.
+// Two independent limits, because they defend against different attacks:
+//
+// 1. **Per IP**, to stop one script minting rooms.
+//
+// 2. **Global**, which is the one that actually matters here, and the reason to
+//    be explicit about it: a per-IP limit does *nothing* against a link shared
+//    into a Telegram channel. That is a thousand distinct addresses arriving at
+//    once, and each one takes its full personal allowance — so "5 per IP per
+//    minute" becomes five thousand seeds a minute, each four statements deep,
+//    all queued against the same five connections the study loop needs. Lowering
+//    the per-IP number would not have fixed that; it would only have made it
+//    arrive sooner. Only a process-wide budget bounds the thing we are actually
+//    afraid of.
+//
+// The global budget sheds rather than queues. Queueing is the failure that
+// hurts: a demo request waiting on the pool is a real student's session write
+// waiting behind it. Refusing instantly costs one visitor a retry; queueing
+// costs everyone their latency.
+//
+// Sized so a demo cannot crowd out study, and bounded so a launch week does not
+// quietly write half a million junk rows. See DEMO_STARTS_PER_MINUTE in
+// .env.schema to retune without a redeploy.
 const START_WINDOW_MS = 60_000;
-const START_MAX_PER_IP = 5;
-const startRegistry = new Map<string, number[]>();
+const START_MAX_PER_IP = 2;
 
-function allowStart(ip: string): boolean {
-  const now = Date.now();
-  const recent = (startRegistry.get(ip) ?? []).filter(
-    (time) => now - time < START_WINDOW_MS,
-  );
-  if (recent.length >= START_MAX_PER_IP) return false;
-  recent.push(now);
-  startRegistry.set(ip, recent);
-  return true;
-}
+const GLOBAL_STARTS_PER_MINUTE = Math.max(
+  1,
+  Math.floor(
+    typeof env.DEMO_STARTS_PER_MINUTE === "number" &&
+      Number.isFinite(env.DEMO_STARTS_PER_MINUTE)
+      ? env.DEMO_STARTS_PER_MINUTE
+      : 25,
+  ),
+);
+
+const gate = createDemoGate({
+  perIpPerMinute: START_MAX_PER_IP,
+  globalPerMinute: GLOBAL_STARTS_PER_MINUTE,
+  windowMs: START_WINDOW_MS,
+});
 
 const router = Router();
 
 router.post("/start", async (req, res) => {
   const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
-  if (!allowStart(ip)) {
+  const decision = gate.decide(ip);
+
+  if (decision === "per-ip") {
+    res.setHeader("Retry-After", String(gate.retryAfterSeconds(ip)));
     res.status(429).json({
       error:
         "Too many demo rooms from this connection. Wait a minute and try again.",
+    });
+    return;
+  }
+
+  if (decision === "global") {
+    // 503, not 429, and the copy says what it actually is. A visitor who hits
+    // this is not being rate-limited for anything they did — Kiftet is busy
+    // because a lot of people arrived at once. Telling them "too many requests
+    // from your connection" would be a lie about a limit they never hit, and
+    // would send them away instead of telling them to try again in a moment.
+    res.setHeader("Retry-After", String(gate.globalRetryAfterSeconds()));
+    res.status(503).json({
+      error:
+        "Kiftet is busy right now — a lot of people are trying the demo at once. Try again in a moment.",
     });
     return;
   }

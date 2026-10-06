@@ -1030,3 +1030,108 @@ student on a chapter pays.
    must still read as a quotation from the book, not as a translated lesson.
 5. Turn off the network mid-lesson. The guide must still render from cache and
    say so, rather than showing an empty page.
+
+---
+
+## Agent handoff prompt — waitlist funnel + core flows
+
+Copy everything inside the block below into a fresh agent. It is self-contained
+on purpose: the agent starts with no memory of this work.
+
+```text
+You are testing the Kiftet waitlist funnel at /Users/Learning/Desktop/kiftet.
+Bun + Turbo monorepo: React Router 8 SSR (apps/web), Express 5 (apps/server),
+Drizzle + Neon, Gemini. Run `bun run check-types`, `bun run lint`,
+`bun test --preload ./test-setup.ts`, `bun run build`.
+
+## CRITICAL SAFETY — read first
+The server AUTO-APPLIES DATABASE MIGRATIONS ON BOOT (apps/server/src/index.ts:30).
+Booting it against the configured DATABASE_URL mutates PRODUCTION Neon.
+- Test ONLY against a local Postgres or a dedicated test/neon branch database.
+- NEVER boot or migrate the production URL. Set DATABASE_URL to your test DB first.
+- Do NOT deploy. Do NOT apply migrations to production.
+- Do not commit anything.
+
+## The product invariant you are verifying
+A signup earns 1 month of premium at launch. Eligibility is DERIVED, never a
+stored flag:
+  eligibleForPremium = activatedAt !== null && testimonialAt !== null
+  nextStep = ready | write-testimonial | join-channel   (exactly one outstanding)
+The reward is a promise to real students. Treat any drift between what the UI
+says and what the server records as a serious finding, not a cosmetic one.
+The server is the single source of truth for the offer: GET /api/waitlist/promise
+must agree with REWARD_PREMIUM_MONTHS in apps/server/src/routes/waitlist.ts AND
+with what the form renders. The form must never hardcode the number.
+
+## Tier 1 — funnel invariants (test these hardest)
+1. Signup creates exactly one row. Re-submitting the same phone UPDATES rather
+   than duplicating. Which field wins on conflict?
+2. Two concurrent submissions with the same phone: does the unique constraint
+   hold with exactly one row? Race this deliberately.
+3. Honeypot filled -> HTTP 200, and NO row created. Silent, no error copy.
+4. consent=false -> 400, no row.
+5. Cap reached (WAITLIST_MAX_SIGNUPS=1) -> 200 with {closed:true}, no row.
+6. POST body > 4kb to /api/waitlist -> 413. (Regression: the 4kb parser was
+   previously dead code because it was mounted after the global 256kb parser.)
+7. Per-IP limit -> 429 with Retry-After. Then verify a shared-NAT IP can still
+   complete 60 signups/hour — a lecture hall behind one CGNAT address must not
+   be locked out. That is the reason the limit is 60.
+8. Phone normalization collapses ALL of these to one value: 0911234567,
+   +251911234567, 251911234567, 00251911234567, "0911 234 567", "0911-234-567".
+9. Eligibility transitions join-channel -> write-testimonial -> ready, and never
+   leaves zero or two things outstanding.
+10. Telegram webhook:
+    - /start with a valid token binds the chat
+    - same chat re-sending /start is idempotent
+    - /start with a token ALREADY BOUND TO A DIFFERENT chat must be REFUSED
+      (regression: leaking a link used to hand the reward to whoever opened it)
+    - a plain text reply stores the testimonial
+    - a second reply does NOT overwrite the first
+    - missing/invalid secret -> 403; unset secret -> 503
+    - non-text update -> 200
+    - when Telegram sendMessage hangs, the webhook must still answer well under
+      10s (regression: AbortSignal.timeout was added; without it Telegram
+      retries a slow webhook for ~24h)
+11. /api/waitlist/promise must agree with REWARD_PREMIUM_MONTHS in
+    apps/server/src/routes/waitlist.ts and with what the form renders.
+
+## Tier 2 — client/contract drift
+12. Every message key in apps/web/src/lib/messages.ts has an Amharic value. Add
+    an automated test that enforces this so it cannot rot silently.
+13. The consent checkbox actually gates submit; /privacy is linked from the
+    consent label and renders in BOTH languages under SSR.
+14. No hydration mismatch on /: localStorage must not be read during render.
+    Verify the "Check my place" button is absent from the SSR HTML.
+15. Form behaviour on 429, 500, network failure, and closed: does the copy stay
+    honest, and does resubmitting risk a double signup?
+
+## Tier 3 — core flows (shared middleware changed; check for regressions)
+16. Demo start still seeds a usable session; /api/study still works normally.
+17. Demo limits (apps/server/src/lib/demo-gate.ts): a per-IP refusal must NOT
+    spend the global budget (otherwise one abuser exhausts the budget real
+    visitors wait on). A flood of DISTINCT IPs must be refused globally. The
+    two cases must report differently — 429 per-IP vs 503 global — and the 503
+    copy must not blame the visitor. Retry-After must never be 0.
+18. AI shed -> 503 + Retry-After. Confirm the CLIENT shows an honest busy
+    message rather than a deterministic fallback presented as a real answer.
+    This distinction is the whole point of the change.
+19. Request logger under a burst: does not flood, AND the suppressed count is
+    actually reported. (Regression: the old code zeroed the counter into a
+    callback it did not own, so the summary was unreachable.)
+20. Rolling window still enforces the per-owner study limit and stays bounded
+    under many distinct keys.
+21. Both DB pools drain on shutdown.
+
+## Known NOT implemented — report, do not build
+Channel membership verification (needs Telegram getChatMember + bot admin);
+premium entitlement for authenticated users; payment; observability/Sentry;
+launch-wave invitations.
+
+## Report back
+- Findings grouped by severity, each with: what you expected, what happened,
+  repro steps, and file:line.
+- Explicitly list which Tier 1-3 cases you actually exercised vs. could not, and
+  why. A gap you name is useful; a gap you paper over is not.
+- Note any test that passes for the wrong reason.
+Do not fix product bugs — report them. Fix only mistakes in your own test code.
+```

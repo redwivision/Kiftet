@@ -24,11 +24,17 @@ import {
   type MasteryMap,
   triageConcepts,
 } from "../ai/gemini";
+import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
 
 const router = Router();
-const aiWindows = new Map<string, number[]>();
+
+// Bounded per-owner AI windows. The cap is deliberately well above any real
+// student count: at this ceiling a burst of distinct owners is the thing that
+// would otherwise pin memory, and dropping the coldest key under that burst is
+// cheaper than an OOM on the loop itself.
+const aiWindows = createRollingWindow(60_000, 50_000);
 
 // Our per-user allowance is deliberately set BELOW the provider's per-project
 // ceiling. Gemini's free tier is per *project* (~10 req/min, ~1-1.5k req/day),
@@ -50,23 +56,21 @@ function isDemo(req: Request): boolean {
 function aiBudgetFor(req: Request) {
   const owner = ownerId(req);
   const now = Date.now();
-  const recent = (aiWindows.get(owner) ?? []).filter(
-    (time) => now - time < 60_000,
-  );
+  const callsThisMinute = aiWindows.count(owner);
   const limitPerMinute = isDemo(req)
     ? AI_REQUESTS_PER_MINUTE.demo
     : AI_REQUESTS_PER_MINUTE.signedIn;
-  const remaining = Math.max(0, limitPerMinute - recent.length);
+  const remaining = Math.max(0, limitPerMinute - callsThisMinute);
   // The window is a rolling 60s filter, not a bucket that empties on the hour,
   // so "when does it restart" has a real answer: the oldest call in the window
   // ages out 60s after it happened. Only meaningful when the student is
   // actually blocked — that's the moment they ask.
-  const oldest = recent.at(0) ?? null;
+  const oldest = aiWindows.oldestHitAt(owner);
   const resetAt = oldest === null ? null : oldest + 60_000;
   return {
     demo: isDemo(req),
     limitPerMinute,
-    callsThisMinute: recent.length,
+    callsThisMinute,
     remaining,
     windowSeconds: 60,
     resetAt,
@@ -107,16 +111,12 @@ async function dailyBookUsageFor(req: Request) {
 }
 
 function allowAiRequest(req: Request): boolean {
-  const owner = ownerId(req);
   const budget = aiBudgetFor(req);
   if (budget.remaining <= 0) return false;
-  const now = Date.now();
-  const recent = (aiWindows.get(owner) ?? []).filter(
-    (time) => now - time < 60_000,
-  );
-  recent.push(now);
-  aiWindows.set(owner, recent);
-  return true;
+  // `hit` records the call and re-checks the limit, so the read above is only
+  // there to keep the refusal message honest — the two cannot disagree because
+  // both read the same window.
+  return aiWindows.hit(ownerId(req), budget.limitPerMinute);
 }
 
 class DailyBookLimitError extends Error {

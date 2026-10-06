@@ -8,7 +8,9 @@
     "compile": "bun build --compile --no-compile-autoload-dotenv --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "dev": "bun run --hot src/index.ts",
     "start": "node dist/index.mjs",
-    "env:generate": "varlock codegen"
+    "env:generate": "varlock codegen",
+    "telegram:webhook": "bun scripts/register-webhook.ts",
+    "telegram:webhook:check": "bun scripts/register-webhook.ts --check"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",

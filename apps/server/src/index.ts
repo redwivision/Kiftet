@@ -15,10 +15,13 @@ import {
   errorMiddleware,
   installProcessGuards,
 } from "./error-handler";
+import { requestLogger } from "./lib/http-log";
 import authProvidersRouter from "./routes/auth-providers";
 import demoRouter from "./routes/demo";
 import studyRouter from "./routes/study";
 import syllabusRouter from "./routes/syllabus";
+import telegramRouter from "./routes/telegram";
+import waitlistRouter from "./routes/waitlist";
 import { auth, getDb } from "./services";
 
 logEnvProbe();
@@ -40,20 +43,14 @@ try {
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";
 
-// Request log: every hit (method, path, status, ms) goes to stderr so the
-// platform's health-check probe is visible in the boot log — if the platform
+// Request log: interesting hits (slow, or 4xx/5xx) always go to stderr, and
+// ordinary successful ones are sampled under a hard lines-per-second ceiling.
+// Mounted first so it also wraps the health handlers below — if the platform
 // pings a path and gets anything but 200, the log shows exactly which one and
-// the code that answered it. This is how we see what the paas is probing.
-// Mounted first so it also wraps the health handlers below.
-app.use((req, res, next) => {
-  const start = performance.now();
-  res.on("finish", () => {
-    console.error(
-      `[http] ${req.method} ${req.originalUrl} ${res.statusCode} ${Math.round(performance.now() - start)}ms`,
-    );
-  });
-  next();
-});
+// the code that answered it. The ceiling exists because a waitlist link shared
+// into a Telegram channel is enough traffic to make the logging the outage; see
+// lib/http-log.ts.
+app.use(requestLogger());
 
 // Health-check tolerance: platforms ping different readiness paths, and a 404
 // on an unknown probe path reads as a failed check even when the app is fine.
@@ -100,6 +97,24 @@ app.get("/api/_envdirect", (_req, res) => {
     res.json({ err: String(e) });
   }
 });
+
+// The launch waitlist. Before the auth gate — an anonymous stranger is the
+// entire audience — and mounted ahead of the study routes so a Gemini retry
+// storm in the study loop cannot delay a signup.
+//
+// Mounted *before* the global json() parser deliberately. body-parser marks a
+// body as parsed and skips any later parser for the same request, so a 4kb cap
+// registered after a 256kb one is a comment rather than a limit, and the
+// endpoint an anonymous stranger can hammer is the one that ends up with the
+// generous bound. A name and a phone number do not need 256kb.
+app.use("/api/waitlist", express.json({ limit: "4kb" }), waitlistRouter);
+
+// The Telegram webhook. Ahead of the auth gate and of every limiter, because it
+// is authenticated by its own secret header, Telegram retries a slow response
+// for hours, and nothing in front of it should be able to make it answer
+// non-200. Same reasoning as the waitlist about parser order; a Telegram update
+// carries a chat id and some text, so 16kb is already generous.
+app.use("/api/telegram", express.json({ limit: "16kb" }), telegramRouter);
 
 app.use(express.json({ limit: "256kb" }));
 

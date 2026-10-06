@@ -83,14 +83,20 @@ function findMigrationsDir(): string {
 // database (scale-to-zero) or a dead network from hanging a request forever —
 // the pool gives up on a slow connect/query instead of blocking the worker.
 // This stays synchronous to build — no I/O happens until a query runs.
-export function createDb(env: DatabaseConfig) {
+/** `max` is the client-side ceiling on concurrent queries. Neon caps
+ *  connections per endpoint, which is why it is small — but it also means the
+ *  five slots are a *shared* resource: an in-flight AI request and a waitlist
+ *  signup compete for the same five. `max` is exposed so a critical write path
+ *  can be given its own pool rather than queueing behind someone else's read.
+ */
+export function createDb(env: DatabaseConfig, options: { max?: number } = {}) {
   const pool = new pg.Pool({
     connectionString: requireDbUrl(
       env.DATABASE_URL,
       "DATABASE_URL",
       env.NODE_ENV ?? "development",
     ),
-    max: 5,
+    max: options.max ?? 5,
     ssl: sslFor(env.DATABASE_URL),
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,

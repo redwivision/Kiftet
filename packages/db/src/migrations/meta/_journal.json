@@ -50,6 +50,20 @@
       "when": 1790799285550,
       "tag": "0006_long_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791212481261,
+      "tag": "0007_freezing_tiger_shark",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791226943017,
+      "tag": "0008_slimy_ego",
+      "breakpoints": true
     }
   ]
 }

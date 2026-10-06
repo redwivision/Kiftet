@@ -538,6 +538,42 @@ export const en = {
   recalled: "recalled",
   "see-your-chapter": "See it on your own chapter",
 
+  // ── Launch waitlist ────────────────────────────────────────
+  // The reward is stated up front, with the two things a person has to do
+  // spelled out. Burying "tell us what you found" in a later step is how a
+  // promotion turns into people feeling trapped after the fact.
+  "waitlist-chip": "Launch waitlist",
+  "waitlist-title": "Be first in when Kiftet launches",
+  "waitlist-text":
+    "Leave your number and we'll tell you the moment Kiftet goes live. Nothing else — no other mail.",
+  "waitlist-reward":
+    "Join our Telegram channel and send us one line about what you found, and you get {n} month of premium on launch day.",
+  "waitlist-name": "Your name",
+  "waitlist-phone": "Mobile number",
+  "waitlist-phone-hint": "For example 0911 234 567",
+  "waitlist-consent":
+    "Kiftet may store this number to contact me when it launches. I can ask for it to be deleted at any time.",
+  "waitlist-cta": "Join the waitlist",
+  "waitlist-joining": "Saving your place…",
+  "waitlist-joined": "You're on the list",
+  "waitlist-wave": "Wave {wave} · you're in",
+  "waitlist-closed":
+    "The waitlist is full right now. Join the channel and we'll tell you when it reopens.",
+  "waitlist-network":
+    "We couldn't reach the server. Check your connection and try again — your number won't be counted twice.",
+  "waitlist-invalid-phone": "Enter a mobile number, like 0911 234 567.",
+  "waitlist-open-telegram": "Connect Telegram",
+  "waitlist-open-channel": "Open the channel",
+  "waitlist-step-channel": "1. Join our Telegram channel",
+  "waitlist-step-verify": "2. Send /joined in the channel",
+  "waitlist-step-testimonial": "3. Send us one line",
+  "waitlist-verify-hint":
+    "We confirm the join from Telegram, so send /joined in the channel once you're in — then this ticks itself.",
+  "waitlist-step-done":
+    "All three done — your premium month is locked in for launch day.",
+  "waitlist-check": "Check my place",
+  "waitlist-privacy": "How we use your number",
+
   // ── Coverage view (the flagship gap visualization) ───────────
   "cov-checked": "of the concepts we checked came out solid",
   "cov-solid": "solid",
@@ -1137,6 +1173,37 @@ export const am: Record<MessageKey, string> = {
   "demo-try": "የቀጥታ ማሳያ ሞክር",
   recalled: "አስታውሷል",
   "see-your-chapter": "በራስህ ምዕራፍ ላይ ተመልከት",
+
+  // ── Launch waitlist ────────────────────────────────────────
+  "waitlist-chip": "የመስተጀት ዝርዝር",
+  "waitlist-title": "ኪፍተት ሲጀምር ቀድሞ ይንሱ",
+  "waitlist-text":
+    "ስልክህን እንውስለን — ኪፍተት የተጀመረ ቁስብ ብቻ እናሳውቅለን። ከዚያ ሌላ መልዕክት የለም።",
+  "waitlist-reward":
+    "የቴሌግራም ቻናላችን ተቀልበህ የሳንስኝህ ውጤት በአንድ ወረፍ ላንተን፣ በመስተጀት ቀን አንድ ወር ክፍል ጥሩ ያገኛህ።",
+  "waitlist-name": "ስምህ",
+  "waitlist-phone": "የሞባይል ቁጥር",
+  "waitlist-phone-hint": "ለምሳሌ 0911 234 567",
+  "waitlist-consent":
+    "ኪፍተት ሲጀምር ስያኝ በዚህ ቁጥር እንያለቅድ ይችላል። በየጊዜም ማጥፋት እንደምችል እችላለሁ።",
+  "waitlist-cta": "ወደ ዝርዝሩ ግባ",
+  "waitlist-joining": "ቦታህን በመቀመጥ ላይ…",
+  "waitlist-joined": "በዝርዝሩ ላይ አለህ",
+  "waitlist-wave": "ዙር {wave} · ውስጥ ነህ",
+  "waitlist-closed": "ዝርዝሩ አሁን ሙሉ ነው። ቻናችን ተቀልበህ ማበሃል ካለው እናሳውቅለን።",
+  "waitlist-network":
+    "አገልግሎቱን መድረስ አልቻልንም። ግንኙነትህን አረጋግጥና እንደገና ሞክር — ቁጥርህ ሁለት ጊዜ አይቆጠርም።",
+  "waitlist-invalid-phone": "የሞባይል ቁጥር አለህ፣ ለምሳሌ 0911 234 567።",
+  "waitlist-open-telegram": "ቴሌግራም አገናኝ",
+  "waitlist-open-channel": "ቻናውን ክፈት",
+  "waitlist-step-channel": "1. የቴሌግራም ቻናላችን ተቀልበህ",
+  "waitlist-step-verify": "2. በቻናላችን ውስጥ /joined ላክ",
+  "waitlist-step-testimonial": "3. አንድ ወረፍ ላንተንኝ",
+  "waitlist-verify-hint":
+    "ትክክለኛውን መግባት ከቴሌግራም እንረጋግጣለን፤ ስለዚህ በቻናላችን ውስጥ /joined ሲልክ ይህ ራሱን ይስተራል።",
+  "waitlist-step-done": "ሁሉም ተጠናቋል — በመስተጀት ቀን የክፍል ወርህ ተወርዷል።",
+  "waitlist-check": "ቦታህን አረጋግጥ",
+  "waitlist-privacy": "ቁጥርህን እንዴት እንጠቀማለን",
 
   // ── Coverage view (the flagship gap visualization) ───────────
   "cov-checked": "ከምርመራቸው ሃሳቦች የተረጋገጡት በዕጉም",

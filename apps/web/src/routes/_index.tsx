@@ -18,6 +18,7 @@ import { CoverageView } from "@/components/gap-list";
 import { useLanguage } from "@/components/language-provider";
 import { ConceptRing } from "@/components/mastery-ring";
 import type { MasteryLevel } from "@/components/study-provider";
+import WaitlistForm from "@/components/waitlist-form";
 import { apiError } from "@/lib/api";
 import { setDemoUser, startDemo } from "@/lib/demo";
 import { type ConceptMeta, weightedMastery } from "@/lib/mastery";
@@ -865,6 +866,24 @@ function DemoSection() {
             {t("demo-foot")}
           </p>,
         )}
+      </div>
+
+      {/* The waitlist sits directly under the demo, not at the footer. Someone
+          who just felt the loop work has already decided they want it; making
+          them scroll past testimonials to find the sign-up is how the sign-up
+          goes unfilled. */}
+      <div className="relative mx-auto mt-14 max-w-md border-border/60 border-t pt-12">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold uppercase tracking-wide">
+            {t("waitlist-chip")}
+          </span>
+          <h3 className="font-display font-semibold text-2xl leading-[1.15] tracking-[-0.02em] sm:text-3xl">
+            {t("waitlist-title")}
+          </h3>
+        </div>
+        <div className="mt-8 text-left">
+          <WaitlistForm />
+        </div>
       </div>
     </section>
   );

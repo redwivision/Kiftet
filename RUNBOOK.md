@@ -360,6 +360,104 @@ Run in order; expected result in parentheses.
 > See the failure table in
 > [`docs/howItWorks/auth.md`](docs/howItWorks/auth.md) §9.7.
 
+10. **Waitlist + Telegram funnel** — only once the env in §8.2 has
+    `TELEGRAM_*` values. See §9.1; it has its own preflight.
+
+### 9.1 The waitlist / Telegram reward funnel
+
+The one flow where a *green* status can hide a broken business. The webhook
+health check passes, the bot welcomes everyone, the status page looks right —
+and nobody is actually eligible for the reward they were promised.
+
+**How membership is established, and why it is not `getChatMember`.**
+
+The obvious API for this is `getChatMember`. It does not work on this group. It
+returns `Bad Request: invalid user_id specified` for *every* member, including
+the group's creator, while `getChatMemberCount` answers fine. Verified against a
+known member; it is not an admin-rights problem, and re-running the check does
+not change it. A checker built on it would report a perfectly correct bot as
+broken — or, worse, quietly answer "not a member" for everyone.
+
+So membership comes from two things Telegram already sends:
+
+| Source | Covers |
+| --- | --- |
+| `chat_member` join event | The normal order: press Start, then join |
+| `/joined@KiftetBot` in the group | Joined *before* pressing Start, or any missed event |
+
+The join event is why `allowed_updates` must include `chat_member`. It is also
+why the bot must be an **admin**: join events are delivered to admins only.
+
+**Preflight (read-only; safe to run any time):**
+
+```bash
+bun run --cwd apps/server telegram:webhook:check -- --url=https://kiftet.ethiodeploy.com
+```
+
+Exit code is `0` only if every check passed.
+
+| Check | Fails when | Fix |
+| --- | --- | --- |
+| Token | BotFather token wrong or revoked | Regenerate via `/token` |
+| Channel | `TELEGRAM_CHANNEL_URL` is not a public `t.me/<Name>` link | Use the public link, not `t.me/+…` |
+| Admin | `@yourbot` is not in `getChatAdministrators` | Add it to the group as admin |
+| Webhook | Not registered, or points elsewhere | `telegram:webhook` with the same `--url` |
+
+> **Private invite links cannot work.** `https://t.me/+AbCd…` and `/joinchat/…`
+> carry no username, so there is nothing to match a join against. Set
+> `TELEGRAM_CHANNEL_URL` to the group's public link, and
+> `TELEGRAM_CHANNEL_ID` to its numeric `-100…` id (from `getChat`) — the id
+> keeps working if the group is ever switched to private.
+
+**Register the webhook — only after the code is actually deployed:**
+
+```bash
+bun run --cwd apps/server telegram:webhook -- --url=https://kiftet.ethiodeploy.com
+```
+
+`--url` is not optional in practice. Without it the script uses
+`BETTER_AUTH_URL`, which in a developer's `.env` is legitimately
+`http://localhost:3000`, and Telegram **accepts** that webhook — reporting
+success and then spending ~24 hours delivering every update to a machine that is
+switched off. The script warns loudly when the origin is local.
+
+> **Do not register the webhook until the deployed service actually serves
+> `/api/telegram/hook`.** If it does not, Telegram receives a non-2xx response
+> and retries the same update for 24 hours. Probe it first:
+> ```bash
+> curl -i -X POST https://kiftet.ethiodeploy.com/api/telegram/hook \
+>   -H 'content-type: application/json' -d '{}'
+> ```
+> A `403` or `503` JSON means the route exists and is checking its secret.
+> A `401 {"error":"You must be signed in."}` means the deployed build predates
+> this code — deploy before registering.
+
+Re-run `--check` afterwards to confirm `url` matches and `last_error_message`
+is empty.
+
+**Manual walk-through — on a real phone, every time.** This is the only test
+that proves the funnel; automated checks cannot.
+
+1. Live site → scroll to the waitlist form → submit your real number → tick
+   consent. Expect "Wave 1 · you're in" with three steps.
+2. **Connect Telegram** → bot opens → **Start**. Expect a welcome reply.
+   Log: `[telegram] activation … channelVerified=false`.
+3. Join the group. This fires a `chat_member` event.
+4. **Check my place** → step 2 should tick itself. Log: `channel join … status=member`.
+   If it does not tick, you joined before pressing Start (or the webhook is not
+   registered) — send `/joined` in the group as in step 6.
+5. Reply to the bot with one line of feedback. If the join is not yet confirmed,
+   the bot says so explicitly instead of promising a reward it cannot honour.
+6. In the group, send `/joined@<bot>`. The bot replies **privately**, never in
+   the group. Log: `/joined … known=1`.
+7. **Check my place** → all three steps struck through, premium month locked in.
+8. Reload the page. Status survives, because the id lives in `localStorage`.
+
+A join **never** clears an already-recorded `channelVerifiedAt`. Leaving the
+group is logged (`channel status … status=left`) but does not revoke: punishing
+a student who accidentally left, or who was muted by Telegram, is worse than the
+gaming it prevents at this scale.
+
 ---
 
 ## 10. Rollback and backups
