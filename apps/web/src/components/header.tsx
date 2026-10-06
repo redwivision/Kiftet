@@ -1,6 +1,8 @@
-import { BookOpen, House } from "lucide-react";
+import { buttonVariants } from "@kiftet/ui/components/button";
+import { cn } from "@kiftet/ui/lib/utils";
+import { BookOpen, House, Sparkles } from "lucide-react";
 import type { ComponentType } from "react";
-import { NavLink } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 
 import { BrandMark } from "./brand-mark";
 import { useLanguage } from "./language-provider";
@@ -46,6 +48,45 @@ const NAV = [
   labelKey: string;
   Icon: ComponentType<{ className?: string }>;
 }[];
+
+/**
+ * The one control here with an end date.
+ *
+ * It is the only solid pill in a header of outlines and text, and it keeps its
+ * ring at every width, because the waitlist is the offer that closes while the
+ * rest of the navigation does not.
+ *
+ * The label is dropped below `sm`, where two text buttons do not fit beside a
+ * brand and two switchers — that row overflowed once and the controls landed
+ * on top of the nav links. `aria-label` keeps the meaning when the words go.
+ */
+function WaitlistCta() {
+  const { t } = useLanguage();
+  const location = useLocation();
+
+  return (
+    <Link
+      to="/#waitlist"
+      aria-label={t("waitlist-cta")}
+      onClick={(event) => {
+        // A <Link> to the location already open does nothing, so on the landing
+        // page the tap has to do the scrolling itself.
+        if (location.pathname !== "/") return;
+        const target = document.getElementById("waitlist");
+        if (!target) return;
+        event.preventDefault();
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }}
+      className={cn(
+        buttonVariants({ variant: "default" }),
+        "h-10 w-10 shrink-0 p-0 ring-1 ring-gold/40 sm:h-9 sm:w-auto sm:gap-1.5 sm:px-4 sm:font-semibold sm:text-sm",
+      )}
+    >
+      <Sparkles className="size-4" aria-hidden="true" />
+      <span className="hidden sm:inline">{t("waitlist-cta")}</span>
+    </Link>
+  );
+}
 
 export default function Header() {
   const { t } = useLanguage();
@@ -94,6 +135,7 @@ export default function Header() {
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <LanguageSwitcher />
           <ThemeSwitcher />
+          <WaitlistCta />
           <UserMenu />
         </div>
       </div>

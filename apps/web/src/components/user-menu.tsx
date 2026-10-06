@@ -34,10 +34,30 @@ export default function UserMenu() {
     // render={...} rather than wrapping the Button in a <Link>: nesting a
     // <button> inside an <a> is invalid and leaves two tab stops for one
     // action. This hands the link to the button so it renders as one control.
+    //
+    // Two of them because the header has room for exactly one text button below
+    // `sm`, and the waitlist is the offer that can expire — so Sign In yields
+    // its label for the width while `aria-label` keeps the meaning.
     return (
-      <Button variant="outline" size="sm" render={<Link to="/login" />}>
-        {t("sign-in")}
-      </Button>
+      <>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label={t("sign-in")}
+          className="sm:hidden"
+          render={<Link to="/login" />}
+        >
+          <User />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden sm:inline-flex"
+          render={<Link to="/login" />}
+        >
+          {t("sign-in")}
+        </Button>
+      </>
     );
   }
 

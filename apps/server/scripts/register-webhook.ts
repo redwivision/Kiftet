@@ -98,12 +98,28 @@ async function api(
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-  return (await res.json()) as {
-    ok: boolean;
-    result?: unknown;
-    description?: string;
-  };
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    return (await res.json()) as {
+      ok: boolean;
+      result?: unknown;
+      description?: string;
+    };
+  } catch (error) {
+    // An uncaught AbortError makes Bun print every DOM error constant it knows
+    // — about thirty lines, none of which is the answer. A slow reply from
+    // Telegram is a network condition to retry, not a crash to read a stack
+    // for, and this script is run by someone standing at a launch, not by a
+    // debugger.
+    const name = error instanceof Error ? error.name : "";
+    const detail =
+      name === "TimeoutError" || name === "AbortError"
+        ? `api.telegram.org did not answer within ${TIMEOUT_MS / 1000}s`
+        : `could not reach api.telegram.org — ${String(error)}`;
+    bad(`${method}: ${detail}`);
+    bad("  Transient network, not a bot problem — run this again.");
+    process.exit(1);
+  }
 }
 
 const token = await loadEnv("TELEGRAM_BOT_TOKEN");

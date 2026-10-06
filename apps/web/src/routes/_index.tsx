@@ -875,7 +875,10 @@ function DemoSection() {
           who just felt the loop work has already decided they want it; making
           them scroll past testimonials to find the sign-up is how the sign-up
           goes unfilled. */}
-      <div className="relative mx-auto mt-14 max-w-md border-border/60 border-t pt-12">
+      <div
+        id="waitlist"
+        className="relative mx-auto mt-14 max-w-md scroll-mt-24 border-border/60 border-t pt-12"
+      >
         <div className="flex flex-col items-center gap-4 text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold uppercase tracking-wide">
             {t("waitlist-chip")}
