@@ -75,7 +75,7 @@ const COPY = {
       "You're on the Kiftet waitlist. Welcome.",
       "",
       "To unlock your month of premium at launch, two things:",
-      "1. Join our channel for the launch announcement — tap the pinned link.",
+      "1. Join our channel for the launch announcement — {channel}",
       "2. Send us a short line about what Kiftet showed you.",
       "",
       "Reply to this message with your line whenever you're ready.",
@@ -99,7 +99,7 @@ const COPY = {
       "",
       "We'll read it before anything is published, and we'll ask before using your name.",
       "",
-      "One thing left: join the channel, then send /joined there so we can confirm it.",
+      "One thing left: join the channel — {channel} — then send /joined there so we can confirm it.",
       "Once we have that, your month of premium is unlocked for launch day.",
     ].join("\n"),
     alreadyReceived:
@@ -125,7 +125,7 @@ const COPY = {
       "በክፍተት መጠበቅ ወረላጋ ላይ አለህ። እንኳን በደህና መጡ።",
       "",
       "በመንረጃ ደረጃ የሚከፈልህበት የአንድ ወር ክፍያ ለማሳየት ሁለት ነገሮች አለህ፦",
-      "1. የመንረጃ ዝርዝርን ለመቀረፍ ያንን ወደ ቻናላችን ተመለስ።",
+      "1. የመንረጃ ዝርዝርን ለመቀረፍ ያንን ወደ ቻናላችን ተመለስ። — {channel}",
       "2. ክፍተት ምን እንዳሳየህልን ስለዚህ አንድ ወረፍ መልእክት ላክልን።",
       "",
       "ሲዘጋጅት ምላሽ መልእክትህን ወደ ዚህ መልስ ልክ።",
@@ -156,7 +156,7 @@ const COPY = {
       "",
       "ማንኛውንም ነገር ከመውጣትህ በፊት እንነባለን፤ ስምህን ለመጠቀም ግን ከመጠየቅህ ጀምሮ እንጠይቅሃለን።",
       "",
-      "አንድ ነገር ቀርቷል፦ ቻናላችን ተቀላቅል፤ ልክ በዚያ /joined ብለህ ላክ፤ ስለዚያ ማረጋገጥ ይችላለን።",
+      "አንድ ነገር ቀርቷል፦ ቻናላችን ተቀላቅል — {channel}፤ ልክ በዚያ /joined ብለህ ላክ፤ ስለዚያ ማረጋገጥ ይችላለን።",
       "ከዚያ በኋላ የአንድ ወር ክፍያህ ለመንረጃ ቀን ተዘጋጅቷል።",
     ].join("\n"),
     verifiedNoRow:
@@ -198,6 +198,28 @@ const MAX_TESTIMONIAL_CHARS = 2_000;
  *
  * Bounded by `AbortSignal.timeout` for the reason above.
  */
+/**
+ * Puts the channel address into copy that asks someone to go there.
+ *
+ * This said "tap the pinned link" — an instruction pointing at a pin nobody
+ * had ever made, so a student reached the channel with nothing to tap and no
+ * way to finish the step. The address is in the message itself now: Telegram
+ * links a bare URL, so there is no pin to go stale and nothing to maintain.
+ *
+ * When the channel is not configured the placeholder and its separator go
+ * together, so the sentence still reads as a sentence instead of ending in a
+ * dangling dash. The omission is logged, because it is a deployment problem
+ * that would otherwise surface only as a student who cannot find the channel.
+ */
+function fillChannel(text: string): string {
+  const url = env.TELEGRAM_CHANNEL_URL?.trim();
+  if (url) return text.replaceAll("{channel}", url);
+  console.error(
+    "[telegram] TELEGRAM_CHANNEL_URL is unset — the join link was left out of a student message",
+  );
+  return text.replace(/(?:\s*[—–:,]\s*|\s)\{channel\}/g, "");
+}
+
 async function reply(chatId: number, text: string): Promise<void> {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
@@ -205,7 +227,7 @@ async function reply(chatId: number, text: string): Promise<void> {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
+      body: JSON.stringify({ chat_id: chatId, text: fillChannel(text) }),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch (error) {

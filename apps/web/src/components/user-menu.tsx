@@ -1,4 +1,4 @@
-import { Button } from "@kiftet/ui/components/button";
+import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,8 +9,9 @@ import {
   DropdownMenuTrigger,
 } from "@kiftet/ui/components/dropdown-menu";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
+import { cn } from "@kiftet/ui/lib/utils";
 import { User } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { useLanguage } from "@/components/language-provider";
 import { authClient } from "@/lib/auth-client";
@@ -18,46 +19,49 @@ import { clearDemoUser } from "@/lib/demo";
 
 export default function UserMenu() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useLanguage();
   const { data: session, isPending } = authClient.useSession();
 
   if (isPending) {
-    // Sized to match the trigger it stands in for, at both widths — a 24rem
-    // placeholder is wider than the real control on a phone and is what made
-    // the header jump once the session resolved.
+    // Sized to match the waitlist pill it stands in for, at both widths — a
+    // 24rem placeholder is wider than the real control on a phone and is what
+    // made the header jump once the session resolved.
     return (
-      <Skeleton className="size-10 shrink-0 rounded-full sm:h-9 sm:w-24" />
+      <Skeleton className="h-10 w-20 shrink-0 rounded-full sm:h-9 sm:w-[9.5rem]" />
     );
   }
 
   if (!session) {
-    // render={...} rather than wrapping the Button in a <Link>: nesting a
-    // <button> inside an <a> is invalid and leaves two tab stops for one
-    // action. This hands the link to the button so it renders as one control.
+    // Sign-up and the waitlist are one funnel, so this slot spends its single
+    // text-button width below `sm` on the offer that expires rather than on
+    // Sign In. Sign-in sits under the waitlist form on the landing page and
+    // stays reachable through /dashboard, which routes an anonymous visitor
+    // to /login.
     //
-    // Two of them because the header has room for exactly one text button below
-    // `sm`, and the waitlist is the offer that can expire — so Sign In yields
-    // its label for the width while `aria-label` keeps the meaning.
+    // A <Link> rather than a Button wrapped in one: nesting a <button> inside
+    // an <a> is invalid and leaves two tab stops for one action.
     return (
-      <>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label={t("sign-in")}
-          className="sm:hidden"
-          render={<Link to="/login" />}
-        >
-          <User />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="hidden sm:inline-flex"
-          render={<Link to="/login" />}
-        >
-          {t("sign-in")}
-        </Button>
-      </>
+      <Link
+        to="/#waitlist"
+        aria-label={t("waitlist-cta")}
+        onClick={(event) => {
+          // A <Link> to the location already open does nothing, so on the
+          // landing page the tap has to do the scrolling itself.
+          if (location.pathname !== "/") return;
+          const target = document.getElementById("waitlist");
+          if (!target) return;
+          event.preventDefault();
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+        className={cn(
+          buttonVariants({ variant: "default" }),
+          "h-10 shrink-0 px-3 ring-1 ring-gold/40 sm:h-9 sm:px-4 sm:font-semibold sm:text-sm",
+        )}
+      >
+        <span className="hidden sm:inline">{t("waitlist-cta")}</span>
+        <span className="sm:hidden">{t("waitlist-cta-short")}</span>
+      </Link>
     );
   }
 

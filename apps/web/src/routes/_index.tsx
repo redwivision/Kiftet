@@ -889,6 +889,18 @@ function DemoSection() {
         </div>
         <div className="mt-8 text-left">
           <WaitlistForm />
+          {/* Sign-in left the header when sign-up and the waitlist merged into
+              one button, so the way back to an existing account lives here,
+              next to the form it is most likely to be wanted from. */}
+          <p className="mt-5 text-center text-muted-foreground text-sm">
+            {t("waitlist-signin-prefix")}{" "}
+            <Link
+              to="/login"
+              className="font-medium text-gold underline-offset-4 hover:underline"
+            >
+              {t("sign-in")}
+            </Link>
+          </p>
         </div>
       </div>
     </section>

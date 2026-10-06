@@ -551,6 +551,8 @@ export const en = {
   "waitlist-consent":
     "Kiftet may store this number to contact me when it launches. I can ask for it to be deleted at any time.",
   "waitlist-cta": "Join the waitlist",
+  "waitlist-cta-short": "Waitlist",
+  "waitlist-signin-prefix": "Already have an account?",
   "waitlist-joining": "Saving your place…",
   "waitlist-joined": "You're on the list",
   "waitlist-wave": "Wave {wave} · you're in",
@@ -1181,6 +1183,8 @@ export const am: Record<MessageKey, string> = {
   "waitlist-consent":
     "ኪፍተት ሲጀምር ስያኝ በዚህ ቁጥር እንያለቅድ ይችላል። በየጊዜም ማጥፋት እንደምችል እችላለሁ።",
   "waitlist-cta": "ወደ ዝርዝሩ ግባ",
+  "waitlist-cta-short": "ዝርዝር",
+  "waitlist-signin-prefix": "መለያ አለህ?",
   "waitlist-joining": "ቦታህን በመቀመጥ ላይ…",
   "waitlist-joined": "በዝርዝሩ ላይ አለህ",
   "waitlist-wave": "ዙር {wave} · ውስጥ ነህ",
