@@ -44,7 +44,7 @@ type Unit = {
   unitNumber: number;
   title: string;
   description: string | null;
-  /** The official MoE teaching-period allocation for this unit, when it has
+  /** The official MoE period allocation for this unit, when it has
    *  been transcribed from the syllabus document. `null` means "not stated in
    *  the source" — it is NOT zero, and the UI must not imply otherwise. */
   periods: number | null;

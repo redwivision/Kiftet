@@ -83,7 +83,7 @@ export type MicroLesson = {
 };
 
 /**
- * One concept's teaching section — the unit the whole phase is built on.
+ * One concept's guide section — the unit the whole phase is built on.
  *
  * Deliberately NOT a student: it depends on the concept, the chapter text and
  * the language, and on nothing about who is asking. That is what lets it be
@@ -132,7 +132,7 @@ export type AiService = {
     language?: ContentLanguage,
   ): Promise<MicroLesson>;
   /**
-   * Teach one concept. Student-independent by construction — it is not given
+   * Explain one concept. Student-independent by construction — it is not given
    * any gap or mastery data, because if it were it could not be shared.
    */
   generateGuideSection(
@@ -169,7 +169,7 @@ export function gapAnalysisFrom(
     if (!name.trim()) continue;
     named.add(name.trim().toLowerCase());
   }
-  // Concepts the client never mentioned are not gaps to teach, so they are left
+  // Concepts the client never mentioned are not gaps to explain, so they are left
   // out of the map rather than being asserted as unmastered.
   const scoped = concepts.filter((c) =>
     named.has(c.conceptText.trim().toLowerCase()),
@@ -405,7 +405,7 @@ function fallbackQuestions(
     question:
       language === "am"
         ? `“${t}”ን በራስህ ቃላት ግለጽ — ጓደኛ እንደሆነ።`
-        : `Explain “${t}” in your own words, as if teaching a friend.`,
+        : `Explain “${t}” in your own words, as if explaining it to a friend.`,
     targetConcept: t,
   }));
 }
@@ -468,7 +468,7 @@ export function sourceAnchor(
 /**
  * Step 2 of the reliability ladder: the section without the model.
  *
- * The deterministic path cannot translate and cannot teach, so it does not
+ * The deterministic path cannot translate and cannot explain, so it does not
  * pretend to. Copying the chapter's sentence into `what` produced an ENGLISH
  * "section" inside a guide that had already claimed `language: "am"` — the one
  * thing an honest fallback must not do. So `what` is target-language scaffolding
@@ -497,7 +497,7 @@ function fallbackSection(
     recall:
       language === "am"
         ? `“${conceptText}”ን በራስህ ቃላት ግለጽ — ጓደኛ እንደሆነ።`
-        : `Explain “${conceptText}” in your own words, as if teaching a friend.`,
+        : `Explain “${conceptText}” in your own words, as if explaining it to a friend.`,
     sourceOffset: anchor?.offset,
     sourceQuote: anchor?.quote,
     estimated: true,
@@ -959,7 +959,7 @@ const LESSON_SYSTEM =
   'Return STRICT JSON: {"text":"the lesson"}.';
 
 const SECTION_SYSTEM =
-  "You teach ONE concept to a Grade 12 student revising this chapter. " +
+  "You explain ONE concept to a Grade 12 student revising this chapter. " +
   "Return STRICT JSON, no prose, no markdown: " +
   '{"what":"1-2 sentences stating the idea itself, in plain words","why":"1 sentence on why it matters or what it connects to","recall":"1 question asking the student to say it back in their own words"}. ' +
   "Rules that matter more than they look: " +
@@ -967,7 +967,7 @@ const SECTION_SYSTEM =
   "- 'what' must stand alone. A student who reads only this line should be able to explain the concept to a friend. " +
   "- 'recall' must ask for an explanation, not a yes/no or multiple choice. " +
   "- Do not mention the student, their grade, their mistakes, or what they got wrong: this section is written ONCE and read by every student who opens this chapter, " +
-  "including students who have no gap here at all. Teach the concept; do not coach a specific person. " +
+  "including students who have no gap here at all. Explain the concept; do not coach a specific person. " +
   "- Do not invent facts, page numbers, or examples that are not in the text below.";
 
 const RETEST_SYSTEM =
@@ -1144,12 +1144,12 @@ export const ai: AiService = {
     try {
       const raw = await askJson(
         SECTION_SYSTEM + outputInstruction(language),
-        `CONCEPT TO TEACH:\n${conceptText.trim()}\n\nCHAPTER TEXT (the only source of facts):\n${chapterText.trim()}`,
+        `CONCEPT TO EXPLAIN:\n${conceptText.trim()}\n\nCHAPTER TEXT (the only source of facts):\n${chapterText.trim()}`,
       );
       const data = parseJson<Record<string, unknown>>(raw);
       const what =
         data && typeof data.what === "string" ? data.what.trim() : "";
-      // A section is only worth storing if it teaches something. Without `what`
+      // A section is only worth storing if it explains something. Without `what`
       // we keep the lexical fallback rather than persisting a stub that every
       // future student would then read as if it were a real lesson.
       if (!what || !data) return malformed("generateGuideSection", fallback);

@@ -302,7 +302,7 @@ exists.
    - *"I'm done explaining: temperature measures kinetic energy, and heat flows
      from hot to cold until equilibrium."* — the recall capability grades it and
      the agent speaks back covered/missing + score.
-   - *"Teach me what I missed"* — generates and speaks the micro-lesson.
+   - *"Show me what I missed"* — generates and speaks the read-aloud script.
    - *"Quiz me"* then speak an answer — the retest loop grades the answer.
    - *"How did I do?"* — reads the before/after delta.
 5. **Without a key:** the orb simply doesn't appear (Web Speech fallback from

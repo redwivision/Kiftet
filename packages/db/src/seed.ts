@@ -21,12 +21,12 @@ import { syllabus, syllabusUnit } from "./schema";
  *
  * `periods` is deliberately left undefined on every Biology 12 unit. The
  * verified source here is the *student textbook's table of contents*, which
- * gives the six-unit structure but not a teaching-period allocation. Filling
+ * gives the six-unit structure but not a period allocation. Filling
  * these in from memory or from a model would be exactly the fabricated
  * authority this column exists to prevent (docs/SYLLABUS.md §4), so they stay
  * NULL until someone transcribes them from the official MoE syllabus document
  * with a page reference. `seedSyllabus` writes them only when a unit actually
- * declares one, so a teacher's later transcription survives boot.
+ * declares one, so an instructor's later transcription survives boot.
  */
 export const ET_BIO12 = {
   id: "bio-12",
@@ -190,7 +190,7 @@ export async function ensureDefaultSyllabus(db: Database): Promise<void> {
             description: u.description,
             // Same rule on update: this seed owns titles and descriptions, but
             // a period allocation is a human-verified fact about the official
-            // document, so the seed must not blank one a teacher has entered.
+            // document, so the seed must not blank one an instructor has entered.
             // Absent a declared figure the column is simply left out of the
             // SET, which keeps the stored value.
             ...(typeof u.periods === "number"

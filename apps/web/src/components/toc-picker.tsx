@@ -192,7 +192,7 @@ export function TocPicker({
 }
 
 /**
- * Every unit, all at once, in the order the book teaches them.
+ * Every unit, all at once, in the order the book lays them out.
  *
  * The row count is the unit count and not the entry count — a 6-unit textbook
  * shows 6 rows. What each unit holds is a number on the row, so the book can

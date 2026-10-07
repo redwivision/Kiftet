@@ -65,11 +65,20 @@ A plan saying "watch this 12-minute video" can be unaffordable. Flag duration
 and size, prefer short, always give a text fallback. Plans get screenshotted and
 shared — design for that literally.
 
-**3. The site still promises the old loop.**
-`loop-title` says *"Four steps. One loop."*, `l-relearn-title` says *"Hear only
-what you missed"*, and `hero-sub` says *"teaches only those in a short spoken
-lesson — then retests what stayed."* If v1 is diagnose + plan, all of that is a
-false promise on the very page an evaluator reads first.
+**3. The site must stop promising the old loop.** ✅ *resolved*
+
+The landing page now leads with the plan, not the lesson: `hero-sub` ends
+*"Not another question bank. A plan."*, `l-relearn-title` is *"Get the
+shortest route"*, and `demo-text` promises the shortest plan rather than a
+lesson. Nothing in student-facing copy, the page metadata, or this repo's
+product docs claims to instruct — the read-aloud step is described only as
+what the plan covers. Lessons are deliberately *not* named
+on the first screen: they are a discovery the student makes inside the
+product, which is where the surprise belongs.
+
+The landing page also answers the eight questions a visitor actually arrives
+with (what it is, cost, install, data, phone number, instructor, waitlist reward,
+syllabus) immediately before the final call to action.
 
 ## Shape of v1
 

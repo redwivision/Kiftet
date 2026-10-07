@@ -42,7 +42,7 @@ export const syllabus = pgTable("syllabus", {
   subject: text("subject").notNull(),
   grade: integer("grade").notNull(),
   title: text("title").notNull(),
-  // "provisional" until a teacher verifies the unit list (STRATEGY.md bet 1);
+  // "provisional" until an instructor verifies the unit list (STRATEGY.md bet 1);
   // flips to "verified" once checked. Never shipped to students as final.
   source: text("source").notNull().default("provisional"),
   // The audit trail behind `source` — the textbook/syllabus the unit list was
@@ -63,7 +63,7 @@ export const syllabusUnit = pgTable(
     unitNumber: integer("unit_number").notNull(),
     title: text("title").notNull(),
     description: text("description"),
-    // Teaching periods the official MoE document allots to this unit. This is
+    // Periods the official MoE document allots to this unit. This is
     // the state's own weighting, transcribed from the syllabus — the single
     // most copy-resistant datum we can hold, because nobody can guess it (see
     // docs/SYLLABUS.md §4). NULL means "the document did not state one for this
@@ -124,7 +124,7 @@ export const conceptNode = pgTable(
 );
 
 /**
- * One concept's teaching section, generated once per (chapter, concept,
+ * One concept's guide section, generated once per (chapter, concept,
  * language) and shared by every student.
  *
  * This is the whole phase in one table. A guide section depends on the chapter

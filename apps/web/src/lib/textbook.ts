@@ -236,7 +236,7 @@ function topicsAsTree(
 }
 
 /**
- * One thing to read, in the order the book teaches it.
+ * One thing to read, in the order the book lays it out.
  *
  * A unit is one job covering all of its chunks, including the "(part n)" splits
  * an oversized chapter is carved into. A topic is one job covering exactly the
@@ -1171,7 +1171,7 @@ export function chaptersFromContents(
       start,
       end: Math.min(end, pageCount),
       // The number is kept: "2.3.1" carries that it is a third-level idea, and
-      // it is what lets the checklist be read in the order the book teaches it.
+      // it is what lets the checklist be read in the order the book lays it out.
       // The printed page becomes a page index with the same offset the units
       // used, so a topic's range and its unit's range are in one coordinate
       // system — mixing the two would put 1.1.1 outside the unit holding it.

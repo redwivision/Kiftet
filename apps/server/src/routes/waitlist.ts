@@ -285,7 +285,7 @@ router.post("/", async (req, res) => {
 
   if (website) {
     // Answer exactly as a success would. Telling a bot its honeypot was
-    // detected just teaches it to retry without the field.
+    // detected just tells it to retry without the field.
     res.status(200).json({ ok: true });
     return;
   }

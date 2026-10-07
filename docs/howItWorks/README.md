@@ -7,7 +7,7 @@
 
 Kiftet (ክፍተት, "gap") is a studying tool for Ethiopian students preparing for
 the national exam: a student speaks what they remember, the app diagnoses the
-specific concepts they **did not** explain, teaches a short lesson covering
+specific concepts they **did not** explain, hands back a short plan covering
 *only* those gaps, then re-tests to confirm they closed. The core loop is
 **Recall → Diagnose → Relearn → Retest**. The "what" and the mental model are in
 [the product](product.md).

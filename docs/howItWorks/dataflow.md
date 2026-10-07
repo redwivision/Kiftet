@@ -111,7 +111,7 @@ Data kept: textbook (1 + nested toc) → chapter (1+) → concept_node (5-12 eac
 ```
 
 When `topics` are supplied from a book's contents, their titles and numbering
-lead the checklist in the order the book teaches them; model-extracted details
+lead the checklist in the order the book lays them out; model-extracted details
 and misconceptions are added without duplicating those topics. Otherwise, the
 model builds the checklist from chapter text as before. When the AI fails, the
 server falls back to deterministic extraction (sentence splitting + token

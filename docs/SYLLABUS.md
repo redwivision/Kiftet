@@ -85,10 +85,10 @@ MoE New-Curriculum Grade 12 Biology student textbook (2023, ISBN
 Transformation, Evolution, Human Body System, Climate Change. Provenance is
 recorded in `syllabus.sourceNote` and the `source` flag is `verified`.
 
-A single human verification pass by a classroom teacher (confirming the list
+A single human verification pass by a classroom instructor (confirming the list
 against the physical textbook) is on the go-live checklist. **Until that
 happens, "verified" means "we transcribed the official list carefully," not
-"a teacher has signed off."** We don't ship it to students as gospel before
+"an instructor has signed off."** We don't ship it to students as gospel before
 then.
 
 ---
@@ -107,7 +107,7 @@ their own allocations too.
 Why this is a moat and not trivia:
 
 - **It's the exam's weighting, from the source.** Not a model's guess about
-  what seems important — the actual number of teaching hours the state assigns.
+  what seems important — the actual number of class hours the state assigns.
 - **It's the difference between "review everything" and "review this first."**
   A student with 40 concepts and 3 weeks cannot do all 40. The periods tell
   them which 12 carry the syllabus. That is the *entire* product promise.
@@ -143,7 +143,7 @@ UI surface a unit's allocation when one exists. Deliberate design points:
 - **The seed refuses to invent figures.** All six Biology 12 units carry
   `periods: undefined`, with a comment saying why. `seedSyllabus` writes the
   columns *only* when a unit actually declares a figure — and on conflict it
-  omits them from the `SET`, so a teacher's transcription is never blanked by
+  omits them from the `SET`, so an instructor's transcription is never blanked by
   a boot. (Verified against a scratch Postgres: declared figures are written,
   undeclared units stay `NULL`, and a stored `24` + provenance survived a seed
   replay that overwrote the unit's title and description.)
@@ -261,10 +261,10 @@ asset.
   from the official document, record the source and page, and keep
   `sourceNote` as the audit trail.
 - **Provenance is a product feature.** Every unit should be traceable to a page
-  in an official document. A student or a teacher should be able to check us.
+  in an official document. A student or an instructor should be able to check us.
   That's also how we defend a `verified` claim later.
 - **Period allocations captured as first-class data** from the start (§4).
-- **A teacher verification pass** before anything ships as `verified` to
+- **An instructor verification pass** before anything ships as `verified` to
   students.
 - **Never infer structure from the model.** The model can *propose* a mapping;
   a human confirms it. An LLM hallucinating a syllabus unit is a trust-ending

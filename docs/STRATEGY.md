@@ -240,13 +240,13 @@ only target the student actually cares about.
 schema change are in [`SYLLABUS.md`](SYLLABUS.md).
 
 **Risks.** A trustworthy source (curated, not scraped — a wrong syllabus is
-worse than none, because students will trust it), and a teacher verification
+worse than none, because students will trust it), and an instructor verification
 pass before anything ships as `verified`.
 
 **Status.** `syllabus` + `syllabus_unit` tables, an idempotent boot seed with
 the **verified** Biology 12 unit list (six units, MoE New-Curriculum 2023
 textbook, ISBN 978-99990-0-011-6), provenance in `sourceNote`, `GET /syllabus`,
-chapter→unit mapping, and the `/syllabus` browse UI. One human teacher pass
+chapter→unit mapping, and the `/syllabus` browse UI. One human instructor pass
 remains on the go-live checklist.
 
 ### 2. Misconception hunting + the national map
@@ -335,7 +335,7 @@ Computational subjects (§3) wait on the instrument, not on ambition.
 
 ## 8. Decisions handed back
 
-1. **Syllabus (bet 1)** — curated, teacher-verified, one subject/grade at a
+1. **Syllabus (bet 1)** — curated, instructor-verified, one subject/grade at a
    time, Biology 12 first. **Add `periods_allocation` from the official
    document and let it override the model's weight guess** — this is the
    highest-leverage small change in the roadmap, because prioritisation is the

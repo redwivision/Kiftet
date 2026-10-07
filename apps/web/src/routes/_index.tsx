@@ -32,7 +32,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+        "Kiftet listens to what you remember, works out which concepts didn't stick, and hands you the shortest plan for closing them — built for Ethiopia's national exam.",
     },
   ];
 }
@@ -71,6 +71,20 @@ const PASS_RATES = [
   { year: "2026", rate: "12.8%" },
 ] as const;
 
+/* The objections a visitor arrives with, in the order they ask them. Kept
+   next to the ask rather than in a support page, because a question that
+   survives the scroll to the CTA is the one that stops the click. */
+const FAQ = [
+  { q: "faq-what-q", a: "faq-what-a" },
+  { q: "faq-free-q", a: "faq-free-a" },
+  { q: "faq-install-q", a: "faq-install-a" },
+  { q: "faq-data-q", a: "faq-data-a" },
+  { q: "faq-phone-q", a: "faq-phone-a" },
+  { q: "faq-instructor-q", a: "faq-instructor-a" },
+  { q: "faq-waitlist-q", a: "faq-waitlist-a" },
+  { q: "faq-syllabus-q", a: "faq-syllabus-a" },
+] as const satisfies readonly { q: MessageKey; a: MessageKey }[];
+
 /* Reveals a string word-by-word: each word slides up and straightens out of
    its clipped box. Staggered by --kft-i, so the whole line reads left to
    right — the landing page's signature reveal. Pure CSS, no library. */
@@ -108,6 +122,7 @@ export default function Home() {
   const stats = useOnScreen<HTMLDivElement>();
   const how = useOnScreen<HTMLElement>();
   const rates = useOnScreen<HTMLElement>();
+  const faq = useOnScreen<HTMLElement>();
   const cta = useOnScreen<HTMLElement>();
   const { t } = useLanguage();
 
@@ -474,6 +489,41 @@ export default function Home() {
             ))}
           </ul>
         </div>
+      </section>
+
+      {/* ── The questions a visitor actually has ──────────────── */}
+      <section ref={faq.ref} className={cn("mt-20", faq.shown && "kft-in")}>
+        <div className="mb-8 max-w-2xl space-y-3">
+          <p
+            className="kft-rise k-label"
+            style={{ "--kft-i": "0ms" } as CSSProperties}
+          >
+            {t("faq-eyebrow")}
+          </p>
+          <h2
+            className="kft-rise font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl"
+            style={{ "--kft-i": "60ms" } as CSSProperties}
+          >
+            {t("faq-title")}
+          </h2>
+        </div>
+
+        <dl className="grid gap-4 sm:grid-cols-2">
+          {FAQ.map(({ q, a }, i) => (
+            <div
+              key={q}
+              className="surface kft-rise p-5"
+              style={{ "--kft-i": `${120 + i * 60}ms` } as CSSProperties}
+            >
+              <dt className="font-medium text-[0.95rem] text-foreground leading-6">
+                {t(q)}
+              </dt>
+              <dd className="mt-2 text-muted-foreground text-sm leading-6">
+                {t(a)}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {/* ── CTA ───────────────────────────────────────────────── */}

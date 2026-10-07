@@ -24,13 +24,13 @@ They didn't sit in empty classrooms. They sat in class, took notes, memorized �
 
 ## The idea
 
-> A student speaks out loud what they remember about a topic. The app listens, figures out which specific concepts they did **not** explain — their "gaps" — teaches a short lesson covering **only** those gaps, then re-tests them to confirm the gaps closed.
+> A student speaks out loud what they remember about a topic. The app listens, figures out which specific concepts they did **not** explain — their "gaps" — and hands back the shortest plan for closing **only** those gaps, then re-tests them to confirm the gaps closed.
 
 ```
         ┌────────────┐     ┌────────────┐     ┌────────────┐     ┌───────────┐
   ▶      │  Recall    │────▶│  Diagnose  │────▶│  Relearn   │────▶│  Retest   │
-  talk   │ name what  │     │ find the   │     │ teach only  │     │ confirm    │
-  out    │ you know   │     │ exact gaps │     │ the gaps    │     │ it closed  │
+  talk   │ name what  │     │ find the   │     │ plan only   │     │ confirm    │
+  out    │ you know   │     │ exact gaps │     │ those gaps  │     │ it closed  │
          └────────────┘     └────────────┘     └────────────┘     └───────────┘
 ```
 
@@ -38,7 +38,7 @@ Before/after coverage is shown directly — a student *sees* the gaps close.
 
 ## Why voice
 
-Explaining something out loud is not a feature bolted on to satisfy a requirement — **it is the mechanism**. The underlying teaching technique ("protégé effect") works by forcing you to reconstruct and articulate what you know. Kiftet captures that spoken explanation, diagnoses it, and talks back. On weak connections everything degrades gracefully to typing and browser speech — the product was built mobile-first for Ethiopian school wi-fi.
+Explaining something out loud is not a feature bolted on to satisfy a requirement — **it is the mechanism**. The underlying learning technique ("protégé effect") works by forcing you to reconstruct and articulate what you know. Kiftet captures that spoken explanation, diagnoses it, and talks back. On weak connections everything degrades gracefully to typing and browser speech — the product was built mobile-first for Ethiopian school wi-fi.
 
 ## Features
 
@@ -150,16 +150,16 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 
 ## Status
 
-**What Kiftet is actually building:** a spoken study *diagnosis* for Ethiopian
-students — not another question bank. A student picks a chapter and explains
-out loud what they remember; Kiftet compares that explanation against the
-chapter's concept checklist (anchored to the national syllabus), surfaces
-exactly which concepts didn't stick, teaches a short lesson that covers *only*
-those gaps, then retests with differently-worded questions and shows a
-before/after picture. It is deliberately sparse, calm, night-study-friendly,
-and built to work on a school phone's connection: when Kiftet's platform is
-unreachable, work queues on the device and is graded when the platform answers
-again.
+**What Kiftet is actually building:** a smart, personalized study *roadmap* for
+Ethiopian students — not another question bank. A student picks a chapter and
+explains out loud what they remember; Kiftet compares that explanation against
+the chapter's concept checklist (anchored to the national syllabus), surfaces
+exactly which concepts didn't stick, and builds the shortest plan for closing
+them — everything the student already knows is left off it. It then retests
+with differently-worded questions and shows a before/after picture. It is
+deliberately sparse, calm, night-study-friendly, and built to work on a school
+phone's connection: when Kiftet's platform is unreachable, work queues on the
+device and is graded when the platform answers again.
 
 What is shipped and live right now:
 

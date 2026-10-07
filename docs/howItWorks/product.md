@@ -9,8 +9,8 @@ preparing for the national exam. The idea is simple:
 
 > A student speaks or types what they remember about a topic. The app grades
 > each checklist concept, shows which ideas are unfinished or explained wrong,
-> teaches from an ordered guide linked back to the student's book, then
-> re-tests to check whether the gaps closed.
+> then hands back a short plan built from an ordered guide linked back to the
+> student's book, and re-tests to check whether the gaps closed.
 
 The core loop is: **Recall → Diagnose → Relearn → Retest**. Diagnosis stores a
 0–3 mastery level per concept; the guide prioritizes wrong beliefs before

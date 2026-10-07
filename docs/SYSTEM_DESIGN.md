@@ -38,7 +38,7 @@ multi-provider LLM integration. See [the stack](howItWorks/stack.md) and
 - **StudySession** — user, chapter, progress state and retest state.
 - **Attempt** — recall or retest transcript, persisted per-concept mastery,
   derived gap lists, score and estimate flag.
-- **GuideSection** — cached `what` / `why` / `recall` teaching for a
+- **GuideSection** — cached `what` / `why` / `recall` content for a
   `(chapter, concept, language)` and a deterministic source anchor.
 - **Syllabus / SyllabusUnit** — curriculum structure, provenance and optional
   official period allocations.
@@ -75,7 +75,7 @@ The authoritative schema and migration history are in
    covered/missing/misconception lists and weighted score from that map.
    Deterministic fallback grades are marked as estimates.
 5. **Study.** The guide orders wrong beliefs first, then partially understood
-   and untouched concepts, with already-solid items last. Teaching sections
+   and untouched concepts, with already-solid items last. Guide sections
    are cached per chapter/concept/language and linked to deterministic source
    quotes and offsets in the chapter text.
 6. **Retest and compare.** The current loop offers retest after study and shows

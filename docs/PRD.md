@@ -128,5 +128,5 @@ assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
 - **Syllabus accuracy is a trust dependency.** If our unit list or period
   allocations are wrong, students act on them and we lose the one thing we
   can't get back. Mitigated by curated (not scraped) sources, recorded
-  provenance, and a teacher verification pass before anything ships as
+  provenance, and an instructor verification pass before anything ships as
   "verified" to students ([`SYLLABUS.md`](SYLLABUS.md) §6).

@@ -422,7 +422,7 @@ export const en = {
   "voice-agent-dashboard": "Take me back to the dashboard",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "Spoken study review for Ethiopian students",
+  "hero-eyebrow": "A smart study roadmap for Ethiopian students",
   "diag-eyebrow": "What it actually sees",
   "diag-title": "Not a score. A list of exactly what to fix.",
   "diag-sub":
@@ -456,7 +456,7 @@ export const en = {
   "demo-card-c-5": "How organelles stay in their compartments",
   "hero-gap": "Close the gap.",
   "hero-sub":
-    "Kiftet listens to what you remember out loud, finds the specific ideas that didn't stick, teaches only those in a short spoken lesson — then retests what stayed. Not another question bank. A diagnosis.",
+    "Kiftet listens to what you remember out loud, works out which specific ideas didn't stick, and hands you the shortest plan for closing them — everything you already know is left off it. Not another question bank. A plan.",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "Ready to use it for real?",
@@ -465,18 +465,18 @@ export const en = {
   "stat-87b": "{schools} schools had zero students pass.",
   "stat-absent":
     "Students weren't absent. They sat through the classes. What's missing isn't exposure — it's knowing, before the exam, which specific ideas didn't stick.",
-  "loop-title": "Four steps. One loop. Only the gaps.",
+  "loop-title": "Four steps. One loop. Only your gaps.",
   "loop-sub":
-    "The sequence is the whole product — recall, diagnose, relearn, retest. Nothing in Kiftet exists outside it.",
+    "The sequence is the whole product — say what you know, find what's missing, take the shortest route across it, prove it closed. Nothing in Kiftet exists outside it.",
   "l-speak-title": "Say what you remember",
   "l-speak-text":
     "Pick a chapter and explain it out loud, no notes, no prompts. Speaking forces clarity — you know what you know, and what you don't.",
   "l-diagnose-title": "See what's missing",
   "l-diagnose-text":
     "The concepts we check are compared against what you said. Solid ideas stay, gaps surface — shown as a picture you can read in one glance.",
-  "l-relearn-title": "Hear only what you missed",
+  "l-relearn-title": "Get the shortest route",
   "l-relearn-text":
-    "A short, spoken lesson covers just the gaps — not the whole chapter. Each pass targets only what didn't land the first time.",
+    "Only what didn't land makes it onto the plan. Everything you already know is left off, so what's left takes far less time than the whole chapter.",
   "l-retest-title": "Prove it stuck",
   "l-retest-text":
     "Freshly worded questions on those same gaps, then a before/after score. You leave with a clear picture of what closed and what's still open.",
@@ -484,7 +484,7 @@ export const en = {
   "voice-1":
     "Explaining something out loud is how the underlying learning technique actually works. There's nowhere to hide off-screen — there's no option, no answer key, just what you can produce. That honesty is the diagnosis.",
   "voice-2":
-    "So you speak. Kiftet transcribes, compares what you said against the chapter's concepts, and reads the short lesson back in a calm voice. Talk in, talk out.",
+    "So you speak. Kiftet transcribes, compares what you said against the chapter's concepts, and talks you through what's left in a calm voice. Talk in, talk out.",
   "tap-speak": "Tap and speak",
   "ring-caption":
     "Says the student. The ring is listening, not judging. What you say out loud is the whole record of what stuck.",
@@ -502,7 +502,7 @@ export const en = {
     "Review happens when the day finally quietens down. The interface stays a calm black room lit by flat ivory, not a bright quiz app.",
   "honest-title": "Honest before/after",
   "honest-text":
-    "You see your coverage right after you recall, and again after the lesson closes. If part of it is still open, that answer is as useful as the progress.",
+    "You see your coverage right after you recall, and again once you've worked the gaps. If part of it is still open, that answer is as useful as the progress.",
   "byob-label": "Bring your own book",
   "byob-a": "Your textbook ",
   "byob-gold": "is",
@@ -526,7 +526,7 @@ export const en = {
   "demo-chip": "Live demo · no account",
   "demo-title": "Feel it for yourself — one round of the loop, right now.",
   "demo-text":
-    "Pick the chapter, speak what you remember, and watch Kiftet find what didn't stick — then teach only that, and prove it stayed.",
+    "Pick the chapter, speak what you remember, and watch Kiftet find what didn't stick — then hand you the shortest plan across it, and prove it stayed.",
   "demo-foot":
     "No email, no password, no card. Your demo is private and expires on its own.",
   "demo-setting-up": "Setting up your demo…",
@@ -534,6 +534,39 @@ export const en = {
   "demo-try": "Try a live demo",
   recalled: "recalled",
   "see-your-chapter": "See it on your own chapter",
+
+  // ── The questions a visitor actually asks ──────────────────
+  // The landing page's job is to leave nothing unresolved between "that's
+  // interesting" and the demo button. Answered on the first screen, in the
+  // order a student would ask them: what is it, what does it cost me, will
+  // it run on my phone, what happens to my number, does it replace my
+  // instructor.
+  "faq-eyebrow": "Before you ask",
+  "faq-title": "The questions everyone has",
+  "faq-what-q": "What is Kiftet, exactly?",
+  "faq-what-a":
+    "A study planner. You explain a chapter out loud, Kiftet works out which specific ideas didn't stick, and gives you a short plan for closing exactly those. Nothing you already know is on it.",
+  "faq-free-q": "Is it free?",
+  "faq-free-a":
+    "Yes. Creating an account costs nothing, and the live demo needs no account at all.",
+  "faq-install-q": "Do I have to install anything?",
+  "faq-install-a":
+    "No app-store install. It's a website that opens in the browser you already have — on a school phone, on school wifi.",
+  "faq-data-q": "How much data will it use?",
+  "faq-data-a":
+    "Built for low bandwidth. Your book is read chapter by chapter instead of as one heavy upload, and if the voice service drops you keep going by typing.",
+  "faq-phone-q": "Is my phone number safe?",
+  "faq-phone-a":
+    "Your number is stored only so we can tell you when Kiftet launches, and you can ask us to delete it at any time.",
+  "faq-instructor-q": "Does it replace my instructor?",
+  "faq-instructor-a":
+    "No. It shows you which of tonight's hours are going on things you already know, so the time you do spend is spent better.",
+  "faq-waitlist-q": "What do I get for joining the waitlist?",
+  "faq-waitlist-a":
+    "Leave your number, join our Telegram channel and send one line about what you found — that locks in one month of premium for launch day.",
+  "faq-syllabus-q": "Which subjects and grades?",
+  "faq-syllabus-a":
+    "It follows the national syllabus and the textbook you actually study from. Upload your own book and every chapter in it becomes its own plan.",
 
   // ── Launch waitlist ────────────────────────────────────────
   // The reward is stated up front, with the two things a person has to do
@@ -656,7 +689,7 @@ export const en = {
   "st-recall-idle":
     "Tap the ring, then say what you remember about this chapter out loud. No notes — rough and honest is perfect. Tap again when you're done.",
   "st-answer-idle":
-    "Say your answer out loud in your own words — teaching it back is what proves it. Tap the ring when you're done.",
+    "Say your answer out loud in your own words — saying it back is what proves it. Tap the ring when you're done.",
   "st-armed": "Ready — tap to start.",
   "st-connecting": "Connecting…",
   "st-listening": "Listening… tap the ring when you're done.",
@@ -1063,7 +1096,7 @@ export const am: Record<MessageKey, string> = {
   "voice-agent-dashboard": "ወደ ዳሽባርድ መልስኝ",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "ለኢትዮጵያ ተማሪዎች በድምጽ የሚደረግ የትምህርት ግምገማ",
+  "hero-eyebrow": "ለኢትዮጵያ ተማሪዎች ብልህ የጥናት መመሪያ",
   "diag-eyebrow": "በእውነት የሚያየው",
   "diag-title": "ውጤት አይደለም። በትክክል የሚስተካከል ዝርዝር።",
   "diag-sub":
@@ -1095,7 +1128,7 @@ export const am: Record<MessageKey, string> = {
   "demo-card-c-5": "አካላቶች በምትሎቻቸው የሚቆዩበት መንገድ",
   "hero-gap": "ክፍተቱን ዝጋ።",
   "hero-sub":
-    "ኪፍተት ጮክ ብለህ የምታስታውሰውን ያዳምጣል፣ ያልተረጋገጡትን ሀሳቦች ያገኛል፣ እነዚያን ብቻ በአጭር የድምጽ ትምህርት ያስተምራል — ከዚያም የተረጋገጠውን እንደገና ይፈትናል። ሌላ የጥያቄ ባንክ አይደለም። ምርመራ ነው።",
+    "ኪፍተት ጮክ ብለህ የምታስታውሰውን ያዳምጣል፣ የትኞቹ ሀሳቦች እንዳልተረጋገጡ ያሰባል፣ እነዚያን መዝጋት የሚያስቸግረውን አጭር ፕላን ይሰጣል — የምታውቀው ሙሉ ነገር ከእሱ ውስጥ ይወጣል። ሌላ የጥያቄ ባንክ አይደለም። ፕላን ነው።",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
   "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
@@ -1104,18 +1137,18 @@ export const am: Record<MessageKey, string> = {
   "stat-87b": "{schools} ትምህርት ቤቶች ውስጥ አንድም ተማሪ አላለፈም።",
   "stat-absent":
     "ተማሪዎቹ አልቀሩም። ትምህርታቸውን ተከታትለዋል። የጎደለው የትምህርት አጋጣሚ አይደለም — ከፈተናው በፊት የትኞቹ ሀሳቦች እንዳልተረጋገጡ ማወቅ ነው።",
-  "loop-title": "አራት እርምጃዎች። አንድ ዑደት። ክፍተቶቹ ብቻ።",
+  "loop-title": "አራት እርምጃዎች። አንድ ዑደት። የራስህ ክፍተቶች ብቻ።",
   "loop-sub":
-    "ቅደም ተከተሉ ሙሉው ምርት ነው — አስታውስ፣ መርምር፣ እንደገና ተማር፣ ድጋሚ ፈትን። ከእሱ ውጭ በኪፍተት ውስጥ ምንም የለም።",
+    "ቅደም ተከተሉ ሙሉው ምርት ነው — የምታውቀውን ተናግር፣ የጎደለውን ማግኘት፣ የአጭሩን መንገድ መውሰድ፣ እንደተዘጋ መሆኑን ማስረግጥ። ከእሱ ውጭ በኪፍተት ውስጥ ምንም የለም።",
   "l-speak-title": "ያስታወስከውን ተናገር",
   "l-speak-text":
     "ምዕራፍ ምረጥና ጮክ ብለህ አስረዳ፣ ያለ ማስታወሻ፣ ያለ ፍንጭ። መናገር ግልጽነትን ያስገድዳል — የምታውቀውን እና የማታውቀውን ታያለህ።",
   "l-diagnose-title": "የጎደለውን ተመልከት",
   "l-diagnose-text":
     "የምንፈትሻቸው ሀሳቦች ከተናገርከው ጋር ይነጻጸራሉ። የተረጋገጡት ይቀራሉ፣ ክፍተቶቹም ይታያሉ — በአንድ እይታ የሚነበብ ምስል።",
-  "l-relearn-title": "ያመለጠህን ብቻ ስማ",
+  "l-relearn-title": "የአጭሩን መንገድ አግኝት",
   "l-relearn-text":
-    "አጭር የድምጽ ትምህርት ክፍተቶቹን ብቻ ይሸፍናል — ሙሉውን ምዕራፍ አይደለም። እያንዳንዱ ዙር በመጀመሪያ ጊዜ ያልተረጋገጠውን ብቻ ያነጣጥራል።",
+    "ያልተረጋገጠው ብቻ ነው ወደ ፕላኑ የሚገባው። የምታውቀው ሙሉ ነገር ይወጣል — ስለዚህ የቀረው ሙሉውን ምዕራፍ የበለጠ አጭር ጊዜ ይወስዳል።",
   "l-retest-title": "የተረጋገጠ መሆኑን አስረግጥ",
   "l-retest-text":
     "በእነዚያው ክፍተቶች ላይ በአዲስ አነጋገር የተፈጠሩ ጥያቄዎች፣ ከዚያም የበፊት/የበኋላ ውጤት። ምን እንደተዘጋ እና ምን አሁንም ክፍት እንደሆነ በግልጽ ተመልከተህ ትወጣለህ።",
@@ -1123,7 +1156,7 @@ export const am: Record<MessageKey, string> = {
   "voice-1":
     "የትምህርት ዘዴው በተጨባጭ የሚሰራው ጮክ ብለህ በማስረዳት ነው። ከስክሪኑ ውጭ የምትደበቅበት ቦታ የለም — አማራጭ የለም፣ የመልስ ቁልፍ የለም፣ የምትፈጥረው ብቻ ነው። ያ እውነተኝነት ምርመራው ነው።",
   "voice-2":
-    "ስለዚህ ትናገራለህ። ኪፍተት ቃላቶችህን ይመዘግባል፣ የተናገርከውን ከምዕራፉ ሀሳቦች ጋር ያነጻጽራል፣ አጭሩን ትምህርት ደግሞ በረጋ ድምጽ ያነባል። በድምጽ ግባ፣ በድምጽ ውጣ።",
+    "ስለዚህ ትናገራለህ። ኪፍተት ቃላቶችህን ይመዘግባል፣ የተናገርከውን ከምዕራፉ ሀሳቦች ጋር ያነጻጽራል፣ የቀረውንም በረጋ ድምጽ ይመራል። በድምጽ ግባ፣ በድምጽ ውጣ።",
   "tap-speak": "ንካና ተናገር",
   "ring-caption":
     "ተማሪው ይላል። ቀለበቱ እያዳመጠ ነው፣ እየፈረደ አይደለም። ጮክ ብለህ የተናገርከው የተረጋገጠው ሙሉ መዝገብ ነው።",
@@ -1140,7 +1173,7 @@ export const am: Record<MessageKey, string> = {
     "ግምገማው ቀኑ በመጨረሻ ሲረጋ ነው የሚደረገው። በይነገጹ በጸጥታዊ የዝሆን ጥርስ ብርሃን የበራ ረጋ ያለ ጥቁር ክፍል ነው፣ ደማቅ የፈተና መተግበሪያ አይደለም።",
   "honest-title": "እውነተኛ በፊት/በኋላ",
   "honest-text":
-    "ካስታወስክ በኋላ ወዲያውኑ ሽፋንህን ታያለህ፣ ትምህርቱ ከተዘጋ በኋላም እንደገና። የተወሰነው አሁንም ክፍት ከሆነ፣ ያ መልስ ልክ እንደ እድገቱ ጠቃሚ ነው።",
+    "ካስታወስክ በኋላ ወዲያውኑ ሽፋንህን ታያለህ፣ ክፍተቶቹን ከሰራከው በኋላም እንደገና። የተወሰነው አሁንም ክፍት ከሆነ፣ ያ መልስ ልክ እንደ እድገቱ ጠቃሚ ነው።",
   "byob-label": "የራስህን መጽሐፍ አምጣ",
   "byob-a": "የመማሪያ መጽሐፍህ ",
   "byob-gold": "ነው",
@@ -1162,13 +1195,40 @@ export const am: Record<MessageKey, string> = {
   "demo-chip": "የቀጥታ ማሳያ · ያለ መለያ",
   "demo-title": "በራስህ ተማክር — አንድ ዙር የዑደቱን፣ አሁኑኑ።",
   "demo-text":
-    "ምዕራፉን ምረጥ፣ ያስታወስከውን ተናገር፣ ኪፍተት ያልተረጋገጠውን ሲያገኝ ተመልከት — ከዚያም ያንን ብቻ ያስተምራል፣ የተረጋገጠ መሆኑንም ያረጋግጣል።",
+    "ምዕራፉን ምረጥ፣ ያስታወስከውን ተናገር፣ ኪፍተት ያልተረጋገጠውን ሲያገኝ ተመልከት — ከዚያም የአጭሩን ፕላንሰጥተህ የተረጋገጠ መሆኑን አረጋግጥ።",
   "demo-foot": "ኢሜይል የለም፣ የይለፍ ቃል የለም፣ ካርድ የለም። ማሳያህ የግል ነው እና በራሱ ያበቃል።",
   "demo-setting-up": "ማሳያህ እየተዘጋጀ ነው…",
   "demo-start": "የቀጥታ ማሳያ ጀምር →",
   "demo-try": "የቀጥታ ማሳያ ሞክር",
   recalled: "አስታውሷል",
   "see-your-chapter": "በራስህ ምዕራፍ ላይ ተመልከት",
+
+  // ── The questions a visitor actually asks ──────────────────
+  "faq-eyebrow": "ከመጠየቅ በፊት",
+  "faq-title": "ሁሉም የሚጠይቁት ጥያቄዎች",
+  "faq-what-q": "ኪፍተት በትክክል ምንድን ነው?",
+  "faq-what-a":
+    "የጥናት እቅድ ነው። ምዕራፍ በአፍ ብለህ ትገለጻለህ፣ ኪፍተት የትኞቹ ሀሳቦች እንዳልተረጋገጡ ያውቃል፣ እነዚያን መዝጋት አጭር ፕላን ይሰጣል። የምታውቀው ምንም አይገባውም።",
+  "faq-free-q": "ነፃ ነው?",
+  "faq-free-a": "አዎ። መለያ መፍጠር ነፃ ነው፣ የቀጥታ ማሳያውም መለያ አያስፈልገውም።",
+  "faq-install-q": "መጫን አለብኝ?",
+  "faq-install-a":
+    "ከመተግበሪያ መደብር መጫን አያስፈልግም። በያለህበት አሳሽ ውስጥ የሚከፈት ድር ገጽ ነው — በትምህርት ቤት ስልክ፣ በትምህርት ቤት ኢንተርኔት።",
+  "faq-data-q": "ምን ያህል ዳታ ይወስዳል?",
+  "faq-data-a":
+    "በደካማ ኢንተርኔት ለመሠራት የተገነባ። መጽሐፍህ በምዕራፍ በምዕራፍ ይነበባል — በአንድ ጊዜ ከባድ አፕሎድ አይደለም፤ የድምጽ አገልግሎቱ ቢወድቅም በመጻፍ ትቀጥላለህ።",
+  "faq-phone-q": "የስልክ ቁጥሬ ደህንነቱ የተጠበቀ ነው?",
+  "faq-phone-a":
+    "ቁጥርህ የሚቀመጠው ኪፍተት ሲጀምር ለማሳወቅ ብቻ ነው፣ በማንኛውም ጊዜ ማጥፋት እንደምንደርግ መጠየቅ ትችላለህ።",
+  "faq-instructor-q": "መምህራንን ይተካል?",
+  "faq-instructor-a":
+    "አይ። ዛሬ ማታ ሰዓታትህን ከምታውቃቸው ነገሮች ላይ እንዴት እንደሚውዱ ያሳያል — ስለዚህ የሚፈጅከው ጊዜ የበለጠ ጥሩ ይሆናል።",
+  "faq-waitlist-q": "በዝርዝሩ ብቀላቅል ምን እ얻ኛ?",
+  "faq-waitlist-a":
+    "ስልክህን በውስጥ አድርግ፣ ቻናላችን ተቀላቅል፣ ስለ ያገርከው አንድ ቃል ላክ — ይህ በመጀመሪያ ቀን አንድ ወር ፕሪሚየም ያደርጋል።",
+  "faq-syllabus-q": "የትኞቹ የትምህርት ትዕዛዞችና ክፍሎች?",
+  "faq-syllabus-a":
+    "ብሔራዊ ስርአተ-ትምህርትና በትክክል የምታጠናውን መጽሐፍ ይከተላል። የራስህን መጽሐፍ ጫን — ውስጡ በመጽሐፍ ምዕራፍ ምዕራፍ የራሱ ፕላን ይሆናል።",
 
   // ── Launch waitlist ────────────────────────────────────────
   "waitlist-chip": "የመስተጀት ዝርዝር",
@@ -1276,7 +1336,7 @@ export const am: Record<MessageKey, string> = {
   "st-recall-idle":
     "ቀለበቱን ንካ ከዚያ ስለዚህ ምዕራፍ የሚስታውስክህን ነገር በአፍት ተናገር። ማንኛውንም ማስታወሻ የለም — ተንብርና ሐቅሓት ያላቸው ለሚፈለግ ነው። ሲቻልቱ በድጋሚ ንካ።",
   "st-answer-idle":
-    "መልስህን በራስህ በራስህ ቃላት በአፍት ተናገር — በመረዳት ስለመረዳት መልስህን ማስታወስክ የሚያሳረጋገጥ ነው። ሲቻልቱ ቀለበቱን ንካ።",
+    "መልስህን በራስህ ቃላት በአፍት ተናገር — ተመልሰህ በአንተው ቃል ማንበብ ነው የሚያረጋግጠው። ሲጨረስክ ቀለበቱን ንካ።",
   "st-armed": "ዝግጁ። — ለመጀመር ንካ።",
   "st-connecting": "በመገናኘት ላይ…",
   "st-listening": "በማዳመጥ ላይ… ሲቻልቱ ቀለበቱን ንካ።",

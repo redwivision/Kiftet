@@ -51,7 +51,7 @@
 - **Concept checklist** — the list of ideas a chapter must cover, extracted at
   ingest. It is the yardstick for every grade, and the key a mastery map is
   stored against.
-- **Guide section** — one concept's teaching content: `what` (the idea), `why`
+- **Guide section** — one concept's study content: `what` (the idea), `why`
   (why it matters), `recall` (the say-it-back prompt). Generated once per
   `(chapter, concept, language)` and shared by every student; the *order* of the
   sections is per-student.

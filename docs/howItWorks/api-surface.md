@@ -13,7 +13,7 @@ All routes live behind `/api`:
 | `POST /api/sessions/start` | Begin a study session on a chapter | 0 |
 | `GET /api/sessions/:id` | Session details + its attempts | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
-| `POST /api/sessions/:id/microlesson` | Get the "teach the gaps" read-aloud script | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
 | `GET /api/chapters/:id/guide` | The ordered guide sections for this student (cached per chapter) | 0/11 (AI only on a cache miss) |
 | `POST /api/sessions/:id/retest` | Get new, differently-phrased questions for the gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/retest/answer` | Submit retest answers → updated score | 0/2 (AI in 2) |

@@ -273,7 +273,7 @@ const ingestSchema = z.object({
     .min(1, "This chunk has no text — the section looks empty.")
     .max(200_000, "That chunk is too large. Pick a smaller section."),
   /**
-   * The chapter's own topics, in the order the book teaches them, as printed:
+   * The chapter's own topics, in the order the book lays them out, as printed:
    * "2.3.1 The internal structure of a leaf".
    *
    * When the import could read a contents page these arrive with the chapter

@@ -54,7 +54,7 @@ export type Concept = {
  * Fold the book's own contents into the concepts a model found.
  *
  * The topics lead, in the book's order, because that order is the sequence the
- * chapter teaches — the order a student has to learn in. Concepts the model
+ * chapter lays out — the order a student has to learn in. Concepts the model
  * found and the contents did not mention follow, which is where misconceptions
  * and detail the contents summarised away survive.
  */

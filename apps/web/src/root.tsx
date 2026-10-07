@@ -52,7 +52,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
     {
       name: "description",
       content:
-        "Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+        "Kiftet listens to what you remember, works out which concepts didn't stick, and hands you the shortest plan for closing them — built for Ethiopia's national exam.",
     },
     { name: "theme-color", content: "#0A0B0D" },
     { property: "og:type", content: "website" },
@@ -67,7 +67,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
     {
       property: "og:description",
       content:
-        "Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those — spoken, calm, and built for Ethiopia's national exam.",
+        "Kiftet listens to what you remember, works out which concepts didn't stick, and hands you the shortest plan for closing them — built for Ethiopia's national exam.",
     },
     {
       property: "og:image",
@@ -84,7 +84,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
     {
       name: "twitter:description",
       content:
-        "Kiftet listens to what you remember, catches the concepts that didn't stick, and teaches only those.",
+        "Kiftet listens to what you remember, works out which concepts didn't stick, and hands you the shortest plan for closing them.",
     },
     { name: "twitter:image", content: logoUrl },
     { name: "robots", content: "index, follow" },
