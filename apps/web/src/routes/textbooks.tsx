@@ -34,6 +34,7 @@ import {
   visibleChapterTitle,
   withPartSplits,
 } from "@/lib/textbook";
+import { readContentsWithModel } from "@/lib/toc-model";
 import type { Route } from "./+types/textbooks";
 
 export function meta(_args: Route.MetaArgs) {
@@ -224,6 +225,7 @@ export default function Textbooks() {
           ? { kind: "pdf", name: pdfFile.name, file: pdfFile }
           : { kind: "text", name: "pasted", text: pastedText },
         language,
+        readContentsWithModel,
       );
       if (!result.chunks.length) throw new Error(t("nothing-to-import"));
       // A second plan replaces the first reader, so close the old one rather
@@ -330,6 +332,7 @@ export default function Textbooks() {
           ? await planImport(
               { kind: "pdf", name: file.name, file },
               book.language,
+              readContentsWithModel,
             )
           : await planImport({
               kind: "text",
@@ -367,6 +370,7 @@ export default function Textbooks() {
       const result = await planImport(
         { kind: "pdf", name: file.name, file },
         book.language,
+        readContentsWithModel,
       );
       applyPlan(
         result,

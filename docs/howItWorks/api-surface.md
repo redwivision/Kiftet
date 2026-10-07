@@ -26,6 +26,7 @@ Additional routes added for Phase 6 (textbook library + demo quotas):
 |---|---|---|
 | `POST /api/textbooks` | Save/update an owned textbook's metadata and nested TOC before importing chapters; never accepts the source file | 6 |
 | `GET /api/textbooks` | Each owned textbook with its saved TOC and imported chapters, in order | 6 |
+| `POST /api/textbooks/contents` | Read a PDF's opening pages as its table of contents, for books the deterministic reader could not find one in | 6 |
 | `GET /api/ai/budget` | Demo/signed-in AI quota remaining this minute + daily book cap | 6 |
 
 In Phase 0, the AI-graded endpoints returned **empty placeholders** (empty gaps,
@@ -100,5 +101,17 @@ sent to `POST /chapters/ingest`. Topics retain their numbering and order while
 the model adds distinct details. `GET /textbooks` returns the saved outline and
 all already-imported chapter rows, so the UI can mark completed chapters and
 resume. Opening the same book on another device requires reselecting its PDF.
+
+**Contents read.** The device first tries the free, deterministic answers: the
+PDF's bookmark tree, then the word "contents" on one of the first fifteen pages.
+When both come up empty, `POST /textbooks/contents` is the third answer — it
+takes up to 40 opening pages of extracted text (≤ 28 kB in total) and returns the
+contents as units and topics. Every `pageIndex` in the reply is the **0-based
+index from the request**, labelled in the prompt, so the client maps it straight
+onto a PDF page with no offset to establish and no printed page number to
+translate. The route sits behind the same admission control as every other AI
+call, and `429`/quota errors are a normal outcome: the client falls back to its
+running-header scan, which is a worse structure but a working import. An answer
+that is not JSON, or whose units run backwards, is dropped rather than repaired.
 
 ---

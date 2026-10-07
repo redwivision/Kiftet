@@ -10,8 +10,8 @@ import type { ImportDiagnostics } from "@/lib/textbook";
  * wrongly, or read correctly and drawn wrongly, and the screen alone cannot say
  * which. This shows the receipt — which source produced the list, whether the
  * contents page was found and what it said, what was parsed off it, what the
- * heading scan found, whether the page offset was trusted — with one button to
- * copy the whole thing.
+ * model read when it was asked, what the heading scan found, whether the page
+ * offset was trusted — with one button to copy the whole thing.
  */
 export function HierarchyReport({
   report,
@@ -33,11 +33,20 @@ export function HierarchyReport({
     `contents page: ${report.contentsPage ?? "not found"}`,
     `contents pages read: ${report.contentsPagesRead}`,
     `page offset: ${report.pageOffset ?? "not established"}`,
+    `model units: ${report.modelUnits.length || "none"}`,
     "",
     "— contents entries —",
     ...report.contentsEntries.map(
       (c) => `Unit ${c.unit}: ${c.title}  p${c.page}`,
     ),
+    "",
+    "— model units (PDF page indices) —",
+    ...(report.modelUnits.length
+      ? report.modelUnits.map(
+          (m) =>
+            `${[m.number, m.title].filter(Boolean).join(" ")}  pdf p${m.page}`,
+        )
+      : ["(none)"]),
     "",
     "— heading scan —",
     ...report.segments.map((s) => `${s.title}  ${s.start}-${s.end}`),
@@ -82,6 +91,10 @@ export function HierarchyReport({
             {t("hierarchy-report-offset")}
           </dt>
           <dd>{report.pageOffset ?? t("hierarchy-report-none")}</dd>
+          <dt className="text-muted-foreground">
+            {t("hierarchy-report-model")}
+          </dt>
+          <dd>{report.modelUnits.length}</dd>
           <dt className="text-muted-foreground">
             {t("hierarchy-report-entries")}
           </dt>

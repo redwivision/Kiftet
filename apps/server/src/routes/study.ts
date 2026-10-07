@@ -12,6 +12,7 @@ import {
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
+import { isAiBusy } from "../ai/admission";
 import { mergeConcepts } from "../ai/concepts";
 import {
   ai,
@@ -572,6 +573,49 @@ router.post("/textbooks", async (req, res) => {
     .where(and(eq(textbook.id, textbookId), eq(textbook.ownerId, owner)));
 
   ok(res, { textbookId }, 201);
+});
+
+// The opening pages the browser already extracted, sent only when the
+// deterministic contents parse came up empty. 24 pages x 1200 characters is
+// about 29kb — comfortably inside the 256kb body, and small enough that one
+// free-tier request is not paying to read half the book.
+const contentsSchema = z.object({
+  pages: z
+    .array(
+      z.object({
+        index: z.number().int().min(0).max(10_000),
+        text: z.string().max(4_000),
+      }),
+    )
+    .min(1)
+    .max(30),
+});
+
+/**
+ * Read a textbook's table of contents with the model.
+ *
+ * This exists because the deterministic parser needs the word "contents" on
+ * one of the first 15 pages to know where to look, and a book that does not
+ * say it there falls through to the running-header scan — which, on the Grade
+ * 10 History textbook, promoted every "Part I: Choose the best answer" exam
+ * section to a chapter and lost Units 2-4.
+ *
+ * Answers `found: false` rather than an error when there is nothing to read or
+ * no call to spend: the client falls back to exactly the scan it would have
+ * used anyway, so a busy minute costs the student the model read and nothing
+ * else.
+ */
+router.post("/textbooks/contents", async (req, res) => {
+  const parsed = contentsSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  try {
+    return ok(res, await ai.parseContents(parsed.data.pages));
+  } catch (error) {
+    if (isAiBusy(error)) return aiBudgetError(res, req);
+    throw error;
+  }
 });
 
 router.get("/chapters", async (req, res) => {

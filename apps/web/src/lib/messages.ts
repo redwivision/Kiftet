@@ -310,6 +310,7 @@ export const en = {
   "hierarchy-report-offset": "Page offset",
   "hierarchy-report-none": "not established",
   "hierarchy-report-entries": "Entries / units",
+  "hierarchy-report-model": "Model units",
   "hierarchy-report-copy": "Copy this reading",
   "hierarchy-report-copied": "Copied",
   "saved-book-device-note":
@@ -995,6 +996,7 @@ export const am: Record<MessageKey, string> = {
   "hierarchy-report-offset": "የገጽ ልዩነት",
   "hierarchy-report-none": "አልተረጋገጠም",
   "hierarchy-report-entries": "ግብዓቶች / ምዕራፎች",
+  "hierarchy-report-model": "የሞዴል ምዕራፎች",
   "hierarchy-report-copy": "ይህን ንባብ ቅዳ",
   "hierarchy-report-copied": "ተቀድቷል",
   "saved-book-device-note":

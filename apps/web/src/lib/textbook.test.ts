@@ -1,19 +1,28 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   auditPageText,
   chaptersFromContents,
+  chaptersFromModel,
   chaptersFromOutline,
+  contentsProbe,
   type ImportChunk,
   type ImportSource,
   importTocTree,
   indexToc,
   isSelectableTopic,
+  type ModelContentsTopic,
+  type ModelContentsUnit,
   numberDepth,
   PdfUnreadableError,
   planChunks,
+  readModelContents,
   segmentsForOcrBook,
   splitTocNumber,
   stripUndecodableGlyphs,
+  TOC_PROBE_CHARS,
+  TOC_PROBE_MAX_PAGES,
+  TOC_PROBE_MIN_CHARS,
+  TOC_PROBE_PAGE_CHARS,
   textLayerReader,
   tocJobs,
   tocPageOffset,
@@ -815,4 +824,232 @@ test("a readable book still serves a topic's own pages, and nothing beside them"
       pages: { start: 9, end: 40 },
     }),
   ).toBe("page 9");
+});
+
+// ─── Reading the contents with the model ────────────────────────────────
+//
+// The browser cannot be exercised end to end here — `planImport` opens a real
+// PDF through the viewer — so these cover the pieces it is assembled from:
+// what is worth sending, what is accepted back, and what happens to the
+// answers that are refused.
+
+function modelUnit(
+  number: string,
+  title: string,
+  pageIndex: number,
+  topics: ModelContentsTopic[] = [],
+): ModelContentsUnit {
+  return { number, title, pageIndex, topics };
+}
+
+describe("contentsProbe", () => {
+  test("skips blank front matter instead of spending the budget on it", () => {
+    const probe = contentsProbe(["", "   ", "real text ".repeat(300)]);
+    expect(probe.pages).toHaveLength(1);
+    expect(probe.pages[0]?.index).toBe(2);
+  });
+
+  test("stops looking after the first forty pages", () => {
+    const pages = Array.from({ length: 100 }, () => "x".repeat(600));
+    const probe = contentsProbe(pages);
+    expect(probe.pages).toHaveLength(TOC_PROBE_MAX_PAGES);
+    expect(probe.pages.at(-1)?.index).toBe(TOC_PROBE_MAX_PAGES - 1);
+  });
+
+  test("cuts one illustration-heavy page so it cannot eat the whole budget", () => {
+    const probe = contentsProbe(["y".repeat(9000)]);
+    expect(probe.pages).toHaveLength(1);
+    expect(probe.pages[0]?.text).toHaveLength(TOC_PROBE_PAGE_CHARS);
+  });
+
+  test("never sends more text than the budget allows", () => {
+    const pages = Array.from({ length: 100 }, () => "x".repeat(2000));
+    const probe = contentsProbe(pages);
+    const total = probe.pages.reduce((n, page) => n + page.text.length, 0);
+    expect(total).toBeGreaterThan(0);
+    // It may overshoot by the one page that put it over, and no further.
+    expect(total).toBeLessThanOrEqual(TOC_PROBE_CHARS + TOC_PROBE_PAGE_CHARS);
+    expect(probe.pages.length).toBeLessThan(pages.length);
+  });
+
+  test("a text layer too thin to hold a contents sends nothing", () => {
+    expect(contentsProbe(["too short to be a contents page"]).pages).toEqual(
+      [],
+    );
+    expect(contentsProbe(["", "", ""]).pages).toEqual([]);
+    expect(contentsProbe([]).pages).toEqual([]);
+    expect(TOC_PROBE_MIN_CHARS).toBeGreaterThan(0);
+  });
+});
+
+describe("chaptersFromModel", () => {
+  test("runs each unit from its own page to the next one", () => {
+    const chapters = chaptersFromModel(
+      [
+        modelUnit("Unit 1", "Cells", 3),
+        modelUnit("Unit 2", "Plants", 12),
+        modelUnit("Unit 3", "Animals", 21),
+      ],
+      30,
+    );
+    expect(chapters?.map((c) => [c.title, c.start, c.end])).toEqual([
+      ["Unit 1: Cells", 3, 12],
+      ["Unit 2: Plants", 12, 21],
+      ["Unit 3: Animals", 21, 30],
+    ]);
+  });
+
+  test("a unit with no number keeps its title alone", () => {
+    const chapters = chaptersFromModel(
+      [modelUnit("", "Cells", 3), modelUnit("", "Plants", 12)],
+      30,
+    );
+    expect(chapters?.map((c) => c.title)).toEqual(["Cells", "Plants"]);
+  });
+
+  test("one unit is not a contents, however well it was read", () => {
+    expect(chaptersFromModel([modelUnit("Unit 1", "Cells", 3)], 30)).toBeNull();
+  });
+
+  test("nothing to place against is refused", () => {
+    expect(chaptersFromModel([], 30)).toBeNull();
+    expect(
+      chaptersFromModel(
+        [modelUnit("Unit 1", "Cells", 3), modelUnit("Unit 2", "Plants", 12)],
+        0,
+      ),
+    ).toBeNull();
+  });
+
+  test("a page index outside the book is a misread, not a clipped range", () => {
+    const units = [
+      modelUnit("Unit 1", "Cells", 3),
+      modelUnit("Unit 2", "Plants", 999),
+    ];
+    expect(chaptersFromModel(units, 30)).toBeNull();
+    expect(
+      chaptersFromModel(
+        [modelUnit("Unit 1", "Cells", -4), modelUnit("Unit 2", "Plants", 12)],
+        30,
+      ),
+    ).toBeNull();
+    expect(
+      chaptersFromModel(
+        [modelUnit("Unit 1", "Cells", 1.5), modelUnit("Unit 2", "Plants", 12)],
+        30,
+      ),
+    ).toBeNull();
+  });
+
+  test("an order the book did not print is refused", () => {
+    expect(
+      chaptersFromModel(
+        [modelUnit("Unit 2", "Plants", 21), modelUnit("Unit 1", "Cells", 3)],
+        30,
+      ),
+    ).toBeNull();
+    // Two units claiming the same page gives the first a range that ends
+    // where it starts.
+    expect(
+      chaptersFromModel(
+        [modelUnit("Unit 1", "Cells", 5), modelUnit("Unit 2", "Plants", 5)],
+        30,
+      ),
+    ).toBeNull();
+  });
+
+  test("a topic is kept only when it sits inside its own unit", () => {
+    const chapters = chaptersFromModel(
+      [
+        modelUnit("Unit 1", "Cells", 3, [
+          { number: "1.0", title: "Before the unit", pageIndex: 1 },
+          { number: "1.1", title: "Cell structure", pageIndex: 4 },
+          { number: "1.2", title: "On the boundary", pageIndex: 12 },
+          { number: "1.3", title: "Next unit's page", pageIndex: 20 },
+          { number: "1.4", title: "Back inside", pageIndex: 11 },
+        ]),
+        modelUnit("Unit 2", "Plants", 12),
+      ],
+      30,
+    );
+    expect(chapters?.[0]?.topics.map((t) => t.title)).toEqual([
+      "Cell structure",
+      "Back inside",
+    ]);
+    expect(chapters?.[0]?.topics.map((t) => t.path)).toEqual([
+      "1.1 Cell structure",
+      "1.4 Back inside",
+    ]);
+    // The second unit's own topics are still its own.
+    expect(chapters?.[1]?.topics).toEqual([]);
+  });
+});
+
+describe("readModelContents", () => {
+  const probe = { pages: [{ index: 0, text: "Contents" }] };
+  const good = {
+    found: true,
+    units: [modelUnit("Unit 1", "Cells", 3), modelUnit("Unit 2", "Plants", 12)],
+  };
+
+  test("does not spend a call when there is nothing worth sending", async () => {
+    let called = false;
+    const out = await readModelContents(
+      async () => {
+        called = true;
+        return good;
+      },
+      { pages: [] },
+      30,
+    );
+    expect(out).toBeNull();
+    expect(called).toBe(false);
+  });
+
+  test("keeps a reading the client can place in the book", async () => {
+    const out = await readModelContents(async () => good, probe, 30);
+    expect(out?.units).toEqual(good.units);
+    expect(out?.chapters.map((c) => c.title)).toEqual([
+      "Unit 1: Cells",
+      "Unit 2: Plants",
+    ]);
+  });
+
+  test("a contents the model did not find falls back quietly", async () => {
+    expect(
+      await readModelContents(
+        async () => ({ found: false, units: [] }),
+        probe,
+        30,
+      ),
+    ).toBeNull();
+    expect(await readModelContents(async () => null, probe, 30)).toBeNull();
+  });
+
+  test("a call that throws reaches the heading scan, not the screen", async () => {
+    const out = await readModelContents(
+      async () => {
+        throw new Error("429 rate limited");
+      },
+      probe,
+      30,
+    );
+    expect(out).toBeNull();
+  });
+
+  test("a reading that cannot be placed in the book is refused", async () => {
+    const offBook = {
+      found: true,
+      units: [
+        modelUnit("Unit 1", "Cells", 3),
+        modelUnit("Unit 2", "Plants", 999),
+      ],
+    };
+    expect(await readModelContents(async () => offBook, probe, 30)).toBeNull();
+  });
+
+  test("a single unit does not earn the right to replace the heading scan", async () => {
+    const one = { found: true, units: [modelUnit("Unit 1", "Cells", 3)] };
+    expect(await readModelContents(async () => one, probe, 30)).toBeNull();
+  });
 });

@@ -120,6 +120,35 @@ export type RetestQuestion = {
   targetConcept?: string;
 };
 
+/**
+ * One opening page of the book, keyed by its PDF page index (0-based).
+ *
+ * The index is carried deliberately: the model is asked for *PDF* page indices
+ * rather than the printed page numbers on the contents, because an index given
+ * to us needs no offset cross-check to become a page range. A printed page
+ * number does, and the cross-check is the part of the deterministic path that
+ * silently produces a whole book of shifted chapters when it guesses wrong.
+ */
+export type ContentsPage = { index: number; text: string };
+
+export type ContentsTopic = {
+  /** The numbering as printed — "1.1", "2.7.3". Never invented. */
+  number: string;
+  title: string;
+  pageIndex: number;
+};
+
+export type ContentsUnit = {
+  /** The unit's own label as printed — "Unit 1", "UNIT TWO". */
+  number: string;
+  title: string;
+  pageIndex: number;
+  topics: ContentsTopic[];
+};
+
+/** The book's contents as read, or `found: false` when there is none to read. */
+export type ContentsParse = { found: boolean; units: ContentsUnit[] };
+
 export type AiService = {
   extractConcepts(rawText: string): Promise<ConceptChecklistItem[]>;
   gradeRecall(
@@ -147,6 +176,15 @@ export type AiService = {
     recallText?: string,
     language?: ContentLanguage,
   ): Promise<RetestQuestion[]>;
+  /**
+   * Read a textbook's table of contents out of its opening pages.
+   *
+   * Deliberately has no deterministic fallback of its own: when there is
+   * nothing to read, `found` comes back false and the caller falls back to the
+   * heading scan, which is the same answer the client would have reached on its
+   * own. Returning that honestly is better than synthesising a contents.
+   */
+  parseContents(pages: ContentsPage[]): Promise<ContentsParse>;
 };
 
 /** Rebuild a GapAnalysis from the flat gap lists a client sent.
@@ -980,6 +1018,39 @@ const RETEST_SYSTEM =
   "and never treat a wrong belief they stated as correct; only echo their phrasing. " +
   'Return STRICT JSON: {"questions":[{"question":"...","targetConcept":"<one exact gap conceptText>"}]}.';
 
+/**
+ * Read the contents page, not the running headers.
+ *
+ * Written against the failure this replaced: a Grade 10 History textbook whose
+ * deterministic parse found no contents at all, so the heading scan took over
+ * and turned every "Part I: Choose the best answer" exam section into a
+ * chapter, dropped Units 2-4 entirely, and duplicated Unit 1. The rules below
+ * name that furniture explicitly rather than hoping the model infers it.
+ *
+ * The model is asked for PDF page *indices* — the `[page N]` labels in the
+ * input — rather than the printed numbers on the contents. An index needs no
+ * offset cross-check to become a page range; a printed number does, and that
+ * cross-check is what silently shifts an entire book when it guesses wrong.
+ */
+const CONTENTS_SYSTEM =
+  "You read the table of contents of a textbook from the text of its opening pages. " +
+  "Return STRICT JSON, no prose, in this exact shape: " +
+  '{"found":true,"units":[{"number":"Unit 1","title":"unit title as printed","pageIndex":0,"topics":[{"number":"1.1","title":"topic title as printed","pageIndex":0}]}]}. ' +
+  "Rules that matter more than they look: " +
+  "- pageIndex is the 0-based PAGE INDEX from the input — the number in the [page N] label — " +
+  "never the printed page number written on the contents line itself. " +
+  "- Report only what the pages actually state. Never invent a unit, a topic or a page, " +
+  "and never fill in a number the book did not print. " +
+  '- When these pages hold no table of contents, return {"found":false,"units":[]} instead of guessing. ' +
+  "- Units appear in book order and their pageIndex must never decrease; every topic sits inside " +
+  "its own unit's span, in the reading order the contents gives. " +
+  '- `number` is the numbering exactly as printed ("Unit 4", "UNIT TWO", "4.2"). ' +
+  "`title` is the words only, with the numbering, the page numbers and the dot leaders removed. " +
+  '- Exam and review furniture — "Part I", "Part II", "Choose the best answer", "True or False", ' +
+  '"Match the following", review questions, and headers that simply repeat on every page — ' +
+  "is never a unit and must not appear in the output. " +
+  "- Keep every title verbatim, in whatever script the book is written in.";
+
 // Bet 4 / phase 10, slice C: generated content follows the app's language
 // pref. Concept names are DATA (they come from the chapter's own checklist,
 // in whatever script that book was written) — the model must keep them
@@ -1029,6 +1100,91 @@ function extractQuestions(raw: string): RetestQuestion[] | null {
     if (out.length >= 3) break;
   }
   return out.length ? out : null;
+}
+
+/**
+ * The opening pages, labelled with the index the answer must quote back.
+ *
+ * Exported so the "which number does the model report?" claim is testable
+ * without a live model — the labels are the contract that removes the page
+ * offset from this path entirely.
+ */
+export function contentsUserPrompt(pages: ContentsPage[]): string {
+  return [
+    "OPENING PAGES OF ONE TEXTBOOK, IN ORDER. Each block is labelled with its 0-based page index. " +
+      "Find the table of contents among them and return it as JSON.",
+    ...pages.map((page) => `[page ${page.index}]\n${page.text.trim()}`),
+  ].join("\n\n");
+}
+
+function contentsText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function pageIndexOf(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value)) return null;
+  return value >= 0 ? value : null;
+}
+
+function contentsTopics(value: unknown, from: number): ContentsTopic[] {
+  if (!Array.isArray(value)) return [];
+  const topics: ContentsTopic[] = [];
+  let last = from;
+  for (const entry of value) {
+    if (topics.length >= 60) break;
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const title = contentsText(record.title);
+    const pageIndex = pageIndexOf(record.pageIndex);
+    // A topic that starts before its unit, or goes backwards, is a misread
+    // line: keeping it would hand the client a range that ends where it starts.
+    if (!title || pageIndex === null || pageIndex < from || pageIndex < last)
+      continue;
+    last = pageIndex;
+    topics.push({
+      number: contentsText(record.number) ?? "",
+      title,
+      pageIndex,
+    });
+  }
+  return topics;
+}
+
+/**
+ * Pull a contents tree out of the model reply.
+ *
+ * Only shape and ordering are checked here — a unit whose page index runs
+ * backwards against the next one, or off the end of the book, is caught by the
+ * client, which is the only side that knows how long the book is. Everything
+ * unparseable is dropped rather than defaulted: a contents missing one unit is
+ * still a contents, while a fabricated one is worse than none.
+ */
+export function parseContentsReply(raw: string): ContentsParse | null {
+  const data = parseJson<Record<string, unknown>>(raw);
+  if (!data || typeof data.found !== "boolean") return null;
+  if (!data.found) return { found: false, units: [] };
+  if (!Array.isArray(data.units)) return null;
+
+  const units: ContentsUnit[] = [];
+  let last = -1;
+  for (const entry of data.units) {
+    if (units.length >= 40) break;
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const title = contentsText(record.title);
+    const pageIndex = pageIndexOf(record.pageIndex);
+    if (!title || pageIndex === null || pageIndex < last) continue;
+    last = pageIndex;
+    units.push({
+      number: contentsText(record.number) ?? "",
+      title,
+      pageIndex,
+      topics: contentsTopics(record.topics, pageIndex),
+    });
+  }
+  return units.length ? { found: true, units } : { found: false, units: [] };
 }
 
 /** The model answered, but the answer was unusable (not JSON, or JSON that
@@ -1186,6 +1342,22 @@ export const ai: AiService = {
       );
     } catch (error) {
       return degraded("generateRetestQuestions", error, fallback);
+    }
+  },
+
+  async parseContents(pages: ContentsPage[]): Promise<ContentsParse> {
+    // No key, or nothing to read: `found: false` IS the answer, and it is the
+    // same one the caller reaches on its own. There is no lexical contents
+    // parser worth synthesising here — the deterministic one already ran and
+    // came up empty, which is the whole reason this method exists.
+    const none: ContentsParse = { found: false, units: [] };
+    if (!isAiAvailable() || pages.length === 0) return none;
+    try {
+      const raw = await askJson(CONTENTS_SYSTEM, contentsUserPrompt(pages));
+      const data = parseContentsReply(raw);
+      return data ?? malformed("parseContents", () => none);
+    } catch (error) {
+      return degraded("parseContents", error, () => none);
     }
   },
 };

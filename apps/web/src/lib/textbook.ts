@@ -1193,6 +1193,174 @@ export function chaptersFromContents(
 }
 
 // ────────────────────────────────────────────────────────────────
+// The model's read of the contents — used when the book will not state its
+// own structure to a regular expression.
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * How far into the book the probe looks, and what it is willing to spend.
+ *
+ * The deterministic reader stops at the word "contents" inside the first 15
+ * pages, and a book that never says it there falls through to the running
+ * header scan. The probe reads further and more loosely, because it costs
+ * characters rather than recognitions — but it is still bounded, so one
+ * free-tier request never pays to read half the book.
+ */
+export const TOC_PROBE_MAX_PAGES = 40;
+/** Each page is cut to this, so one illustration-heavy page cannot eat the budget. */
+export const TOC_PROBE_PAGE_CHARS = 1200;
+/** Total text offered to the model, and the ceiling on the request body. */
+export const TOC_PROBE_CHARS = 28_000;
+/**
+ * Below this there is nothing to read: the book is a scan, not a text layer.
+ *
+ * Must stay at or under `TOC_PROBE_PAGE_CHARS`, since a probe never carries
+ * more than one page's worth from a single page — a threshold above that could
+ * never be met, and a one-page book would be sent to the heading scan every
+ * time.
+ */
+export const TOC_PROBE_MIN_CHARS = TOC_PROBE_PAGE_CHARS;
+/** Fewer units than this is not a contents, however confidently it was read. */
+export const TOC_MODEL_MIN_UNITS = 2;
+
+export type TocProbePage = { index: number; text: string };
+
+/** The opening pages offered to the model, keyed by PDF page index. */
+export type TocProbe = { pages: TocProbePage[] };
+
+export type ModelContentsTopic = {
+  number: string;
+  title: string;
+  pageIndex: number;
+};
+
+export type ModelContentsUnit = {
+  number: string;
+  title: string;
+  pageIndex: number;
+  topics: ModelContentsTopic[];
+};
+
+export type ModelContents = { found: boolean; units: ModelContentsUnit[] };
+
+/**
+ * Reads a book's contents with the model.
+ *
+ * Injected rather than imported so `planImport` stays free of the fetch layer
+ * — and so a plan built in a test is the plan the student gets, not a plan
+ * that also tried the network.
+ */
+export type ContentsReader = (probe: TocProbe) => Promise<ModelContents | null>;
+
+/**
+ * The opening pages worth sending, or none at all.
+ *
+ * Empty pages are skipped rather than counted, so sparse front matter lets the
+ * probe see further into the book without spending more characters; the caps
+ * above bound the cost either way.
+ */
+export function contentsProbe(pages: string[]): TocProbe {
+  const picked: TocProbePage[] = [];
+  let chars = 0;
+  const limit = Math.min(pages.length, TOC_PROBE_MAX_PAGES);
+  for (let i = 0; i < limit && chars < TOC_PROBE_CHARS; i += 1) {
+    const text = pages[i].trim();
+    if (!text) continue;
+    const cut = text.slice(0, TOC_PROBE_PAGE_CHARS);
+    picked.push({ index: i, text: cut });
+    chars += cut.length;
+  }
+  return { pages: chars >= TOC_PROBE_MIN_CHARS ? picked : [] };
+}
+
+/**
+ * The model's units as chapters the rest of the pipeline already understands.
+ *
+ * Returns null — "do not use this" — rather than patching anything up. The
+ * page indices are already in PDF coordinates, so unlike the printed numbers
+ * on a contents page there is no offset to establish: a range that would run
+ * off the end of the book or start before it ends is a misread, and the
+ * heading scan is a worse answer only in structure, never in coordinates.
+ */
+export function chaptersFromModel(
+  units: ModelContentsUnit[],
+  pageCount: number,
+):
+  | { title: string; start: number; end: number; topics: TopicEntry[] }[]
+  | null {
+  if (units.length < TOC_MODEL_MIN_UNITS || pageCount <= 0) return null;
+
+  for (let i = 0; i < units.length; i += 1) {
+    const start = units[i]?.pageIndex ?? -1;
+    if (!Number.isInteger(start) || start < 0 || start >= pageCount)
+      return null;
+    // The book states its own order. A backwards or repeated jump means a line
+    // was misread, and two units claiming the same page produces a chapter
+    // whose range ends where it starts.
+    if (i > 0 && start <= (units[i - 1]?.pageIndex ?? -1)) return null;
+  }
+
+  return units.map((unit, i) => {
+    const start = unit.pageIndex;
+    const end = Math.min(units[i + 1]?.pageIndex ?? pageCount, pageCount);
+    const topics: TopicEntry[] = [];
+    for (const topic of unit.topics) {
+      const { pageIndex } = topic;
+      if (!Number.isInteger(pageIndex) || pageIndex < start || pageIndex >= end)
+        continue;
+      if (topics.length && pageIndex < (topics.at(-1)?.page ?? 0)) continue;
+      const label = topic.number
+        ? `${topic.number} ${topic.title}`
+        : topic.title;
+      topics.push({ path: label, title: topic.title, page: pageIndex });
+    }
+    return {
+      title: unit.number ? `${unit.number}: ${unit.title}` : unit.title,
+      start,
+      end,
+      topics,
+    };
+  });
+}
+
+/**
+ * Ask the model for the contents, and keep only a reading that survives the
+ * same range checks the deterministic path applies to printed page numbers.
+ *
+ * Every way this can fail ends in null rather than a throw. The heading scan
+ * below already found the running headers, so a refused, throttled or simply
+ * wrong model read costs the student the topics under each unit and nothing
+ * else — an error screen here would be a worse answer than a plain one.
+ *
+ * Exported because "which answers are refused" is the property that keeps this
+ * safe: a call that throws, or one that reads two units out of a twenty-page
+ * contents, must reach the heading scan rather than the screen.
+ */
+export async function readModelContents(
+  readContents: ContentsReader,
+  probe: TocProbe,
+  pageCount: number,
+): Promise<{
+  units: ModelContentsUnit[];
+  chapters: NonNullable<ReturnType<typeof chaptersFromModel>>;
+} | null> {
+  if (!probe.pages.length) return null;
+  try {
+    const result = await readContents(probe);
+    if (!result?.found) return null;
+    const chapters = chaptersFromModel(result.units, pageCount);
+    if (!chapters) return null;
+    return { units: result.units, chapters };
+  } catch (error) {
+    console.warn(
+      "[textbook] model contents read failed; using detected headings",
+      error,
+    );
+    return null;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
 // Pasted-text path — same chunking, over raw text instead of pages.
 // ────────────────────────────────────────────────────────────────
 
@@ -1292,7 +1460,9 @@ export type ImportDiagnostics = {
     | "pdf-contents"
     | "pdf-text-layer"
     | "ocr-contents"
-    | "ocr-headings";
+    | "ocr-headings"
+    /** The model read the contents after the deterministic parse found none. */
+    | "model-contents";
   file: string;
   pageCount: number;
   /** Entries in the PDF's own bookmark tree, when it has one. */
@@ -1307,6 +1477,15 @@ export type ImportDiagnostics = {
   contentsText: string;
   /** Entries as parsed off the contents, in the order the book lists them. */
   contentsEntries: { unit: number; title: string; page: number }[];
+  /**
+   * Units the model read, with the PDF page each one starts on.
+   *
+   * Kept apart from `contentsEntries` on purpose: that field's `page` is a
+   * *printed* page number and is only ever right alongside an established
+   * offset, while these are PDF indices and need no offset at all. One field
+   * holding both would be a report nobody can trust.
+   */
+  modelUnits: { number: string; title: string; page: number }[];
   /** Units the heading scan found, with the pages each one covers. */
   segments: { title: string; start: number; end: number }[];
   /** Printed page number → PDF page index. Null when it could not be trusted. */
@@ -1395,6 +1574,7 @@ export function textLayerReader(pages: string[]): OcrChunkReader {
 export async function planImport(
   source: ImportSource,
   language = "en",
+  readContents?: ContentsReader,
 ): Promise<ImportPlan> {
   // Filled in as the work proceeds and handed back with the plan, so a reading
   // that looks wrong on screen can be told apart from a display of a good
@@ -1410,6 +1590,7 @@ export async function planImport(
     contentsPagesRead: 0,
     contentsText: "",
     contentsEntries: [],
+    modelUnits: [],
     segments: [],
     pageOffset: null,
     tree: [],
@@ -1445,6 +1626,10 @@ export async function planImport(
       await closeOnce();
       let chunks =
         outline.length >= 2 ? chaptersFromOutline(pages, outline) : null;
+      // Set when the model read the contents after the deterministic parse
+      // came up empty. Hoisted because `report.source` is written below, past
+      // the block that decides it.
+      let usedModel = false;
       if (!chunks) {
         // No bookmarks. A book that still has a readable text layer states its
         // own structure outright on its contents page, and reading that is free
@@ -1478,6 +1663,28 @@ export async function planImport(
           }
         }
 
+        // The book would not say where it begins — not to the heading that
+        // names a contents page, and not to a line that ends in a page number.
+        // Ask the model to read it directly, and only after that accept the
+        // heading scan, whose answer on this path is a book divided by the
+        // "Part I: Choose the best answer" lines between its exam sections.
+        if (!built && readContents) {
+          const model = await readModelContents(
+            readContents,
+            contentsProbe(pages),
+            pages.length,
+          );
+          if (model) {
+            built = model.chapters;
+            usedModel = true;
+            report.modelUnits = model.units.map((unit) => ({
+              number: unit.number,
+              title: unit.title,
+              page: unit.pageIndex,
+            }));
+          }
+        }
+
         chunks = (
           built
             ? built.flatMap((c) =>
@@ -1505,8 +1712,9 @@ export async function planImport(
       }
       const unique = uniqueTitles(chunks);
       const toc = importTocTree(unique);
-      report.source =
-        report.pageOffset !== null
+      report.source = usedModel
+        ? "model-contents"
+        : report.pageOffset !== null
           ? "pdf-contents"
           : unique.length > 0 && outline.length >= 2
             ? "pdf-outline"
