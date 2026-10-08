@@ -959,6 +959,18 @@ function AddTextbook({
           </p>
         )}
 
+        {report &&
+          (report.source === "pdf-text-layer" ||
+            report.source === "ocr-headings") && (
+            <p className="mt-4 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
+              {report.modelRead === "refused"
+                ? t("toc-fallback-refused", {
+                    reason: report.modelReason ?? "",
+                  })
+                : t("toc-fallback-guessed")}
+            </p>
+          )}
+
         {importing && total > 0 && (
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between text-muted-foreground text-xs">

@@ -880,6 +880,23 @@ function fallbackPages(pages: string[]): PageSegment[] {
 const MIN_OCR_SEGMENT_PAGES = 2;
 
 /**
+ * A numbered unit heading, matched by the number that identifies it.
+ *
+ * A running header is printed two ways down the same unit: in full — "Unit 5:
+ * Banking and Finance" — on the page that opens it, and bare — "Unit 5" — on
+ * the pages after. Those are different strings, so they were different keys,
+ * and the scan cut a new chapter on every alternation: the Grade 10 Economics
+ * textbook came out as 19 segments for its 8 units, seven of them fragments of
+ * Unit 5. The number is what says which unit a heading *is*, so it is the
+ * identity.
+ *
+ * Only an Arabic number counts here. "Unit One" keeps the whole cleaned
+ * heading as its key, because collapsing word-numbered units on their shared
+ * prefix is exactly the merge `cleanHeading` below warns about.
+ */
+const HEADING_UNIT_RE = /^(?:unit|ምዕራፍ|ክፍል)\s+(\d+)\b/i;
+
+/**
  * The identity of a heading: what it says the chapter *is*, ignoring the parts
  * that change page to page.
  *
@@ -890,7 +907,9 @@ const MIN_OCR_SEGMENT_PAGES = 2;
  * question the caller is actually asking: is this the same chapter again?
  */
 function headingKey(heading: string): string {
-  return cleanHeading(heading).toLowerCase().replace(/\s+/g, " ").trim();
+  const key = cleanHeading(heading).toLowerCase().replace(/\s+/g, " ").trim();
+  const unit = key.match(HEADING_UNIT_RE);
+  return unit ? `unit ${unit[1]}` : key;
 }
 
 /** A heading without its trailing page number, which is not part of its name. */
@@ -1204,9 +1223,10 @@ export function chaptersFromContents(
  * pages, and a book that never says it there falls through to the running
  * header scan. The probe reads further and more loosely, because it costs
  * characters rather than recognitions — but it is still bounded, so one
- * free-tier request never pays to read half the book.
+ * free-tier request never pays to read half the book. 20 pages is a generous
+ * walk past any contents that can exist, and still under a single model page.
  */
-export const TOC_PROBE_MAX_PAGES = 40;
+export const TOC_PROBE_MAX_PAGES = 20;
 /** Each page is cut to this, so one illustration-heavy page cannot eat the budget. */
 export const TOC_PROBE_PAGE_CHARS = 1200;
 /** Total text offered to the model, and the ceiling on the request body. */
@@ -1244,13 +1264,36 @@ export type ModelContentsUnit = {
 export type ModelContents = { found: boolean; units: ModelContentsUnit[] };
 
 /**
+ * What a contents reader answered — and, when it did not answer, why not.
+ *
+ * `refused` carries a sentence a student can read: the quota was spent, the
+ * session ended, the connection dropped. Without it every failure collapses to
+ * `null`, and "nobody tried" and "we tried and were told no" look identical on
+ * screen — which is how a guessed chapter list passes for a read one.
+ */
+export type ContentsReadResult = ModelContents & { refused?: string };
+
+/**
  * Reads a book's contents with the model.
  *
  * Injected rather than imported so `planImport` stays free of the fetch layer
  * — and so a plan built in a test is the plan the student gets, not a plan
  * that also tried the network.
  */
-export type ContentsReader = (probe: TocProbe) => Promise<ModelContents | null>;
+export type ContentsReader = (
+  probe: TocProbe,
+) => Promise<ContentsReadResult | null>;
+
+/**
+ * Where a model read ended up, filled in by `readModelContents`.
+ *
+ * Optional so the caller that does not care — every test, and the pasted-text
+ * path — pays nothing for it.
+ */
+export type ModelReadOutcome = {
+  /** A readable sentence for the reason the read was not used, or null. */
+  reason: string | null;
+};
 
 /**
  * The opening pages worth sending, or none at all.
@@ -1332,6 +1375,10 @@ export function chaptersFromModel(
  * wrong model read costs the student the topics under each unit and nothing
  * else — an error screen here would be a worse answer than a plain one.
  *
+ * What it does not cost is the *explanation*. When `outcome` is supplied it is
+ * told which of those things happened, in words, so the screen can say the
+ * chapter list below is a guess and why the better answer never arrived.
+ *
  * Exported because "which answers are refused" is the property that keeps this
  * safe: a call that throws, or one that reads two units out of a twenty-page
  * contents, must reach the heading scan rather than the screen.
@@ -1340,23 +1387,44 @@ export async function readModelContents(
   readContents: ContentsReader,
   probe: TocProbe,
   pageCount: number,
+  outcome?: ModelReadOutcome,
 ): Promise<{
   units: ModelContentsUnit[];
   chapters: NonNullable<ReturnType<typeof chaptersFromModel>>;
 } | null> {
-  if (!probe.pages.length) return null;
+  const refuse = (reason: string): null => {
+    if (outcome) outcome.reason = reason;
+    return null;
+  };
+  if (!probe.pages.length) {
+    return refuse("There was no opening text to send to the AI reader.");
+  }
   try {
     const result = await readContents(probe);
-    if (!result?.found) return null;
+    if (!result) {
+      return refuse("The AI reader returned no answer.");
+    }
+    if (result.refused) return refuse(result.refused);
+    if (!result.found) {
+      return refuse("The AI reader found no contents in the opening pages.");
+    }
     const chapters = chaptersFromModel(result.units, pageCount);
-    if (!chapters) return null;
+    if (!chapters) {
+      return refuse(
+        "The AI reader's answer did not fit inside this book, so it was discarded.",
+      );
+    }
     return { units: result.units, chapters };
   } catch (error) {
     console.warn(
       "[textbook] model contents read failed; using detected headings",
       error,
     );
-    return null;
+    return refuse(
+      error instanceof Error && error.message
+        ? error.message
+        : "The AI reader could not be reached.",
+    );
   }
 }
 
@@ -1486,6 +1554,20 @@ export type ImportDiagnostics = {
    * holding both would be a report nobody can trust.
    */
   modelUnits: { number: string; title: string; page: number }[];
+  /**
+   * What the AI reader did about the contents.
+   *
+   * "used" — the model produced the chapter list. "refused" — it was asked and
+   * did not deliver, and `modelReason` says why in words. "not-attempted" —
+   * nothing was sent: the book answered itself, or there was nothing to send.
+   *
+   * The screen needs this because a contents tree cannot be told from a guess
+   * by looking at it, and a student who is never told which one they are
+   * reading has no way to ask for a better one.
+   */
+  modelRead: "used" | "refused" | "not-attempted";
+  /** Why the AI reader's answer was not used, when it was not. */
+  modelReason: string | null;
   /** Units the heading scan found, with the pages each one covers. */
   segments: { title: string; start: number; end: number }[];
   /** Printed page number → PDF page index. Null when it could not be trusted. */
@@ -1591,6 +1673,8 @@ export async function planImport(
     contentsText: "",
     contentsEntries: [],
     modelUnits: [],
+    modelRead: "not-attempted",
+    modelReason: null,
     segments: [],
     pageOffset: null,
     tree: [],
@@ -1668,15 +1752,26 @@ export async function planImport(
         // Ask the model to read it directly, and only after that accept the
         // heading scan, whose answer on this path is a book divided by the
         // "Part I: Choose the best answer" lines between its exam sections.
-        if (!built && readContents) {
+        // A contents that did yield chapters but too few to be a real reading
+        // gets challenged the same way — a confident-looking parse of a
+        // two-line page is still a guess.
+        const needsModel = !built || built.length < TOC_MODEL_MIN_UNITS;
+        report.modelRead =
+          needsModel && readContents ? "refused" : "not-attempted";
+        if (needsModel && readContents) {
+          const outcome: ModelReadOutcome = { reason: null };
           const model = await readModelContents(
             readContents,
             contentsProbe(pages),
             pages.length,
+            outcome,
           );
+          report.modelReason = outcome.reason;
           if (model) {
             built = model.chapters;
             usedModel = true;
+            report.modelRead = "used";
+            report.modelReason = null;
             report.modelUnits = model.units.map((unit) => ({
               number: unit.number,
               title: unit.title,
@@ -1740,6 +1835,8 @@ export async function planImport(
       start: s.start,
       end: s.end,
     }));
+    // Set when the model read the contents after OCR could not recognize them.
+    let usedModel = false;
 
     const bookKey = ocrBookKey(source.name, source.file.size);
     const language_ = ocrLanguage(language);
@@ -1795,6 +1892,31 @@ export async function planImport(
       }
     }
 
+    // The contents pages refused to recognize — a scanned book whose OCR of
+    // them came back empty or out of range. The model reads whatever the probe
+    // can lift off those same pages before the tree falls back to the heading
+    // scan, which is a guess about where units start.
+    if (!contents && readContents) {
+      const outcome: ModelReadOutcome = { reason: null };
+      const model = await readModelContents(
+        readContents,
+        contentsProbe(pages),
+        pages.length,
+        outcome,
+      );
+      report.modelRead = model ? "used" : "refused";
+      report.modelReason = outcome.reason;
+      if (model) {
+        usedModel = true;
+        report.modelUnits = model.units.map((unit) => ({
+          number: unit.number,
+          title: unit.title,
+          page: unit.pageIndex,
+        }));
+        contents = model.chapters;
+      }
+    }
+
     const chunks = uniqueTitles(
       contents
         ? contents.map((c) => ({
@@ -1811,7 +1933,11 @@ export async function planImport(
             needsOcr: true,
           })),
     );
-    report.source = contents ? "ocr-contents" : "ocr-headings";
+    report.source = usedModel
+      ? "model-contents"
+      : contents
+        ? "ocr-contents"
+        : "ocr-headings";
     report.tree = flatTree(importTocTree(chunks));
     logHierarchy(report);
 

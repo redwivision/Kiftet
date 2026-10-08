@@ -302,6 +302,10 @@ export const en = {
   "toc-expand": "Expand {title}",
   "toc-collapse": "Collapse {title}",
   "toc-empty": "No contents were found in this book.",
+  "toc-fallback-guessed":
+    "We couldn't find this book's contents page, so this list is guessed from the page headings.",
+  "toc-fallback-refused":
+    "We asked the AI reader to find the contents and it couldn't: {reason} This list is therefore guessed from the page headings.",
   "hierarchy-report-label": "What we read from this book",
   "hierarchy-report-source": "Read from",
   "hierarchy-report-contents": "Contents page",
@@ -311,6 +315,7 @@ export const en = {
   "hierarchy-report-none": "not established",
   "hierarchy-report-entries": "Entries / units",
   "hierarchy-report-model": "Model units",
+  "hierarchy-report-model-read": "AI reader",
   "hierarchy-report-copy": "Copy this reading",
   "hierarchy-report-copied": "Copied",
   "saved-book-device-note":
@@ -988,6 +993,10 @@ export const am: Record<MessageKey, string> = {
   "toc-expand": "{title} ክፈት",
   "toc-collapse": "{title} ዝጋ",
   "toc-empty": "በዚህ መጽሐፍ ውስጥ ይዘት አልተገኘም።",
+  "toc-fallback-guessed":
+    "የመጽሐፉን የይዘት ገጽ ማግኘት አልቻልንም፤ ስለዚህ ይህ ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው።",
+  "toc-fallback-refused":
+    "የ AI አንባቢውን ጠይቀናል ግን ሊረዳ አልቻለም፡ {reason} ስለዚህ ይህ ዝርዝር በግምት ከገጾቹ ራስጌዎች የተሰራ ነው።",
   "hierarchy-report-label": "ከዚህ መጽሐፍ የተነበበው",
   "hierarchy-report-source": "ከየት ተነብቷል",
   "hierarchy-report-contents": "የይዘት ገጽ",
@@ -997,6 +1006,7 @@ export const am: Record<MessageKey, string> = {
   "hierarchy-report-none": "አልተረጋገጠም",
   "hierarchy-report-entries": "ግብዓቶች / ምዕራፎች",
   "hierarchy-report-model": "የሞዴል ምዕራፎች",
+  "hierarchy-report-model-read": "የ AI አንባቢ",
   "hierarchy-report-copy": "ይህን ንባብ ቅዳ",
   "hierarchy-report-copied": "ተቀድቷል",
   "saved-book-device-note":

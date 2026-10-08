@@ -112,6 +112,45 @@ test("a contents page is recognised from its heading alone", () => {
   expect(looksLikeTocPage("Unit 2: Plants")).toBe(false);
 });
 
+test("a contents page is recognised by its shape, no matter its language", () => {
+  // The word "contents" is English; a page set in Amharic never says it. What
+  // it still has is the shape: lines that end in a page number, joined to
+  // their titles by a run of dots.
+  const page = [
+    "የይዘት ዝርዝር",
+    "ምዕራፍ 1: የባዮሎጂ ንዑስ ዘርፎች ......... 1",
+    "1.1 ንዑስ ዘርፎች ......... 1",
+    "1.2 ንጹህና ተግባራዊ ዘርፎች ......... 5",
+    "1.3 ባዮሎጂን የቀየሩ ግኝቶች ......... 6",
+  ].join("\n");
+  expect(looksLikeTocPage(page)).toBe(true);
+  // An exercise page is numbered but never dotted: requiring the leaders is
+  // what keeps "4. Name three." from passing as contents.
+  const exercises = [
+    "1. Cells divide.",
+    "2. Energy is stored.",
+    "3. Genes are inherited.",
+  ].join("\n");
+  expect(looksLikeTocPage(exercises)).toBe(false);
+});
+
+test("an Amharic contents page is read instead of discarded", () => {
+  const amharic = [
+    "ምዕራፍ 1: የባዮሎጂ ንዑስ ዘርፎች 1",
+    "1.1 ንዑስ ዘርፎች 1",
+    "1.2 ንጹህና ተግባራዊ ዘርፎች 5",
+    "ምዕራፍ 2: እፅዋት 17",
+    "2.1 የእፅዋት ባህሪያት 17",
+  ].join("\n");
+  const found = chaptersFromToc(parseToc(amharic));
+  expect(found.map((c) => [c.unit, c.title])).toEqual([
+    [1, "የባዮሎጂ ንዑስ ዘርፎች"],
+    [2, "እፅዋት"],
+  ]);
+  expect(found[0].topics).toHaveLength(2);
+  expect(found[1].topics).toHaveLength(1);
+});
+
 test("topics stay in reading order within their unit", () => {
   const plants = chapters()[1];
   const pages = plants.topics.map((t) => t.page);

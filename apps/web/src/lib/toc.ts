@@ -56,11 +56,35 @@ const NUMBER_SOURCE = String.raw`\d+(?:\s*\.\s*\d+)*\s*\.?`;
 const SECTION_RE = new RegExp(
   String.raw`^(${NUMBER_SOURCE})\s+(.+?)\s+(\d{1,3})$`,
 );
-const UNIT_RE = /^Unit\s+(\d+)\s*[:.-]?\s*(.+?)\s+(\d{1,3})$/i;
+/**
+ * How a unit introduces itself.
+ *
+ * `HEADING_RE` in `textbook.ts` already recognises these same words as chapter
+ * starts, so a contents page written in Amharic has to be read by the same
+ * vocabulary the rest of the pipeline uses — otherwise the units are found when
+ * scanning headings and thrown away when reading the page that names them.
+ */
+const UNIT_WORD = String.raw`unit|ምዕራፍ|ክፍል`;
+const UNIT_RE = new RegExp(
+  String.raw`^(?:${UNIT_WORD})\s+(\d+)\s*[:.-]?\s*(.+?)\s+(\d{1,3})$`,
+  "i",
+);
 const STARTS_LIKE_ENTRY_RE = new RegExp(String.raw`^${NUMBER_SOURCE}\s+\S`);
 
 /** A unit line, which is an entry start that does not begin with a digit. */
-const UNIT_STARTS_RE = /^Unit\s+\d/i;
+const UNIT_STARTS_RE = new RegExp(String.raw`^(?:${UNIT_WORD})\s+\d`, "i");
+
+/**
+ * Letters of any script.
+ *
+ * These books are set in English, Afaan Oromoo and Amharic, and the contents
+ * page of an Amharic book has no ASCII in it at all — a `[A-Za-z]` count
+ * scored every one of its titles as zero letters, so `titleLooksReal` refused
+ * them and `hasWords` refused to hold them while they wrapped. The whole
+ * contents parsed to nothing and the student got the heading scan instead.
+ */
+const LETTER_RE = /\p{L}/gu;
+const WORD_RE = /\p{L}{2,}/gu;
 
 /**
  * Decoration can imitate an entry: a flourish reading "2 ; —" begins with a
@@ -70,13 +94,13 @@ const UNIT_STARTS_RE = /^Unit\s+\d/i;
 function titleLooksReal(title: string): boolean {
   const compact = title.replace(/\s+/g, "");
   if (compact.length < 3) return false;
-  const letters = (compact.match(/[A-Za-z]/g) ?? []).length;
+  const letters = (compact.match(LETTER_RE) ?? []).length;
   return letters / compact.length >= 0.7;
 }
 
 /** At least two real words — what separates a wrapped title from a doodle. */
 function hasWords(line: string): boolean {
-  return (line.match(/[A-Za-z]{2,}/g) ?? []).length >= 2;
+  return (line.match(WORD_RE) ?? []).length >= 2;
 }
 
 function endsWithPageNumber(line: string): boolean {
@@ -211,8 +235,40 @@ export function chaptersFromToc(entries: TocEntry[]): TocChapter[] {
 }
 
 /** Does this page look like the start of a contents section? */
+/**
+ * The same run as `LEADER_RUN`, without the `g` flag.
+ *
+ * A `g` regex carries `lastIndex` between calls, so `.test()` on it answers
+ * true on one line and false on the next for no reason a reader could see.
+ */
+const LEADER_TEST = /(?:\s*[.·…_�]\s*){2,}/;
+
+/**
+ * Does this page look like the start of a contents section?
+ *
+ * The obvious tell is the word "contents" — but that is an English word on a
+ * page that may be set in Amharic or Afaan Oromoo, and a book that titles its
+ * contents something else never says it either. The student then loses the
+ * book's own structure entirely and gets the heading scan, which is a guess.
+ *
+ * What every contents page has regardless of language is a *shape*: several
+ * lines that end in a page number, most of them joined to their title by a run
+ * of dots. Requiring the dots as well as the numbers is what keeps a page of
+ * exercises — numbered, and ending in numbers — from being read as contents.
+ */
 export function looksLikeTocPage(text: string): boolean {
-  return /\b(table\s+of\s+contents|contents)\b/i.test(text.slice(0, 400));
+  if (/\b(table\s+of\s+contents|contents)\b/i.test(text.slice(0, 400))) {
+    return true;
+  }
+  let withPage = 0;
+  let withLeader = 0;
+  for (const raw of text.split("\n").slice(0, 60)) {
+    const line = raw.trim();
+    if (!endsWithPageNumber(line)) continue;
+    withPage += 1;
+    if (LEADER_TEST.test(line)) withLeader += 1;
+  }
+  return withPage >= TOC_MIN_ENTRIES_PER_PAGE && withLeader >= 2;
 }
 
 /**

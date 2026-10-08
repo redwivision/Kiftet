@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   auditPageText,
+  type ContentsReadResult,
   chaptersFromContents,
   chaptersFromModel,
   chaptersFromOutline,
@@ -12,6 +13,7 @@ import {
   isSelectableTopic,
   type ModelContentsTopic,
   type ModelContentsUnit,
+  type ModelReadOutcome,
   numberDepth,
   PdfUnreadableError,
   planChunks,
@@ -564,6 +566,32 @@ test("page-numbered headers no longer cost the book its topics", () => {
   expect(built?.[0].topics[0].path).toBe("3.1 The cell cycle");
 });
 
+test("a unit printed short and long on successive pages is still one chapter", () => {
+  // Grade 10 Economics carries "Unit 5" at the top of a page and
+  // "Unit 5: Banking and Finance" a page later, alternating for a dozen
+  // pages. Keying headings on the bare number — not the running text — keeps
+  // both spellings under one chapter instead of shredding the book into a
+  // fragment per page.
+  const page = (header: string, n: number) =>
+    `${header} ${n}\n${prosePage(30, n)}`;
+  const pages = [
+    "Grade 10 Economics",
+    "Contents\nUnit 5: Banking and Finance ....... 20",
+    ...Array.from({ length: 8 }, (_, i) =>
+      page("Unit 5: Banking and Finance", 20 + i),
+    ),
+    ...Array.from({ length: 6 }, (_, i) => page("Unit 5", 28 + i)),
+    ...Array.from({ length: 4 }, (_, i) =>
+      page("Unit 5: Banking and Finance", 34 + i),
+    ),
+  ];
+  const segments = segmentsForOcrBook(pages);
+  expect(segments).toHaveLength(1);
+  expect(segments[0].title).toBe("Unit 5: Banking and Finance");
+  expect(segments[0].start).toBe(2);
+  expect(segments[0].end).toBe(pages.length);
+});
+
 test("a unit that opens on the book's first page keeps its place at the top", () => {
   // A book whose bookmarks point Unit 1 at page 0. Dropping that entry as
   // "front matter" leaves one top-level unit, one too few to trust the top
@@ -849,7 +877,7 @@ describe("contentsProbe", () => {
     expect(probe.pages[0]?.index).toBe(2);
   });
 
-  test("stops looking after the first forty pages", () => {
+  test("stops looking once the probe budget runs out", () => {
     const pages = Array.from({ length: 100 }, () => "x".repeat(600));
     const probe = contentsProbe(pages);
     expect(probe.pages).toHaveLength(TOC_PROBE_MAX_PAGES);
@@ -1035,6 +1063,39 @@ describe("readModelContents", () => {
       30,
     );
     expect(out).toBeNull();
+  });
+
+  test("records why a refused reading was not used", async () => {
+    const outcome: ModelReadOutcome = { reason: null };
+    const refused: ContentsReadResult = {
+      found: false,
+      units: [],
+      refused: "the reader is out of requests for this minute",
+    };
+    const out = await readModelContents(
+      async () => refused,
+      probe,
+      30,
+      outcome,
+    );
+    expect(out).toBeNull();
+    expect(outcome.reason).toBe(
+      "the reader is out of requests for this minute",
+    );
+  });
+
+  test("a call that throws records the error, not a silent nothing", async () => {
+    const outcome: ModelReadOutcome = { reason: null };
+    const out = await readModelContents(
+      async () => {
+        throw new Error("429 rate limited");
+      },
+      probe,
+      30,
+      outcome,
+    );
+    expect(out).toBeNull();
+    expect(outcome.reason).toMatch(/429/i);
   });
 
   test("a reading that cannot be placed in the book is refused", async () => {

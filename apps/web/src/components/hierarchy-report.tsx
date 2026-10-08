@@ -34,6 +34,9 @@ export function HierarchyReport({
     `contents pages read: ${report.contentsPagesRead}`,
     `page offset: ${report.pageOffset ?? "not established"}`,
     `model units: ${report.modelUnits.length || "none"}`,
+    `model reader: ${report.modelRead}${
+      report.modelReason ? ` — ${report.modelReason}` : ""
+    }`,
     "",
     "— contents entries —",
     ...report.contentsEntries.map(
@@ -95,6 +98,13 @@ export function HierarchyReport({
             {t("hierarchy-report-model")}
           </dt>
           <dd>{report.modelUnits.length}</dd>
+          <dt className="text-muted-foreground">
+            {t("hierarchy-report-model-read")}
+          </dt>
+          <dd>
+            {report.modelRead}
+            {report.modelReason ? ` — ${report.modelReason}` : ""}
+          </dd>
           <dt className="text-muted-foreground">
             {t("hierarchy-report-entries")}
           </dt>

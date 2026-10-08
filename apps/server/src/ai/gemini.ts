@@ -734,6 +734,8 @@ export function buildAttemptOrder(
 async function askJson(
   systemPrompt: string,
   userInput: string,
+  /** A JSON Schema describing the reply, enforced by the provider. */
+  schema?: Record<string, unknown>,
 ): Promise<string> {
   // Admission happens ONCE per logical call, not per attempt: the retry ladder
   // below is one student's request and must consume one unit of the shared
@@ -767,7 +769,18 @@ async function askJson(
                 parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
               },
             ],
-            config: { responseMimeType: "application/json", temperature: 0.4 },
+            config: schema
+              ? {
+                  responseMimeType: "application/json",
+                  temperature: 0.4,
+                  // `responseJsonSchema` takes a plain JSON Schema object and is
+                  // the form the SDK recommends when `response_schema` is being
+                  // picky. Enforcing the shape at the provider keeps a contents
+                  // read from degrading into "valid JSON, wrong structure" —
+                  // the only failure this path cannot recover from cheaply.
+                  responseJsonSchema: schema,
+                }
+              : { responseMimeType: "application/json", temperature: 0.4 },
           }),
           Math.min(GEMINI_TIMEOUT_MS, remaining),
         );
@@ -1226,6 +1239,46 @@ function degraded<T>(operation: string, error: unknown, fallback: () => T): T {
   return fallback();
 }
 
+/**
+ * The shape the contents reply must take.
+ *
+ * Mirrors `parseContentsReply`, and deliberately tolerates the "no contents in
+ * this book" case (`found: false`, no units) alongside the happy one. The
+ * provider enforces it, so a page the model cannot read comes back as
+ * `{"found": false}` rather than as prose or an unrelated JSON object.
+ */
+const CONTENTS_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    found: { type: "boolean" },
+    units: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          number: { type: "string" },
+          title: { type: "string" },
+          pageIndex: { type: "integer" },
+          topics: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                number: { type: "string" },
+                title: { type: "string" },
+                pageIndex: { type: "integer" },
+              },
+              required: ["title", "pageIndex"],
+            },
+          },
+        },
+        required: ["title", "pageIndex"],
+      },
+    },
+  },
+  required: ["found"],
+};
+
 export const ai: AiService = {
   async extractConcepts(rawText: string): Promise<ConceptChecklistItem[]> {
     const fallback = () => fallbackExtract(rawText);
@@ -1353,7 +1406,11 @@ export const ai: AiService = {
     const none: ContentsParse = { found: false, units: [] };
     if (!isAiAvailable() || pages.length === 0) return none;
     try {
-      const raw = await askJson(CONTENTS_SYSTEM, contentsUserPrompt(pages));
+      const raw = await askJson(
+        CONTENTS_SYSTEM,
+        contentsUserPrompt(pages),
+        CONTENTS_SCHEMA,
+      );
       const data = parseContentsReply(raw);
       return data ?? malformed("parseContents", () => none);
     } catch (error) {
