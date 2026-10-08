@@ -1130,4 +1130,53 @@ describe("transcribeModelContents", () => {
     expect(out).toBeNull();
     expect(outcome.reason).toMatch(/fewer than two units/i);
   });
+
+  test("chapters the book calls Chapter or Lesson are read, not discarded", async () => {
+    const out = await transcribeModelContents(
+      async () => ({
+        text: "Chapter 1: Cells .... 3\nChapter 2: Plants .... 12",
+      }),
+      probe,
+      pages,
+      30,
+    );
+    expect(out?.chapters.map((c) => [c.title, c.start, c.end])).toEqual([
+      ["Unit 1: Cells", 5, 14],
+      ["Unit 2: Plants", 14, 30],
+    ]);
+  });
+
+  test("chapters numbered the plain way are read, not discarded", async () => {
+    // No unit word at all: "1. Cells", "2. Plants". The strict reader sees
+    // two orphan sections and drops them; the loose reader knows a contents
+    // the model transcribed is worth reading however it is numbered.
+    const out = await transcribeModelContents(
+      async () => ({ text: "1. Cells .... 3\n2. Plants .... 12" }),
+      probe,
+      pages,
+      30,
+    );
+    expect(out?.units).toEqual([
+      { number: "1", title: "Cells", page: 3 },
+      { number: "2", title: "Plants", page: 12 },
+    ]);
+    expect(out?.chapters.map((c) => [c.start, c.end])).toEqual([
+      [5, 14],
+      [14, 30],
+    ]);
+  });
+
+  test("a refusal shows the line the reader could not use", async () => {
+    const outcome: ModelReadOutcome = { reason: null };
+    const out = await transcribeModelContents(
+      async () => ({ text: "Grade 10 student handbook" }),
+      probe,
+      pages,
+      30,
+      outcome,
+    );
+    expect(out).toBeNull();
+    expect(outcome.reason).toMatch(/fewer than two units/i);
+    expect(outcome.reason).toContain('It began: "Grade 10 student handbook"');
+  });
 });

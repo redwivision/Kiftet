@@ -165,3 +165,37 @@ test("a unit with no topics under it is not offered as a chapter", () => {
   expect(lonely).toHaveLength(1);
   expect(lonely[0].unit).toBe(1);
 });
+
+// ─── The chapter vocabulary ─────────────────────────────────────────────
+//
+// The heading scanner has always accepted Chapter/Lesson/Part/Module as
+// chapter starts. The contents reader must accept the same words, or a book
+// that says "Chapter 1:" in its contents finds its units when scanning
+// headings and throws them away when reading the page that names them.
+
+test("Chapter and Lesson lines are units, the same as Unit lines", () => {
+  const found = parseToc(
+    "Chapter 1: Introduction 4\nChapter 2: The cell 12\nLesson 3: Photosynthesis 30",
+  );
+  expect(found).toEqual([
+    { kind: "unit", unit: 1, title: "Introduction", page: 4 },
+    { kind: "unit", unit: 2, title: "The cell", page: 12 },
+    { kind: "unit", unit: 3, title: "Photosynthesis", page: 30 },
+  ]);
+});
+
+test("a roman numeral is a unit number, as it is to the heading scanner", () => {
+  const found = parseToc("Part I: The highlands 5\nPart II: The lowlands 20");
+  expect(found).toEqual([
+    { kind: "unit", unit: 1, title: "The highlands", page: 5 },
+    { kind: "unit", unit: 2, title: "The lowlands", page: 20 },
+  ]);
+});
+
+test("a dotted unit number keeps the chapter and drops the rest", () => {
+  const found = parseToc("Topic 1.1: The cell 5\nTopic 1.2: The leaf 9");
+  expect(found).toEqual([
+    { kind: "unit", unit: 1, title: "The cell", page: 5 },
+    { kind: "unit", unit: 1, title: "The leaf", page: 9 },
+  ]);
+});

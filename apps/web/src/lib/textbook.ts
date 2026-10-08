@@ -10,6 +10,7 @@ import { ocrBookKey } from "./ocr-cache";
 import {
   chaptersFromToc,
   looksLikeTocPage,
+  normalizeTocLine,
   parseToc,
   TOC_MAX_PAGES,
   TOC_MIN_ENTRIES_PER_PAGE,
@@ -17,6 +18,7 @@ import {
   TOC_TEXT_PAGES,
   type TocChapter,
   type TocEntry,
+  titleLooksReal,
 } from "./toc";
 
 type ExtractedItem = { str?: string; hasEOL?: boolean };
@@ -1357,6 +1359,98 @@ function chaptersFromEntries(entries: TocEntry[]): TocChapter[] {
 }
 
 /**
+ * Chapters out of a transcript, however the book chose to number them.
+ *
+ * The strict reader (`parseToc`) is tried first — it handles wrapped lines,
+ * leaders and Amharic spacing, and it is what the deterministic path already
+ * trusts. But it only recognizes a contents shaped the way the Grade 10
+ * Biology textbook is shaped: a unit word, a number, a title, a page. Plenty
+ * of real contents are not that shape — chapters listed as "1. Introduction",
+ * or "Chapter 3" without a colon — and when the strict reader finds fewer
+ * than two units in a transcript the model already confirmed *is* a contents,
+ * the lines it rejected are still contents lines, only in a shape it does not
+ * know. Reading them loosely is safe here in a way it is nowhere else: the
+ * model produced only these lines on purpose, and the placement step still
+ * demands that each title literally appear among the book's own pages before
+ * a single range is built.
+ */
+export function transcriptChapters(text: string): TocChapter[] {
+  const strict = chaptersFromEntries(parseToc(text));
+  if (strict.length >= TOC_MODEL_MIN_UNITS) return strict;
+  return looseTranscriptChapters(text);
+}
+
+function looseTranscriptChapters(text: string): TocChapter[] {
+  // The chunk words a contents may open a chapter with — the same vocabulary
+  // the heading scanner accepts, plus the dotted-number forms.
+  const worded =
+    /^(?:chapter|unit|lesson|part|module|topic|section|boqonnaa|ምዕራፍ|ክፍል|ትምህርት)\s*[:.-]?\s*(\d+)\s*[:.-]?\s*(.*)$/i;
+  const numbered = /^(\d+)\s*[:.-]\s*(.+)$/;
+  const dotted = /^(\d+(?:\.\d+)+)\s+\.?(.+)$/;
+  const units: TocChapter[] = [];
+  let current: TocChapter | null = null;
+  let lastPage = -1;
+  for (const raw of text.split("\n")) {
+    const line = normalizeTocLine(raw);
+    if (!line || line.length > 120) continue;
+    // A contents line ends in its printed page number. Anything that does not
+    // is decoration or prose the model should not have transcribed.
+    const tail = /(\d{1,3})\s*$/.exec(line);
+    if (!tail) continue;
+    const page = Number(tail[1]);
+    const label = line
+      .slice(0, tail.index)
+      .replace(/[\s.·…_�,-]+$/, "")
+      .trim();
+    if (label.length < 2) continue;
+    const sub = dotted.exec(label);
+    if (sub && current) {
+      // A dotted entry under a chapter — "2.3 Structure of a leaf". Dotted
+      // entries before any chapter have nothing to hang from and are skipped
+      // rather than promoted: one stray subsection must not become a chapter.
+      const title = sub[2].trim();
+      if (!titleLooksReal(title)) continue;
+      current.topics.push({
+        kind: "section",
+        path: sub[1].split("."),
+        title,
+        page,
+      });
+      continue;
+    }
+    let unit: number;
+    let title: string;
+    const chapterWord = worded.exec(label);
+    const plainNumber = numbered.exec(label);
+    if (chapterWord) {
+      unit = Number(chapterWord[1]);
+      title = chapterWord[2].trim() || label;
+    } else if (sub) {
+      // A dotted entry with no chapter above it: the book numbers its
+      // chapters the plain way ("1. Introduction", "2.3" never appears
+      // without a "1." somewhere, so the first integer is the chapter).
+      unit = Number(sub[1].split(".")[0]);
+      title = sub[2].trim();
+    } else if (plainNumber) {
+      unit = Number(plainNumber[1]);
+      title = plainNumber[2].trim();
+    } else {
+      // An unnumbered contents line — still a chapter if it reads like one.
+      unit = units.length + 1;
+      title = label;
+    }
+    if (!titleLooksReal(title)) continue;
+    // Contents run forwards; a line whose page goes backwards is a misread.
+    if (page < lastPage) continue;
+    lastPage = page;
+    if (units.length >= 40) break;
+    current = { unit, title, page, topics: [] };
+    units.push(current);
+  }
+  return units;
+}
+
+/**
  * Anchor text for title matching: lowercased, punctuation-free, single-spaced.
  *
  * Keeps Ethiopic letters, which have no case but do have punctuation the
@@ -1504,10 +1598,18 @@ export async function transcribeModelContents(
     if (!result.text.trim()) {
       return refuse("The AI reader found no contents in the opening pages.");
     }
-    const parsed = chaptersFromEntries(parseToc(result.text));
+    const parsed = transcriptChapters(result.text);
     if (parsed.length < TOC_MODEL_MIN_UNITS) {
+      // Show what the reader was looking at: the next paste of this reason
+      // then carries the book's own contents format, which is the one thing
+      // that tells us which line shape needs reading.
+      const firstLine = result.text
+        .split("\n")
+        .map((line) => line.trim())
+        .find(Boolean);
       return refuse(
-        "The AI reader found fewer than two units in these pages, which is not a contents.",
+        "The AI reader found fewer than two units in these pages, which is not a contents." +
+          (firstLine ? ` It began: "${firstLine.slice(0, 60)}".` : ""),
       );
     }
     const offset = offsetByTitle(parsed, pages);

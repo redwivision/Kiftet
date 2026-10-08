@@ -59,20 +59,61 @@ const SECTION_RE = new RegExp(
 /**
  * How a unit introduces itself.
  *
- * `HEADING_RE` in `textbook.ts` already recognises these same words as chapter
- * starts, so a contents page written in Amharic has to be read by the same
- * vocabulary the rest of the pipeline uses — otherwise the units are found when
- * scanning headings and thrown away when reading the page that names them.
+ * The same vocabulary `HEADING_RE` in `textbook.ts` recognises as a chapter
+ * start — that parity is the point: a book whose contents open "Chapter 1:"
+ * or "Lesson 2:" must parse here, or the units are found when scanning
+ * headings and thrown away when reading the page that names them, and the
+ * model is then handed a transcript it cannot rescue either. Roman numerals
+ * count too ("Part III"), because the heading scanner has always accepted
+ * them.
  */
-const UNIT_WORD = String.raw`unit|ምዕራፍ|ክፍል`;
+const UNIT_WORD = String.raw`unit|chapter|lesson|part|module|topic|section|boqonnaa|ምዕራፍ|ክፍል|ትምህርት`;
+/** A unit's own number: an integer, a dotted integer ("2.1"), or a roman numeral. */
+const UNIT_NUM = String.raw`\d{1,3}(?:\s*\.\s*\d+)*|[IVXLCDM]{1,7}`;
 const UNIT_RE = new RegExp(
-  String.raw`^(?:${UNIT_WORD})\s+(\d+)\s*[:.-]?\s*(.+?)\s+(\d{1,3})$`,
+  String.raw`^(?:${UNIT_WORD})\s+(${UNIT_NUM})\s*[:.-]?\s*(.+?)\s+(\d{1,3})$`,
   "i",
 );
 const STARTS_LIKE_ENTRY_RE = new RegExp(String.raw`^${NUMBER_SOURCE}\s+\S`);
 
 /** A unit line, which is an entry start that does not begin with a digit. */
-const UNIT_STARTS_RE = new RegExp(String.raw`^(?:${UNIT_WORD})\s+\d`, "i");
+const UNIT_STARTS_RE = new RegExp(
+  String.raw`^(?:${UNIT_WORD})\s+(?:\d|[IVXLCDM])`,
+  "i",
+);
+
+const ROMAN_VALUES: Record<string, number> = {
+  i: 1,
+  v: 5,
+  x: 10,
+  l: 50,
+  c: 100,
+  d: 500,
+  m: 1000,
+};
+
+/** "III" → 3, or null when the token is not a roman numeral worth trusting. */
+function romanToInt(text: string): number | null {
+  const chars = text.toLowerCase().split("");
+  if (chars.length === 0 || chars.length > 12) return null;
+  let total = 0;
+  for (let i = 0; i < chars.length; i += 1) {
+    const value = ROMAN_VALUES[chars[i]];
+    if (value === undefined) return null;
+    const next = ROMAN_VALUES[chars[i + 1]];
+    total += next !== undefined && next > value ? -value : value;
+  }
+  return total >= 1 ? total : null;
+}
+
+/** A captured unit number as an integer: "2" → 2, "2.1" → 2, "III" → 3. */
+function parseUnitNumber(token: string): number | null {
+  if (/^\d/.test(token)) {
+    const n = Number(token.split(".")[0]);
+    return Number.isInteger(n) && n >= 1 ? n : null;
+  }
+  return romanToInt(token);
+}
 
 /**
  * Letters of any script.
@@ -91,7 +132,9 @@ const WORD_RE = /\p{L}{2,}/gu;
  * digit, and "… OX Na " - 7" ends with one. A real title is overwhelmingly
  * letters; a flourish is punctuation with a few stray letters mixed in.
  */
-function titleLooksReal(title: string): boolean {
+/** Is this title letters rather than decoration? Exported: the transcript
+ *  reader in `textbook.ts` applies the same test to its looser lines. */
+export function titleLooksReal(title: string): boolean {
   const compact = title.replace(/\s+/g, "");
   if (compact.length < 3) return false;
   const letters = (compact.match(LETTER_RE) ?? []).length;
@@ -116,9 +159,11 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
   const unit = line.match(UNIT_RE);
   if (unit) {
     if (!titleLooksReal(unit[2])) return false;
+    const number = parseUnitNumber(unit[1]);
+    if (number === null) return false;
     into.push({
       kind: "unit",
-      unit: Number(unit[1]),
+      unit: number,
       title: tidy(unit[2]),
       page: Number(unit[3]),
     });
@@ -160,8 +205,10 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
  */
 const LEADER_RUN = /(?:\s*[.·…_�]\s*){2,}/g;
 
-/** One contents line, with its leaders collapsed and its spacing normalized. */
-function normalizeTocLine(line: string): string {
+/** One contents line, with its leaders collapsed and its spacing normalized.
+ *  Exported: the transcript reader in `textbook.ts` normalizes its lines the
+ *  same way before reading them loosely. */
+export function normalizeTocLine(line: string): string {
   return line.replace(/\s+/g, " ").replace(LEADER_RUN, " ").trim();
 }
 
