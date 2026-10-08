@@ -6,9 +6,10 @@ import { cn } from "@kiftet/ui/lib/utils";
  * on-device, so the wait shows the product's actual unique move (client-side
  * reading, auto-chunked loops) instead of a generic spinner.
  *
- * Lines wipe in from the left with a staggered `beam` (plain CSS, no loop —
- * it settles and stays). `prefers-reduced-motion` collapses it to the final
- * frame via the global rule in index.css.
+ * Lines wipe in with a staggered `beam-loop` that cycles forever — they
+ * collapse back out and rewrite, so a wait that outlasts the entrance (every
+ * import does) never freezes into a static picture. `prefers-reduced-motion`
+ * collapses it to the written frame via the global rule in index.css.
  */
 
 const LINES = [92, 78, 86, 64, 88, 72, 44];

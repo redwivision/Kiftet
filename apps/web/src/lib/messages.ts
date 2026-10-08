@@ -305,7 +305,7 @@ export const en = {
   "toc-fallback-guessed":
     "We couldn't find this book's contents page, so this list is guessed from the page headings.",
   "toc-fallback-refused":
-    "We asked the AI reader to find the contents and it couldn't: {reason} This list is therefore guessed from the page headings.",
+    "The AI reader did not return a chapter list: {reason} The list below is therefore guessed from the page headings.",
   "hierarchy-report-label": "What we read from this book",
   "hierarchy-report-source": "Read from",
   "hierarchy-report-contents": "Contents page",
@@ -996,7 +996,7 @@ export const am: Record<MessageKey, string> = {
   "toc-fallback-guessed":
     "የመጽሐፉን የይዘት ገጽ ማግኘት አልቻልንም፤ ስለዚህ ይህ ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው።",
   "toc-fallback-refused":
-    "የ AI አንባቢውን ጠይቀናል ግን ሊረዳ አልቻለም፡ {reason} ስለዚህ ይህ ዝርዝር በግምት ከገጾቹ ራስጌዎች የተሰራ ነው።",
+    "የ AI አንባቢው የምዕራፍ ዝርዝር አልመለሰም፡ {reason} ስለዚህ ከታች ያለው ዝርዝር በግምት ከገጾቹ ራስጌዎች የተሰራ ነው።",
   "hierarchy-report-label": "ከዚህ መጽሐፍ የተነበበው",
   "hierarchy-report-source": "ከየት ተነብቷል",
   "hierarchy-report-contents": "የይዘት ገጽ",

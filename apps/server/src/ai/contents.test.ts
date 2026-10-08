@@ -208,14 +208,15 @@ describe("parseContentsReply", () => {
 });
 
 describe("ai.parseContents", () => {
-  test("without a model key the answer is simply that nothing was found", async () => {
-    // CI has no key, and this must not be a failure: `found: false` sends the
-    // client straight to the heading scan, which is the correct answer when
-    // nothing was read. It must also not reach the network.
-    expect(await ai.parseContents([{ index: 0, text: "Contents" }])).toEqual({
-      found: false,
-      units: [],
-    });
+  test("without a model key the answer says so, instead of blaming the book", async () => {
+    // CI has no key, and this must not be a failure: the client still falls
+    // back to the heading scan, but the reason travels with the refusal so the
+    // screen can say the list is a guess because nothing was asked — not that
+    // the book has no contents. It must also not reach the network.
+    const out = await ai.parseContents([{ index: 0, text: "Contents" }]);
+    expect(out.found).toBe(false);
+    expect(out.units).toEqual([]);
+    expect(out.refused).toMatch(/not configured/i);
   });
 
   test("nothing to read is not a call worth making", async () => {

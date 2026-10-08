@@ -147,7 +147,13 @@ export type ContentsUnit = {
 };
 
 /** The book's contents as read, or `found: false` when there is none to read. */
-export type ContentsParse = { found: boolean; units: ContentsUnit[] };
+export type ContentsParse = {
+  found: boolean;
+  units: ContentsUnit[];
+  /** Why the read did not happen, when the model was never reached or not
+   *  asked at all. Distinct from a genuine "no contents in these pages". */
+  refused?: string;
+};
 
 export type AiService = {
   extractConcepts(rawText: string): Promise<ConceptChecklistItem[]>;
@@ -1399,12 +1405,24 @@ export const ai: AiService = {
   },
 
   async parseContents(pages: ContentsPage[]): Promise<ContentsParse> {
-    // No key, or nothing to read: `found: false` IS the answer, and it is the
-    // same one the caller reaches on its own. There is no lexical contents
-    // parser worth synthesising here — the deterministic one already ran and
-    // came up empty, which is the whole reason this method exists.
+    // Nothing to read: `found: false` IS the answer, and it is the same one
+    // the caller reaches on its own. There is no lexical contents parser worth
+    // synthesising here — the deterministic one already ran and came up empty,
+    // which is the whole reason this method exists.
     const none: ContentsParse = { found: false, units: [] };
-    if (!isAiAvailable() || pages.length === 0) return none;
+    if (pages.length === 0) return none;
+    // No key: the model was never asked, and telling a student "this book has
+    // no contents" for that is a sentence they cannot act on. The reason is
+    // handed to the screen instead, so a deployment missing its key shows as
+    // exactly what it is rather than as a chapter list that keeps guessing.
+    if (!isAiAvailable()) {
+      return {
+        found: false,
+        units: [],
+        refused:
+          "The AI reader is not configured on this server, so it was never asked.",
+      };
+    }
     try {
       const raw = await askJson(
         CONTENTS_SYSTEM,

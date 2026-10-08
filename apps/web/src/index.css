@@ -360,6 +360,11 @@
   --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
   --animate-ring-pulse: ring-pulse 2.6s ease-out infinite;
   --animate-beam: beam 1.4s ease-out both;
+  /* Loading: same strokes, but they keep rewriting themselves instead of
+     settling once and freezing. The final frame is the written page, so the
+     reduced-motion rule (which collapses every animation to that frame) still
+     shows a filled card rather than a blank one. */
+  --animate-beam-loop: beam-loop 2.4s ease-in-out infinite;
   --animate-grow: grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   /* Concept-graph motif: edges draw themselves in, then nodes settle. */
   --animate-ink-draw: ink-draw 0.9s ease-out both;
@@ -440,6 +445,27 @@
       transform: scaleX(0.25);
     }
     to {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+  }
+  /* beam, in a loop: collapse back out, then wipe in again. 0% and 100% are
+     both the written page, so the cycle wraps with no pop and reduced motion
+     (one instant frame) lands on visible content. */
+  @keyframes beam-loop {
+    0% {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+    40% {
+      opacity: 0;
+      transform: scaleX(0.3);
+    }
+    55% {
+      opacity: 0;
+      transform: scaleX(0.3);
+    }
+    100% {
       opacity: 1;
       transform: scaleX(1);
     }

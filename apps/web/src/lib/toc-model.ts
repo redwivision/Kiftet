@@ -30,7 +30,7 @@ export const readContentsWithModel: ContentsReader = async (probe) => {
         refused: "The AI reader sent back something we could not read.",
       };
     }
-    const candidate = data as Partial<ModelContents>;
+    const candidate = data as Partial<ModelContents> & { refused?: unknown };
     if (
       typeof candidate.found !== "boolean" ||
       !Array.isArray(candidate.units)
@@ -41,7 +41,16 @@ export const readContentsWithModel: ContentsReader = async (probe) => {
         refused: "The AI reader sent back something we could not read.",
       };
     }
-    return { found: candidate.found, units: candidate.units };
+    // The server declines for reasons of its own — no key on the deployment,
+    // nothing readable in the pages. It says which, and the plan shows that
+    // sentence instead of blaming the book for a decision the book made.
+    const refused =
+      typeof candidate.refused === "string" && candidate.refused.trim()
+        ? candidate.refused
+        : undefined;
+    return refused
+      ? { found: candidate.found, units: candidate.units, refused }
+      : { found: candidate.found, units: candidate.units };
   } catch (error) {
     // Over budget, signed out, offline, or the call timed out. Falling back is
     // a worse structure and a working import; raising is a dead end. The

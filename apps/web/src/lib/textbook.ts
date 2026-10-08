@@ -2,6 +2,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   joinOcrPages,
   type OcrLanguage,
+  type OcrPageResult,
   type OcrProgress,
   ocrPageRange,
 } from "./ocr";
@@ -1096,13 +1097,20 @@ async function readContentsPages(
   start: number,
   pageCount: number,
   language: OcrLanguage,
-): Promise<{ chapters: TocChapter[]; text: string; pagesRead: number }> {
+): Promise<{
+  chapters: TocChapter[];
+  text: string;
+  pagesRead: number;
+  /** The pages as they were recognized, keyed to their real indices. */
+  recognized: OcrPageResult[];
+}> {
   let text = "";
   let chapters: TocChapter[] = [];
   let pagesRead = 0;
+  const recognized: OcrPageResult[] = [];
   const limit = Math.min(start + TOC_MAX_PAGES, pageCount);
   for (let page = start; page < limit; page += 1) {
-    const [recognized] = await ocrPageRange(
+    const [pageResult] = await ocrPageRange(
       doc,
       bookKey,
       page,
@@ -1110,14 +1118,15 @@ async function readContentsPages(
       language,
     );
     pagesRead += 1;
-    const grown = parseToc(joinOcrPages([recognized]));
+    if (pageResult) recognized.push(pageResult);
+    const grown = parseToc(joinOcrPages([pageResult]));
     // One thin page mid-contents — a blank verso, a fold — should not be read as
     // the end of it, so only stop once the walk has found something to lose.
     if (chapters.length > 0 && grown.length < TOC_MIN_ENTRIES_PER_PAGE) break;
-    text += `\n${recognized?.text ?? ""}`;
+    text += `\n${pageResult?.text ?? ""}`;
     chapters = chaptersFromToc(parseToc(text));
   }
-  return { chapters, text, pagesRead };
+  return { chapters, text, pagesRead, recognized };
 }
 
 /**
@@ -1229,6 +1238,14 @@ export function chaptersFromContents(
 export const TOC_PROBE_MAX_PAGES = 20;
 /** Each page is cut to this, so one illustration-heavy page cannot eat the budget. */
 export const TOC_PROBE_PAGE_CHARS = 1200;
+/**
+ * How many front pages get recognized before a contents read on a scanned
+ * book. The deterministic walk already covers the contents page wherever the
+ * text layer can point at it; the model probe only needs to reach the few that
+ * OCR failed to place, and every page past these that has *no* contents is
+ * time spent recognizing covers and front matter that the model will skip.
+ */
+export const TOC_OCR_PROBE_PAGES = 8;
 /** Total text offered to the model, and the ceiling on the request body. */
 export const TOC_PROBE_CHARS = 28_000;
 /**
@@ -1857,6 +1874,9 @@ export async function planImport(
       (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
     );
     report.contentsPage = tocStart >= 0 ? tocStart : null;
+    // The pages the contents walk recognized. Kept so a model read afterwards
+    // can use text the OCR already paid for instead of recognizing again.
+    let walkRecognized: OcrPageResult[] = [];
     if (tocStart >= 0) {
       try {
         // Read the contents one page at a time and stop at the first page that
@@ -1870,6 +1890,7 @@ export async function planImport(
           pages.length,
           language_,
         );
+        walkRecognized = read.recognized;
         report.contentsPagesRead = read.pagesRead;
         report.contentsText = trimForReport(read.text);
         report.contentsEntries = read.chapters.map((c) => ({
@@ -1893,27 +1914,72 @@ export async function planImport(
     }
 
     // The contents pages refused to recognize — a scanned book whose OCR of
-    // them came back empty or out of range. The model reads whatever the probe
-    // can lift off those same pages before the tree falls back to the heading
+    // them came back empty or out of range. The model reads whatever it can
+    // lift off those same pages before the tree falls back to the heading
     // scan, which is a guess about where units start.
+    //
+    // On this path the text layer cannot answer: it is the broken text that
+    // sent the book here, and the probe would hand the model page numbers with
+    // nothing behind them. The front pages are recognized first and the probe
+    // is built from that text, on the real page indices.
     if (!contents && readContents) {
       const outcome: ModelReadOutcome = { reason: null };
-      const model = await readModelContents(
-        readContents,
-        contentsProbe(pages),
-        pages.length,
-        outcome,
-      );
-      report.modelRead = model ? "used" : "refused";
-      report.modelReason = outcome.reason;
-      if (model) {
-        usedModel = true;
-        report.modelUnits = model.units.map((unit) => ({
-          number: unit.number,
-          title: unit.title,
-          page: unit.pageIndex,
-        }));
-        contents = model.chapters;
+      let probe: TocProbe = { pages: [] };
+      try {
+        // The walk's recognized pages first — those were paid for already and
+        // are the very pages a contents lives on. Only when the walk never ran
+        // (or threw) does the front of the book get recognized, and only far
+        // enough to cover where a contents can still be.
+        const texts =
+          walkRecognized.length > 0
+            ? walkRecognized
+            : await ocrPageRange(
+                doc,
+                bookKey,
+                0,
+                Math.min(pages.length, TOC_OCR_PROBE_PAGES),
+                language_,
+              );
+        if (texts.length) {
+          const ocrText = Array.from({ length: pages.length }, () => "");
+          for (const r of texts) {
+            if (!r.text.trim()) continue;
+            ocrText[r.pageIndex] = (
+              ocrText[r.pageIndex] +
+              "\n\n" +
+              r.text
+            ).trim();
+          }
+          probe = contentsProbe(ocrText);
+        }
+      } catch (error) {
+        console.warn(
+          "[textbook] front-page OCR failed; skipping the model contents read",
+          error,
+        );
+      }
+      if (probe.pages.length === 0) {
+        report.modelRead = "not-attempted";
+        report.modelReason =
+          "The book's opening pages could not be recognized, so there was no text to send to the AI reader.";
+      } else {
+        const model = await readModelContents(
+          readContents,
+          probe,
+          pages.length,
+          outcome,
+        );
+        report.modelRead = model ? "used" : "refused";
+        report.modelReason = outcome.reason;
+        if (model) {
+          usedModel = true;
+          report.modelUnits = model.units.map((unit) => ({
+            number: unit.number,
+            title: unit.title,
+            page: unit.pageIndex,
+          }));
+          contents = model.chapters;
+        }
       }
     }
 
