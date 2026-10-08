@@ -61,8 +61,8 @@ describe("parseContentsReply", () => {
           {
             number: "Unit 1",
             title: "Cells",
-            pageIndex: 4,
-            topics: [{ number: "1.1", title: "Cell structure", pageIndex: 5 }],
+            page: 4,
+            topics: [{ number: "1.1", title: "Cell structure", page: 5 }],
           },
         ],
       }),
@@ -72,13 +72,13 @@ describe("parseContentsReply", () => {
       {
         number: "Unit 1",
         title: "Cells",
-        pageIndex: 4,
-        topics: [{ number: "1.1", title: "Cell structure", pageIndex: 5 }],
+        page: 4,
+        topics: [{ number: "1.1", title: "Cell structure", page: 5 }],
       },
     ]);
   });
 
-  test("drops a unit whose page index runs backwards", () => {
+  test("drops a unit whose printed page runs backwards", () => {
     // Two units out of order means a misread line. Sorting them would invent
     // an order the book did not print; keeping them would give the client a
     // chapter whose range ends where it starts.
@@ -86,8 +86,8 @@ describe("parseContentsReply", () => {
       JSON.stringify({
         found: true,
         units: [
-          { number: "Unit 2", title: "Plants", pageIndex: 40 },
-          { number: "Unit 1", title: "Cells", pageIndex: 12 },
+          { number: "Unit 2", title: "Plants", page: 40 },
+          { number: "Unit 1", title: "Cells", page: 12 },
         ],
       }),
     );
@@ -97,25 +97,25 @@ describe("parseContentsReply", () => {
 
   test("keeps two units that open on the same page", () => {
     // Real contents print a chapter that shares a page with the one above it;
-    // only a strictly decreasing index is a misread.
+    // only a strictly decreasing page is a misread.
     const out = parseContentsReply(
       JSON.stringify({
         found: true,
         units: [
-          { number: "Unit 1", title: "Cells", pageIndex: 12 },
-          { number: "Unit 2", title: "Plants", pageIndex: 12 },
+          { number: "Unit 1", title: "Cells", page: 12 },
+          { number: "Unit 2", title: "Plants", page: 12 },
         ],
       }),
     );
     expect(out?.units).toHaveLength(2);
   });
 
-  test("rejects a page index that is not a whole number at or above zero", () => {
-    for (const pageIndex of [-1, 3.5, Number.NaN, "6", null]) {
+  test("rejects a printed page that is not a whole number at or above zero", () => {
+    for (const page of [-1, 3.5, Number.NaN, "6", null]) {
       const out = parseContentsReply(
         JSON.stringify({
           found: true,
-          units: [{ number: "Unit 1", title: "Cells", pageIndex }],
+          units: [{ number: "Unit 1", title: "Cells", page }],
         }),
       );
       expect(out?.units).toEqual([]);
@@ -130,12 +130,12 @@ describe("parseContentsReply", () => {
           {
             number: "Unit 1",
             title: "Cells",
-            pageIndex: 10,
+            page: 10,
             topics: [
-              { number: "1.0", title: "Before the unit", pageIndex: 4 },
-              { number: "1.1", title: "Cell structure", pageIndex: 12 },
-              { number: "1.2", title: "Out of order", pageIndex: 11 },
-              { number: "1.3", title: "Back inside", pageIndex: 15 },
+              { number: "1.0", title: "Before the unit", page: 4 },
+              { number: "1.1", title: "Cell structure", page: 12 },
+              { number: "1.2", title: "Out of order", page: 11 },
+              { number: "1.3", title: "Back inside", page: 15 },
             ],
           },
         ],
@@ -159,8 +159,8 @@ describe("parseContentsReply", () => {
           {
             number: "Unit 1",
             title: "Cells",
-            pageIndex: 10,
-            topics: [{ number: "1.1", title: "Cell structure", pageIndex: 10 }],
+            page: 10,
+            topics: [{ number: "1.1", title: "Cell structure", page: 10 }],
           },
         ],
       }),
@@ -172,7 +172,7 @@ describe("parseContentsReply", () => {
     const units = Array.from({ length: 400 }, (_, i) => ({
       number: `Unit ${i + 1}`,
       title: `Unit ${i + 1}`,
-      pageIndex: i,
+      page: i,
     }));
     expect(
       parseContentsReply(JSON.stringify({ found: true, units }))?.units,
@@ -193,8 +193,8 @@ describe("parseContentsReply", () => {
       JSON.stringify({
         found: true,
         units: [
-          { number: "Unit 1", title: "", pageIndex: 3 },
-          { title: "", pageIndex: 4 },
+          { number: "Unit 1", title: "", page: 3 },
+          { title: "", page: 4 },
         ],
       }),
     );

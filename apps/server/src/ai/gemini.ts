@@ -135,14 +135,16 @@ export type ContentsTopic = {
   /** The numbering as printed — "1.1", "2.7.3". Never invented. */
   number: string;
   title: string;
-  pageIndex: number;
+  /** Printed page where the topic starts, exactly as printed on the contents. */
+  page: number;
 };
 
 export type ContentsUnit = {
   /** The unit's own label as printed — "Unit 1", "UNIT TWO". */
   number: string;
   title: string;
-  pageIndex: number;
+  /** Printed page where the unit starts, exactly as printed on the contents. */
+  page: number;
   topics: ContentsTopic[];
 };
 
@@ -1046,22 +1048,28 @@ const RETEST_SYSTEM =
  * chapter, dropped Units 2-4 entirely, and duplicated Unit 1. The rules below
  * name that furniture explicitly rather than hoping the model infers it.
  *
- * The model is asked for PDF page *indices* — the `[page N]` labels in the
- * input — rather than the printed numbers on the contents. An index needs no
- * offset cross-check to become a page range; a printed number does, and that
- * cross-check is what silently shifts an entire book when it guesses wrong.
+ * The model is asked for the *printed* page numbers, never PDF page indices.
+ * It only ever sees the opening pages, so a contents line reading
+ * "Unit 3 ........ 17" points at a page it has never been shown: no model can
+ * name the index of a page it cannot see, and asking for one produced answers
+ * that were incoherent in exactly the way they were guaranteed to be. The
+ * printed number is the number that is actually on the page in front of it,
+ * and placing it in the book is the client's job — the same
+ * printed-number-plus-heading-scan cross-check the deterministic reader has
+ * always used (`tocPageOffset`), which is the part that knows the book.
  */
 const CONTENTS_SYSTEM =
   "You read the table of contents of a textbook from the text of its opening pages. " +
   "Return STRICT JSON, no prose, in this exact shape: " +
-  '{"found":true,"units":[{"number":"Unit 1","title":"unit title as printed","pageIndex":0,"topics":[{"number":"1.1","title":"topic title as printed","pageIndex":0}]}]}. ' +
+  '{"found":true,"units":[{"number":"Unit 1","title":"unit title as printed","page":1,"topics":[{"number":"1.1","title":"topic title as printed","page":3}]}]}. ' +
   "Rules that matter more than they look: " +
-  "- pageIndex is the 0-based PAGE INDEX from the input — the number in the [page N] label — " +
-  "never the printed page number written on the contents line itself. " +
+  "- page is the PRINTED page number written on the contents line beside that entry — " +
+  "the same digits a reader would flip to, copied exactly as printed — never the " +
+  "[page N] label of the input, and never a guess at where that page lives in the file. " +
   "- Report only what the pages actually state. Never invent a unit, a topic or a page, " +
   "and never fill in a number the book did not print. " +
   '- When these pages hold no table of contents, return {"found":false,"units":[]} instead of guessing. ' +
-  "- Units appear in book order and their pageIndex must never decrease; every topic sits inside " +
+  "- Units appear in book order and their page must never decrease; every topic sits inside " +
   "its own unit's span, in the reading order the contents gives. " +
   '- `number` is the numbering exactly as printed ("Unit 4", "UNIT TWO", "4.2"). ' +
   "`title` is the words only, with the numbering, the page numbers and the dot leaders removed. " +
@@ -1142,7 +1150,10 @@ function contentsText(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function pageIndexOf(value: unknown): number | null {
+/** A printed page number as copied off the contents line: an integer, at 0 or
+ *  above. Anything else (a string, a fraction, a negative) is a misread line
+ *  and drops that entry rather than being coerced into one. */
+function printedPageOf(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isInteger(value)) return null;
   return value >= 0 ? value : null;
 }
@@ -1156,16 +1167,15 @@ function contentsTopics(value: unknown, from: number): ContentsTopic[] {
     if (typeof entry !== "object" || entry === null) continue;
     const record = entry as Record<string, unknown>;
     const title = contentsText(record.title);
-    const pageIndex = pageIndexOf(record.pageIndex);
-    // A topic that starts before its unit, or goes backwards, is a misread
+    const page = printedPageOf(record.page);
+    // A topic printed before its unit, or going backwards, is a misread
     // line: keeping it would hand the client a range that ends where it starts.
-    if (!title || pageIndex === null || pageIndex < from || pageIndex < last)
-      continue;
-    last = pageIndex;
+    if (!title || page === null || page < from || page < last) continue;
+    last = page;
     topics.push({
       number: contentsText(record.number) ?? "",
       title,
-      pageIndex,
+      page,
     });
   }
   return topics;
@@ -1174,11 +1184,12 @@ function contentsTopics(value: unknown, from: number): ContentsTopic[] {
 /**
  * Pull a contents tree out of the model reply.
  *
- * Only shape and ordering are checked here — a unit whose page index runs
+ * Only shape and ordering are checked here — a unit whose printed page runs
  * backwards against the next one, or off the end of the book, is caught by the
- * client, which is the only side that knows how long the book is. Everything
- * unparseable is dropped rather than defaulted: a contents missing one unit is
- * still a contents, while a fabricated one is worse than none.
+ * client, which is the only side that knows how long the book is and where the
+ * printed numbers land in it (the offset cross-check). Everything unparseable
+ * is dropped rather than defaulted: a contents missing one unit is still a
+ * contents, while a fabricated one is worse than none.
  */
 export function parseContentsReply(raw: string): ContentsParse | null {
   const data = parseJson<Record<string, unknown>>(raw);
@@ -1193,14 +1204,14 @@ export function parseContentsReply(raw: string): ContentsParse | null {
     if (typeof entry !== "object" || entry === null) continue;
     const record = entry as Record<string, unknown>;
     const title = contentsText(record.title);
-    const pageIndex = pageIndexOf(record.pageIndex);
-    if (!title || pageIndex === null || pageIndex < last) continue;
-    last = pageIndex;
+    const page = printedPageOf(record.page);
+    if (!title || page === null || page < last) continue;
+    last = page;
     units.push({
       number: contentsText(record.number) ?? "",
       title,
-      pageIndex,
-      topics: contentsTopics(record.topics, pageIndex),
+      page,
+      topics: contentsTopics(record.topics, page),
     });
   }
   return units.length ? { found: true, units } : { found: false, units: [] };
@@ -1264,7 +1275,7 @@ const CONTENTS_SCHEMA: Record<string, unknown> = {
         properties: {
           number: { type: "string" },
           title: { type: "string" },
-          pageIndex: { type: "integer" },
+          page: { type: "integer" },
           topics: {
             type: "array",
             items: {
@@ -1272,13 +1283,13 @@ const CONTENTS_SCHEMA: Record<string, unknown> = {
               properties: {
                 number: { type: "string" },
                 title: { type: "string" },
-                pageIndex: { type: "integer" },
+                page: { type: "integer" },
               },
-              required: ["title", "pageIndex"],
+              required: ["title", "page"],
             },
           },
         },
-        required: ["title", "pageIndex"],
+        required: ["title", "page"],
       },
     },
   },

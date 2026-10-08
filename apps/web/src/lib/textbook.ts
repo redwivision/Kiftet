@@ -739,7 +739,8 @@ async function openPdf(file: File): Promise<{
   };
 }
 
-type PageSegment = { title: string; start: number; end: number };
+/** A run of pages the heading scan found, as physical page indices. */
+export type PageSegment = { title: string; start: number; end: number };
 
 // Slice the book along its own table of contents: each outline entry becomes
 // the *start* of a chunk, so the AI reads one navigable section at a time.
@@ -1268,13 +1269,15 @@ export type TocProbe = { pages: TocProbePage[] };
 export type ModelContentsTopic = {
   number: string;
   title: string;
-  pageIndex: number;
+  /** Printed page as printed on the contents line — never a PDF index. */
+  page: number;
 };
 
 export type ModelContentsUnit = {
   number: string;
   title: string;
-  pageIndex: number;
+  /** Printed page as printed on the contents line — never a PDF index. */
+  page: number;
   topics: ModelContentsTopic[];
 };
 
@@ -1336,56 +1339,87 @@ export function contentsProbe(pages: string[]): TocProbe {
 /**
  * The model's units as chapters the rest of the pipeline already understands.
  *
- * Returns null — "do not use this" — rather than patching anything up. The
- * page indices are already in PDF coordinates, so unlike the printed numbers
- * on a contents page there is no offset to establish: a range that would run
- * off the end of the book or start before it ends is a misread, and the
- * heading scan is a worse answer only in structure, never in coordinates.
+ * The model answers in the *printed* numbers it can actually read off the
+ * contents line — it never sees the pages those numbers point at, so asking it
+ * for PDF indices produced answers that were incoherent by construction. Placing
+ * printed numbers in the book is exactly the job `tocPageOffset` +
+ * `chaptersFromContents` already do for the deterministic reader: cross-check
+ * the units against the heading segments the scan found, demand two or more
+ * agreeing pairs, then build ranges with that single offset. One coordinate
+ * system for every reader.
+ *
+ * Returns null — "do not use this" — rather than patching anything up. A page
+ * that is not an integer, an offset the segments will not confirm, or a range
+ * that runs off the end of the book is a misread; the heading scan below knows
+ * where the headings are, which is a worse answer only in structure.
  */
 export function chaptersFromModel(
   units: ModelContentsUnit[],
+  segments: PageSegment[],
   pageCount: number,
 ):
   | { title: string; start: number; end: number; topics: TopicEntry[] }[]
   | null {
   if (units.length < TOC_MODEL_MIN_UNITS || pageCount <= 0) return null;
 
+  const chapters: TocChapter[] = [];
   for (let i = 0; i < units.length; i += 1) {
-    const start = units[i]?.pageIndex ?? -1;
-    if (!Number.isInteger(start) || start < 0 || start >= pageCount)
-      return null;
-    // The book states its own order. A backwards or repeated jump means a line
-    // was misread, and two units claiming the same page produces a chapter
-    // whose range ends where it starts.
-    if (i > 0 && start <= (units[i - 1]?.pageIndex ?? -1)) return null;
+    const unit = units[i];
+    const page = unit?.page ?? -1;
+    // A printed page number is an integer at zero or above; anything else is a
+    // misread line, not a range to clip into place.
+    if (!unit || !Number.isInteger(page) || page < 0) return null;
+    chapters.push({
+      // The book's own label decides the number when it has a digit in it
+      // ("Unit 4" → 4, "UNIT TWO" → no digit); a contents that numbers itself
+      // in words alone falls back to position, the way the deterministic
+      // reader numbers what it finds.
+      unit: Number(/\d+/.exec(unit.number)?.[0] ?? i + 1),
+      title: unit.title,
+      page,
+      topics: unit.topics.map((topic) => ({
+        kind: "section" as const,
+        path: topic.number
+          .split(".")
+          .map((part) => part.trim())
+          .filter(Boolean),
+        title: topic.title,
+        page: topic.page,
+      })),
+    });
   }
 
-  return units.map((unit, i) => {
-    const start = unit.pageIndex;
-    const end = Math.min(units[i + 1]?.pageIndex ?? pageCount, pageCount);
+  const offset = tocPageOffset(chapters, segments);
+  if (offset === null) return null;
+  const placed = chaptersFromContents(chapters, offset, pageCount);
+  if (!placed) return null;
+  return placed.map((chapter) => {
     const topics: TopicEntry[] = [];
-    for (const topic of unit.topics) {
-      const { pageIndex } = topic;
-      if (!Number.isInteger(pageIndex) || pageIndex < start || pageIndex >= end)
+    for (const topic of chapter.topics) {
+      // A topic outside its own unit's span, or going backwards, is a misread
+      // line — the same rule the older reader applied to the model's answer,
+      // now against the placed ranges rather than the raw reply. The last
+      // unit's topics are still bound by the end of the book, which no printed
+      // number on the contents can know.
+      if (
+        !Number.isInteger(topic.page) ||
+        topic.page < chapter.start ||
+        topic.page >= chapter.end
+      )
         continue;
-      if (topics.length && pageIndex < (topics.at(-1)?.page ?? 0)) continue;
-      const label = topic.number
-        ? `${topic.number} ${topic.title}`
-        : topic.title;
-      topics.push({ path: label, title: topic.title, page: pageIndex });
+      if (topics.length && topic.page < (topics.at(-1)?.page ?? 0)) continue;
+      // `chaptersFromContents` always writes `${path.join(".")} ${title}`,
+      // which leaves a stray leading space on a topic the model read without
+      // a number — trimming restores the label the older reader produced.
+      topics.push({ ...topic, path: topic.path.trim() });
     }
-    return {
-      title: unit.number ? `${unit.number}: ${unit.title}` : unit.title,
-      start,
-      end,
-      topics,
-    };
+    return { ...chapter, topics };
   });
 }
 
 /**
  * Ask the model for the contents, and keep only a reading that survives the
- * same range checks the deterministic path applies to printed page numbers.
+ * same printed-number cross-check the deterministic path applies.
  *
  * Every way this can fail ends in null rather than a throw. The heading scan
  * below already found the running headers, so a refused, throttled or simply
@@ -1403,6 +1437,7 @@ export function chaptersFromModel(
 export async function readModelContents(
   readContents: ContentsReader,
   probe: TocProbe,
+  segments: PageSegment[],
   pageCount: number,
   outcome?: ModelReadOutcome,
 ): Promise<{
@@ -1425,10 +1460,15 @@ export async function readModelContents(
     if (!result.found) {
       return refuse("The AI reader found no contents in the opening pages.");
     }
-    const chapters = chaptersFromModel(result.units, pageCount);
+    if (result.units.length < TOC_MODEL_MIN_UNITS) {
+      return refuse(
+        "The AI reader found fewer than two units in these pages, which is not a contents.",
+      );
+    }
+    const chapters = chaptersFromModel(result.units, segments, pageCount);
     if (!chapters) {
       return refuse(
-        "The AI reader's answer did not fit inside this book, so it was discarded.",
+        "The AI reader's printed page numbers could not be matched to the pages of this book, so its reading was discarded.",
       );
     }
     return { units: result.units, chapters };
@@ -1780,6 +1820,7 @@ export async function planImport(
           const model = await readModelContents(
             readContents,
             contentsProbe(pages),
+            segments,
             pages.length,
             outcome,
           );
@@ -1792,7 +1833,7 @@ export async function planImport(
             report.modelUnits = model.units.map((unit) => ({
               number: unit.number,
               title: unit.title,
-              page: unit.pageIndex,
+              page: unit.page,
             }));
           }
         }
@@ -1966,6 +2007,7 @@ export async function planImport(
         const model = await readModelContents(
           readContents,
           probe,
+          segments,
           pages.length,
           outcome,
         );
@@ -1976,7 +2018,7 @@ export async function planImport(
           report.modelUnits = model.units.map((unit) => ({
             number: unit.number,
             title: unit.title,
-            page: unit.pageIndex,
+            page: unit.page,
           }));
           contents = model.chapters;
         }

@@ -24,13 +24,13 @@ export function InkPage({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <div
-        className="mb-3 h-2 w-1/2 origin-left animate-beam rounded-full bg-gold/70"
+        className="mb-3 h-2 w-1/2 origin-left animate-beam-loop rounded-full bg-gold/70"
         style={{ animationDelay: "0.05s" }}
       />
       {LINES.map((width, i) => (
         <div
           key={i}
-          className="mb-2 h-1.5 origin-left animate-beam rounded-full bg-gold/40"
+          className="mb-2 h-1.5 origin-left animate-beam-loop rounded-full bg-gold/40"
           style={{
             width: `${width}%`,
             animationDelay: `${0.15 + i * 0.12}s`,
