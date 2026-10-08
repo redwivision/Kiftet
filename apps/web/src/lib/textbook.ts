@@ -16,6 +16,7 @@ import {
   TOC_SEARCH_PAGES,
   TOC_TEXT_PAGES,
   type TocChapter,
+  type TocEntry,
 } from "./toc";
 
 type ExtractedItem = { str?: string; hasEOL?: boolean };
@@ -739,8 +740,7 @@ async function openPdf(file: File): Promise<{
   };
 }
 
-/** A run of pages the heading scan found, as physical page indices. */
-export type PageSegment = { title: string; start: number; end: number };
+type PageSegment = { title: string; start: number; end: number };
 
 // Slice the book along its own table of contents: each outline entry becomes
 // the *start* of a chunk, so the AI reads one navigable section at a time.
@@ -1266,35 +1266,24 @@ export type TocProbePage = { index: number; text: string };
 /** The opening pages offered to the model, keyed by PDF page index. */
 export type TocProbe = { pages: TocProbePage[] };
 
-export type ModelContentsTopic = {
-  number: string;
-  title: string;
-  /** Printed page as printed on the contents line — never a PDF index. */
-  page: number;
-};
-
-export type ModelContentsUnit = {
-  number: string;
-  title: string;
-  /** Printed page as printed on the contents line — never a PDF index. */
-  page: number;
-  topics: ModelContentsTopic[];
-};
-
-export type ModelContents = { found: boolean; units: ModelContentsUnit[] };
-
 /**
- * What a contents reader answered — and, when it did not answer, why not.
+ * The model's verbatim transcript of the contents — one entry per line, in
+ * book order, exactly as printed — or the reason there is none.
  *
  * `refused` carries a sentence a student can read: the quota was spent, the
  * session ended, the connection dropped. Without it every failure collapses to
- * `null`, and "nobody tried" and "we tried and were told no" look identical on
- * screen — which is how a guessed chapter list passes for a read one.
+ * an empty transcript, and "nobody tried" and "we tried and were told no" look
+ * identical on screen — which is how a guessed chapter list passes for a read
+ * one.
  */
-export type ContentsReadResult = ModelContents & { refused?: string };
+export type ContentsTranscript = {
+  /** Transcript text, or "" when there was nothing to transcribe. */
+  text: string;
+  refused?: string;
+};
 
 /**
- * Reads a book's contents with the model.
+ * Transcribes a book's contents with the model.
  *
  * Injected rather than imported so `planImport` stays free of the fetch layer
  * — and so a plan built in a test is the plan the student gets, not a plan
@@ -1302,10 +1291,10 @@ export type ContentsReadResult = ModelContents & { refused?: string };
  */
 export type ContentsReader = (
   probe: TocProbe,
-) => Promise<ContentsReadResult | null>;
+) => Promise<ContentsTranscript | null>;
 
 /**
- * Where a model read ended up, filled in by `readModelContents`.
+ * Where a model read ended up, filled in by `transcribeModelContents`.
  *
  * Optional so the caller that does not care — every test, and the pasted-text
  * path — pays nothing for it.
@@ -1337,117 +1326,172 @@ export function contentsProbe(pages: string[]): TocProbe {
 }
 
 /**
- * The model's units as chapters the rest of the pipeline already understands.
+ * Chapters the transcript parse produced, with topic-less units kept.
  *
- * The model answers in the *printed* numbers it can actually read off the
- * contents line — it never sees the pages those numbers point at, so asking it
- * for PDF indices produced answers that were incoherent by construction. Placing
- * printed numbers in the book is exactly the job `tocPageOffset` +
- * `chaptersFromContents` already do for the deterministic reader: cross-check
- * the units against the heading segments the scan found, demand two or more
- * agreeing pairs, then build ranges with that single offset. One coordinate
- * system for every reader.
- *
- * Returns null — "do not use this" — rather than patching anything up. A page
- * that is not an integer, an offset the segments will not confirm, or a range
- * that runs off the end of the book is a misread; the heading scan below knows
- * where the headings are, which is a worse answer only in structure.
+ * `chaptersFromToc` drops a unit that has no topics under it, which is right
+ * for the deterministic walk (a bare "Unit 1" line there is a heading, not a
+ * contents entry) and wrong for a transcript: a book whose contents lists only
+ * its units is still a contents, and dropping them would throw away the
+ * reading the model just did — and it would do so silently, keeping the one
+ * unit that *did* have topics and calling that a contents. This groups the
+ * same way and keeps every unit it finds.
  */
-export function chaptersFromModel(
-  units: ModelContentsUnit[],
-  segments: PageSegment[],
-  pageCount: number,
-):
-  | { title: string; start: number; end: number; topics: TopicEntry[] }[]
-  | null {
-  if (units.length < TOC_MODEL_MIN_UNITS || pageCount <= 0) return null;
-
+function chaptersFromEntries(entries: TocEntry[]): TocChapter[] {
   const chapters: TocChapter[] = [];
-  for (let i = 0; i < units.length; i += 1) {
-    const unit = units[i];
-    const page = unit?.page ?? -1;
-    // A printed page number is an integer at zero or above; anything else is a
-    // misread line, not a range to clip into place.
-    if (!unit || !Number.isInteger(page) || page < 0) return null;
-    chapters.push({
-      // The book's own label decides the number when it has a digit in it
-      // ("Unit 4" → 4, "UNIT TWO" → no digit); a contents that numbers itself
-      // in words alone falls back to position, the way the deterministic
-      // reader numbers what it finds.
-      unit: Number(/\d+/.exec(unit.number)?.[0] ?? i + 1),
-      title: unit.title,
-      page,
-      topics: unit.topics.map((topic) => ({
-        kind: "section" as const,
-        path: topic.number
-          .split(".")
-          .map((part) => part.trim())
-          .filter(Boolean),
-        title: topic.title,
-        page: topic.page,
-      })),
-    });
-  }
-
-  const offset = tocPageOffset(chapters, segments);
-  if (offset === null) return null;
-  const placed = chaptersFromContents(chapters, offset, pageCount);
-  if (!placed) return null;
-  return placed.map((chapter) => {
-    const topics: TopicEntry[] = [];
-    for (const topic of chapter.topics) {
-      // A topic outside its own unit's span, or going backwards, is a misread
-      // line — the same rule the older reader applied to the model's answer,
-      // now against the placed ranges rather than the raw reply. The last
-      // unit's topics are still bound by the end of the book, which no printed
-      // number on the contents can know.
-      if (
-        !Number.isInteger(topic.page) ||
-        topic.page < chapter.start ||
-        topic.page >= chapter.end
-      )
-        continue;
-      if (topics.length && topic.page < (topics.at(-1)?.page ?? 0)) continue;
-      // `chaptersFromContents` always writes `${path.join(".")} ${title}`,
-      // which leaves a stray leading space on a topic the model read without
-      // a number — trimming restores the label the older reader produced.
-      topics.push({ ...topic, path: topic.path.trim() });
+  let current: TocChapter | null = null;
+  for (const entry of entries) {
+    if (entry.kind === "unit") {
+      current = {
+        unit: entry.unit,
+        title: entry.title,
+        page: entry.page,
+        topics: [],
+      };
+      chapters.push(current);
+      continue;
     }
-    return { ...chapter, topics };
-  });
+    if (!current) continue;
+    current.topics.push(entry);
+  }
+  return chapters;
 }
 
 /**
- * Ask the model for the contents, and keep only a reading that survives the
- * same printed-number cross-check the deterministic path applies.
+ * Anchor text for title matching: lowercased, punctuation-free, single-spaced.
  *
- * Every way this can fail ends in null rather than a throw. The heading scan
+ * Keeps Ethiopic letters, which have no case but do have punctuation the
+ * comparison should not care about.
+ */
+function normalizeAnchor(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^0-9a-z\u1200-\u137f]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Does this line end in a printed page number? Such a line is a contents
+ * listing (or a wrapped one), never a running header — and a contents line
+ * must not vote for its own placement.
+ */
+function endsWithPageNumber(line: string): boolean {
+  return /\d{1,3}$/.test(line);
+}
+
+/**
+ * How strongly this page line names this chapter's title. 2 is the whole line
+ * (label plus title, or the title alone); 1 is the title inside a heading the
+ * line also decorates; 0 is nothing. The floor of 2 on the offset tally means
+ * only an exact naming moves a chapter.
+ */
+function headingAnchorWeight(title: string, line: string): 0 | 1 | 2 {
+  const normTitle = normalizeAnchor(title);
+  const normLine = normalizeAnchor(line);
+  if (!normTitle || !normLine) return 0;
+  if (normLine === normTitle) return 2;
+  // "Unit 2 Plants" for the contents' "Plants": a short label in front of the
+  // title is still the title being named, not merely mentioned.
+  if (
+    normLine.endsWith(normTitle) &&
+    normLine.length - normTitle.length <= 16
+  ) {
+    return 2;
+  }
+  if (HEADING_RE.test(line) && normLine.includes(normTitle)) return 1;
+  return 0;
+}
+
+/**
+ * The printed-page → PDF-page offset, measured by finding each chapter's own
+ * title among the book's pages.
+ *
+ * The cross-check this replaces paired the model's units with the heading
+ * scan's segments *positionally* — but on a book that needs the model at all,
+ * the scan's segments are exam furniture ("Part I: Choose the best answer"),
+ * so a correct reading could never agree with them and was always discarded.
+ * This measures against the pages themselves instead: every non-contents line
+ * that names a chapter votes for one offset (`physical page − printed page`),
+ * and the offset with the most weight wins. Contents pages are skipped, and so
+ * is any line ending in a page number, so the listing cannot vote for itself.
+ *
+ * Returns null when the book never names its chapters outside its contents —
+ * which is the case the heading scan below exists for.
+ */
+export function offsetByTitle(
+  chapters: TocChapter[],
+  pages: string[],
+): number | null {
+  const votes = new Map<number, number>();
+  for (let i = 0; i < pages.length; i += 1) {
+    const text = pages[i];
+    if (!text.trim() || looksLikeTocPage(text)) continue;
+    for (const raw of text.split("\n")) {
+      const line = raw.trim();
+      if (!line || line.length > 80 || endsWithPageNumber(line)) continue;
+      for (const chapter of chapters) {
+        const weight = headingAnchorWeight(chapter.title, line);
+        if (!weight) continue;
+        const offset = i - chapter.page;
+        if (offset < 0) continue;
+        votes.set(offset, (votes.get(offset) ?? 0) + weight);
+      }
+    }
+  }
+  let best: number | null = null;
+  let bestWeight = 0;
+  for (const [offset, weight] of votes) {
+    if (weight > bestWeight) {
+      best = offset;
+      bestWeight = weight;
+    }
+  }
+  // One strong match — the unit's own header naming it — is a placement; a
+  // lone weak one (the title merely appearing inside some other heading) is
+  // not.
+  return bestWeight >= 2 ? best : null;
+}
+
+/**
+ * Ask the model to transcribe the contents, parse it with the same reader the
+ * deterministic path uses, and place the printed numbers it copied by finding
+ * the chapters' titles among the book's pages.
+ *
+ * Every way this can fail ends in null rather than a throw: the heading scan
  * below already found the running headers, so a refused, throttled or simply
  * wrong model read costs the student the topics under each unit and nothing
  * else — an error screen here would be a worse answer than a plain one.
  *
- * What it does not cost is the *explanation*. When `outcome` is supplied it is
- * told which of those things happened, in words, so the screen can say the
- * chapter list below is a guess and why the better answer never arrived.
+ * When `outcome` is supplied it is told which of those things happened, in
+ * words, so the screen can say the chapter list below is a guess and why the
+ * better answer never arrived.
  *
  * Exported because "which answers are refused" is the property that keeps this
- * safe: a call that throws, or one that reads two units out of a twenty-page
- * contents, must reach the heading scan rather than the screen.
+ * safe: a call that throws, a transcript the contents reader will not parse,
+ * or titles the book never repeats outside its contents must all reach the
+ * heading scan rather than the screen.
  */
-export async function readModelContents(
+export async function transcribeModelContents(
   readContents: ContentsReader,
   probe: TocProbe,
-  segments: PageSegment[],
+  pages: string[],
   pageCount: number,
   outcome?: ModelReadOutcome,
 ): Promise<{
-  units: ModelContentsUnit[];
-  chapters: NonNullable<ReturnType<typeof chaptersFromModel>>;
+  units: { number: string; title: string; page: number }[];
+  chapters: {
+    title: string;
+    start: number;
+    end: number;
+    topics: TopicEntry[];
+  }[];
 } | null> {
   const refuse = (reason: string): null => {
     if (outcome) outcome.reason = reason;
     return null;
   };
+  const unplaceable =
+    "The AI reader's printed page numbers could not be matched to the pages of this book, so its reading was discarded.";
   if (!probe.pages.length) {
     return refuse("There was no opening text to send to the AI reader.");
   }
@@ -1457,21 +1501,27 @@ export async function readModelContents(
       return refuse("The AI reader returned no answer.");
     }
     if (result.refused) return refuse(result.refused);
-    if (!result.found) {
+    if (!result.text.trim()) {
       return refuse("The AI reader found no contents in the opening pages.");
     }
-    if (result.units.length < TOC_MODEL_MIN_UNITS) {
+    const parsed = chaptersFromEntries(parseToc(result.text));
+    if (parsed.length < TOC_MODEL_MIN_UNITS) {
       return refuse(
         "The AI reader found fewer than two units in these pages, which is not a contents.",
       );
     }
-    const chapters = chaptersFromModel(result.units, segments, pageCount);
-    if (!chapters) {
-      return refuse(
-        "The AI reader's printed page numbers could not be matched to the pages of this book, so its reading was discarded.",
-      );
-    }
-    return { units: result.units, chapters };
+    const offset = offsetByTitle(parsed, pages);
+    if (offset === null) return refuse(unplaceable);
+    const placed = chaptersFromContents(parsed, offset, pageCount);
+    if (!placed) return refuse(unplaceable);
+    return {
+      units: parsed.map((chapter) => ({
+        number: String(chapter.unit),
+        title: chapter.title,
+        page: chapter.page,
+      })),
+      chapters: placed,
+    };
   } catch (error) {
     console.warn(
       "[textbook] model contents read failed; using detected headings",
@@ -1817,10 +1867,10 @@ export async function planImport(
           needsModel && readContents ? "refused" : "not-attempted";
         if (needsModel && readContents) {
           const outcome: ModelReadOutcome = { reason: null };
-          const model = await readModelContents(
+          const model = await transcribeModelContents(
             readContents,
             contentsProbe(pages),
-            segments,
+            pages,
             pages.length,
             outcome,
           );
@@ -1966,6 +2016,11 @@ export async function planImport(
     if (!contents && readContents) {
       const outcome: ModelReadOutcome = { reason: null };
       let probe: TocProbe = { pages: [] };
+      // The recognized text, on real page indices, spanning whatever the walk
+      // recognized. It is both what the model reads *and* where the printed
+      // numbers it copies get measured against — the pages that name each unit
+      // outside the contents are the only honest offset available here.
+      let ocrText: string[] = [];
       try {
         // The walk's recognized pages first — those were paid for already and
         // are the very pages a contents lives on. Only when the walk never ran
@@ -1982,7 +2037,7 @@ export async function planImport(
                 language_,
               );
         if (texts.length) {
-          const ocrText = Array.from({ length: pages.length }, () => "");
+          ocrText = Array.from({ length: pages.length }, () => "");
           for (const r of texts) {
             if (!r.text.trim()) continue;
             ocrText[r.pageIndex] = (
@@ -2004,10 +2059,10 @@ export async function planImport(
         report.modelReason =
           "The book's opening pages could not be recognized, so there was no text to send to the AI reader.";
       } else {
-        const model = await readModelContents(
+        const model = await transcribeModelContents(
           readContents,
           probe,
-          segments,
+          ocrText,
           pages.length,
           outcome,
         );

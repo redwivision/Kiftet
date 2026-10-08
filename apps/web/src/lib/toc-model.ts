@@ -1,8 +1,8 @@
 import { api, apiError } from "./api";
-import type { ContentsReader, ModelContents } from "./textbook";
+import type { ContentsReader, ContentsTranscript } from "./textbook";
 
 /**
- * Read a textbook's own table of contents with the model.
+ * Transcribe a textbook's own table of contents with the model.
  *
  * Used by `planImport` when the deterministic parse found nothing — the word
  * "contents" was not on any of the first fifteen pages, so there was no
@@ -25,19 +25,14 @@ export const readContentsWithModel: ContentsReader = async (probe) => {
     });
     if (!data || typeof data !== "object") {
       return {
-        found: false,
-        units: [],
+        text: "",
         refused: "The AI reader sent back something we could not read.",
       };
     }
-    const candidate = data as Partial<ModelContents> & { refused?: unknown };
-    if (
-      typeof candidate.found !== "boolean" ||
-      !Array.isArray(candidate.units)
-    ) {
+    const candidate = data as Partial<ContentsTranscript>;
+    if (typeof candidate.text !== "string") {
       return {
-        found: false,
-        units: [],
+        text: "",
         refused: "The AI reader sent back something we could not read.",
       };
     }
@@ -49,12 +44,12 @@ export const readContentsWithModel: ContentsReader = async (probe) => {
         ? candidate.refused
         : undefined;
     return refused
-      ? { found: candidate.found, units: candidate.units, refused }
-      : { found: candidate.found, units: candidate.units };
+      ? { text: candidate.text, refused }
+      : { text: candidate.text };
   } catch (error) {
     // Over budget, signed out, offline, or the call timed out. Falling back is
     // a worse structure and a working import; raising is a dead end. The
     // reason still travels with the failure so the fallback can be disclosed.
-    return { found: false, units: [], refused: apiError(error) };
+    return { text: "", refused: apiError(error) };
   }
 };

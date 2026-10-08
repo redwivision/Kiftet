@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   auditPageText,
-  type ContentsReadResult,
   chaptersFromContents,
-  chaptersFromModel,
   chaptersFromOutline,
   contentsProbe,
   type ImportChunk,
@@ -11,14 +9,11 @@ import {
   importTocTree,
   indexToc,
   isSelectableTopic,
-  type ModelContentsTopic,
-  type ModelContentsUnit,
   type ModelReadOutcome,
   numberDepth,
-  type PageSegment,
+  offsetByTitle,
   PdfUnreadableError,
   planChunks,
-  readModelContents,
   segmentsForOcrBook,
   splitTocNumber,
   stripUndecodableGlyphs,
@@ -29,6 +24,7 @@ import {
   textLayerReader,
   tocJobs,
   tocPageOffset,
+  transcribeModelContents,
   visibleChapterTitle,
   withPartSplits,
 } from "./textbook";
@@ -859,26 +855,13 @@ test("a readable book still serves a topic's own pages, and nothing beside them"
 //
 // The browser cannot be exercised end to end here — `planImport` opens a real
 // PDF through the viewer — so these cover the pieces it is assembled from:
-// what is worth sending, what is accepted back, and what happens to the
-// answers that are refused.
+// what is worth sending, how a verbatim transcript is parsed by the same
+// reader the deterministic path uses, and how the printed numbers it copies
+// are measured against the book's own pages.
 
-function modelUnit(
-  number: string,
-  title: string,
-  page: number,
-  topics: ModelContentsTopic[] = [],
-): ModelContentsUnit {
-  return { number, title, page, topics };
-}
-
-/** The heading scan's segments, as `chaptersFromModel` demands to confirm
- *  the printed numbers against — one segment per unit, at its physical page. */
-function segmentsOf(...starts: number[]): PageSegment[] {
-  return starts.map((start, i) => ({
-    title: `Unit ${i + 1}`,
-    start,
-    end: starts[i + 1] ?? start,
-  }));
+/** A chapter as parseToc groups one unit, for the anchor-vote fixtures. */
+function chapterOf(unit: number, title: string, page: number) {
+  return { unit, title, page, topics: [] };
 }
 
 describe("contentsProbe", () => {
@@ -921,171 +904,109 @@ describe("contentsProbe", () => {
   });
 });
 
-describe("chaptersFromModel", () => {
-  test("places printed numbers where the heading scan found the units", () => {
-    const chapters = chaptersFromModel(
-      [
-        modelUnit("Unit 1", "Cells", 3),
-        modelUnit("Unit 2", "Plants", 12),
-        modelUnit("Unit 3", "Animals", 21),
-      ],
-      segmentsOf(5, 14, 23),
-      30,
+describe("offsetByTitle", () => {
+  /** A book whose pages are prose, with a header naming a unit at its start. */
+  function bookWithHeaders(headers: Record<number, string>): string[] {
+    return Array.from({ length: 30 }, (_, i) =>
+      headers[i] ? `${headers[i]}\n${prosePage(60, i)}` : prosePage(60, i),
     );
-    expect(chapters?.map((c) => [c.title, c.start, c.end])).toEqual([
-      ["Unit 1: Cells", 5, 14],
-      ["Unit 2: Plants", 14, 23],
-      ["Unit 3: Animals", 23, 30],
-    ]);
-  });
+  }
 
-  test("a number comes from the book's own label, falling back to position", () => {
-    const chapters = chaptersFromModel(
-      [modelUnit("", "Cells", 3), modelUnit("UNIT TWO", "Plants", 12)],
-      segmentsOf(5, 14),
-      30,
-    );
-    expect(chapters?.map((c) => c.title)).toEqual([
-      "Unit 1: Cells",
-      "Unit 2: Plants",
-    ]);
-  });
-
-  test("one unit is not a contents, however well it was read", () => {
+  test("measures the offset from the pages that name each unit", () => {
+    const pages = bookWithHeaders({ 5: "Unit 1: Cells", 14: "Unit 2: Plants" });
     expect(
-      chaptersFromModel([modelUnit("Unit 1", "Cells", 3)], segmentsOf(5), 30),
-    ).toBeNull();
-  });
-
-  test("nothing to place against is refused", () => {
-    expect(chaptersFromModel([], segmentsOf(), 30)).toBeNull();
-    // The scan found nothing the printed numbers can be checked against, and
-    // a single agreeing pair is a coincidence, not an offset.
-    expect(
-      chaptersFromModel(
-        [modelUnit("Unit 1", "Cells", 3), modelUnit("Unit 2", "Plants", 12)],
-        segmentsOf(),
-        30,
+      offsetByTitle(
+        [chapterOf(1, "Cells", 3), chapterOf(2, "Plants", 12)],
+        pages,
       ),
-    ).toBeNull();
+    ).toBe(2);
+  });
+
+  test("one exact header naming a unit is enough to place the book", () => {
+    const pages = bookWithHeaders({ 7: "Unit 1: Cells" });
+    expect(offsetByTitle([chapterOf(1, "Cells", 5)], pages)).toBe(2);
+  });
+
+  test("a contents page does not vote for its own placement", () => {
+    // The listing names every unit — on the contents page. Letting it vote
+    // would always "confirm" an offset of roughly minus the front matter.
+    const pages = bookWithHeaders({
+      3: "Contents\nUnit 1: Cells .... 3\nUnit 2: Plants .... 12",
+    });
     expect(
-      chaptersFromModel(
-        [modelUnit("Unit 1", "Cells", 3), modelUnit("Unit 2", "Plants", 12)],
-        segmentsOf(5),
-        0,
+      offsetByTitle(
+        [chapterOf(1, "Cells", 3), chapterOf(2, "Plants", 12)],
+        pages,
       ),
     ).toBeNull();
   });
 
-  test("numbers the scan cannot confirm are refused, not forced into place", () => {
-    // The shape of the failure this replaced: a model answering in content
-    // page indices, clustered where the probe was looking, agrees with
-    // nothing the heading scan found.
+  test("a line ending in a page number is a listing, not a header", () => {
+    const pages = bookWithHeaders({ 5: "Unit 1: Cells 3" });
+    expect(offsetByTitle([chapterOf(1, "Cells", 3)], pages)).toBeNull();
+  });
+
+  test("wording that differs but names the same title still agrees", () => {
+    // The Grade 10 Biology split: contents say "Cells", the running header
+    // says "Unit 2: Plants" — the title is what both share.
+    const pages = bookWithHeaders({ 14: "Unit Two: Plants" });
+    expect(offsetByTitle([chapterOf(2, "Plants", 12)], pages)).toBe(2);
+  });
+
+  test("an Amharic header names its unit the same way", () => {
+    const pages = bookWithHeaders({ 8: "ምዕራፍ ፪ እህል" });
+    expect(offsetByTitle([chapterOf(2, "እህል", 5)], pages)).toBe(3);
+  });
+
+  test("a printed page ahead of the book it points into is refused", () => {
+    // Header at physical 5, contents claiming the unit is printed on 20: the
+    // only offset on offer is negative, which cannot be a placement.
+    const pages = bookWithHeaders({ 5: "Unit 1: Cells" });
+    expect(offsetByTitle([chapterOf(1, "Cells", 20)], pages)).toBeNull();
+  });
+
+  test("a book that never names its chapters outside the contents", () => {
+    const pages = Array.from({ length: 30 }, (_, i) => prosePage(60, i));
     expect(
-      chaptersFromModel(
-        [modelUnit("Unit 1", "Cells", 4), modelUnit("Unit 2", "Plants", 5)],
-        segmentsOf(5, 14),
-        30,
+      offsetByTitle(
+        [chapterOf(1, "Cells", 3), chapterOf(2, "Plants", 12)],
+        pages,
       ),
     ).toBeNull();
   });
 
-  test("a page outside the book is a misread, not a clipped range", () => {
-    expect(
-      chaptersFromModel(
-        [modelUnit("Unit 1", "Cells", -4), modelUnit("Unit 2", "Plants", 12)],
-        segmentsOf(5, 14),
-        30,
-      ),
-    ).toBeNull();
-    expect(
-      chaptersFromModel(
-        [modelUnit("Unit 1", "Cells", 1.5), modelUnit("Unit 2", "Plants", 12)],
-        segmentsOf(5, 14),
-        30,
-      ),
-    ).toBeNull();
-    // The first two pairs confirm the offset; the third unit's number still
-    // lands past the last page, which is refused rather than clipped.
-    expect(
-      chaptersFromModel(
-        [
-          modelUnit("Unit 1", "Cells", 3),
-          modelUnit("Unit 2", "Plants", 12),
-          modelUnit("Unit 3", "Animals", 999),
-        ],
-        segmentsOf(5, 14),
-        30,
-      ),
-    ).toBeNull();
-  });
-
-  test("an order the book did not print is refused", () => {
-    expect(
-      chaptersFromModel(
-        [modelUnit("Unit 2", "Plants", 21), modelUnit("Unit 1", "Cells", 3)],
-        segmentsOf(5, 14),
-        30,
-      ),
-    ).toBeNull();
-    // Two units printed on the same page cannot both start where the scan
-    // found a unit, so no offset survives the disagreement.
-    expect(
-      chaptersFromModel(
-        [modelUnit("Unit 1", "Cells", 5), modelUnit("Unit 2", "Plants", 5)],
-        segmentsOf(7, 14),
-        30,
-      ),
-    ).toBeNull();
-  });
-
-  test("a topic is kept only when it sits inside its own unit", () => {
-    const chapters = chaptersFromModel(
-      [
-        modelUnit("Unit 1", "Cells", 3, [
-          { number: "1.0", title: "Before the unit", page: 1 },
-          { number: "1.1", title: "Cell structure", page: 4 },
-          { number: "1.2", title: "On the boundary", page: 12 },
-          { number: "1.3", title: "Next unit's page", page: 20 },
-          { number: "1.4", title: "Back inside", page: 11 },
-        ]),
-        modelUnit("Unit 2", "Plants", 12),
-      ],
-      segmentsOf(5, 14),
-      30,
-    );
-    expect(chapters?.[0]?.topics.map((t) => t.title)).toEqual([
-      "Cell structure",
-      "Back inside",
-    ]);
-    expect(chapters?.[0]?.topics.map((t) => t.path)).toEqual([
-      "1.1 Cell structure",
-      "1.4 Back inside",
-    ]);
-    expect(chapters?.[0]?.topics.map((t) => t.page)).toEqual([6, 13]);
-    // The second unit's own topics are still its own.
-    expect(chapters?.[1]?.topics).toEqual([]);
+  test("the title merely mentioned inside another heading is not a placement", () => {
+    // Weight 1 only — one stray "photosynthesis" inside an exercise heading
+    // must not place a chapter by itself.
+    const pages = bookWithHeaders({
+      9: "Part I: Choose the best answer about plants",
+    });
+    expect(offsetByTitle([chapterOf(2, "plants", 12)], pages)).toBeNull();
   });
 });
 
-describe("readModelContents", () => {
+describe("transcribeModelContents", () => {
   const probe = { pages: [{ index: 0, text: "Contents" }] };
-  // Printed 3 and 12, found by the scan at 5 and 14 — a two-page offset.
-  const segments = segmentsOf(5, 14);
-  const good = {
-    found: true,
-    units: [modelUnit("Unit 1", "Cells", 3), modelUnit("Unit 2", "Plants", 12)],
-  };
+  // Printed 3 and 12, with the units' headers at physical pages 5 and 14 —
+  // a two-page offset the anchor votes can measure.
+  const pages = Array.from({ length: 30 }, (_, i) =>
+    i === 5
+      ? `Unit 1: Cells\n${prosePage(60, i)}`
+      : i === 14
+        ? `Unit 2: Plants\n${prosePage(60, i)}`
+        : prosePage(60, i),
+  );
+  const transcript = "Unit 1: Cells .... 3\nUnit 2: Plants .... 12";
 
   test("does not spend a call when there is nothing worth sending", async () => {
     let called = false;
-    const out = await readModelContents(
+    const out = await transcribeModelContents(
       async () => {
         called = true;
-        return good;
+        return { text: transcript };
       },
       { pages: [] },
-      segments,
+      pages,
       30,
     );
     expect(out).toBeNull();
@@ -1093,56 +1014,85 @@ describe("readModelContents", () => {
   });
 
   test("keeps a reading the client can place in the book", async () => {
-    const out = await readModelContents(async () => good, probe, segments, 30);
-    expect(out?.units).toEqual(good.units);
+    const out = await transcribeModelContents(
+      async () => ({ text: transcript }),
+      probe,
+      pages,
+      30,
+    );
+    expect(out?.units).toEqual([
+      { number: "1", title: "Cells", page: 3 },
+      { number: "2", title: "Plants", page: 12 },
+    ]);
     expect(out?.chapters.map((c) => c.title)).toEqual([
       "Unit 1: Cells",
       "Unit 2: Plants",
     ]);
-    // The printed numbers land where the scan found the units.
+    // The printed numbers land where the book names the units.
     expect(out?.chapters.map((c) => [c.start, c.end])).toEqual([
       [5, 14],
       [14, 30],
     ]);
   });
 
+  test("topics under a unit are parsed by the same reader the book gets", async () => {
+    const withTopics = [
+      "Unit 1: Cells .... 3",
+      "1.1 Cell structure .... 4",
+      "1.2 Cell function .... 8",
+      "Unit 2: Plants .... 12",
+    ].join("\n");
+    const out = await transcribeModelContents(
+      async () => ({ text: withTopics }),
+      probe,
+      pages,
+      30,
+    );
+    expect(out?.chapters[0]?.topics.map((t) => t.path)).toEqual([
+      "1.1 Cell structure",
+      "1.2 Cell function",
+    ]);
+    expect(out?.chapters[0]?.topics.map((t) => t.page)).toEqual([6, 10]);
+  });
+
   test("a contents the model did not find falls back quietly", async () => {
     expect(
-      await readModelContents(
-        async () => ({ found: false, units: [] }),
+      await transcribeModelContents(
+        async () => ({ text: "" }),
         probe,
-        segments,
+        pages,
         30,
       ),
     ).toBeNull();
     expect(
-      await readModelContents(async () => null, probe, segments, 30),
+      await transcribeModelContents(async () => null, probe, pages, 30),
     ).toBeNull();
   });
 
   test("a call that throws reaches the heading scan, not the screen", async () => {
-    const out = await readModelContents(
+    const outcome: ModelReadOutcome = { reason: null };
+    const out = await transcribeModelContents(
       async () => {
         throw new Error("429 rate limited");
       },
       probe,
-      segments,
+      pages,
       30,
+      outcome,
     );
     expect(out).toBeNull();
+    expect(outcome.reason).toMatch(/429/i);
   });
 
   test("records why a refused reading was not used", async () => {
     const outcome: ModelReadOutcome = { reason: null };
-    const refused: ContentsReadResult = {
-      found: false,
-      units: [],
-      refused: "the reader is out of requests for this minute",
-    };
-    const out = await readModelContents(
-      async () => refused,
+    const out = await transcribeModelContents(
+      async () => ({
+        text: "",
+        refused: "the reader is out of requests for this minute",
+      }),
       probe,
-      segments,
+      pages,
       30,
       outcome,
     );
@@ -1152,48 +1102,32 @@ describe("readModelContents", () => {
     );
   });
 
-  test("a call that throws records the error, not a silent nothing", async () => {
+  test("a reading the book's pages will not confirm is refused", async () => {
+    // Printed 999 and 999: the headers at 5 and 14 name the units, but every
+    // offset on offer is negative — the same circular trap the old check
+    // sprang, now resolved against the pages themselves.
     const outcome: ModelReadOutcome = { reason: null };
-    const out = await readModelContents(
-      async () => {
-        throw new Error("429 rate limited");
-      },
+    const out = await transcribeModelContents(
+      async () => ({ text: "Unit 1: Cells .... 999\nUnit 2: Plants .... 999" }),
       probe,
-      segments,
+      pages,
       30,
       outcome,
     );
     expect(out).toBeNull();
-    expect(outcome.reason).toMatch(/429/i);
-  });
-
-  test("a reading that cannot be placed in the book is refused", async () => {
-    const outcome: ModelReadOutcome = { reason: null };
-    const offBook = {
-      found: true,
-      units: [
-        modelUnit("Unit 1", "Cells", 3),
-        modelUnit("Unit 2", "Plants", 999),
-      ],
-    };
-    expect(
-      await readModelContents(
-        async () => offBook,
-        probe,
-        segments,
-        30,
-        outcome,
-      ),
-    ).toBeNull();
     expect(outcome.reason).toMatch(/printed page numbers/i);
   });
 
   test("a single unit does not earn the right to replace the heading scan", async () => {
     const outcome: ModelReadOutcome = { reason: null };
-    const one = { found: true, units: [modelUnit("Unit 1", "Cells", 3)] };
-    expect(
-      await readModelContents(async () => one, probe, segments, 30, outcome),
-    ).toBeNull();
+    const out = await transcribeModelContents(
+      async () => ({ text: "Unit 1: Cells .... 3" }),
+      probe,
+      pages,
+      30,
+      outcome,
+    );
+    expect(out).toBeNull();
     expect(outcome.reason).toMatch(/fewer than two units/i);
   });
 });
