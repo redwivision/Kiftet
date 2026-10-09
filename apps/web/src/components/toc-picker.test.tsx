@@ -208,7 +208,7 @@ test("a book with no contents says so instead of rendering nothing", () => {
 test("a failed line offers a retry", () => {
   const html = render([], "error");
   expect(html).toContain("Failed");
-  expect(html).toContain("Retry");
+  expect(html).toContain("Try again");
 });
 
 test("a unit already in the library is ticked for the student, not hidden", () => {

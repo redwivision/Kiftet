@@ -19,11 +19,11 @@ import type { Route } from "./+types/dashboard";
 
 export function meta(_args: Route.MetaArgs) {
   return [
-    { title: "Dashboard — Kiftet" },
+    { title: "Your chapters — Kiftet" },
     {
       name: "description",
       content:
-        "Pick a chapter and keep closing the gap — every session's score is saved and waiting.",
+        "Pick a chapter and keep closing the gap — every past score is saved and waiting.",
     },
   ];
 }
@@ -360,7 +360,7 @@ export default function Dashboard() {
                 key={row.conceptText}
                 className="rounded-full border border-rust/30 bg-rust/10 px-3 py-1.5 text-sm"
               >
-                <span className="text-rust">{row.count}×</span>{" "}
+                <span className="text-rust">{row.count} students</span>{" "}
                 <span className="text-foreground/90">{row.conceptText}</span>
                 {row.unitTitle && (
                   <span className="ml-1 text-[0.78rem] text-muted-foreground">

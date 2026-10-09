@@ -18,95 +18,95 @@ export const en = {
 
   // ── Study loop steps (the four pills) ─────────────────────────
   "step-speak": "Speak",
-  "step-diagnose": "Diagnose",
-  "step-relearn": "Relearn",
-  "step-retest": "Retest",
+  "step-diagnose": "What's missing",
+  "step-relearn": "Short lesson",
+  "step-retest": "Test",
 
   // ── Session header / framing ──────────────────────────────────
   "step-of": "Step {a} of {b}",
-  "loop-aria": "Study loop",
-  opening: "Opening your study session…",
-  "session-missing": "This session isn't here",
+  "loop-aria": "Study steps",
+  opening: "Opening your study round…",
+  "session-missing": "This study round isn't here",
   "session-missing-body":
     "It may have been created in another browser, or the link has a typo.",
   "back-to-chapters": "Back to chapters",
   "something-went-wrong": "Something went wrong",
-  retry: "Retry",
+  retry: "Try again",
   dismiss: "Dismiss",
-  notice: "Notice:",
+  notice: "Heads up:",
   "read-notice": "Read this notice out loud",
 
   // ── Phase headings ────────────────────────────────────────────
   "recall-title": "Remember it out loud",
   "recall-text":
-    "This is the diagnosis. Say what you know about the chapter in your own words — missing some is the whole point. Nobody covers a chapter cold.",
+    "This shows us what you know. Say what you remember about the chapter in your own words — it's fine to miss some. Nobody knows a whole chapter perfectly the first time.",
   "gaps-title": "Your starting picture",
   "gaps-text":
-    "The solid ideas stay. The open ones are what the short version will fix. Bars that sit taller matter more.",
+    "The ideas you know stay. The missing ones are what the short lesson will fix. Taller bars mean the idea matters more.",
   "gaps-estimated":
-    "Heavily used right now, so this grade is a quick estimate from what it could hear, not a full check. Study the open ones, then test yourself again.",
-  "lesson-title": "The short version",
+    "Lots of students are using this right now, so this is a quick guess from what we could hear — not a full check. Study the missing ones, then test yourself again.",
+  "lesson-title": "The short lesson",
   "lesson-text":
-    "Just what you missed — nothing more. Read it now, or hear it spoken back to you.",
+    "Just what you missed — nothing more. Read it now, or hear it read out to you.",
   // Guide (phase 11, 3b). The study order itself is the message: wrong first,
   // because that is the one thing re-reading does not fix.
   "guide-start-here": "Start here",
-  "guide-wrong-first": "You had this one backwards",
+  "guide-wrong-first": "You got this one the wrong way round",
   "guide-almost-first": "So close — one sentence from you",
-  "guide-almost-title": "You raised it. Now finish it.",
+  "guide-almost-title": "You mentioned it. Now finish it.",
   "guide-almost-body":
-    "You brought these up but did not quite land them. They are the cheapest wins on this page — say each one back in your own words and they are done.",
-  "guide-not-yet": "Not yet touched",
-  "guide-already-have": "Already yours",
+    "You brought these up but didn't quite finish them. They're the quickest wins on this page — say each one back in your own words and they're done.",
+  "guide-not-yet": "Not looked at yet",
+  "guide-already-have": "You already know these",
   "guide-already-body":
-    "You got these right. Skim them, don’t read them twice.",
+    "You got these right. Skim them, don't read them twice.",
   "guide-why": "Why it matters",
   "guide-recall": "Say it back",
   "guide-in-your-book": "In your book",
   "guide-estimated-note":
-    "Some sections are a quick summary from the text itself, not a written lesson. The ideas are real; the wording is ours.",
+    "Some parts are a quick summary taken from your book, not a full lesson. The ideas are from the book; the words are ours.",
   "guide-empty":
-    "Nothing needs work here — every idea in this section is solid. Recap out loud, then move on.",
+    "Nothing needs work here — you know every idea in this section. Say it out loud once, then move on.",
   "guide-section-count": "{count} to work through",
-  "retest-title": "A short retest",
+  "retest-title": "A short test",
   "retest-text":
-    "These questions come after the lesson, so they test what stuck — not what you just heard.",
+    "These questions come after the lesson, so they test what you really remember — not what you just heard.",
   "retest-done-text":
-    "You made it through the set. See whether the short version closed the gaps.",
+    "You've finished the questions. See whether the short lesson filled what was missing.",
 
   // ── Primary CTAs ──────────────────────────────────────────────
-  preparing: "Preparing the short version…",
-  "hear-short-version": "Hear the short version",
+  preparing: "Preparing the short lesson…",
+  "hear-short-version": "Hear the short lesson",
   "skip-lesson": "Skip the lesson, take the test",
   "stop-reading": "Stop reading",
   "read-it-to-me": "Read it to me",
   "ready-to-be-tested": "I'm ready to be tested",
-  "back-to-gaps": "Back to my gaps",
+  "back-to-gaps": "Back to what's missing",
   "question-of": "Question {a} of {b}",
   "all-answered": "All answered",
   "see-result": "See your result",
-  grading: "Grading…",
+  grading: "Checking your answers…",
   "question-i": "Question {n}",
   right: "right",
-  "still-open": "still open",
+  "still-open": "still missing",
   "you-said": "You said:",
   "recorded-by-voice": "— recorded by voice —",
-  landed: "Landed",
-  "still-open-exam": "Still open for exam day",
-  "result-none-title": "Nothing came up missing.",
+  landed: "You got this right",
+  "still-open-exam": "Still missing — for exam day",
+  "result-none-title": "Nothing was missing.",
   "result-none-body":
-    "Every concept this chapter is checked against came out solid — cold, no notes. That's exactly the outcome this loop is built for.",
-  "result-gap-title": "Gap closed.",
+    "You knew every idea this chapter is checked on — with no notes. That's exactly what we're aiming for.",
+  "result-gap-title": "You closed the gap.",
   "result-gap-body":
-    "The short version filled what was missing, and the retest shows it — the score climbed. That's the whole point of Kiftet.",
-  "result-open-title": "A gap is still open.",
+    "The short lesson filled what was missing, and the test shows it — your score went up. That's the whole point of Kiftet.",
+  "result-open-title": "Something is still missing.",
   "result-open-body":
-    "Not everything sticks on the first pass — now you know which ideas are still open, so the next pass is faster than the first.",
-  "retest-the-gaps": "Retest the gaps",
-  "relearn-short-version": "Relearn the short version",
-  "start-over": "Start over with a cold recall",
+    "Not everything is learned on the first try — now you know which ideas are still missing, so the next round will be faster.",
+  "retest-the-gaps": "Test the missing ideas again",
+  "relearn-short-version": "Read the short lesson again",
+  "start-over": "Start over and say what you remember",
   "come-back-later": "Come back to this later",
-  "session-time": "Session time",
+  "session-time": "Time spent",
   "under-a-minute": "under a minute",
   minutes: "{n} minutes",
   minute: "{n} minute",
@@ -114,56 +114,55 @@ export const en = {
 
   // ── Offline banner (bet 3 honest copy) ────────────────────────
   "cl-offline":
-    "No connection — the chapters and checklists you saved are still here, but grading needs to reach Kiftet.",
+    "No connection — the chapters and checklists you saved are still here, but checking answers needs the internet.",
   "saved-one": "1 saved answer",
   "saved-many": "{n} saved answers",
-  "back-grading": "Back online — grading {n}…",
-  "back-applied-one":
-    "Back online — this saved answer is having its result applied.",
+  "back-grading": "Back online — checking {n}…",
+  "back-applied-one": "Back online — applying the result of this saved answer.",
   "back-applied-many":
-    "Back online — {n} saved answers are having their results applied.",
+    "Back online — applying the results of {n} saved answers.",
   "offline-queued-one":
-    "No connection — this saved answer will be graded when you're back online.",
+    "No connection — this saved answer will be checked when you're back online.",
   "offline-queued-many":
-    "No connection — {n} saved answers will be graded when you're back online.",
+    "No connection — {n} saved answers will be checked when you're back online.",
   "try-again": "Try again",
   "saved-waiting": "Saved — waiting on a connection",
   "queued-recall":
-    "Your words are saved on this phone — they'll be graded the moment you're back online. Nothing here is final until then.",
+    "Your words are saved on this phone — they'll be checked as soon as you're back online. Nothing is final until then.",
   "queued-answer":
-    "Your answer is saved on this phone — it will be graded the moment you're back online. Nothing here is final until then.",
+    "Your answer is saved on this phone — it will be checked as soon as you're back online. Nothing is final until then.",
 
   // ── Generated-content notices + fluency (bet 4, slice C) ────
-  "retest-restored": "Your retest progress was restored.",
+  "retest-restored": "We brought back your test progress.",
   "lesson-cached-same":
-    "This lesson was saved on this phone from earlier — it covers the same gaps.",
+    "This lesson was saved on this phone earlier — it covers the same missing ideas.",
   "lesson-cached-changed":
-    "This lesson was saved on this phone from an earlier pass — your gaps have changed a little since.",
+    "This lesson was saved on this phone earlier — what you're missing has changed a little since.",
   "lesson-cached-lang":
-    "This lesson was saved on this phone from earlier in {lang} — it still covers the same gaps, but was written before you switched languages.",
+    "This lesson was saved on this phone earlier in {lang} — it still covers the same missing ideas, but it was written before you changed language.",
   "questions-cached":
-    "These questions were saved on this phone from earlier — your answers still get graded once you're back online.",
+    "These questions were saved on this phone earlier — your answers will still be checked once you're back online.",
   "questions-cached-lang":
-    "These questions were saved on this phone from earlier in {lang} — your answers still get graded once you're back online.",
+    "These questions were saved on this phone earlier in {lang} — your answers will still be checked once you're back online.",
   "fluency-am": "In Amharic",
 
   // ── Study loop chrome (phase 10) ────────────────────────────
-  submit: "Submit",
+  submit: "Send answer",
   "type-your-answer": "Type your answer…",
-  "type-answer-out-loud": "Type your answer out loud in your own words…",
+  "type-answer-out-loud": "Type your answer in your own words…",
   "recall-aria":
-    "Type how much of the chapter you remember — this is graded exactly like a spoken recall",
+    "Type how much of the chapter you remember — this is checked the same way as a spoken answer",
   "voice-service-busy":
-    "The voice service is out of sessions right now — the typed version still works.",
+    "Voice isn't available right now — you can still type your answer.",
   "what-you-said": "What you said",
-  "read-it-back": "Read it back",
+  "read-it-back": "Read it again",
   "try-voice-instead": "Try voice instead",
   "prefer-typing": "Prefer typing?",
-  "gap-closed": "gap closed",
-  "gap-covered": "gap covered",
-  "all-solid": "all solid",
-  "another-pass": "another pass",
-  "previously-answered": "Previously answered retest question",
+  "gap-closed": "you closed the gap",
+  "gap-covered": "missing idea learned",
+  "all-solid": "all known",
+  "another-pass": "one more try",
+  "previously-answered": "Question you answered before",
   "voice-still-listening": "Still listening — take your time.",
   "voice-catch-none":
     "I didn't catch any words yet — tap the ring or type whenever you're ready.",
@@ -171,47 +170,48 @@ export const en = {
     "I didn't catch that — no rush. Tap the ring and try again whenever you're ready.",
 
   // ── Dashboard chrome ─────────────────────────────────────────
-  "study-room": "The study room",
+  "study-room": "Your study room",
   "dash-title": "Pick a chapter, then speak.",
   "dash-text":
-    "Each chapter runs the same loop — recall, diagnose, relearn, retest. You'll see your coverage after each recall, and again at the end.",
-  "study-by-syllabus": "Study by syllabus",
+    "Each chapter takes the same four steps: say what you remember, see what's missing, read the short lesson, then test yourself. You'll see how much you knew after the first step, and again at the end.",
+  "study-by-syllabus": "Study by unit",
   "add-textbook": "Add your textbook",
   "demo-label": "Live demo",
   "demo-banner":
     " — this study room isn't saved to an account. Sign up to keep your progress.",
   "create-free-account": "Create a free account",
-  "ai-calls-minute": "AI calls this minute:",
-  "of-left": "{remaining} of {limitPerMinute} left",
-  "budget-out": " — all used. Wait a moment and try again.",
-  "budget-out-in": " — all used. Back in {time}.",
-  "budget-careful": " — nearly used up.",
+  "ai-calls-minute": "Voice answers left this minute:",
+  "of-left": "{remaining} of {limitPerMinute} still available",
+  "budget-out": " — you've used them all. Wait a moment and try again.",
+  "budget-out-in": " — you've used them all. You can send more in {time}.",
+  "budget-careful": " — almost used up.",
   "new-textbooks-today": "New textbooks today:",
   "textbooks-max": "{n} max (demo)",
   "textbooks-used-of": "{used} of {n} used",
   "textbooks-unlimited": "{used} added, no daily limit",
   "textbooks-reset-at":
     " — that's today's limit. New books allowed from {time}.",
-  "misconception-map": "The national misconception map",
-  "misconception-title": "What students most often get wrong — {subject}",
+  "misconception-map": "What students get wrong most",
+  "misconception-title": "The mistakes {subject} students make most",
   "misconception-text":
-    "Anonymized across every student here. A wrong turn only appears once {threshold} or more students hit it — this stays aggregate, never individual.",
+    "Counted from all students here, with no names. A mistake shows up only after {threshold} or more students make it. It's always a group count — never one person's answers.",
   "unit-of": "· Unit {n}",
-  "room-unreachable": "Couldn't reach the study room",
+  "room-unreachable": "Couldn't load your chapters",
   "offline-saved": "Offline — saved chapters",
   "offline-saved-text":
-    "This list was loaded from this phone. Starting fresh work needs a connection — anything graded earlier stays saved.",
-  "empty-none": "Nothing to diagnose yet.",
+    "This list came from your phone. To start new work you need a connection — anything you already finished stays saved.",
+  "empty-none": "Nothing to study yet.",
   "empty-none-text":
-    "The study room is empty. Chapters appear here the moment they're loaded in — then this room runs the recall loop on them.",
-  "add-book-device": "Add your textbook — it's on your device, not ours",
+    "Your study room is empty. Chapters show up here as soon as you add a book — then you can start studying them.",
+  "add-book-device":
+    "Add your textbook — it stays on your phone, not on our servers",
   "opening-ellipsis": "Opening…",
-  "start-review": "Start review",
+  "start-review": "Start studying",
   "card-promise": "Speak what you remember, see what's missing, close it.",
-  "session-open": "A study session is open",
+  "session-open": "A study round is open",
   resume: "Resume",
   completed: "completed",
-  "last-session": "Last session: {delta}",
+  "last-session": "Last time: {delta}",
 
   // ── Syllabus chrome ──────────────────────────────────────────
   "syllabus-title": "The units, not just the chapters.",
@@ -425,41 +425,41 @@ export const en = {
   "kiftet-label": "Kiftet",
   "vt-idle": "Tap the ring and talk — anything.",
   "vt-armed": "Ready.",
-  "vt-connecting": "Connecting to the voice agent…",
+  "vt-connecting": "Connecting to the voice reader…",
   "vt-listening": "Listening… tap the ring again to stop me.",
   "vt-thinking": "Thinking… tap the ring again to cancel.",
   "vt-speaking": "Speaking… tap the ring again to cut me off.",
-  "vt-executing": "Running the action… tap the ring again to cancel.",
+  "vt-executing": "Working… tap the ring again to cancel.",
   "vt-error": "Something went wrong. Tap to retry.",
 
   // What the voice agent says when it has nothing better to offer: the page
   // drives the loop and it only reads things back. Read to the student, so it
   // has to be in their language.
   "voice-agent-greeting":
-    "The study loop on screen — the recall, the diagnosis, the short version, the retest — is driven by the page, and I help by reading things back in a natural voice. Recite the chapter out loud or answer the question on screen, and when you're finished just tell me and I'll close the session.",
+    "The steps on screen — say what you remember, see what's missing, read the short lesson, then test yourself — are run by the page. I help by reading things out in a natural voice. Say the chapter out loud or answer the question on screen, and when you're done, just tell me and I'll end the session.",
   "voice-agent-done": "I'm done for now",
-  "voice-agent-close": "Close the session",
-  "voice-agent-dashboard": "Take me back to the dashboard",
+  "voice-agent-close": "End this session",
+  "voice-agent-dashboard": "Take me back to my chapters",
 
   // ── Home / landing page ──────────────────────────────────────
   "hero-eyebrow": "A smart study roadmap for Ethiopian students",
   "diag-eyebrow": "What it actually sees",
   "diag-title": "Not a score. A list of exactly what to fix.",
   "diag-sub":
-    "You speak for a minute about a chapter. Kiftet checks each idea on the syllabus against what you actually said — and marks the difference between not raising something and raising it badly. That difference is the whole product.",
+    "You speak for a minute about a chapter. Kiftet checks each idea on the syllabus against what you actually said — and marks the difference between not mentioning something and mentioning it wrongly. That difference is the whole product.",
   "diag-unit": "Biology 12 · Plant physiology",
   "diag-one-minute": "1 minute of speech",
   "diag-l3": "3 — you can answer this",
-  "diag-l1": "1 — you raised it, but didn't say what it means",
+  "diag-l1": "1 — you mentioned it, but didn't say what it means",
   "diag-l2": "2 — you said it the wrong way",
-  "diag-l0": "0 — not raised yet",
+  "diag-l0": "0 — not mentioned yet",
   "diag-t3": "It landed. Leave it alone and spend your night somewhere else.",
   "diag-t1":
     "This is the good news hiding in plain sight. You remember it exists; one clear sentence finishes it.",
   "diag-t2":
     "Re-reading will not fix this one. It has to be unlearned and put back the right way.",
   "diag-t0":
-    "Fair enough — nobody covers everything. This is what the short version is for.",
+    "Fair enough — nobody covers everything. This is what the short lesson is for.",
   "diag-punchline":
     "Two of those need one sentence from you. One needs correcting, not re-reading. That's a very different night from “revise the whole chapter” — and it's the difference between 6 weeks of hoping and 6 days of knowing.",
   "demo-c-1": "Photosynthesis",
@@ -476,7 +476,7 @@ export const en = {
   "demo-card-c-5": "How organelles stay in their compartments",
   "hero-gap": "Close the gap.",
   "hero-sub":
-    "Kiftet listens to what you remember out loud, works out which specific ideas didn't stick, and hands you the shortest plan for closing them — everything you already know is left off it. Not another question bank. A plan.",
+    "Kiftet listens to what you remember out loud, works out which specific ideas you didn't really learn, and hands you the shortest plan for learning them — everything you already know is left off it. Not another question bank. A plan.",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "Ready to use it for real?",
@@ -484,7 +484,7 @@ export const en = {
     "of the {count} students who sat the 2026 national exam were still failed by the system — in the best result the country has recorded.",
   "stat-87b": "{schools} schools had zero students pass.",
   "stat-absent":
-    "Students weren't absent. They sat through the classes. What's missing isn't exposure — it's knowing, before the exam, which specific ideas didn't stick.",
+    "Students weren't absent. They sat through the classes. What's missing isn't exposure — it's knowing, before the exam, which specific ideas didn't really stick.",
   "loop-title": "Four steps. One loop. Only your gaps.",
   "loop-sub":
     "The sequence is the whole product — say what you know, find what's missing, take the shortest route across it, prove it closed. Nothing in Kiftet exists outside it.",
@@ -493,13 +493,13 @@ export const en = {
     "Pick a chapter and explain it out loud, no notes, no prompts. Speaking forces clarity — you know what you know, and what you don't.",
   "l-diagnose-title": "See what's missing",
   "l-diagnose-text":
-    "The concepts we check are compared against what you said. Solid ideas stay, gaps surface — shown as a picture you can read in one glance.",
+    "The ideas we check are compared against what you said. The ones you know stay, the missing ones show up — in a picture you can read at a glance.",
   "l-relearn-title": "Get the shortest route",
   "l-relearn-text":
     "Only what didn't land makes it onto the plan. Everything you already know is left off, so what's left takes far less time than the whole chapter.",
-  "l-retest-title": "Prove it stuck",
+  "l-retest-title": "Prove you learned it",
   "l-retest-text":
-    "Freshly worded questions on those same gaps, then a before/after score. You leave with a clear picture of what closed and what's still open.",
+    "Freshly worded questions on those same missing ideas, then a before/after score. You leave knowing what you learned and what's still missing.",
   "voice-title": "Voice isn't a feature. It's the mechanism.",
   "voice-1":
     "Explaining something out loud is how the underlying learning technique actually works. There's nowhere to hide off-screen — there's no option, no answer key, just what you can produce. That honesty is the diagnosis.",
@@ -507,7 +507,7 @@ export const en = {
     "So you speak. Kiftet transcribes, compares what you said against the chapter's concepts, and talks you through what's left in a calm voice. Talk in, talk out.",
   "tap-speak": "Tap and speak",
   "ring-caption":
-    "Says the student. The ring is listening, not judging. What you say out loud is the whole record of what stuck.",
+    "Says the student. The ring is listening, not judging. What you say out loud is the whole record of what you learned.",
   "rates-title":
     "The system is improving. That's not the same as reaching the student.",
   "rates-text":
@@ -522,13 +522,13 @@ export const en = {
     "Review happens when the day finally quietens down. The interface stays a calm black room lit by flat ivory, not a bright quiz app.",
   "honest-title": "Honest before/after",
   "honest-text":
-    "You see your coverage right after you recall, and again once you've worked the gaps. If part of it is still open, that answer is as useful as the progress.",
+    "You see how much you knew right after you speak, and again once you've worked on what was missing. If part of it is still missing, that answer is as useful as the progress.",
   "byob-label": "Bring your own book",
   "byob-a": "Your textbook ",
   "byob-gold": "is",
   "byob-b": " the study room.",
   "byob-1":
-    "Upload the book you're actually studying — the one that matches your syllabus — and Kiftet reads its table of contents and turns each chunk into its own recall → diagnose → relearn → retest loop.",
+    "Upload the book you're actually studying — the one that matches your syllabus — and Kiftet reads its table of contents and turns each chapter into its own say-it-out-loud → see-what's-missing → short lesson → test round.",
   "byob-2":
     "The file is read on your device. Only the text is sent, chapter by chapter, so a whole book never becomes one heavy upload — it works on the school's wifi.",
   "preview-on-book": "Preview it on your book",
@@ -539,14 +539,14 @@ export const en = {
   "lines-up-next": "lines up next",
   "cta-title": "Pick a chapter. Speak. Close the gap.",
   "cta-text":
-    "Pick a chapter, press the ring, and start speaking. The diagnosis comes from your own words.",
+    "Pick a chapter, press the ring, and start speaking. The picture of what you missed comes from your own words.",
   "open-study-room": "Open the study room",
   "footer-text":
     "Closing the gap between what a class covers and what a student keeps. Built for the national exam — one chapter, one voice, one gap at a time.",
   "demo-chip": "Live demo · no account",
   "demo-title": "Feel it for yourself — one round of the loop, right now.",
   "demo-text":
-    "Pick the chapter, speak what you remember, and watch Kiftet find what didn't stick — then hand you the shortest plan across it, and prove it stayed.",
+    "Pick the chapter, speak what you remember, and watch Kiftet find what you didn't learn — then hand you the shortest plan across it, and prove it stuck.",
   "demo-foot":
     "No email, no password, no card. Your demo is private and expires on its own.",
   "demo-setting-up": "Setting up your demo…",
@@ -565,7 +565,7 @@ export const en = {
   "faq-title": "The questions everyone has",
   "faq-what-q": "What is Kiftet, exactly?",
   "faq-what-a":
-    "A study planner. You explain a chapter out loud, Kiftet works out which specific ideas didn't stick, and gives you a short plan for closing exactly those. Nothing you already know is on it.",
+    "A study planner. You explain a chapter out loud, Kiftet works out which specific ideas you didn't really learn, and gives you a short plan for learning exactly those. Nothing you already know is on it.",
   "faq-free-q": "Is it free?",
   "faq-free-a":
     "Yes. Creating an account costs nothing, and the live demo needs no account at all.",
@@ -583,7 +583,7 @@ export const en = {
     "No. It shows you which of tonight's hours are going on things you already know, so the time you do spend is spent better.",
   "faq-waitlist-q": "What do I get for joining the waitlist?",
   "faq-waitlist-a":
-    "Leave your number, join our Telegram channel and send one line about what you found — that locks in one month of premium for launch day.",
+    "Leave your number, join our Telegram group and send one line about what you found — that locks in one month of Kiftet Premium for launch day.",
   "faq-syllabus-q": "Which subjects and grades?",
   "faq-syllabus-a":
     "It follows the national syllabus and the textbook you actually study from. Upload your own book and every chapter in it becomes its own plan.",
@@ -597,7 +597,7 @@ export const en = {
   "waitlist-text":
     "Leave your number and we'll tell you the moment Kiftet goes live. Nothing else — no other mail.",
   "waitlist-reward":
-    "Join our Telegram channel and send us one line about what you found, and you get {n} month of premium on launch day.",
+    "Do two quick things on Telegram — join our group and send us one line about what you found — and you get {n} month of Kiftet Premium free on launch day.",
   "waitlist-name": "Your name",
   "waitlist-phone": "Mobile number",
   "waitlist-phone-hint": "For example 0911 234 567",
@@ -607,46 +607,47 @@ export const en = {
   "waitlist-cta-short": "Waitlist",
   "waitlist-signin-prefix": "Already have an account?",
   "waitlist-joining": "Saving your place…",
-  "waitlist-joined": "You're on the list",
-  "waitlist-wave": "Wave {wave} · you're in",
+  "waitlist-joined": "You're in!",
+  "waitlist-wave":
+    "You're in the first group — we'll open Kiftet for you first.",
   "waitlist-closed":
-    "The waitlist is full right now. Join the channel and we'll tell you when it reopens.",
+    "The waitlist is full right now. Join our group and we'll tell you when it reopens.",
   "waitlist-network":
     "We couldn't reach the server. Check your connection and try again — your number won't be counted twice.",
   "waitlist-invalid-phone": "Enter a mobile number, like 0911 234 567.",
-  "waitlist-open-telegram": "Connect Telegram",
-  "waitlist-open-channel": "Open the channel",
-  "waitlist-step-channel": "1. Join our Telegram channel",
-  "waitlist-step-verify": "2. Send /joined in the channel",
-  "waitlist-step-testimonial": "3. Send us one line",
+  "waitlist-open-telegram": "Open Telegram",
+  "waitlist-open-channel": "Join the Kiftet group",
+  "waitlist-step-channel": "1. Open Telegram and tap START",
+  "waitlist-step-verify": "2. Join the Kiftet group",
+  "waitlist-step-testimonial": "3. Reply with one line",
   "waitlist-verify-hint":
-    "We confirm the join from Telegram, so send /joined in the channel once you're in — then this ticks itself.",
+    "Tap START in the Telegram chat first. If the group step doesn't tick by itself, send /joined in the group.",
   "waitlist-step-done":
-    "All three done — your premium month is locked in for launch day.",
-  "waitlist-check": "Check my place",
+    "All done — your free month is locked in for launch day.",
+  "waitlist-check": "Check again",
   "waitlist-privacy": "How we use your number",
 
   // ── Coverage view (the flagship gap visualization) ───────────
-  "cov-checked": "of the concepts we checked came out solid",
-  "cov-solid": "solid",
-  "cov-gap": "gap",
-  "cov-wrong": "stated wrong",
-  "cov-aria": "{covered} of {total} concepts covered, {missing} still gaps",
-  "cov-aria-wrong": ", {n} stated incorrectly",
-  "cov-aria-almost": ", {n} raised but not explained",
-  "cov-importance": "importance {n}/5",
-  "cov-legend-sage": "solid",
-  "cov-legend-gold": "nearly",
+  "cov-checked": "of the ideas we checked, you knew",
+  "cov-solid": "known",
+  "cov-gap": "missing",
+  "cov-wrong": "answered wrongly",
+  "cov-aria": "{covered} of {total} ideas known, {missing} still missing",
+  "cov-aria-wrong": ", {n} answered wrongly",
+  "cov-aria-almost": ", {n} mentioned but not explained",
+  "cov-importance": "{n} of 5 — how important",
+  "cov-legend-sage": "known",
+  "cov-legend-gold": "almost",
   "cov-legend-rust": "wrong",
-  "cov-legend-open": "not raised",
-  "cov-already-solid": "Already solid",
+  "cov-legend-open": "not mentioned",
+  "cov-already-solid": "You already know",
   "cov-needs-work": "Needs work",
-  "cov-none-yet": "Nothing landed yet — that's the starting point.",
-  "cov-all-solid": "Nothing. Every concept we checked is solid.",
-  "cov-almost-title": "So close — you raised it",
+  "cov-none-yet": "Nothing here yet — that's where we start.",
+  "cov-all-solid": "None. You know every idea we checked.",
+  "cov-almost-title": "So close — you mentioned it",
   "cov-almost-text":
-    "You brought these up, but stopped before saying what they mean or why. One clear sentence each is usually the whole thing — start here and the payoff is fastest.",
-  "cov-wrong-title": "Watch out — stated wrong",
+    "You mentioned these, but didn't say what they mean or why. Usually one clear sentence each is enough — start here for the quickest gain.",
+  "cov-wrong-title": "Careful — you got these wrong",
   "cov-wrong-text":
     "These aren't ideas you skipped; you said them the wrong way. The short lesson will fix them first.",
 
@@ -659,7 +660,7 @@ export const en = {
     "The link may be old, or the page may have moved. Nothing you saved is gone.",
   "err-500-title": "Something broke on our side.",
   "err-500-body":
-    "This isn't your fault, and nothing you saved is lost. Try again, or head back to the study room.",
+    "This isn't your fault, and nothing you saved is lost. Try again, or head back to your chapters.",
   "err-offline-title": "No connection.",
   "err-offline-body":
     "Kiftet couldn't reach the network. Anything saved on this phone is still here.",
@@ -716,13 +717,14 @@ export const en = {
   "st-thinking": "Thinking…",
   "st-speaking": "Speaking…",
   "st-executing": "Working…",
-  "st-error": "Couldn't reach the voice service. Tap to retry, or type below.",
+  "st-error":
+    "Couldn't reach the voice reader. Tap to try again, or type below.",
   "my-account": "My Account",
   "sign-out": "Sign Out",
   "need-account": "Need an account?",
   "have-account": "Already have an account?",
   "sign-up": "Sign up",
-  "ink-for-the-room": "Ink for the room",
+  "ink-for-the-room": "Choose your background",
   "auth-eyebrow": "Close the gap",
   "auth-promise":
     "Speak a chapter out loud, see exactly which ideas didn't land.",

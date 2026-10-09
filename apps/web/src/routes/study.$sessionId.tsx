@@ -71,7 +71,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Speak what you remember, see what's missing, hear only what you missed, then prove it stuck.",
+        "Say what you remember, see what's missing, read the short lesson, then test yourself.",
     },
   ];
 }
@@ -899,7 +899,7 @@ function LessonPhase() {
                     {sentence}{" "}
                   </span>
                 ))
-              : (state.lessonText ?? "Writing it…")}
+              : (state.lessonText ?? "Writing the lesson…")}
           </div>
 
           {state.lessonText && (
@@ -1398,7 +1398,9 @@ function BeforeAfter({
     <div className="inner-surface p-5">
       <div className="mb-4 flex items-center justify-between">
         <p className="k-label">
-          {hasAfter ? "Coverage, before and after" : "Coverage this session"}
+          {hasAfter
+            ? "How much you knew, before and after"
+            : "How much you knew this round"}
         </p>
         {hasAfter && delta !== undefined && (
           <span
@@ -1411,7 +1413,7 @@ function BeforeAfter({
                   : "text-muted-foreground",
             )}
           >
-            {delta > 0 ? `+${delta} pts` : `${delta} pts`}
+            {delta > 0 ? `+${delta} points` : `${delta} points`}
           </span>
         )}
       </div>

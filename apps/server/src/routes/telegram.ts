@@ -73,53 +73,53 @@ const router = Router();
 const COPY = {
   en: {
     start: [
-      "You're on the Kiftet waitlist. Welcome.",
+      "Welcome to Kiftet! You're on the waitlist.",
       "",
-      "To unlock your month of premium at launch, two things:",
-      "1. Join our channel for the launch announcement — {channel}",
-      "2. Send us a short line about what Kiftet showed you.",
+      "Two quick steps to get one month of Kiftet Premium free at launch:",
+      "1. Join our group — {channel}",
+      "2. Reply to this chat with one line about what the demo showed you.",
       "",
-      "Reply to this message with your line whenever you're ready.",
-      "Sending it means we can keep it and read it internally. We will never publish it, or use your name, without asking you first.",
+      "To join: tap the link above, then tap “Join”. Reply whenever you're ready — one sentence is plenty.",
+      "We keep your line private. We'll ask before we ever publish it or use your name.",
     ].join("\n"),
     startAlreadyJoined: [
       "You're already on the list — nothing to redo here.",
       "",
-      "Send us a short line about what Kiftet showed you and you're done.",
+      "Send us one line about what the demo showed you and you're done.",
     ].join("\n"),
     startNoToken:
-      "Open your waitlist confirmation on kiftet.ethiodeploy.com and use the Telegram button there to connect your account.",
+      "Open your waitlist confirmation on kiftet.ethiodeploy.com and tap the Telegram button there to connect your account.",
     received: [
       "Got it — thank you. That genuinely helps other students decide.",
       "",
       "We'll read it before anything is published, and we'll ask before using your name.",
-      "Your month of premium is unlocked for launch day.",
+      "Your month of Kiftet Premium is unlocked for launch day.",
     ].join("\n"),
     receivedNotVerified: [
       "Got it — thank you. That genuinely helps other students decide.",
       "",
       "We'll read it before anything is published, and we'll ask before using your name.",
       "",
-      "One thing left: join the channel — {channel} — then send /joined there so we can confirm it.",
-      "Once we have that, your month of premium is unlocked for launch day.",
+      "One thing left: join our group — {channel} — then send /joined there so we can confirm it.",
+      "Once we have that, your month of Kiftet Premium is unlocked for launch day.",
     ].join("\n"),
     alreadyReceived:
       "We already have your line — thank you. Nothing else to send.",
     verified: [
-      "Confirmed — you're in the channel, and that's one of your two steps done.",
+      "Confirmed — you're in the group, and that's one of your two steps done.",
       "",
       "Go back to your waitlist confirmation and send us your one line about Kiftet.",
     ].join("\n"),
     verifiedAlready:
-      "You're already confirmed in the channel — nothing to redo here.",
+      "You're already confirmed in the group — nothing to redo here.",
     startVerifiedAlready: [
-      "You're on the list and already confirmed in the channel — good.",
+      "You're on the list and already confirmed in the group — good.",
       "",
-      "Last step: reply to this message with one line about what Kiftet showed you.",
+      "Last step: reply to this message with one line about what the demo showed you.",
     ].join("\n"),
     verifiedNoRow:
-      "I can't find a waitlist signup on this Telegram account. Open your confirmation on kiftet.ethiodeploy.com and use the Telegram button there first.",
-    unknown: "Send /start using the button on your waitlist confirmation.",
+      "I can't find a waitlist signup on this Telegram account. Open your confirmation on kiftet.ethiodeploy.com and tap the Telegram button there first.",
+    unknown: "Tap the Telegram button on your waitlist confirmation to start.",
   },
   am: {
     start: [
