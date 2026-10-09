@@ -18,7 +18,7 @@ Turn any textbook chapter into a **spoken, adaptive review** that closes exactly
 ## Team members
 
 | TEAM | Role |  
-|---|---|---|
+|---|---|
 | Lewi Kibru | **Developer/Full-stack, Founder** | 
 | Fikadu Alemnew | **end to end tester** | 
 | Lombame Lemma | **Marketing** |
