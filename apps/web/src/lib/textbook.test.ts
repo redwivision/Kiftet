@@ -1393,4 +1393,27 @@ describe("guessTitleFromText", () => {
     expect(guessTitleFromText("Figure")).toBeNull();
     expect(guessTitleFromText("Biology")).toBe("Biology");
   });
+
+  test("prefers the line that names subject and grade over banner furniture", () => {
+    // The real cover of the Grade 10 Biology book: the banner and the words
+    // "Student Textbook" lead, the title that names the book sits in the middle
+    // of the pile and is repeated once more on the spine. Nice prose it is
+    // not — the ranked guess must pick "Biology Grade 10" regardless.
+    const cover = [
+      "Student Textbook",
+      "Federal Democratic Republic of Ethiopia",
+      "Ministry of Education",
+      "Biology",
+      "Grade 10",
+      "Biology Student Textbook Grade 10",
+    ].join("\n");
+    expect(guessTitleFromText(cover)).toBe("Biology Student Textbook Grade 10");
+    // And the pasted-start variant, where only the first line is on offer
+    // alongside the banner.
+    expect(
+      guessTitleFromText(
+        "Student Textbook\nMinistry of Education\nBiology\nGrade 10\n",
+      ),
+    ).toBe("Biology");
+  });
 });

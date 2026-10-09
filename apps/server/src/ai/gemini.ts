@@ -148,6 +148,15 @@ export type ContentsParse = {
   refused?: string;
 };
 
+/** The book's title, read off the cover and title page, or the reason none
+ *  came back. Best-effort like every reader: a busy minute or a bad page is
+ *  "no title", never an error the import screen has to explain. */
+export type TitleParse = {
+  title?: string;
+  /** Why the model was never reached or not asked. */
+  refused?: string;
+};
+
 export type AiService = {
   extractConcepts(rawText: string): Promise<ConceptChecklistItem[]>;
   gradeRecall(
@@ -184,6 +193,13 @@ export type AiService = {
    * own. Returning that honestly is better than synthesising a contents.
    */
   parseContents(pages: ContentsPage[]): Promise<ContentsParse>;
+  /**
+   * Name a textbook from its first pages. The companion to [parseContents]:
+   * a cover leads with Government of Ethiopia banner text and the title page
+   * lists writers and editors, so the one line that names the book needs an
+   * eye that can tell "Biology Grade 10" from "Ministry of Education".
+   */
+  parseTitle(pages: ContentsPage[]): Promise<TitleParse>;
 };
 
 /** Rebuild a GapAnalysis from the flat gap lists a client sent.
@@ -1137,6 +1153,29 @@ export function contentsUserPrompt(pages: ContentsPage[]): string {
   ].join("\n\n");
 }
 
+// The title read understands the front matter it lives in: these pages open
+// with a government banner, then the title, then a credits page full of names.
+// Asking for the *subject and grade* instead of a verbatim cover line is what
+// keeps the answer useful as a shelf label, whatever the cover is worded like.
+const TITLE_SYSTEM =
+  "You are handed the first pages of one textbook, extracted from its PDF text layer. " +
+  "These pages are noisy: the cover repeats its words and usually wears a government " +
+  'banner such as "Federal Democratic Republic of Ethiopia" above the title, and the ' +
+  "title page lists writers, editors and publishers. " +
+  "Answer with ONLY the book's title, the way a student would name it — the subject " +
+  'and grade, e.g. "Biology Grade 10". ' +
+  'Drop banner words and "Ministry of Education"; drop "Student Textbook" when the book ' +
+  "names its subject. " +
+  "One line, no quotes, no JSON, no commentary. " +
+  "If no page names a book, output nothing.";
+
+export function titleUserPrompt(pages: ContentsPage[]): string {
+  return [
+    "FIRST PAGES OF ONE TEXTBOOK, IN ORDER. Each block is labelled with its 0-based page index.",
+    ...pages.map((page) => `[page ${page.index}]\n${page.text.trim()}`),
+  ].join("\n\n");
+}
+
 /** The model answered, but the answer was unusable (not JSON, or JSON that
  *  failed validation). Distinct from a transport failure: this one is worth
  *  watching as a quality signal, not just an availability one. */
@@ -1320,6 +1359,29 @@ export const ai: AiService = {
       return { text: raw.trim().slice(0, 20_000) };
     } catch (error) {
       return degraded("parseContents", error, () => none);
+    }
+  },
+
+  async parseTitle(pages: ContentsPage[]): Promise<TitleParse> {
+    const none: TitleParse = {};
+    if (pages.length === 0) return none;
+    if (!isAiAvailable()) {
+      return {
+        refused:
+          "The AI reader is not configured on this server, so it was never asked.",
+      };
+    }
+    try {
+      const raw = await ask(TITLE_SYSTEM, titleUserPrompt(pages), {
+        text: true,
+      });
+      const title = raw
+        .trim()
+        .replace(/^["'\u201C\u201D]+|["'\u201C\u201D]+$/g, "")
+        .slice(0, 300);
+      return title ? { title } : none;
+    } catch (error) {
+      return degraded("parseTitle", error, () => none);
     }
   },
 };

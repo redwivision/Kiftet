@@ -35,14 +35,14 @@ import {
   pageRangesFromToc,
   pageRangeTree,
   planImport,
-  suggestTitleFromPdf,
+  readFrontPages,
   type TocJob,
   tocJobs,
   topicLabel,
   visibleChapterTitle,
   withPartSplits,
 } from "@/lib/textbook";
-import { readContentsWithModel } from "@/lib/toc-model";
+import { readContentsWithModel, readTitleWithModel } from "@/lib/toc-model";
 import type { Route } from "./+types/textbooks";
 
 export function meta(_args: Route.MetaArgs) {
@@ -1067,6 +1067,27 @@ function AddTextbook({
   const [titleEdited, setTitleEdited] = useState(false);
   const titleGuessAttempted = useRef(false);
   const textGuessDone = useRef(false);
+  // The field is controlled by the parent, so refs mirror it for anyone who
+  // needs to decide between stepping in and standing down: a guess is only
+  // ever applied to a field that is empty or still wearing an earlier guess
+  // of ours. The moment the student types, the title is theirs.
+  const bookTitleRef = useRef(bookTitle);
+  const appliedGuessRef = useRef("");
+  useEffect(() => {
+    bookTitleRef.current = bookTitle;
+  }, [bookTitle]);
+
+  /** Drop a suggested title into the field, only while it is still ours. */
+  const applyTitle = (guess: string | null) => {
+    if (!guess) return;
+    const current = bookTitleRef.current;
+    if (current.trim() && current !== appliedGuessRef.current) return;
+    appliedGuessRef.current = guess;
+    bookTitleRef.current = guess;
+    setTitleGuessed(guess);
+    setBookTitle(guess);
+  };
+
   if (step === "planning") {
     return (
       <section className="surface flex flex-col items-center gap-5 p-10 text-center">
@@ -1358,16 +1379,21 @@ function AddTextbook({
                 }
                 setError(null);
                 setPdfFile(file);
-                // Float a title from the opening pages once, and only while the
-                // field is still empty — the setter below refuses to step on a
-                // title the student has already typed.
+                // Float a title from the opening pages, twice and in order:
+                // the free heuristic fills the field instantly, then the model
+                // read replaces that guess with one worth trusting. Both step
+                // in only while the field is still ours; both may land after
+                // the student has already started typing, and yield silently.
                 if (file && !titleGuessAttempted.current) {
                   titleGuessAttempted.current = true;
-                  void suggestTitleFromPdf(file).then((guess) => {
-                    if (!guess) return;
-                    setTitleGuessed(guess);
-                    setBookTitle((prev) => (prev.trim() ? prev : guess));
-                  });
+                  void (async () => {
+                    const pages = await readFrontPages(file);
+                    if (!pages) return;
+                    applyTitle(
+                      guessTitleFromText(pages.map((p) => p.text).join("\n")),
+                    );
+                    applyTitle(await readTitleWithModel(pages));
+                  })();
                 }
               }}
             />
@@ -1399,13 +1425,12 @@ function AddTextbook({
               onChange={(e) => {
                 const value = e.target.value;
                 setPastedText(value);
-                // One guess from the top of the pasted block, only while the
-                // title is still empty.
+                // One guess from the top of the pasted block, and the same
+                // standing-down rule as the PDF pick: never step on a
+                // title the student has already typed.
                 if (!textGuessDone.current) {
                   textGuessDone.current = true;
-                  const guess = guessTitleFromText(value);
-                  if (guess)
-                    setBookTitle((prev) => (prev.trim() ? prev : guess));
+                  applyTitle(guessTitleFromText(value));
                 }
               }}
               rows={8}

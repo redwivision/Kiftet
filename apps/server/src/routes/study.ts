@@ -630,6 +630,19 @@ router.post("/textbooks/contents", async (req, res) => {
   }
 });
 
+router.post("/textbooks/title", async (req, res) => {
+  const parsed = contentsSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  try {
+    return ok(res, await ai.parseTitle(parsed.data.pages));
+  } catch (error) {
+    if (isAiBusy(error)) return aiBudgetError(res, req);
+    throw error;
+  }
+});
+
 router.get("/chapters", async (req, res) => {
   const owner = ownerId(req);
   const rows = await db()

@@ -790,19 +790,19 @@ export function fileSizeError(file: File): string | null {
   return null;
 }
 
-// How many opening pages we read before calling [suggestTitleFromPdf] off the
-// job. A book names itself early; three or four pages catch the title page of
-// textbooks that open with a cover, or a blank page, without unpacking the
-// whole file — that is what [planImport] is for.
+// How many opening pages we read to guess a title. A book names itself early:
+// four pages catch the cover and title page, or a blank page, without
+// unpacking the whole file — that is what [planImport] is for.
 export const TITLE_GUESS_PAGES = 4;
 
 /**
- * Read only the first few pages of a PDF, cheaply, to float a title the
- * student can take or edit. The guess is a suggestion, not an authority: when
- * the opening pages carry no text (scanned covers) or no line that reads like
- * one, we return null and the field stays in the student's hands.
+ * Read only the first few pages of a PDF into `{ index, text }` pairs, the
+ * shape both the heuristic guess and the model read speak. Cheap enough to run
+ * the moment a book is picked; the full read is [planImport]'s business.
  */
-export async function suggestTitleFromPdf(file: File): Promise<string | null> {
+export async function readFrontPages(
+  file: File,
+): Promise<{ index: number; text: string }[] | null> {
   const sizeError = fileSizeError(file);
   if (sizeError) return null;
   try {
@@ -811,10 +811,11 @@ export async function suggestTitleFromPdf(file: File): Promise<string | null> {
       data: new Uint8Array(await file.arrayBuffer()),
     });
     const doc = await loadingTask.promise;
-    const lines: string[] = [];
+    const pages: { index: number; text: string }[] = [];
     for (let i = 1; i <= Math.min(TITLE_GUESS_PAGES, doc.numPages); i += 1) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
+      const lines: string[] = [];
       let line = "";
       for (const item of content.items) {
         if (!item || typeof item !== "object" || !("str" in item)) continue;
@@ -826,46 +827,68 @@ export async function suggestTitleFromPdf(file: File): Promise<string | null> {
         }
       }
       if (line.trim()) lines.push(line);
+      pages.push({
+        index: i - 1,
+        text: stripUndecodableGlyphs(lines.join("\n")),
+      });
     }
     await loadingTask.destroy();
-    return guessTitleFromText(lines.join("\n"));
+    return pages;
   } catch {
     return null;
   }
 }
 
 /**
- * Pick the one line that reads like a title, from the start of a pasted block
- * or the opening pages of a PDF. Rules of thumb, not a fine read: a title is
- * short, carries words, and is not book furniture ("Unit 2", "Contents", a
- * page number). When nothing fits we say so and leave the field blank.
+ * A quick, free first guess at a title, from the start of a pasted block or
+ * the opening pages of a PDF. It is *scored*, because a cover leads with
+ * furniture: the government banner, the words "Student Textbook", the grade —
+ * and the real title is the line that names the subject, which must rank above
+ * them. The model read ([readTitleWithModel]) refines this when it lands, but
+ * this keeps the field useful the instant a book is picked. `null` means "no
+ * idea", and the field stays in the student's hands.
  */
 export function guessTitleFromText(text: string): string | null {
+  // Grounds the guess in the title we can actually plan against: the line that
+  // names the subject is the book. English cover words for now — the model
+  // read carries the titles that get written in Amharic or Afaan Oromoo.
+  const subjectWord =
+    /\b(physics|chemistry|biology|mathematics|maths?|geometry|geography|history|economics|civics|citizenship|general science|information technology|computer science|statistics)\b/i;
+  // The other half of a shelf title: "Biology" beats the banner beside it, but
+  // "Biology Grade 10" beats "Biology". Worth one rank above the rank itself.
+  const textbookWord = /\b(textbook|student|grade|class)\b/i;
   // Furniture a title never is, judged only when a line *starts* with it so a
   // real title like "General Science Grade 7" is not thrown away for passing
   // grade words later in the line.
   const furniture =
     /^(unit|chapter|lesson|module|part|contents|preface|introduction|appendix|acknowledgement)\b/i;
-  const singleWordTitle =
-    /^(physics|chemistry|biology|mathematics?|maths?|geography|history|economics|ethics|civics|general science|information technology|it)$/i;
-  const lines = text.split(/\n+/).map((raw) =>
-    raw
-      .replace(/[·•◆●◉–—]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim(),
-  );
-  for (const line of lines) {
+
+  const lines = text
+    .split(/\n+/)
+    .map((raw) =>
+      raw
+        .replace(/[·•◆●◉–—]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean);
+  let best: { rank: number; line: string } | null = null;
+  // The title lives in the front matter, not in a sentence halfway down a
+  // pasted chapter — so only the first lines are candidates.
+  for (const line of lines.slice(0, 14)) {
     if (line.length < 3 || line.length > 80) continue;
     if (/^[\d.,\s%()/-]+$/.test(line)) continue;
     if (/^\d+(\.\d+)*[.\s:-]+/.test(line)) continue;
-    const words = line.split(/\s+/).filter(Boolean);
-    if (words.length > 7) continue;
+    if (line.split(/\s+/).length > 7) continue;
     if (furniture.test(line)) continue;
     if (!/[a-zA-Z]|\p{Script=Ethiopic}/u.test(line)) continue;
-    if (words.length === 1 && !singleWordTitle.test(line)) continue;
-    return line;
+    const rank =
+      (subjectWord.test(line) ? 2 : 0) + (textbookWord.test(line) ? 1 : 0);
+    if (rank > 0 && (best === null || rank > best.rank)) {
+      best = { rank, line };
+    }
   }
-  return null;
+  return best ? best.line : null;
 }
 
 /**

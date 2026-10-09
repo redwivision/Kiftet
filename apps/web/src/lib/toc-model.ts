@@ -53,3 +53,31 @@ export const readContentsWithModel: ContentsReader = async (probe) => {
     return { text: "", refused: apiError(error) };
   }
 };
+
+/**
+ * Name a textbook from its first pages, the way a cover is meant to be read.
+ *
+ * The same best-effort contract as [readContentsWithModel]: a busy minute, a
+ * signed-out student, or a slow link means "no title" — the import screen
+ * fills the title field with a quicker heuristic guess or leaves it blank,
+ * and never blocks on this. Whatever comes back is a suggestion the student
+ * can simply edit.
+ */
+export async function readTitleWithModel(
+  pages: { index: number; text: string }[],
+): Promise<string | null> {
+  if (!pages.length) return null;
+  try {
+    const data = await api<unknown>("/textbooks/title", {
+      method: "POST",
+      body: JSON.stringify({ pages }),
+    });
+    if (!data || typeof data !== "object") return null;
+    const candidate = data as { title?: unknown; refused?: unknown };
+    return typeof candidate.title === "string" && candidate.title.trim()
+      ? candidate.title.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
