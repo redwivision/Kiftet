@@ -9,6 +9,7 @@ import {
 import { ocrBookKey } from "./ocr-cache";
 import {
   chaptersFromToc,
+  isSummaryOrReview,
   looksLikeTocPage,
   normalizeTocLine,
   parseToc,
@@ -817,7 +818,10 @@ export function chaptersFromOutline(
         (candidate) =>
           candidate.path.startsWith(prefix) &&
           candidate.pageIndex >= start &&
-          candidate.pageIndex < end,
+          candidate.pageIndex < end &&
+          // A unit's summary and review sections are back matter, not study
+          // material — the PDF's own outline lists them like any topic.
+          !isSummaryOrReview(candidate.title),
       )
       .map((candidate) => ({
         path: candidate.path.slice(prefix.length),
@@ -1206,11 +1210,15 @@ export function chaptersFromContents(
       // The printed page becomes a page index with the same offset the units
       // used, so a topic's range and its unit's range are in one coordinate
       // system — mixing the two would put 1.1.1 outside the unit holding it.
-      topics: chapter.topics.map((topic) => ({
-        path: `${topic.path.join(".")} ${topic.title}`,
-        title: topic.title,
-        page: topic.page + offset,
-      })),
+      // A unit's summary and review sections are dropped here: they are the
+      // unit said back, and nothing to study from.
+      topics: chapter.topics
+        .filter((topic) => !isSummaryOrReview(topic.title))
+        .map((topic) => ({
+          path: `${topic.path.join(".")} ${topic.title}`,
+          title: topic.title,
+          page: topic.page + offset,
+        })),
     };
   });
   const sane = out.every(
@@ -1410,6 +1418,8 @@ function looseTranscriptChapters(text: string): TocChapter[] {
       // rather than promoted: one stray subsection must not become a chapter.
       const title = sub[2].trim();
       if (!titleLooksReal(title)) continue;
+      // A unit's summary or review is back matter, not a topic to study.
+      if (isSummaryOrReview(title)) continue;
       current.topics.push({
         kind: "section",
         path: sub[1].split("."),
@@ -1440,6 +1450,9 @@ function looseTranscriptChapters(text: string): TocChapter[] {
       title = label;
     }
     if (!titleLooksReal(title)) continue;
+    // A "Unit Summary 30" or "Review Questions 31" line ends in a page number
+    // like any chapter, but it is back matter, not a chapter to import.
+    if (isSummaryOrReview(title)) continue;
     // Contents run forwards; a line whose page goes backwards is a misread.
     if (page < lastPage) continue;
     lastPage = page;

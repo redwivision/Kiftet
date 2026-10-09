@@ -1179,4 +1179,23 @@ describe("transcribeModelContents", () => {
     expect(outcome.reason).toMatch(/fewer than two units/i);
     expect(outcome.reason).toContain('It began: "Grade 10 student handbook"');
   });
+
+  test("a unit's summary and review sections are not study topics", async () => {
+    const text = [
+      "Unit 1: Cells .... 3",
+      "1.1 Cell structure .... 4",
+      "1.9 Unit Summary .... 8",
+      "1.10 Review Questions .... 9",
+      "Unit 2: Plants .... 12",
+    ].join("\n");
+    const out = await transcribeModelContents(
+      async () => ({ text }),
+      probe,
+      pages,
+      30,
+    );
+    expect(out?.chapters[0]?.topics.map((t) => t.title)).toEqual([
+      "Cell structure",
+    ]);
+  });
 });

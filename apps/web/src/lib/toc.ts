@@ -141,6 +141,32 @@ export function titleLooksReal(title: string): boolean {
   return letters / compact.length >= 0.7;
 }
 
+/**
+ * Is this the title of a unit's summary or review section, rather than
+ * something to study from?
+ *
+ * Ethiopian textbooks close every unit with the same back matter — "Summary",
+ * "Unit Summary", "Review Questions", "Review Exercises", "Revision". They are
+ * worth reading once and worthless to ingest: a summary is the unit restated,
+ * and a review is questions with no teaching in them, so a study material
+ * generated from either is a worse copy of the unit itself.
+ *
+ * The whole title must be the back-matter phrase (bar a leading "Unit" and its
+ * number), so a chapter a book genuinely calls "Review of cell biology" or
+ * "Summary of the nitrogen cycle" is left alone.
+ */
+export function isSummaryOrReview(title: string): boolean {
+  const bare = title
+    .trim()
+    .replace(/^unit\s+/i, "")
+    .replace(/^\d+(?:\.\d+)*[.)]?\s*/, "")
+    .trim()
+    .toLowerCase();
+  return /^(?:summary|review(?:\s+(?:questions|exercises|activities))?|revision(?:\s+(?:questions|exercises))?)$/.test(
+    bare,
+  );
+}
+
 /** At least two real words — what separates a wrapped title from a doodle. */
 function hasWords(line: string): boolean {
   return (line.match(WORD_RE) ?? []).length >= 2;

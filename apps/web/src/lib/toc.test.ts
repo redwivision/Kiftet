@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   chaptersFromToc,
+  isSummaryOrReview,
   looksLikeTocPage,
   parseToc,
   type TocChapter,
@@ -198,4 +199,36 @@ test("a dotted unit number keeps the chapter and drops the rest", () => {
     { kind: "unit", unit: 1, title: "The cell", page: 5 },
     { kind: "unit", unit: 1, title: "The leaf", page: 9 },
   ]);
+});
+
+// ─── Back matter ────────────────────────────────────────────────────────
+//
+// Every unit closes with a summary and a review. They are the unit said back
+// and questions with no teaching in them — worth reading, worthless to study
+// from, so the importer drops them.
+
+test("a unit's summary and review headings are recognised", () => {
+  for (const heading of [
+    "Summary",
+    "Unit Summary",
+    "Review",
+    "Unit Review",
+    "Review Questions",
+    "Review Exercises",
+    "Revision",
+    "2.7 Summary",
+  ]) {
+    expect(isSummaryOrReview(heading)).toBe(true);
+  }
+});
+
+test("a real chapter that mentions review or summary is left alone", () => {
+  for (const title of [
+    "Review of cell biology",
+    "Summary of the nitrogen cycle",
+    "Reviewing the microscope",
+    "Cell Review",
+  ]) {
+    expect(isSummaryOrReview(title)).toBe(false);
+  }
 });
