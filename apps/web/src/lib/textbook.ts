@@ -1478,15 +1478,6 @@ function normalizeAnchor(text: string): string {
 }
 
 /**
- * Does this line end in a printed page number? Such a line is a contents
- * listing (or a wrapped one), never a running header — and a contents line
- * must not vote for its own placement.
- */
-function endsWithPageNumber(line: string): boolean {
-  return /\d{1,3}$/.test(line);
-}
-
-/**
  * How strongly this page line names this chapter's title. 2 is the whole line
  * (label plus title, or the title alone); 1 is the title inside a heading the
  * line also decorates; 0 is nothing. The floor of 2 on the offset tally means
@@ -1510,17 +1501,45 @@ function headingAnchorWeight(title: string, line: string): 0 | 1 | 2 {
 }
 
 /**
- * The printed-page → PDF-page offset, measured by finding each chapter's own
- * title among the book's pages.
+ * The weight with which one page names a chapter's title, or 0.
  *
- * The cross-check this replaces paired the model's units with the heading
+ * A running header usually carries the folio on the same line — "Unit 2:
+ * Plants 17" — so a trailing page number is stripped before matching rather
+ * than used to reject the line: that folio line is the single most reliable
+ * place a unit names itself. Contents pages are skipped whole by the caller,
+ * which is what keeps a real listing from matching here.
+ */
+function pageNamesTitle(text: string, title: string): 0 | 1 | 2 {
+  let best: 0 | 1 | 2 = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw
+      .trim()
+      .replace(/\s+\d{1,3}$/, "")
+      .trim();
+    if (!line || line.length > 80) continue;
+    const weight = headingAnchorWeight(title, line);
+    if (weight > best) best = weight;
+    if (best === 2) break;
+  }
+  return best;
+}
+
+/**
+ * The printed-page → PDF-page offset, measured by finding where the book first
+ * names each chapter outside its contents.
+ *
+ * The cross-check this replaced paired the model's units with the heading
  * scan's segments *positionally* — but on a book that needs the model at all,
  * the scan's segments are exam furniture ("Part I: Choose the best answer"),
  * so a correct reading could never agree with them and was always discarded.
- * This measures against the pages themselves instead: every non-contents line
- * that names a chapter votes for one offset (`physical page − printed page`),
- * and the offset with the most weight wins. Contents pages are skipped, and so
- * is any line ending in a page number, so the listing cannot vote for itself.
+ * This measures against the pages themselves instead.
+ *
+ * Each chapter votes once, at the *earliest* page that names it, because a
+ * running header repeats down its whole unit: counting every occurrence would
+ * scatter a single chapter's vote across dozens of offsets (the header on page
+ * 6 of a unit that starts on page 5 "votes" an offset one too high), letting
+ * noise outvote the truth. The earliest naming is the unit's own start, which
+ * is the one page whose offset is real.
  *
  * Returns null when the book never names its chapters outside its contents —
  * which is the case the heading scan below exists for.
@@ -1530,20 +1549,26 @@ export function offsetByTitle(
   pages: string[],
 ): number | null {
   const votes = new Map<number, number>();
-  for (let i = 0; i < pages.length; i += 1) {
-    const text = pages[i];
-    if (!text.trim() || looksLikeTocPage(text)) continue;
-    for (const raw of text.split("\n")) {
-      const line = raw.trim();
-      if (!line || line.length > 80 || endsWithPageNumber(line)) continue;
-      for (const chapter of chapters) {
-        const weight = headingAnchorWeight(chapter.title, line);
-        if (!weight) continue;
-        const offset = i - chapter.page;
-        if (offset < 0) continue;
-        votes.set(offset, (votes.get(offset) ?? 0) + weight);
+  for (const chapter of chapters) {
+    let first: { page: number; weight: 1 | 2 } | null = null;
+    for (let i = 0; i < pages.length; i += 1) {
+      const text = pages[i];
+      if (!text.trim() || looksLikeTocPage(text)) continue;
+      const weight = pageNamesTitle(text, chapter.title);
+      if (!weight) continue;
+      // An exact naming — the unit's own header — is the placement. A mere
+      // mention inside some other heading only stands if nothing better ever
+      // appears for this chapter.
+      if (weight === 2) {
+        first = { page: i, weight: 2 };
+        break;
       }
+      first ??= { page: i, weight: 1 };
     }
+    if (!first) continue;
+    const offset = first.page - chapter.page;
+    if (offset < 0) continue;
+    votes.set(offset, (votes.get(offset) ?? 0) + first.weight);
   }
   let best: number | null = null;
   let bestWeight = 0;
@@ -1553,9 +1578,8 @@ export function offsetByTitle(
       bestWeight = weight;
     }
   }
-  // One strong match — the unit's own header naming it — is a placement; a
-  // lone weak one (the title merely appearing inside some other heading) is
-  // not.
+  // One exact naming is a placement; one weak mention is not, and two weak
+  // mentions must still agree on the same offset to be trusted.
   return bestWeight >= 2 ? best : null;
 }
 
@@ -1626,7 +1650,18 @@ export async function transcribeModelContents(
       );
     }
     const offset = offsetByTitle(parsed, pages);
-    if (offset === null) return refuse(unplaceable);
+    if (offset === null) {
+      // Name the unit that could not be placed: the next report of this reason
+      // then says whether the book is missing the title entirely or prints it
+      // in a shape the matcher does not know.
+      const first = parsed[0];
+      return refuse(
+        unplaceable +
+          (first
+            ? ` It read "${first.title}" from printed page ${first.page}, and no page of the book names it.`
+            : ""),
+      );
+    }
     const placed = chaptersFromContents(parsed, offset, pageCount);
     if (!placed) return refuse(unplaceable);
     return {

@@ -941,9 +941,31 @@ describe("offsetByTitle", () => {
     ).toBeNull();
   });
 
-  test("a line ending in a page number is a listing, not a header", () => {
+  test("a running header that carries its folio still names the unit", () => {
+    // "Unit 1: Cells 3" is a header with the page number on the same line, not
+    // a contents listing — stripping the trailing number is what makes the
+    // most reliable anchor in the book usable.
     const pages = bookWithHeaders({ 5: "Unit 1: Cells 3" });
-    expect(offsetByTitle([chapterOf(1, "Cells", 3)], pages)).toBeNull();
+    expect(offsetByTitle([chapterOf(1, "Cells", 3)], pages)).toBe(2);
+  });
+
+  test("a header repeated down its unit still votes the unit's start", () => {
+    // The header runs from the unit's first page to its last; counting every
+    // occurrence would spread one chapter's vote across the whole range. Only
+    // the earliest page — physical 5 for printed 3 — is the real offset.
+    const pages = bookWithHeaders({
+      5: "Unit 1: Cells 3",
+      6: "Unit 1: Cells 4",
+      7: "Unit 1: Cells 5",
+      14: "Unit 2: Plants 12",
+      15: "Unit 2: Plants 13",
+    });
+    expect(
+      offsetByTitle(
+        [chapterOf(1, "Cells", 3), chapterOf(2, "Plants", 12)],
+        pages,
+      ),
+    ).toBe(2);
   });
 
   test("wording that differs but names the same title still agrees", () => {
