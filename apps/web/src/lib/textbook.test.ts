@@ -4,6 +4,7 @@ import {
   chaptersFromContents,
   chaptersFromOutline,
   contentsProbe,
+  guessTitleFromText,
   type ImportChunk,
   type ImportSource,
   importTocTree,
@@ -1357,5 +1358,39 @@ describe("transcribeModelContents", () => {
     expect(out?.chapters[0]?.topics.map((t) => t.title)).toEqual([
       "Cell structure",
     ]);
+  });
+});
+
+describe("guessTitleFromText", () => {
+  test("reads a cover-page title as the guess", () => {
+    expect(guessTitleFromText("CHEMISTRY\nStudent Textbook\nGrade 10\n")).toBe(
+      "CHEMISTRY",
+    );
+    expect(guessTitleFromText("Physics Grade 9")).toBe("Physics Grade 9");
+  });
+
+  test("skips table-of-contents furniture and page numbers", () => {
+    expect(
+      guessTitleFromText("Unit 2: Plants\n1.1 Cell structure\n"),
+    ).toBeNull();
+    expect(
+      guessTitleFromText("Contents\nChapter 1 Introduction\n12\n"),
+    ).toBeNull();
+  });
+
+  test("skips long body text and returns nothing for empties", () => {
+    const prose =
+      "Photosynthesis is the process by which green plants turn light into " +
+      "chemical energy, and it is the single most important reaction on the " +
+      "planet.";
+    expect(guessTitleFromText(prose)).toBeNull();
+    expect(guessTitleFromText("")).toBeNull();
+    expect(guessTitleFromText("12\n34\n56\n")).toBeNull();
+  });
+
+  test("a one-word line only counts when it is a subject", () => {
+    expect(guessTitleFromText("Photosynthesis")).toBeNull();
+    expect(guessTitleFromText("Figure")).toBeNull();
+    expect(guessTitleFromText("Biology")).toBe("Biology");
   });
 });

@@ -4,6 +4,7 @@ import { Label } from "@kiftet/ui/components/label";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { ChevronDown } from "lucide-react";
+import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -19,6 +20,7 @@ import { getDemoUser } from "@/lib/demo";
 import { getLocalTextbookSource, saveLocalTextbookSource } from "@/lib/store";
 import {
   fileSizeError,
+  guessTitleFromText,
   type ImportChunk,
   type ImportDiagnostics,
   type ImportTocNode,
@@ -33,6 +35,7 @@ import {
   pageRangesFromToc,
   pageRangeTree,
   planImport,
+  suggestTitleFromPdf,
   type TocJob,
   tocJobs,
   topicLabel,
@@ -272,8 +275,19 @@ export default function Textbooks() {
     (mode === "text" && pastedText.trim().length > 0);
 
   const plan = async () => {
-    setStep("planning");
     setError(null);
+    // The title and subject are the student's own labels for the book, so they
+    // are asked for when the import begins — not discovered at save time, after
+    // a page-range hunt that can take minutes.
+    if (!bookTitle.trim()) {
+      setError(t("title-required"));
+      return;
+    }
+    if (!subject.trim()) {
+      setError(t("subject-required"));
+      return;
+    }
+    setStep("planning");
     try {
       const result = await planImport(
         mode === "pdf" && pdfFile
@@ -977,7 +991,7 @@ function AddTextbook({
   step: ImportStep;
   enabled: boolean;
   bookTitle: string;
-  setBookTitle: (v: string) => void;
+  setBookTitle: Dispatch<SetStateAction<string>>;
   subject: string;
   setSubject: (v: string) => void;
   language: string;
@@ -1021,6 +1035,38 @@ function AddTextbook({
   pickedJobs: TocJob[];
 }) {
   const { t } = useLanguage();
+  // The conceptual subjects we can actually plan against. "Something else" is
+  // available, but a custom subject floats no study plan yet, so it is offered
+  // last and quietly.
+  //
+  // Math, physics and chemistry are marked Beta: they lean on worked problems
+  // and procedures as much as recall, so the concept loop fits them loosely
+  // for now — honest to show, still worth importing.
+  const subjects = [
+    t("subject-physics"),
+    t("subject-chemistry"),
+    t("subject-biology"),
+    t("subject-mathematics"),
+    t("subject-geography"),
+    t("subject-history"),
+    t("subject-civics"),
+    t("subject-economics"),
+    t("subject-general-science"),
+    t("subject-information-technology"),
+  ];
+  const betaSubjects = new Set([
+    t("subject-physics"),
+    t("subject-chemistry"),
+    t("subject-mathematics"),
+  ]);
+  const [subjectChoice, setSubjectChoice] = useState("");
+  const customSubject = subjectChoice === "_custom";
+  // A guessed title is just a suggestion: it lands in the field once, marks
+  // itself as a guess, and is dropped the moment the student types.
+  const [titleGuessed, setTitleGuessed] = useState("");
+  const [titleEdited, setTitleEdited] = useState(false);
+  const titleGuessAttempted = useRef(false);
+  const textGuessDone = useRef(false);
   if (step === "planning") {
     return (
       <section className="surface flex flex-col items-center gap-5 p-10 text-center">
@@ -1189,22 +1235,67 @@ function AddTextbook({
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="book-title">{t("book-title")}</Label>
+          <Label htmlFor="book-title">
+            {t("book-title")} <span className="text-gold">*</span>
+          </Label>
           <Input
             id="book-title"
             value={bookTitle}
-            onChange={(e) => setBookTitle(e.target.value)}
+            onChange={(e) => {
+              setTitleEdited(true);
+              setBookTitle(e.target.value);
+            }}
             placeholder={t("grade-example")}
           />
+          {titleGuessed && !titleEdited && bookTitle === titleGuessed && (
+            <p className="text-muted-foreground text-xs">
+              {t("title-guessed-note")}
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="book-subject">{t("subject-label")}</Label>
-          <Input
-            id="book-subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder={t("physics-example")}
-          />
+          <Label htmlFor="book-subject">
+            {t("subject-label")} <span className="text-gold">*</span>
+          </Label>
+          <div className="relative">
+            <select
+              id="book-subject"
+              value={customSubject ? "" : subjectChoice}
+              onChange={(e) => {
+                const chosen = e.target.value;
+                setSubjectChoice(chosen);
+                if (chosen !== "_custom") setSubject(chosen);
+              }}
+              className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30"
+            >
+              <option value="" disabled>
+                {t("subject-choose")}
+              </option>
+              {subjects.map((name) => (
+                <option key={name} value={name}>
+                  {betaSubjects.has(name) ? `${name} (Beta)` : name}
+                </option>
+              ))}
+              <option value="_custom">{t("subject-custom")}</option>
+            </select>
+            <ChevronDown
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+          </div>
+          {customSubject && (
+            <>
+              <Input
+                id="book-subject-custom"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder={t("subject-custom")}
+              />
+              <p className="text-muted-foreground text-xs leading-5">
+                {t("subject-custom-note")}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -1267,6 +1358,17 @@ function AddTextbook({
                 }
                 setError(null);
                 setPdfFile(file);
+                // Float a title from the opening pages once, and only while the
+                // field is still empty — the setter below refuses to step on a
+                // title the student has already typed.
+                if (file && !titleGuessAttempted.current) {
+                  titleGuessAttempted.current = true;
+                  void suggestTitleFromPdf(file).then((guess) => {
+                    if (!guess) return;
+                    setTitleGuessed(guess);
+                    setBookTitle((prev) => (prev.trim() ? prev : guess));
+                  });
+                }
               }}
             />
             {pdfFile ? (
@@ -1294,7 +1396,18 @@ function AddTextbook({
           <div className="mt-3 space-y-2">
             <Textarea
               value={pastedText}
-              onChange={(e) => setPastedText(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setPastedText(value);
+                // One guess from the top of the pasted block, only while the
+                // title is still empty.
+                if (!textGuessDone.current) {
+                  textGuessDone.current = true;
+                  const guess = guessTitleFromText(value);
+                  if (guess)
+                    setBookTitle((prev) => (prev.trim() ? prev : guess));
+                }
+              }}
               rows={8}
               placeholder={t("paste-placeholder")}
             />

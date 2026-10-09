@@ -790,6 +790,84 @@ export function fileSizeError(file: File): string | null {
   return null;
 }
 
+// How many opening pages we read before calling [suggestTitleFromPdf] off the
+// job. A book names itself early; three or four pages catch the title page of
+// textbooks that open with a cover, or a blank page, without unpacking the
+// whole file — that is what [planImport] is for.
+export const TITLE_GUESS_PAGES = 4;
+
+/**
+ * Read only the first few pages of a PDF, cheaply, to float a title the
+ * student can take or edit. The guess is a suggestion, not an authority: when
+ * the opening pages carry no text (scanned covers) or no line that reads like
+ * one, we return null and the field stays in the student's hands.
+ */
+export async function suggestTitleFromPdf(file: File): Promise<string | null> {
+  const sizeError = fileSizeError(file);
+  if (sizeError) return null;
+  try {
+    const pdf = await getPdfLib();
+    const loadingTask = pdf.getDocument({
+      data: new Uint8Array(await file.arrayBuffer()),
+    });
+    const doc = await loadingTask.promise;
+    const lines: string[] = [];
+    for (let i = 1; i <= Math.min(TITLE_GUESS_PAGES, doc.numPages); i += 1) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      let line = "";
+      for (const item of content.items) {
+        if (!item || typeof item !== "object" || !("str" in item)) continue;
+        const { str, hasEOL } = item as ExtractedItem;
+        line += str ?? "";
+        if (hasEOL || isUndecodableRun(line)) {
+          if (line.trim()) lines.push(line);
+          line = "";
+        }
+      }
+      if (line.trim()) lines.push(line);
+    }
+    await loadingTask.destroy();
+    return guessTitleFromText(lines.join("\n"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pick the one line that reads like a title, from the start of a pasted block
+ * or the opening pages of a PDF. Rules of thumb, not a fine read: a title is
+ * short, carries words, and is not book furniture ("Unit 2", "Contents", a
+ * page number). When nothing fits we say so and leave the field blank.
+ */
+export function guessTitleFromText(text: string): string | null {
+  // Furniture a title never is, judged only when a line *starts* with it so a
+  // real title like "General Science Grade 7" is not thrown away for passing
+  // grade words later in the line.
+  const furniture =
+    /^(unit|chapter|lesson|module|part|contents|preface|introduction|appendix|acknowledgement)\b/i;
+  const singleWordTitle =
+    /^(physics|chemistry|biology|mathematics?|maths?|geography|history|economics|ethics|civics|general science|information technology|it)$/i;
+  const lines = text.split(/\n+/).map((raw) =>
+    raw
+      .replace(/[·•◆●◉–—]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+  for (const line of lines) {
+    if (line.length < 3 || line.length > 80) continue;
+    if (/^[\d.,\s%()/-]+$/.test(line)) continue;
+    if (/^\d+(\.\d+)*[.\s:-]+/.test(line)) continue;
+    const words = line.split(/\s+/).filter(Boolean);
+    if (words.length > 7) continue;
+    if (furniture.test(line)) continue;
+    if (!/[a-zA-Z]|\p{Script=Ethiopic}/u.test(line)) continue;
+    if (words.length === 1 && !singleWordTitle.test(line)) continue;
+    return line;
+  }
+  return null;
+}
+
 /**
  * Open a PDF and pull everything we can from its text layer.
  *
