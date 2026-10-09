@@ -241,11 +241,35 @@ function topicsAsTree(
 }
 
 /**
+ * A run of pages the student typed, in the book's own printed numbers.
+ *
+ * This is the path that does not depend on the book stating its own structure:
+ * the student already knows "Unit 3 is pages 90–140" from a syllabus or the
+ * printed book, so the reader is asked for exactly those pages and nothing has
+ * to be detected. It is the fallback the TOC-based reading is measured against.
+ */
+export type PageRange = {
+  id: string;
+  title: string;
+  /** Printed page the range starts on (inclusive), or null until typed. */
+  start: number | null;
+  end: number | null;
+};
+
+export type RangeJob = {
+  kind: "range";
+  nodeId: string;
+  title: string;
+  pages: { start: number; end: number };
+};
+
+/**
  * One thing to read, in the order the book lays it out.
  *
  * A unit is one job covering all of its chunks, including the "(part n)" splits
  * an oversized chapter is carved into. A topic is one job covering exactly the
  * pages between its own number and the next line at the same depth or shallower.
+ * A range is a run of pages the student typed directly.
  */
 export type TocJob =
   | { kind: "unit"; nodeId: string; title: string; chunkIndexes: number[] }
@@ -256,7 +280,8 @@ export type TocJob =
       unit: string;
       number: string | null;
       pages: { start: number; end: number };
-    };
+    }
+  | RangeJob;
 
 /**
  * Turn a set of ticked node ids into the list of things to read.
@@ -313,6 +338,97 @@ export function tocJobs(
 /** Entries in the selection a student can count on being read. */
 export function selectedCount(toc: ImportTocNode[], selection: Set<string>) {
   return tocJobs(toc, selection).length;
+}
+
+/** The name a page range is stored and studied under. */
+export function pageRangeTitle(range: PageRange): string {
+  const from = range.start ?? 0;
+  const to = range.end ?? from;
+  return (
+    range.title.trim() ||
+    `Pages ${Math.min(from, to)}\u2013${Math.max(from, to)}`
+  );
+}
+
+/**
+ * The printed→PDF offset implied by "printed page 1 is on PDF page `pdfPage`".
+ *
+ * Both numbers are 1-based, as a viewer and a printed page are, while a page
+ * index is 0-based — so the shift sits two apart from the 1-based PDF page.
+ * The planner's `tocPageOffset` uses the same convention: PDF index = printed
+ * page + offset.
+ */
+export function pageOffsetForPrintedOne(pdfPage: number): number {
+  return pdfPage - 2;
+}
+
+/**
+ * Turn typed printed page ranges into jobs the reader can read.
+ *
+ * `offset` is the printed→PDF shift: PDF page index = printed page + offset. A
+ * printed range is inclusive at both ends, so it becomes the half-open PDF
+ * slice `[start + offset, end + offset + 1]`, clamped to the book. A range that
+ * is half-typed, reversed, or wholly outside the book yields no job — it is not
+ * an error yet, just not ready.
+ */
+export function pageRangeJobs(
+  ranges: PageRange[],
+  offset: number,
+  pageCount: number,
+): RangeJob[] {
+  return ranges.flatMap((range) => {
+    if (range.start === null || range.end === null) return [];
+    const from = Math.min(range.start, range.end) + offset;
+    const to = Math.max(range.start, range.end) + offset + 1;
+    const start = Math.max(from, 0);
+    const end = Math.min(to, pageCount);
+    if (!(end > start)) return [];
+    return [
+      {
+        kind: "range" as const,
+        nodeId: `range-${range.id}`,
+        title: pageRangeTitle(range),
+        pages: { start, end },
+      },
+    ];
+  });
+}
+
+/** Page ranges as tree nodes, so a saved book remembers what was picked. */
+export function pageRangeTree(
+  ranges: PageRange[],
+  offset: number,
+  pageCount: number,
+): ImportTocNode[] {
+  return pageRangeJobs(ranges, offset, pageCount).map((job) => ({
+    id: job.nodeId,
+    title: job.title,
+    start: job.pages.start,
+    end: job.pages.end,
+    children: [],
+  }));
+}
+
+/**
+ * Recover the typed page ranges a saved book was imported with.
+ *
+ * A saved range is stored as the resolved PDF slice it produced, so reading it
+ * back needs the same printed→PDF offset that made it; the caller passes back
+ * the offset it recovered for the same file. Range nodes are the ones the
+ * picker names `range-`, which keeps them apart from the detected contents.
+ */
+export function pageRangesFromToc(
+  toc: ImportTocNode[],
+  offset: number,
+): PageRange[] {
+  return toc
+    .filter((node) => node.id.startsWith("range-"))
+    .map((node) => ({
+      id: node.id.slice("range-".length),
+      title: node.title,
+      start: node.start === null ? null : node.start - offset,
+      end: node.end === null ? null : node.end - 1 - offset,
+    }));
 }
 
 export function importTocTree(chunks: ImportChunk[]): ImportTocNode[] {

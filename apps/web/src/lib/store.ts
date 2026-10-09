@@ -265,12 +265,18 @@ export type LocalTextbookSource = {
   type: "application/pdf" | "text/plain";
   blob: Blob;
   savedAt: number;
+  // "Printed page 1 is on PDF page N", as typed in the import picker. Saved
+  // ranges store their resolved PDF pages, so this shift cannot be read back out
+  // of them — it rides along with the file it belongs to instead, and lets the
+  // picker show the student's own page numbers again on resume.
+  pageOneAt?: string;
 };
 
 export async function saveLocalTextbookSource(
   textbookId: string,
   name: string,
   blob: Blob,
+  pageOneAt?: string,
 ): Promise<void> {
   if (!dbAvailable()) throw new Error("This browser cannot store textbooks.");
   await putStore(
@@ -281,6 +287,7 @@ export async function saveLocalTextbookSource(
       type: blob.type === "application/pdf" ? "application/pdf" : "text/plain",
       blob,
       savedAt: Date.now(),
+      pageOneAt,
     } satisfies LocalTextbookSource,
     textbookId,
   );

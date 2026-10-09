@@ -12,7 +12,12 @@ import {
   type ModelReadOutcome,
   numberDepth,
   offsetByTitle,
+  type PageRange,
   PdfUnreadableError,
+  pageOffsetForPrintedOne,
+  pageRangeJobs,
+  pageRangesFromToc,
+  pageRangeTree,
   planChunks,
   segmentsForOcrBook,
   splitTocNumber,
@@ -849,6 +854,139 @@ test("a readable book still serves a topic's own pages, and nothing beside them"
       pages: { start: 9, end: 40 },
     }),
   ).toBe("page 9");
+});
+
+// ─── Typed page ranges ──────────────────────────────────────────────────
+
+describe("pageRangeJobs", () => {
+  const range = (over: Partial<PageRange> = {}): PageRange => ({
+    id: "r1",
+    title: "",
+    start: 10,
+    end: 12,
+    ...over,
+  });
+
+  test("a printed range becomes the half-open PDF slice the offset implies", () => {
+    // offset 0: PDF index = printed page. Printed 10–12 is PDF indices 10–12,
+    // which is the half-open slice [10, 13) — the +1 is what makes the printed
+    // end page inclusive.
+    expect(pageRangeJobs([range()], 0, 100)).toEqual([
+      {
+        kind: "range",
+        nodeId: "range-r1",
+        title: "Pages 10–12",
+        pages: { start: 10, end: 13 },
+      },
+    ]);
+  });
+
+  test("the offset shifts every range into the PDF's numbering", () => {
+    expect(pageRangeJobs([range()], 5, 200)[0]?.pages).toEqual({
+      start: 15,
+      end: 18,
+    });
+  });
+
+  test("a printed page 1 on the PDF's first page maps to offset -1", () => {
+    // "Printed page 1 is on PDF page 1" is the one case with a negative offset:
+    // printed page p and PDF index p-1 line up, so printed 10–12 is [9, 12).
+    expect(pageOffsetForPrintedOne(1)).toBe(-1);
+    expect(pageRangeJobs([range()], -1, 100)[0]?.pages).toEqual({
+      start: 9,
+      end: 12,
+    });
+  });
+
+  test("a typed label names the chapter, otherwise the range does", () => {
+    expect(
+      pageRangeJobs([range({ title: "Unit 3: Genetics" })], 0, 100)[0]?.title,
+    ).toBe("Unit 3: Genetics");
+  });
+
+  test("a reversed range reads the same as the forward one", () => {
+    expect(
+      pageRangeJobs([range({ start: 12, end: 10 })], 3, 100)[0]?.pages,
+    ).toEqual(pageRangeJobs([range({ start: 10, end: 12 })], 3, 100)[0]?.pages);
+  });
+
+  test("a half-typed or empty range is simply not ready, not an error", () => {
+    expect(pageRangeJobs([range({ start: null })], 0, 100)).toEqual([]);
+    expect(pageRangeJobs([range({ end: null })], 0, 100)).toEqual([]);
+  });
+
+  test("a range past the end of the book is clamped, and gone if it clamps out", () => {
+    expect(
+      pageRangeJobs([range({ start: 8, end: 12 })], 0, 10)[0]?.pages,
+    ).toEqual({ start: 8, end: 10 });
+    expect(pageRangeJobs([range({ start: 20, end: 30 })], 0, 10)).toEqual([]);
+  });
+});
+
+describe("pageOffsetForPrintedOne", () => {
+  test("matches the planner's printed→PDF convention", () => {
+    // The Grade 10 book: printed page 1 is the 7th page a viewer shows, so PDF
+    // index 6 and offset 5 — exactly what tocPageOffset cross-checks.
+    expect(pageOffsetForPrintedOne(7)).toBe(5);
+  });
+});
+
+describe("pageRangeTree", () => {
+  test("a ready range becomes a tree node with the pages it will read", () => {
+    expect(
+      pageRangeTree(
+        [{ id: "r1", title: "Unit 3", start: 10, end: 12 }],
+        5,
+        200,
+      ),
+    ).toEqual([
+      {
+        id: "range-r1",
+        title: "Unit 3",
+        start: 15,
+        end: 18,
+        children: [],
+      },
+    ]);
+  });
+});
+
+describe("pageRangesFromToc", () => {
+  test("a saved range round-trips back to the numbers it was typed in", () => {
+    const tree = pageRangeTree(
+      [{ id: "r1", title: "", start: 10, end: 12 }],
+      5,
+      200,
+    );
+    expect(pageRangesFromToc(tree, 5)).toEqual([
+      { id: "r1", title: "Pages 10–12", start: 10, end: 12 },
+    ]);
+  });
+
+  test("detected contents are left where they are", () => {
+    const toc = [
+      { id: "chapter-0", title: "Unit 1", start: 5, end: 40, children: [] },
+      { id: "range-r1", title: "Unit 3", start: 15, end: 18, children: [] },
+    ];
+    expect(pageRangesFromToc(toc, 5)).toEqual([
+      { id: "r1", title: "Unit 3", start: 10, end: 12 },
+    ]);
+  });
+
+  test("the pages read right even if the offset comes back wrong", () => {
+    // The offset cancels when a range is re-expanded, so a book restored with
+    // a different shift still reads the same slice — only the labels move.
+    const tree = pageRangeTree(
+      [{ id: "r1", title: "", start: 10, end: 12 }],
+      5,
+      200,
+    );
+    const shifted = pageRangesFromToc(tree, 0);
+    expect(pageRangeJobs(shifted, 0, 200)[0]?.pages).toEqual({
+      start: 15,
+      end: 18,
+    });
+  });
 });
 
 // ─── Reading the contents with the model ────────────────────────────────

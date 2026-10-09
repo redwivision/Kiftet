@@ -26,7 +26,12 @@ import {
   indexToc,
   MAX_FILE_MB,
   type OcrChunkReader,
+  type PageRange,
   type PdfUnreadableReason,
+  pageOffsetForPrintedOne,
+  pageRangeJobs,
+  pageRangesFromToc,
+  pageRangeTree,
   planImport,
   type TocJob,
   tocJobs,
@@ -99,6 +104,19 @@ type OcrProgressView = { done: number; total: number } | null;
 // hides the flow without removing any code.
 const TEXTBOOK_IMPORT_ENABLED = true;
 
+// "Printed page 1 is on PDF page N" is the picker's field; the offset the
+// planner and the saved ranges speak in is the inverse. Keeping the conversion
+// in one place is what lets the field, a restored book, and the planner's seed
+// agree on where page one falls.
+function offsetForPageOneAt(value: string): number {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n >= 1 ? pageOffsetForPrintedOne(n) : -1;
+}
+
+function pageOneAtForOffset(offset: number | null): string {
+  return offset === null ? "1" : String(offset + 2);
+}
+
 export default function Textbooks() {
   const navigate = useNavigate();
   const { data: auth, isPending: sessionPending } = authClient.useSession();
@@ -113,6 +131,9 @@ export default function Textbooks() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
   const [tocSelection, setTocSelection] = useState<Set<string>>(new Set());
+  const [pageRanges, setPageRanges] = useState<PageRange[]>([]);
+  // "Printed page 1 is on PDF page N" — entered as 1-based N, like a viewer.
+  const [pageOneAt, setPageOneAt] = useState("1");
   const [savedTextbookId, setSavedTextbookId] = useState<string | null>(null);
   const [pendingResumeBook, setPendingResumeBook] =
     useState<LibraryTextbook | null>(null);
@@ -172,6 +193,35 @@ export default function Textbooks() {
     [planned],
   );
 
+  // The printed→PDF shift every typed page range is placed with. The offset
+  // itself is data the planner already derived (diagnostics.pageOffset); the
+  // field just lets the student confirm or correct it.
+  const pageOffset = useMemo(() => offsetForPageOneAt(pageOneAt), [pageOneAt]);
+  const pageCount = report?.pageCount ?? 0;
+  // Page numbers need pages: pasted text has none, so the tab is not offered.
+  const pagesAvailable = pageCount > 0;
+  const rangeJobs = useMemo(
+    () => pageRangeJobs(pageRanges, pageOffset, pageCount),
+    [pageRanges, pageOffset, pageCount],
+  );
+
+  const addPageRange = () =>
+    setPageRanges((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).slice(2),
+        title: "",
+        start: null,
+        end: null,
+      },
+    ]);
+  const updatePageRange = (id: string, patch: Partial<Omit<PageRange, "id">>) =>
+    setPageRanges((prev) =>
+      prev.map((range) => (range.id === id ? { ...range, ...patch } : range)),
+    );
+  const removePageRange = (id: string) =>
+    setPageRanges((prev) => prev.filter((range) => range.id !== id));
+
   const applyPlan = (
     result: Awaited<ReturnType<typeof planImport>>,
     imported: Set<string>,
@@ -182,6 +232,11 @@ export default function Textbooks() {
     setReport(result.diagnostics);
     setOcrProgress(null);
     setPlanned(result.chunks);
+    // A fresh plan starts with no typed ranges, and seeds the offset from
+    // whatever the planner managed to work out (often nothing on a book with no
+    // contents) so the common case is one less number to type.
+    setPageRanges([]);
+    setPageOneAt(pageOneAtForOffset(result.diagnostics.pageOffset));
     const toc = importTocTree(result.chunks);
     // One stage per visible line, keyed by node id, and one for *every* line —
     // not just the six units. A topic is importable on its own now, and a stage
@@ -266,7 +321,10 @@ export default function Textbooks() {
           language,
           sourceName,
           sourceSize,
-          toc: importTocTree(planned),
+          toc: [
+            ...activeToc,
+            ...pageRangeTree(pageRanges, pageOffset, pageCount),
+          ],
         }),
       });
       setSavedTextbookId(textbookId);
@@ -280,6 +338,7 @@ export default function Textbooks() {
             textbookId,
             sourceName ?? "textbook",
             source,
+            pageOneAt,
           );
         } catch (storageError) {
           setError(
@@ -342,6 +401,16 @@ export default function Textbooks() {
       setPdfFile(file);
       setMode(file ? "pdf" : "text");
       applyPlan(result, imported, book.id);
+      // Ranges come back out of the saved contents; the offset that places them
+      // is the one stored beside the file, falling back to what the planner
+      // found. Without it the pages would still read right — the offset cancels
+      // when a range is re-expanded — but the student's numbers would be off.
+      const oneAt =
+        source.pageOneAt ?? pageOneAtForOffset(result.diagnostics.pageOffset);
+      setPageOneAt(oneAt);
+      setPageRanges(
+        pageRangesFromToc(book.toc ?? [], offsetForPageOneAt(oneAt)),
+      );
     } catch (err) {
       setError(apiError(err));
       setStep("form");
@@ -377,15 +446,26 @@ export default function Textbooks() {
         new Set(book.chapters.map((chapter) => chapter.title)),
         book.id,
       );
+      // The source was re-picked on this device, so there is no stored offset
+      // to lean on; the planner's own read of the file is the best one there is.
+      const oneAt = pageOneAtForOffset(result.diagnostics.pageOffset);
+      setPageOneAt(oneAt);
+      setPageRanges(
+        pageRangesFromToc(book.toc ?? [], offsetForPageOneAt(oneAt)),
+      );
     } catch (err) {
       setError(apiError(err));
       setStep("form");
     }
   };
 
+  // Upsert, not update: a typed page range is never in the tree the stages were
+  // seeded from, so its first state has to create its row as well as set it.
   const setNodeState = (id: string, state: NodeStage["state"]) =>
     setNodeStages((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, state } : s)),
+      prev.some((s) => s.id === id)
+        ? prev.map((s) => (s.id === id ? { ...s, state } : s))
+        : [...prev, { id, title: id, state }],
     );
 
   /**
@@ -399,6 +479,9 @@ export default function Textbooks() {
    * The chapter is titled with its unit, because a chapter called only "1.1.1 The
    * nucleus" would land on the shelf with no way to tell which of the six units
    * it came from.
+   *
+   * A typed page range is the same synthetic chunk without a number to hang off:
+   * the reader reads exactly its pages under whatever name the student gave it.
    */
   const importJob = async (job: TocJob): Promise<void> => {
     const reader = readerRef.current;
@@ -417,7 +500,7 @@ export default function Textbooks() {
         return;
       }
       const slice: ImportChunk = {
-        title: `${job.unit} · ${job.title}`,
+        title: job.kind === "topic" ? `${job.unit} · ${job.title}` : job.title,
         rawText: "",
         pages: job.pages,
         needsOcr: Boolean(reader),
@@ -474,7 +557,7 @@ export default function Textbooks() {
   const runImport = async () => {
     if (!planned || !savedTextbookId || !TEXTBOOK_IMPORT_ENABLED) return;
     setStep("importing");
-    const jobs = tocJobs(activeToc, tocSelection).filter(
+    const jobs = [...tocJobs(activeToc, tocSelection), ...rangeJobs].filter(
       (job) => nodeStages.find((s) => s.id === job.nodeId)?.state !== "skip",
     );
     let failed = 0;
@@ -503,7 +586,9 @@ export default function Textbooks() {
     if (!planned || !TEXTBOOK_IMPORT_ENABLED) return;
     setStep("importing");
     try {
-      const job = tocJobs(activeToc, new Set([nodeId]))[0];
+      const job =
+        tocJobs(activeToc, new Set([nodeId]))[0] ??
+        rangeJobs.find((candidate) => candidate.nodeId === nodeId);
       if (job) await importJob(job);
       fetchLibrary();
     } catch {
@@ -528,6 +613,8 @@ export default function Textbooks() {
     setPlanned(null);
     setNodeStages([]);
     setTocSelection(new Set());
+    setPageRanges([]);
+    setPageOneAt("1");
     setSavedTextbookId(null);
     setPendingResumeBook(null);
     setError(null);
@@ -563,7 +650,7 @@ export default function Textbooks() {
   // inside one unit reports 3 of 3 and not 1 of 1. A unit that is already in the
   // library counts as settled the moment it is picked, matching the badge beside
   // it — otherwise the bar would sit at zero while the screen says "Already here".
-  const pendingJobs = tocJobs(activeToc, tocSelection);
+  const pendingJobs = [...tocJobs(activeToc, tocSelection), ...rangeJobs];
   const settled = (nodeId: string) => {
     const state = nodeStages.find((s) => s.id === nodeId)?.state;
     return state === "done" || state === "skip";
@@ -778,6 +865,16 @@ export default function Textbooks() {
         progress={progress}
         total={total}
         onCancel={resetForm}
+        pageRanges={pageRanges}
+        onAddRange={addPageRange}
+        onUpdateRange={updatePageRange}
+        onRemoveRange={removePageRange}
+        pageOffset={pageOffset}
+        pageOneAt={pageOneAt}
+        onPageOneAtChange={setPageOneAt}
+        pageCount={pageCount}
+        pagesAvailable={pagesAvailable}
+        pickedJobs={pendingJobs}
       />
       <input
         ref={resumeInputRef}
@@ -866,6 +963,16 @@ function AddTextbook({
   progress,
   total,
   onCancel,
+  pageRanges,
+  onAddRange,
+  onUpdateRange,
+  onRemoveRange,
+  pageOffset,
+  pageOneAt,
+  onPageOneAtChange,
+  pageCount,
+  pagesAvailable,
+  pickedJobs,
 }: {
   step: ImportStep;
   enabled: boolean;
@@ -902,6 +1009,16 @@ function AddTextbook({
   progress: number;
   total: number;
   onCancel: () => void;
+  pageRanges: PageRange[];
+  onAddRange: () => void;
+  onUpdateRange: (id: string, patch: Partial<Omit<PageRange, "id">>) => void;
+  onRemoveRange: (id: string) => void;
+  pageOffset: number;
+  pageOneAt: string;
+  onPageOneAtChange: (value: string) => void;
+  pageCount: number;
+  pagesAvailable: boolean;
+  pickedJobs: TocJob[];
 }) {
   const { t } = useLanguage();
   if (step === "planning") {
@@ -918,9 +1035,7 @@ function AddTextbook({
     const importing = step === "importing";
     const stateOf = (node: ImportTocNode) =>
       nodeStages.find((s) => s.id === node.id)?.state ?? "queued";
-    const selectedIds = new Set(
-      tocJobs(toc, selection).map((job) => job.nodeId),
-    );
+    const selectedIds = new Set(pickedJobs.map((job) => job.nodeId));
     const newChapters = [...selectedIds].filter(
       (id) => nodeStages.find((s) => s.id === id)?.state !== "skip",
     ).length;
@@ -998,6 +1113,15 @@ function AddTextbook({
           importing={importing}
           onRetry={onRetryOne}
           ocrProgress={ocrProgress}
+          pageRanges={pageRanges}
+          onAddRange={onAddRange}
+          onUpdateRange={onUpdateRange}
+          onRemoveRange={onRemoveRange}
+          pageOffset={pageOffset}
+          pageOneAt={pageOneAt}
+          onPageOneAtChange={onPageOneAtChange}
+          pageCount={pageCount}
+          pagesAvailable={pagesAvailable}
         />
 
         <HierarchyReport report={report} className="mt-3" />
