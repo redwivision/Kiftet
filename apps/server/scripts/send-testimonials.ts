@@ -1,11 +1,11 @@
 /**
- * Send the testimonials students wrote to the bot, to the operator's Telegram.
+ * Backfill: send any testimonials the live forward missed, to the operator.
  *
- * The reward funnel already collects one line per verified student — it lands in
- * `waitlist_signup.testimonial_text` and then goes nowhere, because reading it
- * meant opening Drizzle Studio or remembering a psql query. This turns the pile
- * into a push: run it and the new opinions arrive as Telegram messages, each
- * prefixed with who wrote it and when.
+ * New testimonials now reach the operator on their own — the webhook forwards
+ * each one the moment a student sends it (see routes/telegram.ts). This script
+ * covers the gaps: rows that arrived before `TELEGRAM_ADMIN_CHAT_ID` was set, or
+ * whose forward failed, sit unmarked in `waitlist_signup.testimonial_text` for
+ * it to pick up. It is also the way to re-read the whole set.
  *
  * Usage:
  *   bun run --cwd apps/server telegram:testimonials
@@ -14,9 +14,9 @@
  *   bun run --cwd apps/server telegram:testimonials -- --all
  *
  * Sends only what has not been sent before — `testimonial_sent_at` is stamped
- * once a message is delivered — so the command is safe to run on a schedule or
- * on a whim without re-pinging the same opinions. `--all` re-sends everything,
- * and `--dry-run` prints without sending or marking anything.
+ * once a message is delivered — so it is safe to run on a schedule or on a whim
+ * without re-pinging the same opinions. `--all` re-sends everything, and
+ * `--dry-run` prints without sending or marking anything.
  *
  * Reads apps/server/.env (Bun loads it automatically). Never prints the token.
  */
@@ -24,6 +24,8 @@
 import { createDb } from "@kiftet/db";
 import { waitlistSignup } from "@kiftet/db/schema";
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+
+import { formatTestimonial } from "../src/lib/testimonial";
 
 const TELEGRAM_API = "https://api.telegram.org";
 const TIMEOUT_MS = 15_000;
@@ -114,18 +116,7 @@ async function call(
 
 /** One testimonial as the operator should read it: who, when, then the words. */
 function format(row: typeof waitlistSignup.$inferSelect): string {
-  const when = row.testimonialAt
-    ? row.testimonialAt.toISOString().slice(0, 10)
-    : "unknown date";
-  const who = [row.name, row.phone].filter(Boolean).join(" · ");
-  const language = row.language === "am" ? "Amharic" : "English";
-  return [
-    "New Kiftet testimonial",
-    `${who} (${language})`,
-    when,
-    "",
-    row.testimonialText ?? "(empty)",
-  ].join("\n");
+  return formatTestimonial(row);
 }
 
 const token = await loadEnv("TELEGRAM_BOT_TOKEN");

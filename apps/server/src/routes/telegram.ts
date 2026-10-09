@@ -8,6 +8,7 @@ import {
   isMember,
   isSameChat,
 } from "../lib/telegram-membership";
+import { formatTestimonial } from "../lib/testimonial";
 import { getWaitlistDb } from "../services";
 
 /**
@@ -236,6 +237,39 @@ async function reply(chatId: number, text: string): Promise<void> {
 }
 
 /**
+ * Hand a fresh testimonial to the operator's own chat.
+ *
+ * This is what makes the feedback arrive without anyone running a command: the
+ * script only fires when a human runs it, but this fires the moment a student
+ * sends the line, on the server that is already up to receive it. Returns
+ * whether it actually delivered, because a failure here must leave the row
+ * unmarked so `telegram:testimonials` can pick it up later rather than lose it.
+ *
+ * A no-op when `TELEGRAM_ADMIN_CHAT_ID` is unset — that just means no inbox was
+ * named, not an error.
+ */
+async function notifyAdmin(text: string): Promise<boolean> {
+  if (ADMIN_CHAT_ID === null) return false;
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token) return false;
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${token}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: ADMIN_CHAT_ID, text }),
+        signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
+      },
+    );
+    return res.ok;
+  } catch (error) {
+    console.error("[telegram] admin notify failed:", error);
+    return false;
+  }
+}
+
+/**
  * The channel, as two independently usable identifiers.
  *
  * `TELEGRAM_CHANNEL_ID` is the numeric `-100…` id and is the one that keeps
@@ -252,6 +286,17 @@ const CHANNEL_ID = (() => {
 })();
 
 const CHANNEL_HANDLE = channelHandleFromUrl(env.TELEGRAM_CHANNEL_URL);
+
+/**
+ * The operator's own chat, where testimonials are forwarded as they arrive.
+ * Numeric like any Telegram chat id; unset means the forward is simply skipped.
+ */
+const ADMIN_CHAT_ID = (() => {
+  const raw = env.TELEGRAM_ADMIN_CHAT_ID;
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+})();
 
 /**
  * Thin binding of the config to `isSameChat`, so the matching rule itself stays
@@ -424,6 +469,7 @@ router.post("/hook", async (req, res) => {
 
     const body = text.slice(0, MAX_TESTIMONIAL_CHARS);
     const verified = row.channelVerifiedAt !== null;
+    const receivedAt = new Date();
 
     // The testimonial is stored either way. It is evidence the student took the
     // time, and it is the input to the launch-day review, so withholding it
@@ -431,8 +477,28 @@ router.post("/hook", async (req, res) => {
     // Eligibility is a separate column and stays honest.
     await getWaitlistDb()
       .update(waitlistSignup)
-      .set({ testimonialText: body, testimonialAt: new Date() })
+      .set({ testimonialText: body, testimonialAt: receivedAt })
       .where(eq(waitlistSignup.id, row.id));
+
+    // Forward it to the operator the instant it lands, so reading feedback never
+    // means running a command. Only a delivered message is marked sent: a send
+    // that failed, or an inbox that was never configured, is left unmarked for
+    // `telegram:testimonials` to pick up instead of being counted as seen.
+    const delivered = await notifyAdmin(
+      formatTestimonial({
+        name: row.name,
+        phone: row.phone,
+        language: row.language,
+        testimonialAt: receivedAt,
+        testimonialText: body,
+      }),
+    );
+    if (delivered) {
+      await getWaitlistDb()
+        .update(waitlistSignup)
+        .set({ testimonialSentAt: new Date() })
+        .where(eq(waitlistSignup.id, row.id));
+    }
 
     // Distinct copy, because these are genuinely different situations: one is
     // done, the other has a concrete next step. Telling someone their month of
