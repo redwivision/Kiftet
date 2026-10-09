@@ -10,7 +10,8 @@
     "start": "node dist/index.mjs",
     "env:generate": "varlock codegen",
     "telegram:webhook": "bun scripts/register-webhook.ts",
-    "telegram:webhook:check": "bun scripts/register-webhook.ts --check"
+    "telegram:webhook:check": "bun scripts/register-webhook.ts --check",
+    "telegram:testimonials": "bun scripts/send-testimonials.ts"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",

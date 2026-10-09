@@ -1,0 +1,1 @@
+ALTER TABLE "waitlist_signup" ADD COLUMN "testimonial_sent_at" timestamp;

@@ -93,6 +93,14 @@ export const waitlistSignup = pgTable(
     testimonialAt: timestamp("testimonial_at"),
     /** Set only after a human approves the wording. Not self-published. */
     testimonialPublishedAt: timestamp("testimonial_published_at"),
+    /**
+     * When an operator was last handed this testimonial.
+     *
+     * Separate from `testimonialPublishedAt` because being *told* an opinion
+     * and *publishing* it are different decisions. `telegram:testimonials`
+     * writes it so a re-run sends only the new lines, not the whole pile again.
+     */
+    testimonialSentAt: timestamp("testimonial_sent_at"),
 
     // ── The reward ──
     // Materialised at launch from the two facts above, once, by an operator

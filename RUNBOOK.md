@@ -458,6 +458,22 @@ group is logged (`channel status … status=left`) but does not revoke: punishin
 a student who accidentally left, or who was muted by Telegram, is worse than the
 gaming it prevents at this scale.
 
+**Reading the feedback.** Every testimonial from step 5 lands in
+`waitlist_signup.testimonial_text` and is normally read nowhere. To have the new
+ones pushed to your own Telegram:
+
+```bash
+bun run --cwd apps/server telegram:testimonials            # only what is new
+bun run --cwd apps/server telegram:testimonials -- --all   # every one, again
+bun run --cwd apps/server telegram:testimonials -- --dry-run
+```
+
+Set `TELEGRAM_ADMIN_CHAT_ID` in `apps/server/.env` once (message `@userinfobot`
+for the number, or read your own `waitlist_signup.telegram_chat_id`), or pass
+`--to=<chat id>` for a single run. The script stamps `testimonial_sent_at` after
+each delivery, so re-running only sends what arrived since — safe to schedule.
+The marker column ships with migration `0009`, applied automatically at boot.
+
 ---
 
 ## 10. Rollback and backups
