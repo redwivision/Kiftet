@@ -193,7 +193,7 @@ function friendlyIssue(issue: z.ZodIssue): string {
     return "That's too long. Trim it down and try again.";
   }
   if (/too small|less than|below minimum/i.test(message)) {
-    return "That's too short. Add a little more and try again.";
+    return "Something required is missing or too short. Check the form and try again.";
   }
   return message;
 }
@@ -284,18 +284,30 @@ const ingestSchema = z.object({
    * will reorder them. The book already knows.
    */
   topics: z
-    .array(z.string().trim().min(1).max(300))
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1, "A topic name came through empty.")
+        .max(300, "That topic name is too long."),
+    )
     .max(200, "Too many topics in one chapter.")
     .optional(),
 });
 
 const saveTextbookSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  subject: z.string().trim().min(1).max(120),
+  title: z.string().trim().min(1, "Name the textbook first.").max(200),
+  subject: z.string().trim().min(1, "Which subject is it?").max(120),
   language: z.string().trim().min(1).max(24).default("en"),
   sourceName: z.string().trim().min(1).max(255).optional(),
   sourceSize: z.number().int().positive().optional(),
-  toc: z.array(z.unknown()).min(1).max(200),
+  toc: z
+    .array(z.unknown())
+    .min(
+      1,
+      "No chapters were found in this book. Add a page range, or paste more of the book, then try again.",
+    )
+    .max(200, "That book has too many contents entries."),
 });
 
 function isTocPage(value: unknown): value is number | null {

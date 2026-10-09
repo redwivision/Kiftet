@@ -379,7 +379,7 @@ export const en = {
   characters: "{n} characters",
   "headings-detect":
     "Chapter headings like \u201CUnit 1\u201D or \u201Cምዕራፍ 2\u201D are detected automatically.",
-  "scan-chunks": "Read the table of contents",
+  "scan-chunks": "Import book",
   "plan-confirm":
     "Review the book's contents, then save the textbook before importing chapters.",
   "demo-budget":
