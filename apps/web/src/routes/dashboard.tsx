@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import { useLanguage } from "@/components/language-provider";
+import { MasteryRing } from "@/components/mastery-ring";
 import type { ChapterInfo } from "@/components/study-provider";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -248,6 +249,9 @@ export default function Dashboard() {
     }
   };
 
+  const openRound = history.find((h) => h.status === "in_progress");
+  const neverStudied = history.length === 0;
+
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
@@ -264,6 +268,7 @@ export default function Dashboard() {
           <Link
             to="/textbooks"
             className={buttonVariants({
+              variant: chapters && chapters.length > 0 ? "outline" : "default",
               size: "default",
               className: "w-full sm:w-auto",
             })}
@@ -298,6 +303,39 @@ export default function Dashboard() {
             {t("create-free-account")}
           </Link>
         </div>
+      )}
+
+      {chapters && chapters.length > 0 && (openRound || neverStudied) && (
+        <section className="surface mb-8 flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2 className="font-display font-semibold text-xl tracking-tight">
+              {openRound ? t("continue-where") : t("start-first-chapter")}
+            </h2>
+            <p className="max-w-md text-muted-foreground text-sm leading-6">
+              {openRound
+                ? t("continue-where-text")
+                : t("start-first-chapter-text")}
+            </p>
+          </div>
+          {openRound ? (
+            <Link
+              to={`/study/${openRound.id}`}
+              className={buttonVariants({ className: "w-full sm:w-auto" })}
+            >
+              {t("resume-round")}
+            </Link>
+          ) : (
+            <Button
+              className="w-full sm:w-auto"
+              disabled={starting === chapters[0].id}
+              onClick={() => start(chapters[0])}
+            >
+              {starting === chapters[0].id
+                ? t("opening-ellipsis")
+                : t("first-chapter-cta")}
+            </Button>
+          )}
+        </section>
       )}
 
       {budget && (
@@ -452,6 +490,7 @@ export default function Dashboard() {
                     chapter={chapter}
                     title={title}
                     starting={starting === chapter.id}
+                    percent={last?.after ?? 0}
                     onStart={() => start(chapter)}
                   />
                   <ChapterHistory last={last} />
@@ -469,11 +508,13 @@ function ChapterCard({
   chapter,
   title,
   starting,
+  percent,
   onStart,
 }: {
   chapter: ChapterInfo;
   title: string;
   starting: boolean;
+  percent: number;
   onStart: () => void;
 }) {
   const { t } = useLanguage();
@@ -493,8 +534,11 @@ function ChapterCard({
             {title}
           </h2>
         </div>
-        <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
-          {starting ? t("opening-ellipsis") : t("start-review")}
+        <span className="flex shrink-0 items-center gap-2">
+          <MasteryRing percent={percent} size={30} />
+          <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
+            {starting ? t("opening-ellipsis") : t("start-review")}
+          </span>
         </span>
       </div>
 
