@@ -32,6 +32,7 @@ import {
 import {
   REVIEW_DUE_DAYS,
   STUDY_PLAN_BUDGETS,
+  STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
   STUDY_PLAN_VERSION,
 } from "../ai/plan-config";
@@ -1158,6 +1159,7 @@ const planSchema = z.object({
 });
 
 router.post("/sessions/:id/plan", async (req, res) => {
+  const contentDeadline = Date.now() + STUDY_PLAN_CONTENT_BUDGET_MS;
   const parsed = planSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -1262,15 +1264,30 @@ router.post("/sessions/:id/plan", async (req, res) => {
   for (const step of initial.steps) {
     const key = `${step.concept.trim().toLowerCase()}|${step.type}`;
     if (contentByConcept.has(key)) continue;
-    const skipAi = !allowAiRequest(req);
-    const content = await ai.generateStudyPlanContent(
-      step.concept,
-      step.type,
-      chapterRow.rawText,
-      step.anchor.excerpt,
-      language,
-      { skipAi },
-    );
+    const timeoutMs = contentDeadline - Date.now();
+    const skipAi = timeoutMs <= 0 || !allowAiRequest(req);
+    let content: StudyPlanContent;
+    try {
+      content = await ai.generateStudyPlanContent(
+        step.concept,
+        step.type,
+        chapterRow.rawText,
+        step.anchor.excerpt,
+        language,
+        { skipAi, timeoutMs },
+      );
+    } catch (error) {
+      if (!isAiBusy(error)) throw error;
+      console.warn(
+        "[study-plan] AI capacity unavailable; using the anchored excerpt",
+      );
+      content = {
+        body: [step.anchor.excerpt],
+        contrast: null,
+        chapterExplains: null,
+        estimated: true,
+      };
+    }
     contentByConcept.set(key, content);
     if (!skipAi && !content.estimated) {
       await db()

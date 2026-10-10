@@ -157,6 +157,20 @@ describe("admitAiCall", () => {
     expect(admissionSnapshot().inFlight).toBe(4);
     fifth.settle("success");
   });
+
+  test("a caller can cap its wait for a concurrency slot", async () => {
+    const leases = [];
+    for (let i = 0; i < 4; i += 1) {
+      leases.push(await admitAiCall());
+    }
+
+    const startedAt = performance.now();
+    await expectRefusal(admitAiCall("gemini", 25));
+    expect(performance.now() - startedAt).toBeLessThan(250);
+    expect(admissionSnapshot().queued).toBe(0);
+
+    for (const lease of leases) lease.settle("success");
+  });
 });
 
 describe("caller errors", () => {

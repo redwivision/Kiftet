@@ -3,9 +3,9 @@ import { resolveBrowserServerRoot } from "@/lib/server-url";
 
 const API = (import.meta.env.VITE_SERVER_URL as string) || "";
 
-// Long enough for a graded recall (Gemini is guarded at 20s server-side), short
-// enough that a dead connection doesn't leave the student staring at "…" for a
-// minute. The server request cap is 60s; this fires well inside it.
+// Long enough for a graded recall and plan generation (both are bounded on the
+// server), short enough that a dead connection doesn't leave the student
+// staring at "…" for a minute.
 const REQUEST_TIMEOUT_MS = 30_000;
 
 function resolveServerRoot(): string {
@@ -76,7 +76,7 @@ function describeNetworkError(error: unknown): string {
     error !== null &&
     (error as { name?: unknown }).name === "AbortError"
   ) {
-    return "That took longer than expected. Try again, or import one chapter at a time.";
+    return "This request took too long. Check your connection and try again.";
   }
   const message = error instanceof Error ? error.message : String(error);
   if (

@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { __resetAdmissionForTests } from "./admission";
 import {
+  __overrideProviderForTests,
+  ai,
   buildStudyPlan,
   type ConceptChecklistItem,
   estimateStudyStepMinutes,
@@ -222,6 +225,35 @@ describe("study plan personalization", () => {
     );
     expect(JSON.stringify(result)).not.toMatch(/youtube|google|https?:\/\//i);
   });
+
+  test("AI plan content falls back inside its caller-supplied time budget", async () => {
+    __resetAdmissionForTests();
+    process.env.GEMINI_API_KEY = "test-key";
+    delete process.env.GROQ_API_KEY;
+    __overrideProviderForTests("gemini", () => new Promise<string>(() => {}));
+
+    const startedAt = performance.now();
+    const content = await ai.generateStudyPlanContent(
+      PLASMA_MEMBRANE,
+      "CONTRAST",
+      RAW,
+      RAW.slice(0, 110),
+      "en",
+      { timeoutMs: 40 },
+    );
+
+    expect(performance.now() - startedAt).toBeLessThan(250);
+    expect(content.estimated).toBe(true);
+    expect(content.body).toEqual([RAW.slice(0, 110)]);
+  });
+});
+
+afterEach(() => {
+  __overrideProviderForTests("gemini", null);
+  __overrideProviderForTests("groq", null);
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GROQ_API_KEY;
+  __resetAdmissionForTests();
 });
 
 describe("grounded plan content", () => {

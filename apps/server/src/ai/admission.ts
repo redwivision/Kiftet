@@ -337,6 +337,7 @@ export type AiOutcome =
  */
 export async function admitAiCall(
   provider: AiProvider = "gemini",
+  maxWaitMs = WAIT_MS,
 ): Promise<AiAdmission> {
   const gate = gates[provider];
   const now = Date.now();
@@ -351,7 +352,7 @@ export async function admitAiCall(
     throw new AiBusyError("provider-busy", secondsUntilToken(gate, now));
   }
 
-  const gotSlot = await acquireSlot(WAIT_MS);
+  const gotSlot = await acquireSlot(Math.min(WAIT_MS, Math.max(0, maxWaitMs)));
   if (!gotSlot) {
     gate.shedSaturated += 1;
     throw new AiBusyError("saturated", 2);

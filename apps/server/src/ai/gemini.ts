@@ -270,7 +270,7 @@ export type AiService = {
     chapterText: string,
     excerpt: string,
     language?: ContentLanguage,
-    options?: { skipAi?: boolean },
+    options?: { skipAi?: boolean; timeoutMs?: number },
   ): Promise<StudyPlanContent>;
   /**
    * Explain one concept. Student-independent by construction — it is not given
@@ -1300,9 +1300,13 @@ async function ask(
     schema?: Record<string, unknown>;
     /** Ask for plain text — a transcription — instead of JSON. */
     text?: boolean;
+    /** Per-operation cap, still bounded by the shared AI retry budget. */
+    timeoutMs?: number;
   } = {},
 ): Promise<string> {
-  const deadline = Date.now() + AI_TOTAL_BUDGET_MS;
+  const deadline =
+    Date.now() +
+    Math.min(AI_TOTAL_BUDGET_MS, options.timeoutMs ?? AI_TOTAL_BUDGET_MS);
   let lastError: unknown;
   // A provider refusing its own admission is NOT an error to the student — it
   // is a reason to hand the call to the next provider. The last refusal is kept
@@ -1329,7 +1333,7 @@ async function ask(
     // only an admitted call settles against its gate.
     let admission: Awaited<ReturnType<typeof admitAiCall>>;
     try {
-      admission = await admitAiCall(provider);
+      admission = await admitAiCall(provider, remaining);
     } catch (error) {
       if (isAiBusy(error)) {
         lastBusy = error;
@@ -1941,10 +1945,13 @@ export const ai: AiService = {
     chapterText: string,
     excerpt: string,
     language: ContentLanguage = "en",
-    options: { skipAi?: boolean } = {},
+    options: { skipAi?: boolean; timeoutMs?: number } = {},
   ): Promise<StudyPlanContent> {
     const fallback = () => fallbackStudyPlanContent(excerpt);
     if (options.skipAi || !anyAiAvailable()) return fallback();
+    const deadline =
+      Date.now() +
+      Math.min(AI_TOTAL_BUDGET_MS, options.timeoutMs ?? AI_TOTAL_BUDGET_MS);
     const schema = {
       type: "object",
       properties: {
@@ -1984,13 +1991,15 @@ export const ai: AiService = {
     const user = `CONCEPT: ${conceptText}\nSTEP TYPE: ${type}\nANCHOR: ${excerpt}\n\nCHAPTER TEXT:\n${chapterText.slice(0, 24000)}`;
     try {
       for (let attemptNumber = 0; attemptNumber < 2; attemptNumber += 1) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) return fallback();
         const raw = await ask(
           system +
             (attemptNumber === 1
               ? " Your previous answer did not validate. Retry with only exact verbatim substrings from the anchor excerpt."
               : ""),
           user,
-          { schema },
+          { schema, timeoutMs: remaining },
         );
         const content = validateGroundedPlanContent(
           parseJson<unknown>(raw),
