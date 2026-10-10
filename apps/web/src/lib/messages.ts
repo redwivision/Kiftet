@@ -789,6 +789,15 @@ export const en = {
   "first-chapter-cta": "Start studying",
   "hint-first-recall": "Tap the ring and say what you remember. No notes.",
   "hint-dismiss": "Got it",
+
+  // ── The loop, phase by phase (tier 2) ─────────────────────────
+  "gaps-known": "You knew {known} of {total} ideas.",
+  "cov-start-here": "Start here",
+  "retest-checking": "Checking: {focus}",
+  "lesson-only-gaps": "Only your gaps. Nothing you already know is here.",
+  "tap-a-sentence": "Tap a sentence to hear it again",
+  "recall-reading": "Reading your answer",
+  "result-ring-words": "You knew {before}%, now you know {after}%.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1510,6 +1519,15 @@ export const am: Record<MessageKey, string> = {
   "first-chapter-cta": "ጥናት ጀምር",
   "hint-first-recall": "ቀለበቱን ነክተህ ያስታወስከውን ተናገር። ማስታወሻ የለም።",
   "hint-dismiss": "ገባኝ",
+
+  // ── The loop, phase by phase (tier 2) ─────────────────────────
+  "gaps-known": "ከ{total} ሃሳቦች {known} ታውቅ ነበር።",
+  "cov-start-here": "ከዚህ ጀምር",
+  "retest-checking": "የሚመረመረው: {focus}",
+  "lesson-only-gaps": "ክፍተቶችህ ብቻ። የምታውቀው ምንም እዚህ የለም።",
+  "tap-a-sentence": "እንደገና ለመስማት ዓረፍተ ነገር ንካ",
+  "recall-reading": "መልስህን በማንበብ ላይ",
+  "result-ring-words": "{before}% ታውቅ ነበር፣ አሁን {after}% ታውቃለህ።",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

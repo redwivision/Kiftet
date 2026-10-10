@@ -137,6 +137,18 @@ export function CoverageView({
 
   return (
     <div className={cn("space-y-6", className)}>
+      {/* The result in plain words, so nobody has to translate a ring into a
+          sentence themselves. The cream rises to the top: what you knew, then
+          the picture, then the detail. */}
+      {strip.length > 0 && (
+        <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
+          {t("gaps-known", {
+            known: groups.solid.length,
+            total: strip.length,
+          })}
+        </p>
+      )}
+
       {/* The score, as a gap closing */}
       <div className="flex items-center gap-5">
         <MasteryRing percent={pct} estimated={estimated} />
@@ -265,7 +277,7 @@ export function CoverageView({
             {t("cov-almost-text")}
           </p>
           <ul className="space-y-2">
-            {groups.almost.map((concept) => (
+            {byImportance(groups.almost, meta).map((concept, i) => (
               <li
                 key={concept}
                 className="flex items-baseline gap-2 text-foreground/90 text-sm"
@@ -276,6 +288,11 @@ export function CoverageView({
                   className="translate-y-[3px]"
                 />
                 <span className="min-w-0 break-words">{concept}</span>
+                {i === 0 && (
+                  <span className="ml-auto shrink-0 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 font-medium text-[0.72rem] text-gold">
+                    {t("cov-start-here")}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

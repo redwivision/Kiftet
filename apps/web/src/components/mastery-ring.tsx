@@ -72,6 +72,75 @@ export function MasteryRing({
 }
 
 /**
+ * A ring divided into one segment per question, so a test reads as a circle
+ * filling rather than a "3 of 7" bar. Each segment takes the answer's own
+ * colour — sage for right, rust for wrong — and the segment being asked now
+ * pulses gold. Decorative: the count is in the DOM as text nearby.
+ */
+export function SegmentedRing({
+  states,
+  size = 40,
+  className,
+}: {
+  states: ("correct" | "wrong" | "current" | "pending")[];
+  size?: number;
+  className?: string;
+}) {
+  const stroke = Math.max(3, Math.round(size * 0.1));
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const n = Math.max(1, states.length);
+  const seg = c / n;
+  const gap = Math.min(5, seg * 0.32);
+  const dash = Math.max(0.001, seg - gap);
+  const color: Record<string, string> = {
+    correct: "var(--color-sage)",
+    wrong: "var(--color-rust)",
+    current: "var(--color-gold)",
+    pending: "var(--border)",
+  };
+
+  return (
+    <span
+      className={cn("relative inline-flex shrink-0", className)}
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        fill="none"
+        aria-hidden="true"
+        className="-rotate-90"
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="var(--border)"
+          strokeWidth={stroke}
+          opacity={0.5}
+        />
+        {states.map((s, i) => (
+          <circle
+            key={i}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={color[s]}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${c - dash}`}
+            strokeDashoffset={-i * seg}
+            className={cn(s === "current" && "motion-safe:animate-pulse-soft")}
+          />
+        ))}
+      </svg>
+    </span>
+  );
+}
+
+/**
  * One concept's arc: 0 is an empty ring, 1 a quarter sweep, 2 a full ring in
  * rust, 3 a full ring in sage. Level 2 being *full* is the point — the student
  * filled this concept with the wrong thing, and the ring should not pretend

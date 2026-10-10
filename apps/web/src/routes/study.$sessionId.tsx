@@ -26,6 +26,7 @@ import { CoverageView } from "@/components/gap-list";
 import { GuideView } from "@/components/guide-view";
 import { InkSettling } from "@/components/ink-settling";
 import { useLanguage } from "@/components/language-provider";
+import { MasteryRing, SegmentedRing } from "@/components/mastery-ring";
 import {
   type Gaps,
   type StudyPlan,
@@ -471,6 +472,18 @@ function VoiceCapture({
     return () => setCaptureActive(false);
   }, [voice.status]);
 
+  // A single quiet tick the moment the mic starts listening, so the ring
+  // answering under your finger is felt, not only seen. Silent where the
+  // hardware or the person's settings say no.
+  useEffect(() => {
+    if (voice.status !== "listening") return;
+    try {
+      navigator.vibrate?.(10);
+    } catch {
+      // No vibration; the ring still ripples.
+    }
+  }, [voice.status]);
+
   // Auto-end: when the student signals they've finished speaking, finalize
   // the capture on the spot and hang up — the loop advances to the next step
   // without waiting for a tap on the ring. Re-runs per streamed chunk, which
@@ -579,6 +592,15 @@ function VoiceCapture({
           </p>
         )}
 
+        {!effectiveText && voice.status === "listening" && <ElapsedTimer />}
+
+        {busy && (
+          <p className="flex items-center gap-2 text-muted-foreground text-sm">
+            <InkSettling />
+            {t("recall-reading")}
+          </p>
+        )}
+
         {voice.errorCode === "usage_limit" && (
           <p className="max-w-md rounded-lg border border-rust/30 bg-rust/10 px-3 py-2 text-muted-foreground text-xs leading-5">
             {t("voice-service-busy")}
@@ -659,6 +681,28 @@ function captureCaption(
 ): string {
   const table = phase === "retest" ? CAPTION_KEYS.answer : CAPTION_KEYS.recall;
   return t(table[status] ?? table.idle);
+}
+
+// A calm elapsed clock, shown only while the mic is listening. It answers the
+// one question a person speaking has — "how long have I been going?" — without
+// ever counting down or turning a pause into a deadline.
+function ElapsedTimer() {
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const id = window.setInterval(
+      () => setSecs(Math.floor((Date.now() - started) / 1000)),
+      500,
+    );
+    return () => window.clearInterval(id);
+  }, []);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return (
+    <span className="font-medium text-muted-foreground text-sm tabular-nums">
+      {m}:{String(s).padStart(2, "0")}
+    </span>
+  );
 }
 
 function TextRecorder({
@@ -916,7 +960,7 @@ function PlanView({
               className="rounded-2xl border border-border/70 bg-card/50 p-4 dark:border-white/10"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-[0.72rem] text-muted-foreground uppercase tracking-wide">
+                <p className="font-medium text-[0.72rem] text-muted-foreground">
                   {t("plan-step-of", { a: i + 1, b: plan.steps.length })}
                 </p>
                 {step.gapType === "misconception" ? (
@@ -1006,6 +1050,7 @@ function LessonTextPanel({
   recording,
   narrate,
   stopReading,
+  onReplaySentence,
 }: {
   lessonText: string | null;
   sentences: string[];
@@ -1013,6 +1058,7 @@ function LessonTextPanel({
   recording: boolean;
   narrate: () => void;
   stopReading: () => void;
+  onReplaySentence?: (index: number) => void;
 }) {
   const { t } = useLanguage();
   return (
@@ -1020,21 +1066,30 @@ function LessonTextPanel({
       <div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
         {sentences.length > 1
           ? sentences.map((sentence, i) => (
-              <span
+              <button
                 key={`${i}-${sentence}`}
+                type="button"
+                onClick={() => onReplaySentence?.(i)}
                 className={cn(
-                  "rounded px-0.5 transition-colors duration-150",
+                  "rounded px-0.5 text-left transition-colors duration-150",
+                  onReplaySentence &&
+                    "cursor-pointer hover:bg-gold/10 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2",
                   activeSentence === i && "bg-gold/15 text-foreground",
                 )}
               >
                 {sentence}{" "}
-              </span>
+              </button>
             ))
           : (lessonText ?? "Writing the lesson…")}
       </div>
 
       {lessonText && (
         <div className="flex items-center justify-center gap-2">
+          {onReplaySentence && (
+            <span className="text-muted-foreground text-xs">
+              {t("tap-a-sentence")}
+            </span>
+          )}
           {recording ? (
             <Button variant="outline" size="sm" onClick={stopReading}>
               <Square className="size-3.5" aria-hidden="true" />
@@ -1184,6 +1239,9 @@ function LessonPhase() {
               {t("fluency-am")}
             </p>
           )}
+          <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
+            {t("lesson-only-gaps")}
+          </p>
           {state.guide?.length ? (
             <GuideView
               sections={state.guide}
@@ -1201,6 +1259,9 @@ function LessonPhase() {
               recording={reading}
               narrate={() => void narrate(state.lessonText ?? "", "button")}
               stopReading={stopReading}
+              onReplaySentence={(i) =>
+                void narrate(sentences[i] ?? "", "button")
+              }
             />
           )}
           <div className="flex justify-center">
@@ -1221,6 +1282,9 @@ function LessonPhase() {
               {t("fluency-am")}
             </p>
           )}
+          <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
+            {t("lesson-only-gaps")}
+          </p>
           {state.guide?.length ? (
             <GuideView
               sections={state.guide}
@@ -1238,6 +1302,9 @@ function LessonPhase() {
               recording={reading}
               narrate={() => void narrate(state.lessonText ?? "", "button")}
               stopReading={stopReading}
+              onReplaySentence={(i) =>
+                void narrate(sentences[i] ?? "", "button")
+              }
             />
           )}
         </>
@@ -1294,30 +1361,25 @@ function RetestPhase() {
                 b: questions.length,
               })}
         </p>
-        <div className="flex items-center gap-1.5" aria-hidden="true">
-          {questions.map((_q, i) => {
+        <SegmentedRing
+          size={40}
+          states={questions.map((_q, i) => {
             const a = answered[i];
-            return (
-              <span
-                key={i}
-                className={cn(
-                  "size-2 rounded-full transition-colors",
-                  a
-                    ? a.correct
-                      ? "bg-sage"
-                      : "bg-rust"
-                    : i === currentQuestion
-                      ? "animate-pulse-soft bg-gold"
-                      : "bg-border dark:bg-white/20",
-                )}
-              />
-            );
+            if (a) return a.correct ? "correct" : "wrong";
+            return i === currentQuestion ? "current" : "pending";
           })}
-        </div>
+        />
       </div>
 
       {!done ? (
         <div className="inner-surface p-5">
+          {questions[currentQuestion]?.focus?.length ? (
+            <p className="mb-2 font-medium text-[0.78rem] text-muted-foreground">
+              {t("retest-checking", {
+                focus: questions[currentQuestion].focus.join(", "),
+              })}
+            </p>
+          ) : null}
           <p className="font-display font-medium text-foreground text-lg leading-7 tracking-[-0.01em] sm:text-xl">
             {questions[currentQuestion]?.question ?? ""}
           </p>
@@ -1472,24 +1534,27 @@ function ResultPhase({
 
   if (improved) {
     return (
-      <ResultPanel
-        tone="gold"
-        headline={t("result-gap-title")}
-        body={t("result-gap-body")}
-        metric={durationMetric(result, t)}
-        actions={
-          <Button
-            className="w-full justify-center"
-            disabled={busy}
-            onClick={() => void onDone()}
-          >
-            {t("done-for-now")}
-          </Button>
-        }
-        before={result.before ?? 0}
-        after={result.after ?? 0}
-        delta={result.delta ?? 0}
-      />
+      <div className="space-y-6">
+        <ResultPanel
+          tone="gold"
+          headline={t("result-gap-title")}
+          body={t("result-gap-body")}
+          metric={durationMetric(result, t)}
+          actions={
+            <Button
+              className="w-full justify-center"
+              disabled={busy}
+              onClick={() => void onDone()}
+            >
+              {t("done-for-now")}
+            </Button>
+          }
+          before={result.before ?? 0}
+          after={result.after ?? 0}
+          delta={result.delta ?? 0}
+        />
+        <StillOpen gaps={state.gaps} />
+      </div>
     );
   }
 
@@ -1617,6 +1682,20 @@ function ResultPanel({
   const isGold = tone === "gold";
   const { t } = useLanguage();
 
+  // The ring closing is one of the two moments the design is allowed to be
+  // bold, so it is the one thing on this screen that moves: it opens from the
+  // "before" score to the "after" score and holds. On a full close it also
+  // gives a double haptic, the only reward the loop offers.
+  useEffect(() => {
+    if (after !== undefined && after >= 100) {
+      try {
+        navigator.vibrate?.([12, 60, 12]);
+      } catch {
+        // No vibration hardware; the ring still closes.
+      }
+    }
+  }, [after]);
+
   return (
     <div className="space-y-6">
       <div
@@ -1638,11 +1717,22 @@ function ResultPanel({
             }}
           />
         )}
-        {isGold && (
-          <div className="mb-5 flex justify-center">
-            <GapClosingMark size={64} closing className="text-sage" />
-          </div>
-        )}
+        {isGold &&
+          (after !== undefined ? (
+            <div className="mb-5 flex flex-col items-center gap-2">
+              <AnimatedRing before={before ?? 0} after={after} />
+              <p className="text-muted-foreground text-sm">
+                {t("result-ring-words", {
+                  before: before ?? 0,
+                  after,
+                })}
+              </p>
+            </div>
+          ) : (
+            <div className="mb-5 flex justify-center">
+              <GapClosingMark size={64} closing className="text-sage" />
+            </div>
+          ))}
         <p
           className={cn(
             "inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium text-[0.78rem]",
@@ -1774,6 +1864,25 @@ function BeforeAfter({
       )}
     </div>
   );
+}
+
+function AnimatedRing({
+  before,
+  after,
+  size = 96,
+}: {
+  before: number;
+  after: number;
+  size?: number;
+}) {
+  // Starts where the round started, then opens to where it ended. The ring
+  // itself carries the motion; nothing else on the screen needs to.
+  const [pct, setPct] = useState(before);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setPct(after));
+    return () => cancelAnimationFrame(id);
+  }, [after]);
+  return <MasteryRing percent={pct} size={size} />;
 }
 
 function ScoreBar({

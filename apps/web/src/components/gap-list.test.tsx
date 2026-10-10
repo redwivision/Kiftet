@@ -85,3 +85,32 @@ test("the ring is decorative, and the number is real text", () => {
   expect(html).toContain('aria-hidden="true"');
   expect(html).toContain("47");
 });
+
+test("the result is said in plain words, counting what the student knew", () => {
+  const html = renderToStaticMarkup(
+    <CoverageView
+      covered={[names.solid]}
+      missing={[names.open]}
+      misconceptions={[names.wrong]}
+      mastery={mastery as never}
+      meta={meta}
+    />,
+  );
+  // One solid, four ideas total -> the sentence, not a bare percentage.
+  expect(html).toContain("You knew 1 of 4 ideas.");
+});
+
+test("'Start here' marks only the highest-gain almost", () => {
+  const html = renderToStaticMarkup(
+    <CoverageView
+      covered={[names.solid]}
+      missing={[names.open]}
+      misconceptions={[names.wrong]}
+      mastery={mastery as never}
+      meta={meta}
+    />,
+  );
+  // The almost panel exists and its first row carries exactly one marker.
+  expect(html).toContain(names.almost);
+  expect(html.match(/Start here/g)?.length).toBe(1);
+});
