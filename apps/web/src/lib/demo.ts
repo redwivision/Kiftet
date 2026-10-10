@@ -15,6 +15,18 @@ export function clearDemoUser(): void {
   window.localStorage.removeItem(KEY);
 }
 
+// Whether this visitor should wear the demo chrome (banner, sample-answer
+// on-ramp). A demo id alone is not enough: a signed-in student can still be
+// carrying one — an OAuth redirect that never cleared it, or a sign-up that
+// only clears it on a later screen. The session is the tie-breaker, so a
+// signed-in student is never dressed as someone who "just came to look".
+export function isDemoVisitor(
+  session: unknown,
+  demoUserId: string | null,
+): boolean {
+  return !session && Boolean(demoUserId);
+}
+
 export async function startDemo(): Promise<string> {
   // Already have a demo room in this browser — hand back the cached id instead
   // of fabricating another one.

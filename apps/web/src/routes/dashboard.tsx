@@ -9,7 +9,7 @@ import { MasteryRing } from "@/components/mastery-ring";
 import type { ChapterInfo } from "@/components/study-provider";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { getDemoUser } from "@/lib/demo";
+import { clearDemoUser, getDemoUser } from "@/lib/demo";
 import {
   type CachedChapter,
   cacheChapters,
@@ -141,6 +141,14 @@ export default function Dashboard() {
     const id = setInterval(poll, 15_000);
     return () => clearInterval(id);
   }, []);
+
+  // Once a real session exists the demo identity has done its job, so drop it.
+  // Sign-up and password sign-in already clear it on success; this also covers
+  // the paths that can't (an OAuth redirect, or an email link landing here), so
+  // a signed-in student is never left looking half-anonymous.
+  useEffect(() => {
+    if (session) clearDemoUser();
+  }, [session]);
 
   useEffect(() => {
     if (!sessionPending && !session && !getDemoUser()) {

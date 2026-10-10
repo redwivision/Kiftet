@@ -37,7 +37,7 @@ import {
 import { VoxideRing } from "@/components/voxide-ring";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { getDemoUser } from "@/lib/demo";
+import { getDemoUser, isDemoVisitor } from "@/lib/demo";
 import { haptic } from "@/lib/haptics";
 import {
   markInstallHintOffered,
@@ -225,9 +225,14 @@ export default function StudyRoute({ params }: Route.ComponentProps) {
   if (!session && !getDemoUser()) {
     return <NavigateToLogin />;
   }
+  // A demo room is a signed-out stranger trying the product. A signed-in
+  // student is dedicating — even if a demo id is still lying around in this
+  // browser (a social sign-in that never cleared it, say), the session wins,
+  // so the loop never wears demo chrome in front of them.
+  const demo = isDemoVisitor(session, getDemoUser());
   return (
     <StudyProvider sessionId={params.sessionId}>
-      <StudyScreen />
+      <StudyScreen demo={demo} />
     </StudyProvider>
   );
 }
@@ -240,15 +245,14 @@ function NavigateToLogin() {
   return null;
 }
 
-function StudyScreen() {
+function StudyScreen({ demo }: { demo: boolean }) {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { state, retryAgain, retryLast, completeSession, clearError } =
     useStudy();
-  // A demo room is trying the product; a signed-in student is dedicating.
-  // The same loop serves both, but the demo wears a banner and gets a
-  // no-effort on-ramp (sample answer) so the loop is visible in one minute.
-  const demo = getDemoUser();
+  // `demo` is threaded down from the route so a signed-in student is never
+  // dressed as a visitor: the banner and the no-effort sample-answer on-ramp
+  // belong to the anonymous room only.
   // Tier 3: the tab names the phase and the favicon is the ring closing as the
   // loop advances. Called before the early returns below so hook order holds.
   useLoopTabChrome(state.phase);
@@ -351,7 +355,7 @@ function StudyScreen() {
           )}
 
           <div className="animate-fade-in" key={state.phase}>
-            {state.phase === "recall" && <RecallPhase />}
+            {state.phase === "recall" && <RecallPhase demo={demo} />}
             {state.phase === "gaps" && <GapsPhase />}
             {state.phase === "lesson" && <LessonPhase />}
             {state.phase === "retest" && <RetestPhase />}
@@ -849,7 +853,7 @@ function QueuedPanel({ text }: { text: string }) {
   );
 }
 
-function RecallPhase() {
+function RecallPhase({ demo }: { demo: boolean }) {
   const { state, submitRecall } = useStudy();
   const { t } = useLanguage();
   // Stable so VoiceCapture's capture effects can depend on it honestly instead
@@ -858,7 +862,6 @@ function RecallPhase() {
     (text: string) => submitRecall(text),
     [submitRecall],
   );
-  const demoRoom = getDemoUser();
 
   if (state.queued?.kind === "recall") {
     return (
@@ -877,8 +880,8 @@ function RecallPhase() {
         textDefault={!hasVoxideKey()}
         busy={state.busy}
       />
-      {!demoRoom && <FirstRunHint />}
-      {demoRoom && (
+      {!demo && <FirstRunHint />}
+      {demo && (
         <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
           <p className="text-muted-foreground text-xs leading-5">
             {t("plan-demo-sample-note")}
