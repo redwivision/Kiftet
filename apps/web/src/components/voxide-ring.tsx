@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { getVoxideClient } from "@/components/assistant";
 import { InkSettling } from "@/components/ink-settling";
 import { useLanguage } from "@/components/language-provider";
+import { ShortcutHint } from "@/components/shortcut-hint";
 import type { MessageKey } from "@/lib/messages";
+import { shouldHandleSpace } from "@/lib/shortcuts";
 
 /* The voice state captions. These keys have been bilingual since bet 4 — the
    ring was simply never wired to them, so an Amharic reader was told
@@ -99,10 +101,28 @@ export function VoxideRing({
     }
   };
 
+  // On a desktop the ring is the primary control, so Space toggles it the same
+  // way a tap does — the one shortcut a keyboard student expects from a mic.
+  // It stays out of the way when the key already belongs to something: a field
+  // keeps its space, and a focused button or link activates normally.
+  const onClickRef = useRef(onClick);
+  onClickRef.current = onClick;
+  useEffect(() => {
+    if (!initReady) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || event.repeat) return;
+      if (!shouldHandleSpace(document.activeElement)) return;
+      event.preventDefault();
+      onClickRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [initReady]);
+
   const label = initReady ? t(LABEL_KEY[status]) : t("loading");
 
   return (
-    <div className="relative grid place-items-center" aria-live="polite">
+    <div className="group relative grid place-items-center" aria-live="polite">
       {/* Resting heartbeat: the quiet ring breathes in flat ivory, ~3s.
 			    Sits just proud of the ring so the motion reads as a soft halo. */}
       {initReady && (status === "idle" || status === "armed") && (
@@ -117,10 +137,16 @@ export function VoxideRing({
       {initReady && isSpeaking && (
         <span className="absolute inset-0 animate-ring-pulse rounded-full bg-gold/20" />
       )}
+      {initReady && !isProcessing && (
+        <div className="absolute top-1/2 left-full ml-3 -translate-y-1/2">
+          <ShortcutHint keys="Space" label={t("shortcut-talk-label")} />
+        </div>
+      )}
       <button
         type="button"
         onClick={onClick}
         aria-label={label}
+        aria-keyshortcuts="Space"
         className={cn(
           "relative grid size-40 place-items-center rounded-full border-2 bg-night-raised transition-colors duration-300",
           "focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-4",

@@ -815,6 +815,12 @@ export const en = {
   // about the home screen belongs on a phone, not on a desktop browser.
   "hint-add-home":
     "Add Kiftet to your home screen so your next loop is one tap away.",
+
+  // ── Desktop shortcuts (tier 3) ────────────────────────────────
+  // The keycap itself ("Space", "Esc") is a key label and is not translated;
+  // these are the little verbs that follow it on hover.
+  "shortcut-talk-label": "to talk",
+  "shortcut-pause-label": "to pause",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1553,6 +1559,8 @@ export const am: Record<MessageKey, string> = {
   "tab-retest": "ድጋሚ ፈተና — ኪፍተት",
   "tab-result": "ውጤት — ኪፍተት",
   "hint-add-home": "ኪፍተትን በስልክህ መነሻ ገጽ ላይ ጨምር — ቀጣዩ ዙርህ በአንድ ንክኪ ይገኛል።",
+  "shortcut-talk-label": "ለመናገር",
+  "shortcut-pause-label": "ለማቆም",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

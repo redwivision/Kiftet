@@ -27,6 +27,7 @@ import { GuideView } from "@/components/guide-view";
 import { InkSettling } from "@/components/ink-settling";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing, SegmentedRing } from "@/components/mastery-ring";
+import { ShortcutHint } from "@/components/shortcut-hint";
 import {
   type Gaps,
   type StudyPlan,
@@ -1062,10 +1063,20 @@ function PlanView({
           </div>
           <div className="mt-3 flex justify-end">
             {recording ? (
-              <Button variant="outline" size="sm" onClick={stopReading}>
-                <Square className="size-3.5" aria-hidden="true" />
-                {t("stop-reading")}
-              </Button>
+              <span className="group relative inline-flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={stopReading}
+                  aria-keyshortcuts="Escape"
+                >
+                  <Square className="size-3.5" aria-hidden="true" />
+                  {t("stop-reading")}
+                </Button>
+                <span className="absolute top-1/2 left-full ml-2 -translate-y-1/2">
+                  <ShortcutHint keys="Esc" label={t("shortcut-pause-label")} />
+                </span>
+              </span>
             ) : (
               <Button
                 variant="outline"
@@ -1133,10 +1144,20 @@ function LessonTextPanel({
             </span>
           )}
           {recording ? (
-            <Button variant="outline" size="sm" onClick={stopReading}>
-              <Square className="size-3.5" aria-hidden="true" />
-              {t("stop-reading")}
-            </Button>
+            <span className="group relative inline-flex">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={stopReading}
+                aria-keyshortcuts="Escape"
+              >
+                <Square className="size-3.5" aria-hidden="true" />
+                {t("stop-reading")}
+              </Button>
+              <span className="absolute top-1/2 left-full ml-2 -translate-y-1/2">
+                <ShortcutHint keys="Esc" label={t("shortcut-pause-label")} />
+              </span>
+            </span>
           ) : (
             <Button variant="outline" size="sm" onClick={narrate}>
               <Volume2 className="size-4" aria-hidden="true" />
@@ -1238,6 +1259,22 @@ function LessonPhase() {
   };
 
   stopRef.current = stopReading;
+
+  // Esc pauses the lesson — the read-aloud stops where it is. On a desktop the
+  // narration is the one thing playing on its own, so the key a student
+  // reaches for to quiet it should work. Read through a ref so the listener is
+  // bound once and never goes stale between renders.
+  const readingRef = useRef(reading);
+  readingRef.current = reading;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !readingRef.current) return;
+      event.preventDefault();
+      stopRef.current?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Leaving the phase (test, back to gaps, session end) must cut off any
   // read-back still in flight — never bleed narration into the next phase.
