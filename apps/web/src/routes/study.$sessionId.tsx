@@ -37,6 +37,7 @@ import { VoxideRing } from "@/components/voxide-ring";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
+import { haptic } from "@/lib/haptics";
 import { countWords, findBoundaryEnd, leadingText } from "@/lib/intent";
 import type { ConceptMeta } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
@@ -483,14 +484,10 @@ function VoiceCapture({
 
   // A single quiet tick the moment the mic starts listening, so the ring
   // answering under your finger is felt, not only seen. Silent where the
-  // hardware or the person's settings say no.
+  // hardware or the person's reduced-motion setting says no.
   useEffect(() => {
     if (voice.status !== "listening") return;
-    try {
-      navigator.vibrate?.(10);
-    } catch {
-      // No vibration; the ring still ripples.
-    }
+    haptic(10);
   }, [voice.status]);
 
   // Auto-end: when the student signals they've finished speaking, finalize
@@ -1694,15 +1691,10 @@ function ResultPanel({
   // The ring closing is one of the two moments the design is allowed to be
   // bold, so it is the one thing on this screen that moves: it opens from the
   // "before" score to the "after" score and holds. On a full close it also
-  // gives a double haptic, the only reward the loop offers.
+  // gives a double haptic, the only reward the loop offers — still quiet under
+  // reduced motion, where the closing ring alone carries it.
   useEffect(() => {
-    if (after !== undefined && after >= 100) {
-      try {
-        navigator.vibrate?.([12, 60, 12]);
-      } catch {
-        // No vibration hardware; the ring still closes.
-      }
-    }
+    if (after !== undefined && after >= 100) haptic([12, 60, 12]);
   }, [after]);
 
   return (
