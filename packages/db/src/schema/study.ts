@@ -172,6 +172,40 @@ export const guideSection = pgTable(
   ],
 );
 
+export const planContent = pgTable(
+  "plan_content",
+  {
+    id: text("id").primaryKey(),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapter.id, { onDelete: "cascade" }),
+    conceptText: text("concept_text").notNull(),
+    stepType: text("step_type").notNull(),
+    language: text("language").notNull(),
+    planVersion: integer("plan_version").notNull(),
+    body: jsonb("body").$type<string[]>().notNull(),
+    contrast: jsonb("contrast").$type<{
+      bookSays: string;
+      feelsRightBecause: string;
+      failsBecause: string;
+    } | null>(),
+    chapterExplains: boolean("chapter_explains"),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    unique("plan_content_chapter_concept_type_language_version_unique").on(
+      table.chapterId,
+      table.conceptText,
+      table.stepType,
+      table.language,
+      table.planVersion,
+    ),
+    index("plan_content_chapter_idx").on(table.chapterId),
+  ],
+);
+
 export const studySession = pgTable(
   "study_session",
   {
@@ -198,10 +232,35 @@ export const studySession = pgTable(
   ],
 );
 
+export const planStepCheck = pgTable(
+  "plan_step_check",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => studySession.id, { onDelete: "cascade" }),
+    conceptText: text("concept_text").notNull(),
+    responseText: text("response_text").notNull(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    unique("plan_step_check_session_concept_unique").on(
+      table.sessionId,
+      table.conceptText,
+    ),
+    index("plan_step_check_session_idx").on(table.sessionId),
+  ],
+);
+
 export type AttemptGaps = {
   covered: string[];
   missing: string[];
   misconceptions: string[];
+  mastery?: Record<string, number>;
+  evidence?: Record<string, string | null>;
+  estimated?: boolean;
 };
 
 export const attempt = pgTable(

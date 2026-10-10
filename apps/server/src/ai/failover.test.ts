@@ -21,10 +21,10 @@ const GROQ_KEY = "groq-test-key";
 const GROQ_GRADE = JSON.stringify({
   covered: ["current flows through a resistor"],
   missing: [],
-  misconceptions: [],
+  misconceptions: ["voltage drop"],
   mastery: {
     "current flows through a resistor": 3,
-    "voltage drop": 0,
+    "voltage drop": 2,
   },
 });
 
@@ -59,7 +59,7 @@ describe("provider failover", () => {
     ];
 
     const gaps = await ai.gradeRecall(
-      "current flows through a resistor",
+      "current flows through a resistor. Voltage drop happens across the resistor.",
       concepts,
     );
 
@@ -68,6 +68,9 @@ describe("provider failover", () => {
     expect(gaps.estimated).toBe(false);
     expect(gaps.covered).toContain("current flows through a resistor");
     expect(Object.keys(gaps.mastery)).toContain("voltage drop");
+    expect(gaps.evidence?.["voltage drop"]).toBe(
+      "Voltage drop happens across the resistor.",
+    );
 
     // Groq answered — telemetry names the provider, so a 2am reading can tell
     // "Groq handled it" from "we silently degraded."

@@ -4,6 +4,8 @@ import {
   conceptNode,
   guideSection,
   misconceptionHit,
+  planContent,
+  planStepCheck,
   studySession,
   syllabusUnit,
   type TextbookTocNode,
@@ -17,14 +19,22 @@ import { mergeConcepts } from "../ai/concepts";
 import {
   ai,
   aiTelemetrySnapshot,
+  buildStudyPlan,
   focusScore,
   type GuideSection,
   gapAnalysisFrom,
   levelOf,
   type MasteryLevel,
   type MasteryMap,
+  type StudyPlanContent,
   triageConcepts,
 } from "../ai/gemini";
+import {
+  REVIEW_DUE_DAYS,
+  STUDY_PLAN_BUDGETS,
+  STUDY_PLAN_DEFAULT_BUDGET,
+  STUDY_PLAN_VERSION,
+} from "../ai/plan-config";
 import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -812,6 +822,56 @@ router.get("/sessions", async (req, res) => {
   ok(res, out);
 });
 
+router.get("/review-due", async (req, res) => {
+  const rows = await db()
+    .select({
+      chapterId: studySession.chapterId,
+      chapterTitle: chapter.title,
+      createdAt: attempt.createdAt,
+      gapsIdentified: attempt.gapsIdentified,
+    })
+    .from(attempt)
+    .innerJoin(studySession, eq(attempt.sessionId, studySession.id))
+    .innerJoin(chapter, eq(studySession.chapterId, chapter.id))
+    .where(eq(studySession.userId, ownerId(req)))
+    .orderBy(desc(attempt.createdAt))
+    .limit(500);
+  const threshold = Date.now() - REVIEW_DUE_DAYS * 24 * 60 * 60 * 1000;
+  const seen = new Set<string>();
+  const due: {
+    chapterId: string;
+    chapterTitle: string;
+    concept: string;
+    lastCheckedAt: Date;
+  }[] = [];
+  for (const row of rows) {
+    const gaps = row.gapsIdentified;
+    if (!gaps || typeof gaps !== "object" || Array.isArray(gaps)) continue;
+    const data = gaps as Record<string, unknown>;
+    const mastery =
+      data.mastery &&
+      typeof data.mastery === "object" &&
+      !Array.isArray(data.mastery)
+        ? (data.mastery as Record<string, unknown>)
+        : {};
+    const concepts = Object.keys(mastery);
+    for (const concept of concepts) {
+      const key = `${row.chapterId}\u0000${concept.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (row.createdAt.getTime() <= threshold) {
+        due.push({
+          chapterId: row.chapterId,
+          chapterTitle: row.chapterTitle,
+          concept,
+          lastCheckedAt: row.createdAt,
+        });
+      }
+    }
+  }
+  ok(res, due.slice(0, 20));
+});
+
 router.get("/sessions/:id", async (req, res) => {
   const userId = ownerId(req);
   const rows = await db()
@@ -850,6 +910,8 @@ type AttemptInsert = {
     /** Phase 11: per-concept levels, the source the three lists derive from.
      *  Optional so attempts written before this change still read back. */
     mastery?: Record<string, number>;
+    /** Matched student wording for near-misses; absent in older attempts. */
+    evidence?: Record<string, string | null>;
     /** True when the grade came from the lexical fallback, which cannot judge
      *  correctness. The UI must not present such a score as a real one. */
     estimated?: boolean;
@@ -1019,6 +1081,7 @@ router.post("/sessions/:id/recall", async (req, res) => {
       missing: gaps.missing,
       misconceptions: gaps.misconceptions,
       mastery: gaps.mastery,
+      evidence: gaps.evidence ?? {},
       estimated: gaps.estimated,
     },
     score,
@@ -1080,13 +1143,17 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
 // Study plan
 // ────────────────────────────────────────────────────────────────
 
-// One model call ordered over the same gap lists as the microlesson, but
-// budgeted like the guide: when the window is spent the rules still hand back
-// a plan (misconceptions first, missing by weight) rather than a 429 — the
-// plan is the phase, so a hard error there would take the whole phase down.
 const planSchema = z.object({
   missing: z.array(z.string().trim().min(1).max(500)).max(50),
   misconceptions: z.array(z.string().trim().min(1).max(500)).max(50),
+  mastery: z.record(z.string(), z.number().int().min(0).max(3)).optional(),
+  budgetMinutes: z
+    .union([
+      z.literal(STUDY_PLAN_BUDGETS[0]),
+      z.literal(STUDY_PLAN_BUDGETS[1]),
+      z.literal(STUDY_PLAN_BUDGETS[2]),
+    ])
+    .default(STUDY_PLAN_DEFAULT_BUDGET),
   language: z.enum(["en", "am"]).optional(),
 });
 
@@ -1098,22 +1165,172 @@ router.post("/sessions/:id/plan", async (req, res) => {
   if (!chapterId) return err(res, "Session not found", 404);
 
   const concepts = await chapterConcepts(chapterId);
+  const [chapterRow] = await db()
+    .select({
+      title: chapter.title,
+      rawText: chapter.rawText,
+      subject: textbook.subject,
+    })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(eq(chapter.id, chapterId))
+    .limit(1);
+  if (!chapterRow) return err(res, "Chapter not found", 404);
 
-  const gapAnalysis = gapAnalysisFrom(
+  const gaps = gapAnalysisFrom(
     {
       missing: parsed.data.missing,
       misconceptions: parsed.data.misconceptions,
     },
     concepts,
   );
+  for (const concept of concepts) {
+    const key = concept.conceptText.trim().toLowerCase();
+    const matching = Object.entries(parsed.data.mastery ?? {}).find(
+      ([name]) => name.trim().toLowerCase() === key,
+    );
+    gaps.mastery[concept.conceptText] = matching
+      ? (matching[1] as MasteryLevel)
+      : parsed.data.misconceptions.some(
+            (name) => name.trim().toLowerCase() === key,
+          )
+        ? 2
+        : parsed.data.missing.some((name) => name.trim().toLowerCase() === key)
+          ? 0
+          : 3;
+  }
+  const [latestRecall] = await db()
+    .select({ gapsIdentified: attempt.gapsIdentified })
+    .from(attempt)
+    .where(
+      and(eq(attempt.sessionId, req.params.id), eq(attempt.stage, "recall")),
+    )
+    .orderBy(desc(attempt.createdAt))
+    .limit(1);
+  const storedGaps = latestRecall?.gapsIdentified;
+  if (
+    storedGaps &&
+    typeof storedGaps === "object" &&
+    !Array.isArray(storedGaps)
+  ) {
+    const storedEvidence = (storedGaps as Record<string, unknown>).evidence;
+    if (
+      storedEvidence &&
+      typeof storedEvidence === "object" &&
+      !Array.isArray(storedEvidence)
+    ) {
+      gaps.evidence = Object.fromEntries(
+        Object.entries(storedEvidence).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
+    }
+  }
 
-  const plan = await ai.generateStudyPlan(
-    gapAnalysis,
+  const language = parsed.data.language ?? "en";
+  const contentRows = await db()
+    .select()
+    .from(planContent)
+    .where(
+      and(
+        eq(planContent.chapterId, chapterId),
+        eq(planContent.language, language),
+        eq(planContent.planVersion, STUDY_PLAN_VERSION),
+      ),
+    );
+  const contentByConcept = new Map<string, StudyPlanContent>(
+    contentRows.map((row) => [
+      `${row.conceptText.trim().toLowerCase()}|${row.stepType}`,
+      {
+        body: row.body,
+        contrast: row.contrast,
+        chapterExplains: row.chapterExplains,
+        estimated: false,
+      },
+    ]),
+  );
+  const initial = buildStudyPlan(
+    gaps,
     concepts,
-    parsed.data.language,
-    { skipAi: !allowAiRequest(req) },
+    chapterRow.title,
+    chapterRow.rawText,
+    contentByConcept,
+    chapterRow.subject,
+    language,
+    parsed.data.budgetMinutes,
+  );
+  for (const step of initial.steps) {
+    const key = `${step.concept.trim().toLowerCase()}|${step.type}`;
+    if (contentByConcept.has(key)) continue;
+    const skipAi = !allowAiRequest(req);
+    const content = await ai.generateStudyPlanContent(
+      step.concept,
+      step.type,
+      chapterRow.rawText,
+      step.anchor.excerpt,
+      language,
+      { skipAi },
+    );
+    contentByConcept.set(key, content);
+    if (!skipAi && !content.estimated) {
+      await db()
+        .insert(planContent)
+        .values({
+          id: crypto.randomUUID(),
+          chapterId,
+          conceptText: step.concept,
+          stepType: step.type,
+          language,
+          planVersion: STUDY_PLAN_VERSION,
+          body: content.body,
+          contrast: content.contrast,
+          chapterExplains: content.chapterExplains,
+        })
+        .onConflictDoNothing();
+    }
+  }
+  const plan = buildStudyPlan(
+    gaps,
+    concepts,
+    chapterRow.title,
+    chapterRow.rawText,
+    contentByConcept,
+    chapterRow.subject,
+    language,
+    parsed.data.budgetMinutes,
   );
   ok(res, plan);
+});
+
+const planCheckSchema = z.object({
+  attemptId: z.string().min(1).max(100),
+  concept: z.string().trim().min(1).max(500),
+  transcriptText: z.string().trim().min(1).max(20_000),
+});
+
+router.post("/sessions/:id/plan/check", async (req, res) => {
+  const parsed = planCheckSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Session not found", 404);
+  const concepts = await chapterConcepts(chapterId);
+  const concept = concepts.find(
+    (item) =>
+      !item.isMisconception &&
+      item.conceptText.trim().toLowerCase() ===
+        parsed.data.concept.toLowerCase(),
+  );
+  if (!concept) return err(res, "Concept not found", 400);
+  await db()
+    .insert(planStepCheck)
+    .values({
+      id: parsed.data.attemptId,
+      sessionId: req.params.id,
+      conceptText: concept.conceptText,
+      responseText: parsed.data.transcriptText,
+    })
+    .onConflictDoNothing();
+  ok(res, { attempted: true });
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -1373,10 +1590,25 @@ router.post("/sessions/:id/retest", async (req, res) => {
     }
     return { question: q.question, focus: target ? [target] : [] };
   });
+  const byFocus = new Map<string, typeof withFocus>();
+  for (const question of withFocus) {
+    const key = question.focus[0] ?? "";
+    const group = byFocus.get(key) ?? [];
+    group.push(question);
+    byFocus.set(key, group);
+  }
+  const spreadQuestions: typeof withFocus = [];
+  while ([...byFocus.values()].some((group) => group.length > 0)) {
+    for (const group of byFocus.values()) {
+      const next = group.shift();
+      if (next) spreadQuestions.push(next);
+    }
+  }
+  const orderedQuestions = byFocus.size > 1 ? spreadQuestions : withFocus;
 
   await db()
     .update(studySession)
-    .set({ retestQuestions: withFocus, retestIndex: 0 })
+    .set({ retestQuestions: orderedQuestions, retestIndex: 0 })
     .where(
       and(
         eq(studySession.id, req.params.id),
@@ -1384,7 +1616,7 @@ router.post("/sessions/:id/retest", async (req, res) => {
       ),
     );
 
-  ok(res, { questions: withFocus });
+  ok(res, { questions: orderedQuestions });
 });
 
 const answerSchema = z.object({

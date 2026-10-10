@@ -6,6 +6,13 @@ import {
   admitAiCall,
   isAiBusy,
 } from "./admission";
+import {
+  CHECK_SECONDS,
+  READING_WORDS_PER_MINUTE,
+  SPOKEN_WORDS_PER_MINUTE,
+  STUDY_PLAN_DEFAULT_BUDGET,
+  STUDY_PLAN_MAX_STEPS,
+} from "./plan-config";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
@@ -100,6 +107,8 @@ export type GapAnalysis = {
    *  an estimate — a student must not be shown a quietly halved score because
    *  *we* hit a rate limit. */
   estimated: boolean;
+  /** Exact recall spans matched to concepts for personalised study steps. */
+  evidence?: Record<string, string | null>;
 };
 
 export type MicroLesson = {
@@ -107,40 +116,67 @@ export type MicroLesson = {
 };
 
 /**
- * ONE step of the study plan — a roadmap over this student's gaps.
- *
- * The plan is an ORDER and a reason, not the content: the deep/preview
- * content lives in the guide and microlesson, which the browser fetches
- * alongside it. Serving the ordering this thinly is what keeps a plan to a
- * single model call.
+ * One grounded, mastery-specific step in the student's study plan.
  */
 export type StudyPlanStep = {
   /** Exact conceptText from the checklist. */
   concept: string;
-  /** Where this gap sits: a wrong belief outranks a blank. */
   gapType: "missing" | "misconception";
-  /** The concept's importance, 1-5, from the checklist (server-computed, never
-   *  trusted to the model). */
   weight: number;
   /** One short line: why this step comes here FOR THIS STUDENT. Absent on the
    *  deterministic fallback. */
   whyFirst?: string;
-  /** The concept named in 2-6 plain search words, in the student's language.
-   *  The client compiles safe search links from it; the model is never allowed
-   *  to send a URL, because an invented URL is worse than none. */
-  searchTopic?: string;
+  type: "BUILD" | "CONTRAST" | "FINISH";
+  masteryLevel: MasteryLevel;
+  estimatedMinutes: number;
+  anchor: {
+    chapter: string;
+    heading: string | null;
+    page: number | null;
+    offset: number;
+    excerpt: string;
+  };
+  body: string[];
+  contrast: {
+    bookSays: string;
+    feelsRightBecause: string;
+    failsBecause: string;
+  } | null;
+  chapterExplains: boolean | null;
+  check: {
+    sayItBack: string;
+    whyIsThisTrue?: string;
+  };
+  studentWords: string | null;
 };
 
 /** A personalized study roadmap over the student's gaps. */
 export type StudyPlan = {
   steps: StudyPlanStep[];
-  /** Deterministic read on length — a cap that the ordering must stay under,
-   *  never trusted to the model, so the number is honest in every mode. */
+  nextSession: string[];
+  skippedKnown: {
+    count: number;
+    estimatedTimeSavedMinutes: number;
+  };
+  budgetMinutes: number;
   estMinutes: number;
-  /** True when the ordering came from the rules (no narration, no links). The
-   *  UI must label it as such rather than silently dressing up a fallback. */
   estimated: boolean;
 };
+
+export type StudyPlanContent = {
+  body: string[];
+  contrast: StudyPlanStep["contrast"];
+  chapterExplains: boolean | null;
+  estimated: boolean;
+};
+
+export type PlanArchetype =
+  | "PROCESS"
+  | "CAUSAL"
+  | "PLACE_SYSTEM"
+  | "PRINCIPLE"
+  | "LANGUAGE"
+  | "GENERIC";
 
 /**
  * One concept's guide section — the unit the whole phase is built on.
@@ -228,19 +264,14 @@ export type AiService = {
     concepts: ConceptChecklistItem[],
     language?: ContentLanguage,
   ): Promise<MicroLesson>;
-  /**
-   * Order a student's gaps into a study roadmap: wrong beliefs first, then
-   * the missing ideas by weight, each step with one line of reasoning and a
-   * web-searchable phrase — never a URL. The ordering rules also run as the
-   * deterministic fallback, so a plan always exists even when no key is set
-   * or the budget is spent.
-   */
-  generateStudyPlan(
-    gaps: GapAnalysis,
-    concepts: ConceptChecklistItem[],
+  generateStudyPlanContent(
+    conceptText: string,
+    type: StudyPlanStep["type"],
+    chapterText: string,
+    excerpt: string,
     language?: ContentLanguage,
     options?: { skipAi?: boolean },
-  ): Promise<StudyPlan>;
+  ): Promise<StudyPlanContent>;
   /**
    * Explain one concept. Student-independent by construction — it is not given
    * any gap or mastery data, because if it were it could not be shared.
@@ -527,6 +558,28 @@ function fallbackGrade(
   };
 }
 
+function withRecallEvidence(
+  gaps: GapAnalysis,
+  transcript: string,
+  concepts: ConceptChecklistItem[],
+): GapAnalysis {
+  const evidence: Record<string, string | null> = {};
+  for (const concept of concepts) {
+    const level = levelOf(gaps.mastery, concept.conceptText);
+    if (level !== 1 && level !== 2) continue;
+    const wanted = significantTokens(concept.conceptText);
+    let best: { text: string; score: number } | undefined;
+    for (const match of transcript.matchAll(/[^.!?]+[.!?]*/g)) {
+      const text = match[0].trim();
+      const tokens = significantTokens(text);
+      const score = [...wanted].filter((token) => tokens.has(token)).length;
+      if (score && (!best || score > best.score)) best = { text, score };
+    }
+    evidence[concept.conceptText] = best?.text ?? null;
+  }
+  return { ...gaps, evidence };
+}
+
 function fallbackLesson(
   gaps: GapAnalysis,
   language: ContentLanguage = "en",
@@ -558,129 +611,334 @@ function fallbackQuestions(
   }));
 }
 
-// A rough, honest read on how long the plan will take. Wrong beliefs cost the
-// most to undo, so a misconception step is weighted heavier than a blank.
-// Deterministic by construction — the number is a cap the UI quotes as a cap.
-function estimatePlanMinutes(
-  steps: { gapType: "missing" | "misconception" }[],
+export function planStepType(level: MasteryLevel): StudyPlanStep["type"] {
+  if (level === 2) return "CONTRAST";
+  if (level === 1) return "FINISH";
+  return "BUILD";
+}
+
+export function planArchetype(
+  subject: string,
+  conceptText = "",
+): PlanArchetype {
+  const normalized = subject.trim().toLowerCase();
+  if (normalized === "biology") return "PROCESS";
+  if (normalized === "chemistry") {
+    // The syllabus boundary excludes computational Chemistry; keep those
+    // checks generic rather than implying spoken recall proves calculation.
+    if (
+      /\b(stoichiometr|moles?|equations?|concentration|calculat|formulae?|chemical formula)\b/i.test(
+        conceptText,
+      )
+    )
+      return "GENERIC";
+    return "PROCESS";
+  }
+  if (normalized === "history") return "CAUSAL";
+  if (normalized === "geography") return "PLACE_SYSTEM";
+  if (normalized === "civics" || normalized.includes("civics"))
+    return "PRINCIPLE";
+  if (
+    normalized === "english" ||
+    normalized.includes("language") ||
+    normalized.includes("mother tongue")
+  )
+    return "LANGUAGE";
+  return "GENERIC";
+}
+
+export function estimateStudyStepMinutes(
+  body: string[],
+  checkPrompt: string | string[],
+  additionalReading = "",
 ): number {
-  if (!steps.length) return 1;
-  const raw = steps.reduce(
-    (total, step) => total + (step.gapType === "misconception" ? 2 : 1.5),
+  const readingWords = [...body, additionalReading]
+    .join(" ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+  const spokenWords = (Array.isArray(checkPrompt) ? checkPrompt : [checkPrompt])
+    .join(" ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+  const minutes =
+    readingWords / READING_WORDS_PER_MINUTE +
+    spokenWords / SPOKEN_WORDS_PER_MINUTE +
+    CHECK_SECONDS / 60;
+  return Math.max(1, Math.ceil(minutes));
+}
+
+function localizedCheck(
+  type: StudyPlanStep["type"],
+  concept: string,
+  archetype: PlanArchetype,
+  language: ContentLanguage,
+  studentWords: string | null,
+): { sayItBack: string; whyIsThisTrue?: string } {
+  const am = language === "am";
+  const archetypeMove: Record<PlanArchetype, string> = {
+    PROCESS: am
+      ? "ከጽሑፉ የተጠቀሱትን ደረጃዎች አስቀምጥ፤ ካልተጠቀሱ መዋቅሩንና ተግባሩን አገናኝ።"
+      : "Put any stages named in the passage in order; if none are named, pair the structure with its stated function.",
+    CAUSAL: am
+      ? "ጽሑፉ ከደገፈው መሠረት፣ ክስተቱንና ውጤቱን አገናኝ።"
+      : "Use only what the passage supports to connect the cause, event, and consequence.",
+    PLACE_SYSTEM: am
+      ? "ጽሑፉ ካቀረበ፣ ቦታውን፣ ምክንያቱንና ምሳሌውን ግለጽ።"
+      : "If the passage provides them, explain where, why there, and one example.",
+    PRINCIPLE: am
+      ? "ደንቡን በቀላል ቃላት ግለጽ፤ ጽሑፉ ካካተተው ሁኔታ ጋር አያይዘው።"
+      : "State the rule in plain words and apply it to a case only if the passage includes one.",
+    LANGUAGE: am
+      ? "ቃሉን በጽሑፉ ውስጥ ባለው አውድ አስረዳ።"
+      : "Explain how the idea is used in the context shown in the passage.",
+    GENERIC: am
+      ? "በጽሑፉ የተደገፈውን ብቻ በራስህ ቃላት ግለጽ።"
+      : "Explain only what this passage supports in your own words.",
+  };
+  let sayItBack: string;
+  if (type === "FINISH") {
+    if (am) {
+      sayItBack = studentWords
+        ? `“${studentWords}” አልክ። አጠናቅቀው፦ ይህ የሚሆነው ምክንያቱም ___. ${archetypeMove[archetype]}`
+        : `“${concept}”ን አጠናቅቀው፦ ለምን እንደሚሆን ግለጽ። ${archetypeMove[archetype]}`;
+    } else {
+      sayItBack = studentWords
+        ? `You said “${studentWords}.” Finish it: it happens because ___. ${archetypeMove[archetype]}`
+        : `Finish “${concept}”: explain why it happens. ${archetypeMove[archetype]}`;
+    }
+  } else if (type === "CONTRAST") {
+    sayItBack = am
+      ? `“${concept}” ላይ ከሁለቱ የትኛው እውነት ነው፣ ለምንስ? ${archetypeMove[archetype]}`
+      : `Which account of “${concept}” is true, and why? ${archetypeMove[archetype]}`;
+  } else {
+    sayItBack = am
+      ? `ሳታይ “${concept}”ን በራስህ ቃላት ግለጽ። ${archetypeMove[archetype]}`
+      : `Without looking, explain “${concept}” in your own words. ${archetypeMove[archetype]}`;
+  }
+  return {
+    sayItBack,
+    ...(type === "BUILD" || type === "CONTRAST"
+      ? { whyIsThisTrue: am ? "ይህ ለምን እውነት ነው?" : "Why is this true?" }
+      : {}),
+  };
+}
+
+export function fallbackStudyPlanContent(excerpt: string): StudyPlanContent {
+  return {
+    body: excerpt.trim() ? [excerpt.trim()] : [],
+    contrast: null,
+    chapterExplains: null,
+    estimated: true,
+  };
+}
+
+/** Only quoted spans from the supplied chapter text may become plan blocks. */
+export function validateGroundedPlanContent(
+  value: unknown,
+  chapterText: string,
+  type: StudyPlanStep["type"],
+  anchorExcerpt = chapterText,
+): StudyPlanContent | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const data = value as Record<string, unknown>;
+  if (
+    !Array.isArray(data.body) ||
+    data.body.length < 2 ||
+    data.body.length > 4 ||
+    data.body.some(
+      (block) =>
+        typeof block !== "string" ||
+        !block.trim() ||
+        block.trim().length > 400 ||
+        !chapterText.includes(block.trim()) ||
+        !anchorExcerpt.includes(block.trim()) ||
+        /https?:\/\/|www\.|youtube|google/i.test(block),
+    ) ||
+    typeof data.chapterExplains !== "boolean"
+  )
+    return;
+  const contrastData = data.contrast;
+  let contrast: StudyPlanContent["contrast"] = null;
+  if (type === "CONTRAST") {
+    if (
+      !contrastData ||
+      typeof contrastData !== "object" ||
+      Array.isArray(contrastData)
+    )
+      return;
+    const value = contrastData as Record<string, unknown>;
+    const keys = ["bookSays", "feelsRightBecause", "failsBecause"] as const;
+    if (
+      keys.some(
+        (key) =>
+          typeof value[key] !== "string" ||
+          !value[key].trim() ||
+          value[key].trim().length > 400 ||
+          !chapterText.includes(value[key].trim()) ||
+          !anchorExcerpt.includes(value[key].trim()),
+      )
+    )
+      return;
+    contrast = {
+      bookSays: (value.bookSays as string).trim(),
+      feelsRightBecause: (value.feelsRightBecause as string).trim(),
+      failsBecause: (value.failsBecause as string).trim(),
+    };
+  } else if (contrastData !== null) return;
+  return {
+    body: data.body.map((block) => (block as string).trim()),
+    contrast,
+    chapterExplains: data.chapterExplains,
+    estimated: false,
+  };
+}
+
+export function buildStudyPlan(
+  gaps: GapAnalysis,
+  concepts: ConceptChecklistItem[],
+  chapterTitle: string,
+  rawText: string,
+  contentByConcept: Map<string, StudyPlanContent>,
+  subject: string,
+  language: ContentLanguage,
+  budgetMinutes = STUDY_PLAN_DEFAULT_BUDGET,
+): StudyPlan {
+  const mastery = gaps.mastery;
+  const allCandidates = concepts
+    .map((concept, index) => {
+      const level = levelOf(mastery, concept.conceptText);
+      const anchor = sourceAnchor(concept.conceptText, rawText);
+      if (concept.isMisconception || level === 3 || !anchor) return null;
+      const type = planStepType(level);
+      const key = `${concept.conceptText.trim().toLowerCase()}|${type}`;
+      const fallback = fallbackStudyPlanContent(anchor.quote);
+      const content = contentByConcept.get(key) ?? fallback;
+      const studentWords =
+        level === 1 || level === 2
+          ? (gaps.evidence?.[concept.conceptText] ?? null)
+          : null;
+      const check = localizedCheck(
+        type,
+        concept.conceptText,
+        planArchetype(subject, concept.conceptText),
+        language,
+        studentWords,
+      );
+      const additionalReading = [
+        studentWords ?? "",
+        ...(content.contrast
+          ? [
+              content.contrast.bookSays,
+              content.contrast.feelsRightBecause,
+              content.contrast.failsBecause,
+            ]
+          : []),
+      ].join(" ");
+      const minutes = estimateStudyStepMinutes(
+        content.body,
+        [check.sayItBack, check.whyIsThisTrue ?? ""],
+        additionalReading,
+      );
+      return {
+        concept,
+        index,
+        level,
+        type,
+        anchor,
+        key,
+        content,
+        check,
+        minutes,
+        score:
+          (concept.weight * (3 - level) * (level === 2 ? 1.5 : 1)) / minutes,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const prioritized = [...allCandidates].sort(
+    (a, b) => b.score - a.score || a.index - b.index,
+  );
+  const selected = new Set<string>();
+  let elapsed = 0;
+  for (const candidate of prioritized) {
+    if (
+      selected.size >= STUDY_PLAN_MAX_STEPS ||
+      elapsed + candidate.minutes > budgetMinutes
+    )
+      continue;
+    selected.add(candidate.key);
+    elapsed += candidate.minutes;
+  }
+  const candidateByConcept = new Map(
+    allCandidates.map((candidate) => [
+      candidate.concept.conceptText,
+      candidate,
+    ]),
+  );
+  const ordered = triageConcepts(concepts, mastery, { studyPlan: true })
+    .map((concept) => candidateByConcept.get(concept.conceptText))
+    .filter(
+      (candidate): candidate is (typeof allCandidates)[number] =>
+        candidate !== undefined && selected.has(candidate.key),
+    );
+
+  const steps: StudyPlanStep[] = ordered.map((item) => ({
+    concept: item.concept.conceptText,
+    gapType: item.level === 2 ? "misconception" : "missing",
+    weight: item.concept.weight,
+    type: item.type,
+    masteryLevel: item.level,
+    estimatedMinutes: item.minutes,
+    anchor: {
+      chapter: chapterTitle,
+      heading: null,
+      page: null,
+      offset: item.anchor.offset,
+      excerpt: item.anchor.quote,
+    },
+    body: item.content.body,
+    contrast: item.content.contrast,
+    chapterExplains: item.content.chapterExplains,
+    check: item.check,
+    studentWords:
+      item.level === 1 || item.level === 2
+        ? (gaps.evidence?.[item.concept.conceptText] ?? null)
+        : null,
+  }));
+  const knownCount = concepts.filter(
+    (concept) =>
+      !concept.isMisconception && levelOf(mastery, concept.conceptText) === 3,
+  ).length;
+  const chapterReadMinutes = Math.ceil(
+    rawText.trim().split(/\s+/).filter(Boolean).length /
+      READING_WORDS_PER_MINUTE,
+  );
+  const planMinutes = steps.reduce(
+    (total, step) => total + step.estimatedMinutes,
     0,
   );
-  return Math.min(20, Math.max(1, Math.round(raw)));
-}
-
-/**
- * The ordering the rules give, and the whole answer when no key is set or the
- * budget is gone. Misconceptions first, then missing by weight, ties broken by
- * the checklist's own order — the same spine the model refines, so the fallback
- * is a real plan, not a stub: just without the one-line reasons or search
- * topics, which it marks honestly via `estimated`.
- */
-export function fallbackPlan(
-  gaps: GapAnalysis,
-  concepts: ConceptChecklistItem[],
-): StudyPlan {
-  const weightBy = new Map(
-    concepts.map((c) => [c.conceptText.trim().toLowerCase(), c.weight]),
-  );
-  const indexBy = new Map(
-    concepts.map((c, i) => [c.conceptText.trim().toLowerCase(), i]),
-  );
-  const misconceptions = new Set(
-    gaps.misconceptions.map((c) => c.trim().toLowerCase()),
-  );
-  const named = new Set(
-    [...gaps.misconceptions, ...gaps.missing].map((c) =>
-      c.trim().toLowerCase(),
-    ),
-  );
-  const gapRank = (key: string) => (misconceptions.has(key) ? 0 : 1);
-  const steps: StudyPlanStep[] = concepts
-    .filter((c) => named.has(c.conceptText.trim().toLowerCase()))
-    .sort((a, b) => {
-      const ka = a.conceptText.trim().toLowerCase();
-      const kb = b.conceptText.trim().toLowerCase();
-      if (gapRank(ka) !== gapRank(kb)) return gapRank(ka) - gapRank(kb);
-      if (a.weight !== b.weight) return b.weight - a.weight;
-      return (indexBy.get(ka) ?? 0) - (indexBy.get(kb) ?? 0);
-    })
-    .map((c) => {
-      const key = c.conceptText.trim().toLowerCase();
-      return {
-        concept: c.conceptText,
-        gapType: misconceptions.has(key) ? "misconception" : "missing",
-        weight: weightBy.get(key) ?? c.weight,
-      };
-    });
-  return { steps, estMinutes: estimatePlanMinutes(steps), estimated: true };
-}
-
-// trust boundary: the model names concepts and we must only keep names that
-// are real gaps. A drifted or invented name is dropped, the real concept's
-// spelling is used, and the weight is always recomputed from the checklist.
-export function sanitizePlanSteps(
-  value: unknown,
-  gaps: GapAnalysis,
-  concepts: ConceptChecklistItem[],
-): StudyPlanStep[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const rawSteps = (value as { steps?: unknown }).steps;
-  if (!Array.isArray(rawSteps)) return [];
-  const weightBy = new Map(
-    concepts.map((c) => [c.conceptText.trim().toLowerCase(), c.weight]),
-  );
-  const misconceptions = new Set(
-    gaps.misconceptions.map((c) => c.trim().toLowerCase()),
-  );
-  const allowed = new Set(
-    [...gaps.misconceptions, ...gaps.missing].map((c) =>
-      c.trim().toLowerCase(),
-    ),
-  );
-  const seen = new Set<string>();
-  const steps: StudyPlanStep[] = [];
-  for (const raw of rawSteps) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const o = raw as Record<string, unknown>;
-    const name = typeof o.concept === "string" ? o.concept.trim() : "";
-    const key = name.toLowerCase();
-    if (!key || !allowed.has(key) || seen.has(key)) continue;
-    seen.add(key);
-    const gapType =
-      misconceptions.has(key) ||
-      concepts.some(
-        (c) => c.isMisconception && c.conceptText.trim().toLowerCase() === key,
+  return {
+    steps,
+    nextSession: concepts
+      .filter(
+        (concept) =>
+          !concept.isMisconception &&
+          levelOf(mastery, concept.conceptText) !== 3 &&
+          !selected.has(
+            `${concept.conceptText.trim().toLowerCase()}|${planStepType(levelOf(mastery, concept.conceptText))}`,
+          ),
       )
-        ? "misconception"
-        : "missing";
-    const canonical =
-      concepts.find((c) => c.conceptText.trim().toLowerCase() === key)
-        ?.conceptText ?? name;
-    const whyFirst =
-      typeof o.whyFirst === "string" ? o.whyFirst.trim().slice(0, 300) : "";
-    const searchTopic =
-      typeof o.searchTopic === "string"
-        ? o.searchTopic.trim().slice(0, 160)
-        : "";
-    steps.push({
-      concept: canonical,
-      gapType,
-      weight: weightBy.get(key) ?? 1,
-      ...(whyFirst ? { whyFirst } : {}),
-      ...(searchTopic ? { searchTopic } : {}),
-    });
-  }
-  return steps;
-}
-
-function planUserPrompt(
-  gaps: GapAnalysis,
-  concepts: ConceptChecklistItem[],
-): string {
-  return `CONCEPT CHECKLIST (exact names, weights):\n${conceptsChecklist(concepts)}\n\nSTUDENT GAPS:\n${gapsSummary(gaps)}\n\nOrder EVERY gap exactly once.`;
+      .map((concept) => concept.conceptText),
+    skippedKnown: {
+      count: knownCount,
+      estimatedTimeSavedMinutes: Math.max(0, chapterReadMinutes - planMinutes),
+    },
+    budgetMinutes,
+    estMinutes: planMinutes,
+    estimated: ordered.some((item) => item.content.estimated),
+  };
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -782,31 +1040,41 @@ function fallbackSection(
  * out, with no AI call, so ordering can never disagree between two students who
  * happen to have the same diagnosis, and it costs nothing.
  *
- * Misconceptions first — a wrong belief is the one thing re-reading does not
- * fix. Then level 1, the cheapest win. Then untouched concepts by importance.
- * A misconception checklist item is a *wrong belief*, not a concept, so it
- * never gets a section of its own; it is addressed where it appears among the
- * real concepts.
+ * The guide's default order is misconceptions, near-misses, untouched concepts
+ * by importance, then solid concepts. Study plans use the same mastery map but
+ * place FINISH steps after BUILD steps. A misconception checklist item is a
+ * wrong belief, not a concept, so it never gets a section of its own.
  */
 export function triageConcepts(
   concepts: ConceptChecklistItem[],
   mastery: MasteryMap,
+  options: { studyPlan?: boolean } = {},
 ): ConceptChecklistItem[] {
   const rank = (c: ConceptChecklistItem) => levelOf(mastery, c.conceptText);
   return concepts
     .filter((c) => !c.isMisconception)
     .map((concept, i) => ({ concept, i }))
     .sort((a, b) => {
-      // Tier: 2 (wrong) → 1 (unraised) → 0 (untouched) → 3 (solid, last).
-      const tier = (l: MasteryLevel) =>
-        l === 2 ? 0 : l === 1 ? 1 : l === 0 ? 2 : 3;
+      // The plan keeps the shared mastery triage but moves FINISH rounds after
+      // BUILD steps. The guide's established order remains unchanged.
+      const tier = (level: MasteryLevel) => {
+        if (options.studyPlan) {
+          if (level === 2) return 0;
+          if (level === 0) return 1;
+          if (level === 1) return 2;
+          return 3;
+        }
+        if (level === 2) return 0;
+        if (level === 1) return 1;
+        if (level === 0) return 2;
+        return 3;
+      };
       const byTier = tier(rank(a.concept)) - tier(rank(b.concept));
       if (byTier !== 0) return byTier;
-      // Within a tier, importance decides.
-      if (b.concept.weight !== a.concept.weight)
+      // The existing guide weights within a tier. Plan order follows the book.
+      if (!options.studyPlan && b.concept.weight !== a.concept.weight)
         return b.concept.weight - a.concept.weight;
-      // Ties keep checklist order, so the guide is stable rather than
-      // reshuffling on an unstable sort between requests.
+      // Ties keep checklist order so both guide and plan output are stable.
       return a.i - b.i;
     })
     .map((x) => x.concept);
@@ -1425,25 +1693,8 @@ const LESSON_SYSTEM =
   "no headers, no markdown, no bullet lists, 4-8 sentences total, one plain analogy, ends with a one-line recall prompt to the student. " +
   'Return STRICT JSON: {"text":"the lesson"}.';
 
-// The plan is a *short* roadmap — the whole point of the phase. "A lesson for
-// every gap" is what the microlesson and the guide are for; this prompt is
-// deliberately written so the model orders and names, and nothing else. And
-// one hard rule: search topics, never URLs.
-const PLAN_SYSTEM =
-  "You plan a student's study session from a gap analysis. Each gap is either 'missing' " +
-  "(they did not really learn it) or a 'misconception' (they said it wrong, and the wrong " +
-  "model blocks the right one). " +
-  "Build a SHORT, EFFECTIVE roadmap — this is their plan, not their lesson. Every gap exactly once, ordered to work FOR THIS STUDENT. " +
-  "Rules, in order of importance: " +
-  "1. Misconceptions first, because a wrong belief must be corrected before the idea it blocks can land. " +
-  "2. Then the missing ideas, heaviest (weight) first. " +
-  "3. Keep the exact conceptText names verbatim. " +
-  'For each step, "whyFirst" is ONE short sentence a voice engine can read aloud, saying why this ' +
-  "gap comes now for THIS student — e.g. 'you had this backwards, so we fix it first'. " +
-  'Also set "searchTopic": the concept named in 2-6 plain web-search words in the student\'s language ' +
-  "- never a URL, never a platform name. " +
-  'Return STRICT JSON, no prose, no markdown: {"steps":[{"concept":"...","gapType":"missing"|"misconception","whyFirst":"...","searchTopic":"..."}]}.';
-
+// Shared, student-independent guide content. Personalized study-plan steps use
+// the separate, source-substring-validated generator above.
 const SECTION_SYSTEM =
   "You explain ONE concept to a Grade 12 student revising this chapter. " +
   "Return STRICT JSON, no prose, no markdown: " +
@@ -1642,14 +1893,22 @@ export const ai: AiService = {
     transcript: string,
     concepts: ConceptChecklistItem[],
   ): Promise<GapAnalysis> {
-    const fallback = () => fallbackGrade(transcript, concepts);
+    const fallback = () =>
+      withRecallEvidence(
+        fallbackGrade(transcript, concepts),
+        transcript,
+        concepts,
+      );
     if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         GRADE_SYSTEM,
         `CONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}\n\nSTUDENT RECALL:\n${transcript}`,
       );
-      return parseGaps(raw, concepts) ?? malformed("gradeRecall", fallback);
+      const parsed = parseGaps(raw, concepts);
+      return parsed
+        ? withRecallEvidence(parsed, transcript, concepts)
+        : malformed("gradeRecall", fallback);
     } catch (error) {
       return degraded("gradeRecall", error, fallback);
     }
@@ -1676,29 +1935,74 @@ export const ai: AiService = {
     }
   },
 
-  async generateStudyPlan(
-    gaps: GapAnalysis,
-    concepts: ConceptChecklistItem[],
+  async generateStudyPlanContent(
+    conceptText: string,
+    type: StudyPlanStep["type"],
+    chapterText: string,
+    excerpt: string,
     language: ContentLanguage = "en",
     options: { skipAi?: boolean } = {},
-  ): Promise<StudyPlan> {
-    const fallback = () => fallbackPlan(gaps, concepts);
-    if (options.skipAi) return fallback();
-    if (!anyAiAvailable()) return fallback();
+  ): Promise<StudyPlanContent> {
+    const fallback = () => fallbackStudyPlanContent(excerpt);
+    if (options.skipAi || !anyAiAvailable()) return fallback();
+    const schema = {
+      type: "object",
+      properties: {
+        body: {
+          type: "array",
+          minItems: 2,
+          maxItems: 4,
+          items: { type: "string" },
+        },
+        chapterExplains: { type: "boolean" },
+        contrast: {
+          type: ["object", "null"],
+          properties: {
+            bookSays: { type: "string" },
+            feelsRightBecause: { type: "string" },
+            failsBecause: { type: "string" },
+          },
+          required: ["bookSays", "feelsRightBecause", "failsBecause"],
+          additionalProperties: false,
+        },
+      },
+      required: ["body", "chapterExplains", "contrast"],
+      additionalProperties: false,
+    };
+    const system =
+      "Create the textbook-only body for one study-plan step. The diagnosis is already done; do not re-grade it. " +
+      `The step type is ${type} for the exact concept ${JSON.stringify(conceptText)}. ` +
+      "Return 2-4 short blocks, each copied verbatim from the anchor excerpt. " +
+      "Do not paraphrase or add a word, fact, example, heading, URL, web search, or outside knowledge. " +
+      "If the chapter mentions the concept but does not explain it, set chapterExplains=false and use only the relevant exact excerpt. " +
+      (type === "CONTRAST"
+        ? "Also provide contrast.bookSays, contrast.feelsRightBecause, and contrast.failsBecause, each an exact source substring; if the text cannot support any field, set contrast=null and chapterExplains=false."
+        : "Set contrast=null.") +
+      "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
+      'Return strict JSON: {"body":["exact chapter excerpt","exact chapter excerpt"],"chapterExplains":true}.' +
+      outputInstruction(language);
+    const user = `CONCEPT: ${conceptText}\nSTEP TYPE: ${type}\nANCHOR: ${excerpt}\n\nCHAPTER TEXT:\n${chapterText.slice(0, 24000)}`;
     try {
-      const raw = await ask(
-        PLAN_SYSTEM + outputInstruction(language),
-        planUserPrompt(gaps, concepts),
-      );
-      const steps = sanitizePlanSteps(parseJson<unknown>(raw), gaps, concepts);
-      if (!steps.length) return malformed("generateStudyPlan", fallback);
-      return {
-        steps,
-        estMinutes: estimatePlanMinutes(steps),
-        estimated: false,
-      };
+      for (let attemptNumber = 0; attemptNumber < 2; attemptNumber += 1) {
+        const raw = await ask(
+          system +
+            (attemptNumber === 1
+              ? " Your previous answer did not validate. Retry with only exact verbatim substrings from the anchor excerpt."
+              : ""),
+          user,
+          { schema },
+        );
+        const content = validateGroundedPlanContent(
+          parseJson<unknown>(raw),
+          chapterText,
+          type,
+          excerpt,
+        );
+        if (content) return content;
+      }
+      return malformed("generateStudyPlanContent", fallback);
     } catch (error) {
-      return degraded("generateStudyPlan", error, fallback);
+      return degraded("generateStudyPlanContent", error, fallback);
     }
   },
 

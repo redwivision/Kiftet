@@ -4,10 +4,10 @@
 
 
 A database's design is basically: *what facts do we need to remember, and how do
-they relate?* Kiftet has **thirteen tables** in two families: the nine **study-domain**
+they relate?* Kiftet has **fifteen tables** in two families: the eleven **study-domain**
 tables (the product) and the four **auth tables** (who is signed in).
 
-### 6.1 The study domain (9 tables)
+### 6.1 The study domain (11 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
@@ -15,8 +15,10 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `guide_section` | Cached guide content for one chapter concept and language | `chapterId`, `conceptText`, `language`, structured guide content and source anchor; unique `(chapterId, conceptText, language)` |
+| `plan_content` | Student-independent grounded content for one plan step | `chapterId`, `conceptText`, `stepType`, `language`, `planVersion`; unique across all five fields |
+| `plan_step_check` | One attempted plan check per concept per session | `sessionId`, `conceptText`, `responseText`; unique `(sessionId, conceptText)` |
 | `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
-| `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (JSON mastery map + derived `{covered,missing,misconceptions}` and optional estimate flag), `score` (int 0–100) |
+| `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (mastery map, derived lists, optional matched evidence and estimate flag), `score` (int 0–100) |
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
 | `misconception_hit` | One time a grader saw a known misconception surface in a real session (bet 2) | `conceptNodeId` → concept_node, `sessionId`, `userId`; unique `(sessionId, conceptNodeId)` so retries never double-count |

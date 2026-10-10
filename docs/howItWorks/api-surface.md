@@ -14,6 +14,9 @@ All routes live behind `/api`:
 | `GET /api/sessions/:id` | Session details + its attempts | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/plan` | Build the grounded plan from diagnosed mastery and a 10/20/40 minute budget | 12 |
+| `POST /api/sessions/:id/plan/check` | Record one attempted plan check; idempotent per session/concept | 12 |
+| `GET /api/review-due` | Concepts whose latest mastery check is at least two days old | 12 |
 | `GET /api/chapters/:id/guide` | The ordered guide sections for this student (cached per chapter) | 0/11 (AI only on a cache miss) |
 | `POST /api/sessions/:id/retest` | Get new, differently-phrased questions for the gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/retest/answer` | Submit retest answers → updated score | 0/2 (AI in 2) |
@@ -62,6 +65,14 @@ shape, and `mastery` is the part that matters:
 client should read `mastery` for anything per-concept and must not expect the
 lists to carry more than the map does. A concept at `2` never appears in
 `covered`. The map is also persisted to `attempt.gapsIdentified.mastery`.
+When available, `evidence` stores the exact recall span matched to a level-1
+or level-2 concept; it is optional for backwards compatibility.
+
+`POST /sessions/:id/plan` additionally accepts `budgetMinutes` (`10`, `20`, or
+`40`) and `language` (`en` or `am`). It returns ordered anchored steps,
+leftover concepts, and an estimated known-reading-time summary. Cached plan
+content excludes student wording and timing. No AI call is made to reorder the
+mastery-based triage.
 
 `POST /microlesson` and `POST /retest` take only the gap **names**
 (`missing`, `misconceptions`) and rebuild the levels server-side, so a lesson is
