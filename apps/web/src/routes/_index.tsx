@@ -125,19 +125,13 @@ export default function Home() {
   const faq = useOnScreen<HTMLElement>();
   const cta = useOnScreen<HTMLElement>();
   const { t } = useLanguage();
+  const { launch, pending, failure } = useDemoLaunch();
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
       {/* ── Hero: the problem, stated plainly ─────────────────── */}
       <section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
         <div ref={hero.ref} className={cn("space-y-7", hero.shown && "kft-in")}>
-          <p
-            className="kft-rise font-medium text-muted-foreground text-sm"
-            style={{ "--kft-i": "0ms" } as CSSProperties}
-          >
-            {t("hero-eyebrow")}
-          </p>
-
           <h1 className="relative isolate space-y-3 font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-6xl sm:leading-[1.04]">
             <span aria-hidden="true" className="halo" />
             <span className="block">
@@ -149,35 +143,43 @@ export default function Home() {
           </h1>
 
           <p
-            className="kft-rise max-w-xl text-base text-muted-foreground leading-7 sm:text-lg"
-            style={{ "--kft-i": "300ms" } as CSSProperties}
+            className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg"
+            style={{ "--kft-i": "260ms" } as CSSProperties}
+          >
+            {t("hero-line")}
+          </p>
+
+          <p
+            className="kft-rise max-w-xl text-muted-foreground text-sm leading-7"
+            style={{ "--kft-i": "320ms" } as CSSProperties}
           >
             {t("hero-sub")}
           </p>
 
           <div
-            className="kft-rise flex flex-col gap-3 sm:flex-row sm:flex-wrap"
+            className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
             style={{ "--kft-i": "400ms" } as CSSProperties}
           >
-            <a
-              href="#demo"
-              className={cn(
-                buttonVariants({ size: "lg" }),
-                "w-full font-medium sm:w-auto",
-              )}
+            <Button
+              size="lg"
+              onClick={launch}
+              disabled={pending}
+              className="w-full font-medium sm:w-auto"
             >
-              {t("demo-try")}
-            </a>
+              {pending ? t("demo-setting-up") : t("demo-try")}
+            </Button>
             <a
               href="#how"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "lg" }),
-                "w-full sm:w-auto",
-              )}
+              className="text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
             >
               {t("how-loop-works")}
             </a>
           </div>
+          {failure && (
+            <p role="alert" className="text-rust text-sm">
+              {failure}
+            </p>
+          )}
           <p
             className="kft-rise text-muted-foreground text-sm"
             style={{ "--kft-i": "480ms" } as CSSProperties}
@@ -192,8 +194,27 @@ export default function Home() {
           </p>
         </div>
 
-        {/* The product, shown as itself */}
-        <DemoCard />
+        {/* The product, entered through the ring itself */}
+        <div className="flex flex-col items-center gap-6">
+          <button
+            type="button"
+            onClick={launch}
+            disabled={pending}
+            aria-label={t("demo-ring-aria")}
+            className="group relative grid size-32 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-4"
+          >
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 animate-breathe rounded-full bg-gold/20 blur-2xl motion-reduce:animate-none"
+            />
+            <GapClosingMark
+              size={120}
+              className="relative text-gold transition-transform duration-300 ease-out group-hover:scale-[1.03] motion-reduce:transition-none"
+            />
+          </button>
+          <p className="text-muted-foreground text-sm">{t("demo-ring-hint")}</p>
+          <DemoCard />
+        </div>
       </section>
 
       {/* ── The statistic that decides the stakes ─────────────── */}
@@ -293,6 +314,9 @@ export default function Home() {
           ))}
         </ol>
       </section>
+
+      {/* The ask, placed right after the loop explains why it works. */}
+      <WaitlistSection />
 
       {/* ── Why voice ─────────────────────────────────────────── */}
       <section className="mt-20 grid gap-8 lg:grid-cols-2 lg:items-center">
@@ -582,11 +606,16 @@ function DemoCard() {
       style={{ animationDelay: "0.15s" }}
     >
       <div className="border-border/60 border-b px-6 py-4 dark:border-white/10">
-        <div className="mb-2 flex items-center gap-2.5">
-          <BrandMark size={22} className="rounded-full" />
-          <p className="font-medium text-[0.78rem] text-muted-foreground">
-            Kiftet
-          </p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <BrandMark size={22} className="rounded-full" />
+            <p className="font-medium text-[0.78rem] text-muted-foreground">
+              Kiftet
+            </p>
+          </div>
+          <span className="rounded-full border border-border/70 px-2.5 py-0.5 font-medium text-[0.72rem] text-muted-foreground dark:border-white/15">
+            {t("example-label")}
+          </span>
         </div>
         <div className="mb-1 flex items-center justify-between gap-3">
           <p className="k-label">{t("demo-card-unit")}</p>
@@ -883,7 +912,7 @@ function DemoSection() {
 
         {stagger(
           0,
-          <span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.78rem] text-sage uppercase tracking-wide">
+          <span className="inline-flex items-center gap-2 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 font-medium text-[0.78rem] text-sage">
             <span
               className={cn(
                 "size-1.5 rounded-full bg-sage transition-opacity duration-500",
@@ -920,56 +949,49 @@ function DemoSection() {
           </p>,
         )}
       </div>
+    </section>
+  );
+}
 
-      {/* The waitlist sits directly under the demo, not at the footer. Someone
-          who just felt the loop work has already decided they want it; making
-          them scroll past testimonials to find the sign-up is how the sign-up
-          goes unfilled. */}
-      <div
-        id="waitlist"
-        className="relative mx-auto mt-14 max-w-md scroll-mt-24 border-border/60 border-t pt-12"
-      >
-        <div className="flex flex-col items-center gap-4 text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold uppercase tracking-wide">
-            {t("waitlist-chip")}
-          </span>
-          <h3 className="font-display font-semibold text-2xl leading-[1.15] tracking-[-0.02em] sm:text-3xl">
-            {t("waitlist-title")}
-          </h3>
-        </div>
-        <div className="mt-8 text-left">
-          <WaitlistForm />
-          {/* Sign-in left the header when sign-up and the waitlist merged into
-              one button, so the way back to an existing account lives here,
-              next to the form it is most likely to be wanted from. */}
-          <p className="mt-5 text-center text-muted-foreground text-sm">
-            {t("waitlist-signin-prefix")}{" "}
-            <Link
-              to="/login"
-              className="font-medium text-gold underline-offset-4 hover:underline"
-            >
-              {t("sign-in")}
-            </Link>
-          </p>
-        </div>
+/* The waitlist, asked once and asked plainly, under the loop that earns it. */
+function WaitlistSection() {
+  const { t } = useLanguage();
+  return (
+    <section
+      id="waitlist"
+      className="surface mx-auto mt-20 max-w-2xl scroll-mt-24 rounded-[2rem] border p-6 text-center sm:p-10"
+    >
+      <div className="flex flex-col items-center gap-4">
+        <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold">
+          {t("waitlist-chip")}
+        </span>
+        <h2 className="font-display font-semibold text-2xl leading-[1.15] tracking-[-0.02em] sm:text-3xl">
+          {t("waitlist-title")}
+        </h2>
+      </div>
+      <div className="mx-auto mt-8 max-w-md text-left">
+        <WaitlistForm />
+        {/* Sign-in left the header when sign-up and the waitlist merged into
+            one button, so the way back to an existing account lives here,
+            next to the form it is most likely to be wanted from. */}
+        <p className="mt-5 text-center text-muted-foreground text-sm">
+          {t("waitlist-signin-prefix")}{" "}
+          <Link
+            to="/login"
+            className="font-medium text-gold underline-offset-4 hover:underline"
+          >
+            {t("sign-in")}
+          </Link>
+        </p>
       </div>
     </section>
   );
 }
 
-function DemoButton({
-  variant = "outline",
-  size,
-  className,
-}: {
-  variant?: "primary" | "outline";
-  size?: "lg";
-  className?: string;
-}) {
+function useDemoLaunch() {
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const { t } = useLanguage();
 
   const launch = async () => {
     setPending(true);
@@ -983,6 +1005,21 @@ function DemoButton({
       setPending(false);
     }
   };
+
+  return { launch, pending, failure };
+}
+
+function DemoButton({
+  variant = "outline",
+  size,
+  className,
+}: {
+  variant?: "primary" | "outline";
+  size?: "lg";
+  className?: string;
+}) {
+  const { launch, pending, failure } = useDemoLaunch();
+  const { t } = useLanguage();
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>

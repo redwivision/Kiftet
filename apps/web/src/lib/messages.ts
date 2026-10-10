@@ -592,7 +592,7 @@ export const en = {
   "demo-foot":
     "No email, no password, no card. Your demo is private and expires on its own.",
   "demo-setting-up": "Setting up your demo…",
-  "demo-start": "Start the live demo →",
+  "demo-start": "Start the live demo",
   "demo-try": "Try a live demo",
   recalled: "recalled",
   "see-your-chapter": "See it on your own chapter",
@@ -773,6 +773,22 @@ export const en = {
   "auth-quote": "Say what you remember. The gaps do the rest.",
   "auth-foot": "Nobody starts from zero.",
   "choose-theme": "Choose a theme",
+
+  // ── First look (tier 1) ───────────────────────────────────────
+  "hero-line": "Say what you remember. See exactly what you missed.",
+  "example-label": "Example",
+  "demo-ring-aria": "Try a live demo",
+  "demo-ring-hint": "Tap the ring to try it",
+  "continue-where": "Continue where you left off",
+  "continue-where-text":
+    "Your last study round is still open. Pick the loop back up where you stopped.",
+  "start-first-chapter": "Start your first chapter",
+  "start-first-chapter-text":
+    "Choose a chapter and say what you remember — that is the whole first step.",
+  "resume-round": "Pick up where you left off",
+  "first-chapter-cta": "Start studying",
+  "hint-first-recall": "Tap the ring and say what you remember. No notes.",
+  "hint-dismiss": "Got it",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1322,7 +1338,7 @@ export const am: Record<MessageKey, string> = {
     "ምዕራፉን ምረጥ፣ ያስታወስከውን ተናገር፣ ኪፍተት ያልተረጋገጠውን ሲያገኝ ተመልከት — ከዚያም የአጭሩን ፕላንሰጥተህ የተረጋገጠ መሆኑን አረጋግጥ።",
   "demo-foot": "ኢሜይል የለም፣ የይለፍ ቃል የለም፣ ካርድ የለም። ማሳያህ የግል ነው እና በራሱ ያበቃል።",
   "demo-setting-up": "ማሳያህ እየተዘጋጀ ነው…",
-  "demo-start": "የቀጥታ ማሳያ ጀምር →",
+  "demo-start": "የቀጥታ ማሳያ ጀምር",
   "demo-try": "የቀጥታ ማሳያ ሞክር",
   recalled: "አስታውሷል",
   "see-your-chapter": "በራስህ ምዕራፍ ላይ ተመልከት",
@@ -1479,6 +1495,21 @@ export const am: Record<MessageKey, string> = {
   "auth-quote": "ያስታውስክትን ተናገር። ክፍተቶቹ ሌላውን ያደርጋሉ።",
   "auth-foot": "አንድም ከዜሮ አይጀምሩም።",
   "choose-theme": "ገምት ምረጥ",
+
+  // ── First look (tier 1) ───────────────────────────────────────
+  "hero-line": "ያስታወስከውን ተናገር። ያመለጠህን በግልጽ አይ።",
+  "example-label": "ምሳሌ",
+  "demo-ring-aria": "የቀጥታ ማሳያ ሞክር",
+  "demo-ring-hint": "ለመሞከር ቀለበቱን ንካ",
+  "continue-where": "ያቋረጥከበት ቀጥል",
+  "continue-where-text": "ያለፈው የጥናት ዙርህ አሁንም ክፍት ነው። የቆምክበትን ቀጥል።",
+  "start-first-chapter": "የመጀመሪያ ምዕራፍህን ጀምር",
+  "start-first-chapter-text":
+    "ምዕራፍ ምረጥና ያስታወስከውን ተናገር — ይህ ብቻውን የመጀመሪያው እርምጃ ነው።",
+  "resume-round": "ያቋረጥከበት ቀጥል",
+  "first-chapter-cta": "ጥናት ጀምር",
+  "hint-first-recall": "ቀለበቱን ነክተህ ያስታወስከውን ተናገር። ማስታወሻ የለም።",
+  "hint-dismiss": "ገባኝ",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {
