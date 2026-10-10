@@ -45,6 +45,7 @@ import {
   cacheChecklist,
   getCachedChecklist,
 } from "@/lib/store";
+import { useLoopTabChrome } from "@/lib/tab-chrome";
 import { visibleChapterTitle } from "@/lib/textbook";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
 import type { Route } from "./+types/study.$sessionId";
@@ -181,6 +182,9 @@ function StudyScreen() {
   // The same loop serves both, but the demo wears a banner and gets a
   // no-effort on-ramp (sample answer) so the loop is visible in one minute.
   const demo = getDemoUser();
+  // Tier 3: the tab names the phase and the favicon is the ring closing as the
+  // loop advances. Called before the early returns below so hook order holds.
+  useLoopTabChrome(state.phase);
 
   if (state.chapterLoading) {
     return (

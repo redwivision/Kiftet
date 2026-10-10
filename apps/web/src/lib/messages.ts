@@ -798,6 +798,16 @@ export const en = {
   "tap-a-sentence": "Tap a sentence to hear it again",
   "recall-reading": "Reading your answer",
   "result-ring-words": "You knew {before}%, now you know {after}%.",
+
+  // ── Tab title follows the loop (tier 3) ───────────────────────
+  // The browser tab is a second surface for "where am I in the loop" — a
+  // student comparing tabs (or glancing while another app is open) reads the
+  // phase, not a static "Study". Each names the phase the way the page does.
+  "tab-recall": "Speak — Kiftet",
+  "tab-gaps": "What's missing — Kiftet",
+  "tab-lesson": "Short lesson — Kiftet",
+  "tab-retest": "Test — Kiftet",
+  "tab-result": "Result — Kiftet",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1528,6 +1538,13 @@ export const am: Record<MessageKey, string> = {
   "tap-a-sentence": "እንደገና ለመስማት ዓረፍተ ነገር ንካ",
   "recall-reading": "መልስህን በማንበብ ላይ",
   "result-ring-words": "{before}% ታውቅ ነበር፣ አሁን {after}% ታውቃለህ።",
+
+  // ── Tab title follows the loop (tier 3) ───────────────────────
+  "tab-recall": "ተናገር — ኪፍተት",
+  "tab-gaps": "ያመለጠ — ኪፍተት",
+  "tab-lesson": "አጭር ማብራሪያ — ኪፍተት",
+  "tab-retest": "ድጋሚ ፈተና — ኪፍተት",
+  "tab-result": "ውጤት — ኪፍተት",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

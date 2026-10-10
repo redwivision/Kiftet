@@ -10,7 +10,15 @@ import { NavigationProgress } from "./components/navigation-progress";
 import { ThemeProvider } from "./components/theme-provider";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "icon", href: "/logo-mark.svg", type: "image/svg+xml" },
+  // id so the study loop can swap the SVG icon's href as the student moves
+  // through the phases (see lib/tab-chrome.ts). The .ico stays as the
+  // no-JS/browser fallback.
+  {
+    rel: "icon",
+    id: "app-icon",
+    href: "/logo-mark.svg",
+    type: "image/svg+xml",
+  },
   { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
   // The brand: an open ring with a question inside. Never stale — keep this
   // file in sync with what the client signs off as the logo.
