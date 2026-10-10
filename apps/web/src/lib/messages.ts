@@ -821,6 +821,12 @@ export const en = {
   // these are the little verbs that follow it on hover.
   "shortcut-talk-label": "to talk",
   "shortcut-pause-label": "to pause",
+
+  // ── Share a closed gap (tier 3) ───────────────────────────────
+  // The button is on a student's own result screen; the caption is the only
+  // text baked into the shared image, and it names no topic, score, or person.
+  "share-card": "Share this",
+  "share-card-caption": "One gap, closed.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1561,6 +1567,8 @@ export const am: Record<MessageKey, string> = {
   "hint-add-home": "ኪፍተትን በስልክህ መነሻ ገጽ ላይ ጨምር — ቀጣዩ ዙርህ በአንድ ንክኪ ይገኛል።",
   "shortcut-talk-label": "ለመናገር",
   "shortcut-pause-label": "ለማቆም",
+  "share-card": "ይህን አጋራ",
+  "share-card-caption": "አንድ ክፍተት ተሞላ።",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

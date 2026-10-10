@@ -47,6 +47,7 @@ import {
 import { countWords, findBoundaryEnd, leadingText } from "@/lib/intent";
 import type { ConceptMeta } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
+import { shareClosedGapCard } from "@/lib/share-card";
 import {
   type ChecklistRow,
   cacheChecklist,
@@ -142,6 +143,34 @@ function AddToHomeHint() {
         {t("hint-dismiss")}
       </button>
     </div>
+  );
+}
+
+// A closed-gap card the student can choose to share. Off by default and only
+// ever made on a deliberate tap; the card itself names nothing about them. If
+// the platform can't share a file, the button quietly downloads instead — the
+// option is always honored, never a dead end.
+function ShareCardButton() {
+  const { t, lang } = useLanguage();
+  const [busy, setBusy] = useState(false);
+  const share = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await shareClosedGapCard(t("share-card-caption"), lang);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void share()}
+      disabled={busy}
+      className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground disabled:opacity-50"
+    >
+      {t("share-card")}
+    </button>
   );
 }
 
@@ -1620,13 +1649,16 @@ function ResultPhase({
           body={t("result-gap-body")}
           metric={durationMetric(result, t)}
           actions={
-            <Button
-              className="w-full justify-center"
-              disabled={busy}
-              onClick={() => void onDone()}
-            >
-              {t("done-for-now")}
-            </Button>
+            <div className="space-y-3">
+              <Button
+                className="w-full justify-center"
+                disabled={busy}
+                onClick={() => void onDone()}
+              >
+                {t("done-for-now")}
+              </Button>
+              <ShareCardButton />
+            </div>
           }
           before={result.before ?? 0}
           after={result.after ?? 0}
