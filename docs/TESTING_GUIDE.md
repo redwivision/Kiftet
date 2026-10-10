@@ -197,11 +197,19 @@ misconceptions.
   exceptions in server logs.
 - Server typechecks clean with the new Gemini SDK calls.
 
-**Fallback chain design:** when `GEMINI_API_KEY` equals the placeholder, the
-service skips the Gemini call entirely and falls back to a heuristic:
-- extract: sentence-splitting picks 8 meaningful sentences from the chapter text.
-- grade: word-overlap scoring determines what the student mentioned.
-- lesson/retest: templates produce a reasonable experience even when no key is
+**Fallback chain design:** the AI seam has two provider tiers and one
+deterministic floor:
+- **Gemini** (primary, measured working) — the model ladder under it handles a
+  busy model; see *The model, and why it changed*.
+- **Groq** (failover) — when Gemini is unconfigured or its free-tier quota is
+  exhausted (a 429 storm trips Gemini's *own* circuit breaker and the ladder
+  skips it), the same request is answered by Groq at Groq's separate allowance.
+  Gemini and Groq gate separately (see `admission.ts`), so a dead Gemini never
+  takes Groq offline with it.
+- **Heuristics** (floor) — only when every configured provider is out:
+  extract: sentence-splitting picks 8 meaningful sentences from the chapter text.
+  grade: word-overlap scoring determines what the student mentioned.
+  lesson/retest: templates produce a reasonable experience even when no key is
   set. This matches the system design's "product works even when a service is
   missing" seam rule, and lets you run the whole flow in dev without touching
   the key.
@@ -255,6 +263,22 @@ service skips the Gemini call entirely and falls back to a heuristic:
      lower than 1.0, showing real gaps).
    - `microlesson` text will be a Gemini-written lesson; `retest` questions
      will be natural-language spoken prompts rather than templates.
+
+**With a Groq key (failover path — the one that matters when Gemini is out):**
+
+1. Set `GROQ_API_KEY` in `apps/server/.env` (the file already has an empty
+   `GROQ_API_KEY=` line waiting; get a key from https://console.groq.com/keys):
+   ```
+   GROQ_API_KEY=your_actual_key
+   ```
+2. Restart the server. Gemini stays primary and keeps its own 5/min bucket;
+   Groq answers only when Gemini sheds, breaks or is unconfigured.
+3. To prove the failover rather than the happy path: let Gemini hit its daily
+   quota (or temporarily point `GEMINI_API_KEY` at a wrong key) and repeat the
+   curl sequence. Recall must still grade semantically with
+   `estimated: false` — a real Groq answer, not the word-overlap estimate — and
+   `GET /api/ai/telemetry` reports `"lastProvider": "groq"` plus a `providers`
+   block showing both buckets and breakers separately.
 
 ---
 

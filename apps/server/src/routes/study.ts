@@ -12,7 +12,7 @@ import {
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
-import { isAiBusy } from "../ai/admission";
+import { allAdmissionSnapshots, isAiBusy } from "../ai/admission";
 import { mergeConcepts } from "../ai/concepts";
 import {
   ai,
@@ -521,7 +521,10 @@ router.get("/ai/budget", async (req, res) => {
 // decision needs — in-memory for now, so it resets on restart, but it is what
 // tells us whether we are quietly serving fallbacks and not real generations.
 router.get("/ai/telemetry", async (_req, res) => {
-  ok(res, aiTelemetrySnapshot());
+  ok(res, {
+    ...aiTelemetrySnapshot(),
+    providers: allAdmissionSnapshots(),
+  });
 });
 
 // Each textbook with its chapters, in import order — the library view and the

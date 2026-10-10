@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../env.server";
 import {
-  type AiOutcome,
+  type AiProvider,
   admissionSnapshot,
   admitAiCall,
   isAiBusy,
@@ -38,7 +38,30 @@ export const MODEL_FALLBACKS = [
 
 export const DEFAULT_MODEL = MODEL_FALLBACKS[0];
 
-const PLACEHOLDER_KEY = "placeholder-gemini-api-key";
+/**
+ * The failover provider, one rung below Google in the ladder.
+ *
+ * Its job is the step the Gemini ladder cannot do: a Gemini free-tier quota is
+ * perc-project and exhausts, and every attempt after that is a sure 429 that
+ * only manufactures latency. When Gemini is exhausted its own breaker opens
+ * (see admission.ts) and the ladder skips THESE models and hands the request
+ * to Groq instead, which draws on a *separate* free quota at its own rate.
+ * Only when both providers are down does a student see the deterministic
+ * fallback or the honest "busy" refusal.
+ *
+ * `llama-3.3-70b-versatile` is the general-purpose rung: it has reliable JSON
+ * mode, handles Amharic, and its free tier (~30 req/min) comfortably absorbs
+ * the 5/minute that Gemini's breaker would leave behind.
+ */
+export const GROQ_MODELS = ["llama-3.3-70b-versatile"] as const;
+
+export const DEFAULT_GROQ_MODEL = GROQ_MODELS[0];
+
+const GROQ_MAX_ATTEMPTS = GROQ_MODELS.length + 1;
+
+/** Groq's OpenAI-compatible endpoint. No SDK dependency — one POST, the same
+ *  shape the rest of the seam already parses. */
+const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
 export type ConceptChecklistItem = {
   conceptText: string;
@@ -294,11 +317,33 @@ export function gapAnalysisFrom(
 // deterministic heuristics so demos and CI never hard-fail.
 // ────────────────────────────────────────────────────────────────
 
-function isAiAvailable(): boolean {
+/**
+ * A provider counts as wired up when a real key is present. Both schema files
+ * ship a "placeholder-…" default so production builds pass without secrets,
+ * and a placeholder must read as "not configured" — otherwise a deployment
+ * that never got its key would silently bet every request on a provider that
+ * does not exist.
+ */
+function configured(key: string | undefined): boolean {
   return (
-    env.GEMINI_API_KEY !== PLACEHOLDER_KEY &&
-    env.GEMINI_API_KEY.trim().length > 0
+    typeof key === "string" &&
+    key.trim().length > 0 &&
+    !key.trim().startsWith("placeholder-")
   );
+}
+
+function isAiAvailable(): boolean {
+  return configured(env.GEMINI_API_KEY);
+}
+
+function isGroqAvailable(): boolean {
+  return configured(env.GROQ_API_KEY);
+}
+
+/** The seam produces a real answer when ANY provider is wired up; the ladder
+ *  inside `ask` decides which one actually takes the call. */
+function anyAiAvailable(): boolean {
+  return isAiAvailable() || isGroqAvailable();
 }
 
 function sentences(text: string): string[] {
@@ -794,17 +839,18 @@ function parseJson<T>(raw: string): T | null {
   }
 }
 
-// A stalled Gemini call must never hang a student session: after this the
+// A stalled provider call must never hang a student session: after this the
 // promise rejects, the per-method catch falls back, and the UI keeps moving.
-const GEMINI_TIMEOUT_MS = 20_000;
+const PROVIDER_TIMEOUT_MS = 20_000;
 
-// Retries share ONE wall-clock budget rather than getting a fresh full timeout
-// each. Four 20s attempts would be 80s+ of hanging, which blows past the 30s
-// client fetch timeout in `api.ts` and turns a transient blip into a hard error
-// page. Each attempt gets whatever is left of the budget, so the retry path
-// stays inside the client window (24s of calls + backoff vs 30s) with a little
-// headroom. Raise GEMINI_TOTAL_BUDGET_MS only if that client timeout moves.
-const GEMINI_TOTAL_BUDGET_MS = 24_000;
+// The whole ladder — both providers, every model — shares ONE wall-clock budget
+// rather than getting a fresh full timeout each. Six 20s attempts would be 120s
+// of hanging, which blows past the 30s client fetch timeout in `api.ts` and
+// turns a transient blip into a hard error page. Each attempt gets whatever is
+// left of the budget, so the retry path stays inside the client window (24s of
+// calls + backoff vs 30s) with a little headroom. Raise AI_TOTAL_BUDGET_MS only
+// if that client timeout moves.
+const AI_TOTAL_BUDGET_MS = 24_000;
 // The attempt list length, kept next to the budget comment because the two are
 // one decision: the budget bounds the wall clock, this bounds how many models
 // or retries we can try inside it. A 503 on one model is answered by the next
@@ -850,7 +896,7 @@ function sleep(ms: number): Promise<void> {
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`Gemini request timed out after ${ms}ms`));
+      reject(new Error(`AI request timed out after ${ms}ms`));
     }, ms);
     promise.then(
       (value) => {
@@ -866,10 +912,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 // Why the product is currently degraded to deterministic fallbacks. A 429 is
-// the failure to expect: the Gemini free tier is per *project* (~10 req/min,
-// ~1-1.5k/day) and we are explicitly not paying until real users prove the
-// case, so our own per-user allowance is deliberately set below it.
+// the failure to expect on EITHER provider's free tier — per *project*, not per
+// user (~10 req/min and ~1-1.5k/day on Gemini, ~30 req/min on Groq) — and we
+// are explicitly not paying until real users prove the case, so our own
+// per-provider allowance is deliberately set below the ceiling. The second
+// provider exists to make "the quota ran out" a different, survivable day.
 const aiTelemetry = {
+  /** Which provider last answered, or "" if none has. */
+  lastProvider: "",
   /** Which model last answered, or "" if none has. Read at 2am to answer
    *  "is this the model, or is it us?" without adding a log line per call. */
   lastModel: "",
@@ -882,10 +932,9 @@ const aiTelemetry = {
 };
 
 export function aiTelemetrySnapshot() {
-  // Admission is nested rather than flattened so "was the model bad, or did we
-  // refuse to ask?" stays a one-glance question: `sheds` non-zero with
-  // `attempts` flat means we shed on purpose, and `rateLimited` climbing with
-  // `admitted` climbing means the ceiling is genuinely too low.
+  // The admission nested here is the PRIMARY provider's, because the counts
+  // that want comparing against `lastProvider` live in this object; the other
+  // provider's full state rides along via /ai/telemetry's `providers` field.
   return { ...aiTelemetry, admission: admissionSnapshot() };
 }
 
@@ -920,6 +969,65 @@ export function buildAttemptOrder(
   return order.slice(0, attempts);
 }
 
+/**
+ * Flatten the configured providers into one attempt list, in ladder order.
+ *
+ * Gemini leads — it is the provider measured working — with its model ladder
+ * first; Groq follows at its own attempt count. A provider that is not wired
+ * up contributes nothing, in the same way a model that is not listed does.
+ *
+ * Exported for tests: the ordering is a claim about reliability and capacity,
+ * so it is asserted rather than assumed.
+ */
+export function buildProviderAttempts(
+  gemini: boolean,
+  groq: boolean,
+): Array<{ provider: AiProvider; model: string }> {
+  const attempts: Array<{ provider: AiProvider; model: string }> = [];
+  if (gemini)
+    for (const model of buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS))
+      attempts.push({ provider: "gemini", model });
+  if (groq)
+    for (const model of buildAttemptOrder(GROQ_MODELS, GROQ_MAX_ATTEMPTS))
+      attempts.push({ provider: "groq", model });
+  return attempts;
+}
+
+/**
+ * One logical attempt inside the ladder. The two real implementations below
+ * (geminiGenerate / groqGenerate) are dispatchable so the fallover itself can
+ * be tested without a real key or a real provider — see
+ * __overrideProviderForTests.
+ */
+type ProviderGenerate = (
+  model: string,
+  systemPrompt: string,
+  userInput: string,
+  options: { schema?: Record<string, unknown>; text?: boolean },
+) => Promise<string>;
+
+// Function declarations are hoisted, so these may reference functions defined
+// further down the file; at module load every entry is the real provider.
+const defaultProviderCallbacks: Record<AiProvider, ProviderGenerate> = {
+  gemini: geminiGenerate,
+  groq: groqGenerate,
+};
+const providerCallbacks: Record<AiProvider, ProviderGenerate> = {
+  ...defaultProviderCallbacks,
+};
+
+/**
+ * Test seam, in the style of admission's __resetAdmissionForTests: swap a
+ * provider's callback without so much as a placeholder key. `null` restores
+ * the real implementation.
+ */
+export function __overrideProviderForTests(
+  provider: AiProvider,
+  fn: ProviderGenerate | null,
+): void {
+  providerCallbacks[provider] = fn ?? defaultProviderCallbacks[provider];
+}
+
 async function ask(
   systemPrompt: string,
   userInput: string,
@@ -930,101 +1038,101 @@ async function ask(
     text?: boolean;
   } = {},
 ): Promise<string> {
-  // Admission happens ONCE per logical call, not per attempt: the retry ladder
-  // below is one student's request and must consume one unit of the shared
-  // allowance, not four. It sits above the loop so a shed fails fast with
-  // `AiBusyError` and never burns a single Gemini call.
-  const admission = await admitAiCall();
-  let outcome: AiOutcome = "provider-failure";
-
-  const deadline = Date.now() + GEMINI_TOTAL_BUDGET_MS;
+  const deadline = Date.now() + AI_TOTAL_BUDGET_MS;
   let lastError: unknown;
+  // A provider refusing its own admission is NOT an error to the student — it
+  // is a reason to hand the call to the next provider. The last refusal is kept
+  // so that, if every provider refuses, the honest "busy" answer reaches the
+  // route instead of a misleading "AI degraded" fallback.
+  let lastBusy: unknown;
 
-  const order = buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS);
+  const attempts = buildProviderAttempts(isAiAvailable(), isGroqAvailable());
+  // Unreachable in practice — every caller guards on `anyAiAvailable` before
+  // calling `ask` — but the ladder must not silently accept an empty order.
+  if (attempts.length === 0) throw new Error("No AI provider configured");
 
-  try {
-    for (const [index, model] of order.entries()) {
-      const remaining = deadline - Date.now();
-      // Out of wall clock: a timeout, not a provider fault. Fall back rather
-      // than starting an attempt that cannot finish inside the client window.
-      if (remaining <= 0) {
-        lastError = new Error("Gemini retry budget exhausted");
-        break;
-      }
-      aiTelemetry.attempts += 1;
-      try {
-        const response = await withTimeout(
-          genAI.models.generateContent({
-            model,
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
-              },
-            ],
-            config: options.schema
-              ? {
-                  responseMimeType: "application/json",
-                  temperature: 0.4,
-                  // `responseJsonSchema` takes a plain JSON Schema object and is
-                  // the form the SDK recommends when `response_schema` is being
-                  // picky. Enforcing the shape at the provider keeps a graded
-                  // answer from degrading into "valid JSON, wrong structure" —
-                  // the only failure this path cannot recover from cheaply.
-                  responseJsonSchema: options.schema,
-                }
-              : {
-                  // Transcription: the model copies what it sees, so the reply
-                  // is plain text and the temperature is low — there is nothing
-                  // to invent and a paraphrase would only be harder to parse.
-                  responseMimeType: options.text
-                    ? "text/plain"
-                    : "application/json",
-                  temperature: options.text ? 0.2 : 0.4,
-                },
-          }),
-          Math.min(GEMINI_TIMEOUT_MS, remaining),
-        );
-        aiTelemetry.lastModel = model;
-        outcome = "success";
-        return response.text ?? "";
-      } catch (error) {
-        lastError = error;
-        // Classify here rather than at the bottom: a 4xx is the provider
-        // declining a request we sent badly, and it must not be allowed to
-        // reach the global breaker. 429 is the exception — that one genuinely
-        // is the provider under load, and it is the failure mode this whole
-        // module exists for.
-        if (
-          statusOf(error) !== undefined &&
-          isCallerError(statusOf(error) as number)
-        )
-          outcome = "caller-error";
-        if (!isRetryable(error) || index === order.length - 1) break;
-        // Jitter matters here: many students hit the same per-project ceiling at
-        // the same moment, and fixed backoff would have them all retry in
-        // lockstep and re-trip the 429 immediately.
-        //
-        // No delay when the NEXT attempt uses a DIFFERENT model: a busy model
-        // is not a rate limit on us, so backing off would waste wall clock we
-        // do not have. Back off only when we are retrying the same model.
-        const sameModel = order[index + 1] === model;
-        const delay = sameModel
-          ? RETRY_BASE_DELAY_MS * 2 ** index + Math.random() * 250
-          : 0;
-        aiTelemetry.retries += 1;
-        if (delay)
-          await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
-      }
+  for (const [index, { provider, model }] of attempts.entries()) {
+    const remaining = deadline - Date.now();
+    // Out of wall clock: a timeout, not a provider fault. Fall back rather
+    // than starting an attempt that cannot finish inside the client window.
+    if (remaining <= 0) {
+      lastError = new Error("AI retry budget exhausted");
+      break;
     }
-  } finally {
-    // One decision, one place. `outcome` is the breaker's input and is set
-    // exactly once per call: success on the return above, caller-error or
-    // provider-failure on the break out of the retry loop. A thrown AiBusyError
-    // never reaches here having taken a slot, because admission throws before
-    // acquire.
-    admission.settle(outcome);
+
+    // Admission is per attempt so the allowance tracks the provider that is
+    // actually asked: a request that Gemini sheds is still worth serving, and
+    // only an admitted call settles against its gate.
+    let admission: Awaited<ReturnType<typeof admitAiCall>>;
+    try {
+      admission = await admitAiCall(provider);
+    } catch (error) {
+      if (isAiBusy(error)) {
+        lastBusy = error;
+        // A shed costs no token and no network, so the remaining attempts of
+        // this provider shed just as cheaply on their turn instead of being
+        // skipped explicitly — the loop lands on the next provider naturally.
+        continue;
+      }
+      throw error;
+    }
+    // Counted here, not before admission: `attempts` means *provider calls
+    // actually made*, so "sheds > 0 with attempts flat" still reads as "we
+    // refused on purpose" at 2am rather than as work that never happened.
+    aiTelemetry.attempts += 1;
+
+    try {
+      const response = await withTimeout(
+        providerCallbacks[provider](model, systemPrompt, userInput, options),
+        Math.min(PROVIDER_TIMEOUT_MS, remaining),
+      );
+      aiTelemetry.lastProvider = provider;
+      aiTelemetry.lastModel = model;
+      admission.settle("success");
+      return response;
+    } catch (error) {
+      lastError = error;
+      // Classify immediately rather than at the bottom: a 4xx is the provider
+      // declining a request we sent badly, and it must not be allowed to reach
+      // that provider's breaker. 429 is the exception — that one genuinely is
+      // the provider under load, and it is the failure mode this module exists
+      // for.
+      admission.settle(
+        statusOf(error) !== undefined &&
+          isCallerError(statusOf(error) as number)
+          ? "caller-error"
+          : "provider-failure",
+      );
+
+      // A malformed request will not fare better on another provider; give up
+      // the whole ladder rather than hand a bad prompt to Groq as well.
+      if (!isRetryable(error)) break;
+      // Every model of every provider tried and failed within the budget.
+      if (index === attempts.length - 1) break;
+
+      aiTelemetry.retries += 1;
+      // Jitter matters here: many students hit the same per-project ceiling at
+      // the same moment, and fixed backoff would have them all retry in
+      // lockstep and re-trip the 429 immediately.
+      //
+      // No delay when the NEXT attempt uses a DIFFERENT model: a busy model is
+      // not a rate limit on us, so backing off would waste wall clock we do not
+      // have. Back off only when we are retrying the same model.
+      const sameModel = attempts[index + 1]?.model === model;
+      const delay = sameModel
+        ? RETRY_BASE_DELAY_MS * 2 ** index + Math.random() * 250
+        : 0;
+      if (delay)
+        await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
+    }
   }
+
+  // Every provider refused without a single attempt reaching them: that is the
+  // honest "busy, try again in N seconds", and it must NOT become the
+  // deterministic fallback (degraded() re-throws AiBusyError for the same
+  // reason). `lastError` is set on the "budget exhausted" break above, so only
+  // rethrow the refusal when no provider was even reached.
+  if (isAiBusy(lastBusy) && lastError === undefined) throw lastBusy;
 
   const status = statusOf(lastError);
   if (status === 429) aiTelemetry.rateLimited += 1;
@@ -1033,9 +1141,116 @@ async function ask(
     lastError.message.includes("timed out")
   )
     aiTelemetry.timeouts += 1;
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Gemini request failed");
+  throw lastError instanceof Error ? lastError : new Error("AI request failed");
+}
+
+/** One Gemini attempt: the SDK call stripped out of the ladder so another
+ *  provider can sit beside it. */
+async function geminiGenerate(
+  model: string,
+  systemPrompt: string,
+  userInput: string,
+  options: {
+    schema?: Record<string, unknown>;
+    text?: boolean;
+  },
+): Promise<string> {
+  const response = await genAI.models.generateContent({
+    model,
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
+      },
+    ],
+    config: options.schema
+      ? {
+          responseMimeType: "application/json",
+          temperature: 0.4,
+          // `responseJsonSchema` takes a plain JSON Schema object and is
+          // the form the SDK recommends when `response_schema` is being
+          // picky. Enforcing the shape at the provider keeps a graded
+          // answer from degrading into "valid JSON, wrong structure" —
+          // the only failure this path cannot recover from cheaply.
+          responseJsonSchema: options.schema,
+        }
+      : {
+          // Transcription: the model copies what it sees, so the reply
+          // is plain text and the temperature is low — there is nothing
+          // to invent and a paraphrase would only be harder to parse.
+          responseMimeType: options.text ? "text/plain" : "application/json",
+          temperature: options.text ? 0.2 : 0.4,
+        },
+  });
+  return response.text ?? "";
+}
+
+/**
+ * One Groq attempt. A provider with a different contract, so instead of an SDK
+ * it is one POST to the OpenAI-compatible endpoint — the exact request shape
+ * Groq documents, with the same low temperature philosophy on transcriptions.
+ *
+ * JSON mode is used for every non-transcription call because every one of those
+ * prompts already demands "STRICT JSON", which is also what Groq's
+ * `json_object` mode requires; `text` calls skip it so a transcription is never
+ * wrapped in JSON the parser would have to fish out.
+ */
+async function groqGenerate(
+  model: string,
+  systemPrompt: string,
+  userInput: string,
+  options: {
+    schema?: Record<string, unknown>;
+    text?: boolean;
+  },
+): Promise<string> {
+  const wantsJson = !options.text;
+  const response = await fetch(GROQ_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userInput },
+      ],
+      temperature: options.text ? 0.2 : 0.4,
+      max_tokens: wantsJson ? 4096 : 16_384,
+      ...(wantsJson ? { response_format: { type: "json_object" } } : {}),
+    }),
+  });
+
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    // An empty or non-JSON body is still a failure worth reporting below.
+  }
+
+  if (!response.ok) {
+    const message = (data as { error?: { message?: string } } | null)?.error
+      ?.message;
+    // Attach the HTTP status exactly like the Gemini SDK's `ApiError` does, so
+    // `statusOf`/`isRetryable` classify Groq failures with no provider-specific
+    // branches.
+    const err = new Error(
+      message ?? `Groq request failed (${response.status})`,
+    ) as Error & {
+      status: number;
+    };
+    err.status = response.status;
+    throw err;
+  }
+
+  const content = (
+    data as {
+      choices?: Array<{ message?: { content?: string } }>;
+    } | null
+  )?.choices?.[0]?.message?.content;
+  return content ?? "";
 }
 
 function extractItems(raw: string): ConceptChecklistItem[] | null {
@@ -1411,7 +1626,7 @@ function degraded<T>(operation: string, error: unknown, fallback: () => T): T {
 export const ai: AiService = {
   async extractConcepts(rawText: string): Promise<ConceptChecklistItem[]> {
     const fallback = () => fallbackExtract(rawText);
-    if (!isAiAvailable()) return fallback();
+    if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         EXTRACT_SYSTEM,
@@ -1428,7 +1643,7 @@ export const ai: AiService = {
     concepts: ConceptChecklistItem[],
   ): Promise<GapAnalysis> {
     const fallback = () => fallbackGrade(transcript, concepts);
-    if (!isAiAvailable()) return fallback();
+    if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         GRADE_SYSTEM,
@@ -1446,7 +1661,7 @@ export const ai: AiService = {
     language: ContentLanguage = "en",
   ): Promise<MicroLesson> {
     const fallback = () => ({ text: fallbackLesson(gaps, language) });
-    if (!isAiAvailable()) return fallback();
+    if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         LESSON_SYSTEM + outputInstruction(language),
@@ -1469,7 +1684,7 @@ export const ai: AiService = {
   ): Promise<StudyPlan> {
     const fallback = () => fallbackPlan(gaps, concepts);
     if (options.skipAi) return fallback();
-    if (!isAiAvailable()) return fallback();
+    if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         PLAN_SYSTEM + outputInstruction(language),
@@ -1504,7 +1719,7 @@ export const ai: AiService = {
     const fallback = (): GuideSection =>
       fallbackSection(conceptText, chapterText, language);
     if (options.skipAi) return fallback();
-    if (!isAiAvailable()) return fallback();
+    if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         SECTION_SYSTEM + outputInstruction(language),
@@ -1539,7 +1754,7 @@ export const ai: AiService = {
     language: ContentLanguage = "en",
   ): Promise<RetestQuestion[]> {
     const fallback = () => fallbackQuestions(gaps, language);
-    if (!isAiAvailable()) return fallback();
+    if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         RETEST_SYSTEM + outputInstruction(language),
@@ -1564,7 +1779,7 @@ export const ai: AiService = {
     // no contents" for that is a sentence they cannot act on. The reason is
     // handed to the screen instead, so a deployment missing its key shows as
     // exactly what it is rather than as a chapter list that keeps guessing.
-    if (!isAiAvailable()) {
+    if (!anyAiAvailable()) {
       return {
         text: "",
         refused:
@@ -1584,7 +1799,7 @@ export const ai: AiService = {
   async parseTitle(pages: ContentsPage[]): Promise<TitleParse> {
     const none: TitleParse = {};
     if (pages.length === 0) return none;
-    if (!isAiAvailable()) {
+    if (!anyAiAvailable()) {
       return {
         refused:
           "The AI reader is not configured on this server, so it was never asked.",

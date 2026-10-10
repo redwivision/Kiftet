@@ -7,7 +7,13 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { buildAttemptOrder, DEFAULT_MODEL, MODEL_FALLBACKS } from "./gemini";
+import {
+  buildAttemptOrder,
+  buildProviderAttempts,
+  DEFAULT_GROQ_MODEL,
+  DEFAULT_MODEL,
+  MODEL_FALLBACKS,
+} from "./gemini";
 
 describe("model selection", () => {
   test("leads with the model that measured working", () => {
@@ -69,5 +75,42 @@ describe("buildAttemptOrder", () => {
   test("returns nothing for an empty model list", () => {
     // Guards the destructuring: an empty list must not yield [undefined].
     expect(buildAttemptOrder([], 4)).toEqual([]);
+  });
+});
+
+describe("buildProviderAttempts", () => {
+  test("gemini-only config yields only gemini attempts, led by the measured model", () => {
+    const list = buildProviderAttempts(true, false);
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((a) => a.provider === "gemini")).toBe(true);
+    expect(list[0]?.model).toBe(DEFAULT_MODEL);
+  });
+
+  test("groq-only config still has somewhere real to go", () => {
+    // A deployment that never got a Gemini key is not dead — it is a
+    // groq-backed install, and it must behave like one rather than like a
+    // fallback chain that forgot it has a provider.
+    const list = buildProviderAttempts(false, true);
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((a) => a.provider === "groq")).toBe(true);
+    expect(list[0]?.model).toBe(DEFAULT_GROQ_MODEL);
+  });
+
+  test("with both wired, gemini leads and groq follows at its own count", () => {
+    const list = buildProviderAttempts(true, true);
+    expect(list[0]?.provider).toBe("gemini");
+    const geminiCount = list.filter((a) => a.provider === "gemini").length;
+    const groqCount = list.filter((a) => a.provider === "groq").length;
+    expect(geminiCount).toBeGreaterThan(0);
+    expect(groqCount).toBeGreaterThan(0);
+    expect(list).toHaveLength(geminiCount + groqCount);
+    // Gemini's whole ladder precedes the first groq attempt.
+    expect(
+      list.slice(0, geminiCount).every((a) => a.provider === "gemini"),
+    ).toBe(true);
+  });
+
+  test("neither provider configured yields nothing to try", () => {
+    expect(buildProviderAttempts(false, false)).toEqual([]);
   });
 });

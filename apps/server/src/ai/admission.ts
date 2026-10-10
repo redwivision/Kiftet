@@ -3,32 +3,49 @@ import { env } from "../env.server";
 /**
  * Global admission control for the AI seam.
  *
- * Three mechanisms, because they answer three separate questions, and
- * confusing them is what produces an outage that looks like a bug:
+ * One gate per provider, because the thing being protected is a *per-provider*
+ * free-tier quota: Gemini and Groq draw on two different pools, so admitting
+ * them against one bucket would let a starved Gemini take a healthy Groq
+ * offline with it — the exact failure this module exists to prevent.
  *
- *  1. **A leaky bucket** — how many Gemini calls this process may make in
- *     total. This is the only capacity we actually have. The Gemini free tier
- *     is per *project* and shared by every student, so N students at 8 req/min
- *     each is not 8N of capacity, it is a shared pool that empties. Admitting
- *     work we cannot serve is what manufactures 429s, and a 429 inside
- *     `askJson` costs a full retry budget before it becomes a fallback.
+ * Each provider's gate has two mechanisms of its own, and there is one shared
+ * third, because they answer three separate questions and confusing them is
+ * what produces an outage that looks like a bug:
  *
- *  2. **A concurrency cap** — how many admitted calls may be in flight at
- *     once. Bounds memory and stops the retry ladder from multiplying load
- *     exactly when the provider is least able to absorb it.
+ *  1. **A leaky bucket** — how many calls this process may make to THAT
+ *     provider in total. This and the free tier are the only capacity we
+ *     actually have: the tier is per *project* and shared by every student,
+ *     so N students at 8 req/min each is not 8N of capacity, it is a shared
+ *     pool that empties. Admitting work we cannot serve is what manufactures
+ *     429s, and a 429 inside `ask` costs a full retry budget before it
+ *     becomes a fallback (or a handover to the second provider).
  *
- *  3. **A circuit breaker** — when the provider is persistently failing, stop
- *     calling it and refuse fast. Without this, a Gemini 429 storm holds every
- *     request open for `GEMINI_TOTAL_BUDGET_MS`; enough of those and the
- *     process is doing nothing but waiting. That is the self-inflicted outage:
- *     a provider blip becomes a total site outage.
+ *  2. **A concurrency cap** — shared, not one pool per provider: a real
+ *     student request occupies one slot whether Gemini or Groq ends up
+ *     answering it. Bounds memory and stops the retry ladder from multiplying
+ *     load precisely when a provider is least able to absorb it.
  *
- * Every refusal raises `AiBusyError` rather than falling through to the
- * deterministic fallback. That distinction is the whole point: a fallback is a
- * *worse answer* for one student, a refusal is an *honest* answer for everyone,
- * and silently substituting one for the other is what shipped before
- * (see docs/howItWorks/roadmap.md, 2026-09-27).
+ *  3. **A circuit breaker** — per provider. When a provider is persistently
+ *     failing, stop calling it and hand the ladder to the other one. Without
+ *     this, a Gemini quota storm holds every request open for the whole retry
+ *     budget; enough of those and the process is doing nothing but waiting for
+ *     a provider that has already said no. The per-provider half of the design
+ *     is what lets Gemini collapse without taking Groq with it.
+ *
+ * Every refusal raises `AiBusyError`. That is deliberate and it is the whole
+ * point of the distinction from falling through to the deterministic fallback:
+ * a fallback is a *worse answer* for one student, a refusal is an *honest*
+ * answer for everyone, and silently substituting one for the other is what
+ * shipped before (see docs/howItWorks/roadmap.md, 2026-09-27). The ladder in
+ * `ask` catches a refusal for ITS provider and moves to the next one; only
+ * when every configured provider refuses does the refusal reach the student.
  */
+
+/** The AI providers the app can gate. Adding one is a decision about
+ *  contract, capacity and language, so the union is closed on purpose. */
+export type AiProvider = "gemini" | "groq";
+
+export const AI_PROVIDERS: readonly AiProvider[] = ["gemini", "groq"];
 
 /** Why admission refused. Carried on the error so the HTTP layer can pick an
  *  honest status and so telemetry can separate "we shed load on purpose"
@@ -49,8 +66,8 @@ export function isAiBusy(error: unknown): error is AiBusyError {
   return error instanceof AiBusyError;
 }
 
-// Every one of these ships a default in .env.schema, so the `??` branches are
-// unreachable in a correctly configured process. They exist because the
+// Every tweakable number ships a default in .env.schema, so the `??` branches
+// are unreachable in a correctly configured process. They exist because the
 // generated types mark the vars optional, and because a limit silently becoming
 // NaN or 0 would be a far worse failure than a slightly wrong default: a zero
 // bucket sheds 100% of AI traffic with no obvious cause.
@@ -60,12 +77,19 @@ function positive(value: number | undefined, fallback: number): number {
     : fallback;
 }
 
-const PER_MINUTE = positive(env.AI_GLOBAL_PER_MINUTE, 5);
+// The MAX_CONCURRENT / failures / cooldown knobs are shared across providers;
+// only the per-minute allowance is per provider, which is the definition of
+// their separation. Tune them in .env.schema, not here.
 const MAX_CONCURRENT = positive(env.AI_MAX_CONCURRENT, 4);
 const CIRCUIT_FAILURES = positive(env.AI_CIRCUIT_FAILURES, 6);
 const CIRCUIT_COOLDOWN_MS = positive(env.AI_CIRCUIT_COOLDOWN_MS, 30_000);
 
-// ── 1. Leaky bucket ───────────────────────────────────────────────────
+const PER_MINUTE: Record<AiProvider, number> = {
+  gemini: positive(env.AI_GEMINI_PER_MINUTE, 5),
+  groq: positive(env.AI_GROQ_PER_MINUTE, 20),
+};
+
+// ── 1. Leaky bucket (per provider) ────────────────────────────────────
 //
 // Capacity equals one minute of allowance, because "a whole minute's worth
 // arriving at once" is the realistic burst shape (a Telegram link hits, or a
@@ -78,41 +102,73 @@ const CIRCUIT_COOLDOWN_MS = positive(env.AI_CIRCUIT_COOLDOWN_MS, 30_000);
 // Backdated to `lastRefillAt` on first use so a process that boots and sits
 // idle for an hour does not wake up with a full bucket plus an hour of credit.
 
-let tokens = PER_MINUTE;
-let lastRefillAt = Date.now();
+type Gate = {
+  perMinute: number;
+  tokens: number;
+  lastRefillAt: number;
+  consecutiveFailures: number;
+  openUntil: number;
+  admitted: number;
+  shedBusy: number;
+  shedSaturated: number;
+  shedCircuit: number;
+};
 
-function refill(now: number): void {
-  if (now === lastRefillAt) return;
-  const elapsedMinutes = (now - lastRefillAt) / 60_000;
+function createGate(perMinute: number): Gate {
+  const now = Date.now();
+  return {
+    perMinute,
+    tokens: perMinute,
+    lastRefillAt: now,
+    consecutiveFailures: 0,
+    openUntil: 0,
+    admitted: 0,
+    shedBusy: 0,
+    shedSaturated: 0,
+    shedCircuit: 0,
+  };
+}
+
+const gates: Record<AiProvider, Gate> = {
+  gemini: createGate(PER_MINUTE.gemini),
+  groq: createGate(PER_MINUTE.groq),
+};
+
+function refill(gate: Gate, now: number): void {
+  if (now === gate.lastRefillAt) return;
+  const elapsedMinutes = (now - gate.lastRefillAt) / 60_000;
   if (elapsedMinutes <= 0) return;
-  tokens = Math.min(PER_MINUTE, tokens + elapsedMinutes * PER_MINUTE);
-  lastRefillAt = now;
+  gate.tokens = Math.min(
+    gate.perMinute,
+    gate.tokens + elapsedMinutes * gate.perMinute,
+  );
+  gate.lastRefillAt = now;
 }
 
-function tokensAvailable(now: number): number {
-  refill(now);
-  return tokens;
+function tokensAvailable(gate: Gate, now: number): number {
+  refill(gate, now);
+  return gate.tokens;
 }
 
-function takeToken(now: number): boolean {
-  if (tokensAvailable(now) < 1) return false;
-  tokens -= 1;
+function takeToken(gate: Gate, now: number): boolean {
+  if (tokensAvailable(gate, now) < 1) return false;
+  gate.tokens -= 1;
   return true;
 }
 
 /** Seconds until the bucket holds a whole token again — the honest answer to
  *  "try again in…?" rather than a fixed "in a minute". */
-function secondsUntilToken(now: number): number {
-  refill(now);
-  const missing = 1 - tokens;
+function secondsUntilToken(gate: Gate, now: number): number {
+  refill(gate, now);
+  const missing = 1 - gate.tokens;
   if (missing <= 0) return 0;
-  return Math.max(1, Math.ceil((missing / PER_MINUTE) * 60));
+  return Math.max(1, Math.ceil((missing / gate.perMinute) * 60));
 }
 
-// ── 2. Concurrency cap ────────────────────────────────────────────────
+// ── 2. Concurrency cap (shared) ───────────────────────────────────────
 //
 // A counting semaphore with FIFO waiters. Not a timeout-bounded queue on
-// purpose: waiting is only worthwhile if a slot is genuinely coming, and the
+// purpose: waiting is only worthwhile if a slot is genuinely coming, and a
 // bucket above is what guarantees one arrives. Past that, waiting just holds a
 // request open — so a waiter that cannot be served within WAIT_MS is released
 // with the same honest refusal.
@@ -152,7 +208,7 @@ function acquireSlot(waitMs: number): Promise<boolean> {
   });
 }
 
-// ── 3. Circuit breaker ────────────────────────────────────────────────
+// ── 3. Circuit breaker (per provider) ─────────────────────────────────
 //
 // `consecutiveFailures` counts *transient* provider failures only — a
 // non-retryable 400 is the request's problem, not the provider's, and must
@@ -163,74 +219,88 @@ function acquireSlot(waitMs: number): Promise<boolean> {
 // the provider occasionally and stay healthy" and "every student gets one
 // failed call per cooldown window forever".
 
-let consecutiveFailures = 0;
-let openUntil = 0;
-
-function circuitOpen(now: number): boolean {
-  return now < openUntil;
+function circuitOpen(gate: Gate, now: number): boolean {
+  return now < gate.openUntil;
 }
 
-function secondsUntilCircuitCloses(now: number): number {
-  return Math.max(1, Math.ceil((openUntil - now) / 1000));
+function secondsUntilCircuitCloses(gate: Gate, now: number): number {
+  return Math.max(1, Math.ceil((gate.openUntil - now) / 1000));
 }
 
-function recordSuccess(): void {
-  consecutiveFailures = 0;
-  openUntil = 0;
+function recordSuccess(gate: Gate): void {
+  gate.consecutiveFailures = 0;
+  gate.openUntil = 0;
 }
 
-function recordFailure(now: number): void {
-  consecutiveFailures += 1;
-  if (consecutiveFailures < CIRCUIT_FAILURES) return;
-  openUntil = now + CIRCUIT_COOLDOWN_MS;
+function recordFailure(gate: Gate, now: number): void {
+  gate.consecutiveFailures += 1;
+  if (gate.consecutiveFailures < CIRCUIT_FAILURES) return;
+  gate.openUntil = now + CIRCUIT_COOLDOWN_MS;
 }
 
 // ── Telemetry ─────────────────────────────────────────────────────────
 //
-// Merged into the existing AI counters rather than kept separate, because the
-// question an operator actually asks at 2am is one question: "are we serving
-// real generations, and if not, who stopped us?" Splitting it across two
-// endpoints makes that a join.
-const admissionTelemetry = {
-  admitted: 0,
-  /** Refused because the global bucket was empty — the honest ceiling. */
-  shedBusy: 0,
-  /** Refused because every slot was taken and none freed in time. */
-  shedSaturated: 0,
-  /** Refused because the circuit was open. */
-  shedCircuit: 0,
-};
+// One snapshot per provider, merged by the caller rather than kept separate,
+// because the question an operator actually asks at 2am is one question: "are
+// we serving real generations, and if not, who stopped us?" Splitting it
+// across endpoints makes that a join.
 
-export function admissionSnapshot() {
+/** One snapshot per provider, so "who stopped us?" stays a per-provider
+ *  story and both halves show up in the merged telemetry route. */
+function providerSnapshot(provider: AiProvider) {
+  const gate = gates[provider];
   const now = Date.now();
+  const isOpen = circuitOpen(gate, now);
   return {
-    perMinuteLimit: PER_MINUTE,
+    perMinuteLimit: gate.perMinute,
     maxConcurrent: MAX_CONCURRENT,
-    tokensAvailable: Number(tokensAvailable(now).toFixed(2)),
+    tokensAvailable: Number(tokensAvailable(gate, now).toFixed(2)),
     inFlight,
     queued: waiters.length,
-    circuitOpen: circuitOpen(now),
-    circuitOpensUntil: circuitOpen(now)
-      ? new Date(openUntil).toISOString()
-      : null,
-    consecutiveFailures,
-    ...admissionTelemetry,
+    circuitOpen: isOpen,
+    circuitOpensUntil: isOpen ? new Date(gate.openUntil).toISOString() : null,
+    consecutiveFailures: gate.consecutiveFailures,
+    /** Admitted because the bucket had a token and a slot was free. */
+    admitted: gate.admitted,
+    /** Refused because the bucket was empty — the honest ceiling. */
+    shedBusy: gate.shedBusy,
+    /** Refused because every slot was taken and none freed in time. */
+    shedSaturated: gate.shedSaturated,
+    /** Refused because THAT provider's circuit was open. */
+    shedCircuit: gate.shedCircuit,
   };
 }
 
-/** Test seam: reset module state so a case can drive the bucket and the
- *  breaker from a known starting point. */
+/** Defaults to Gemini so operators of a single-provider install read the same
+ *  shape they always did; Groq is one arg away. */
+export function admissionSnapshot(provider: AiProvider = "gemini") {
+  return providerSnapshot(provider);
+}
+
+/** The full picture for the /ai/telemetry route: one snapshot per provider. */
+export function allAdmissionSnapshots() {
+  return {
+    gemini: providerSnapshot("gemini"),
+    groq: providerSnapshot("groq"),
+  };
+}
+
+/** Test seam: reset every gate's state so a case can drive a bucket and a
+ *  breaker from a known starting point, on any provider. */
 export function __resetAdmissionForTests(): void {
-  tokens = PER_MINUTE;
-  lastRefillAt = Date.now();
+  for (const provider of AI_PROVIDERS) {
+    const gate = gates[provider];
+    gate.tokens = gate.perMinute;
+    gate.lastRefillAt = Date.now();
+    gate.consecutiveFailures = 0;
+    gate.openUntil = 0;
+    gate.admitted = 0;
+    gate.shedBusy = 0;
+    gate.shedSaturated = 0;
+    gate.shedCircuit = 0;
+  }
   inFlight = 0;
   waiters.length = 0;
-  consecutiveFailures = 0;
-  openUntil = 0;
-  admissionTelemetry.admitted = 0;
-  admissionTelemetry.shedBusy = 0;
-  admissionTelemetry.shedSaturated = 0;
-  admissionTelemetry.shedCircuit = 0;
 }
 
 // ── The gate ──────────────────────────────────────────────────────────
@@ -257,43 +327,47 @@ export type AiOutcome =
   | "caller-error";
 
 /**
- * Admit one AI call, or refuse it.
+ * Admit one call to one provider, or refuse it.
  *
- * Order matters: the circuit is checked before the bucket so an open circuit
- * costs no tokens, and the bucket before the semaphore so we never hold a slot
- * we have no quota to use. The semaphore is only acquired once the token is
- * spent, so the two limits can't deadlock against each other.
+ * Order matters: the provider's circuit is checked before its bucket so an
+ * open circuit costs no tokens, and the bucket before the semaphore so we
+ * never hold a slot we have no quota to use. The semaphore is only acquired
+ * once the token is spent, so the two limits can't deadlock against each
+ * other.
  */
-export async function admitAiCall(): Promise<AiAdmission> {
+export async function admitAiCall(
+  provider: AiProvider = "gemini",
+): Promise<AiAdmission> {
+  const gate = gates[provider];
   const now = Date.now();
 
-  if (circuitOpen(now)) {
-    admissionTelemetry.shedCircuit += 1;
-    throw new AiBusyError("circuit-open", secondsUntilCircuitCloses(now));
+  if (circuitOpen(gate, now)) {
+    gate.shedCircuit += 1;
+    throw new AiBusyError("circuit-open", secondsUntilCircuitCloses(gate, now));
   }
 
-  if (!takeToken(now)) {
-    admissionTelemetry.shedBusy += 1;
-    throw new AiBusyError("provider-busy", secondsUntilToken(now));
+  if (!takeToken(gate, now)) {
+    gate.shedBusy += 1;
+    throw new AiBusyError("provider-busy", secondsUntilToken(gate, now));
   }
 
   const gotSlot = await acquireSlot(WAIT_MS);
   if (!gotSlot) {
-    admissionTelemetry.shedSaturated += 1;
+    gate.shedSaturated += 1;
     throw new AiBusyError("saturated", 2);
   }
 
-  admissionTelemetry.admitted += 1;
+  gate.admitted += 1;
 
   return {
     settle(outcome) {
       releaseSlot();
-      if (outcome === "success") recordSuccess();
+      if (outcome === "success") recordSuccess(gate);
       // `caller-error` is deliberately inert: it neither opens the breaker nor
       // clears the streak. A request we sent badly says nothing about whether
       // the next request will work, and resetting on it would let a single
       // 400 close a circuit that was correctly open.
-      else if (outcome === "provider-failure") recordFailure(Date.now());
+      else if (outcome === "provider-failure") recordFailure(gate, Date.now());
     },
   };
 }

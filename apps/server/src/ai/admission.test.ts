@@ -225,3 +225,47 @@ describe("admissionSnapshot", () => {
     expect(snap.tokensAvailable).toBe(PER_MINUTE);
   });
 });
+
+describe("per-provider gates", () => {
+  test("each provider keeps its own bucket", async () => {
+    // Spend gemini's whole allowance…
+    for (let i = 0; i < PER_MINUTE; i += 1) {
+      (await admitAiCall()).settle("success");
+    }
+    await expectRefusal(admitAiCall());
+
+    // …and groq still has its own untouched allowance to draw on. This is the
+    // property the whole two-provider design exists for: a starved gemini
+    // must not take a healthy groq offline with it.
+    const groqLease = await admitAiCall("groq");
+    groqLease.settle("success");
+    expect(admissionSnapshot("groq").admitted).toBe(1);
+    expect(admissionSnapshot("groq").shedBusy).toBe(0);
+  });
+
+  test("a provider's breaker opens without taking the other offline", async () => {
+    for (let i = 0; i < 6; i += 1) {
+      if (i > 0) advance(12_000);
+      (await admitAiCall("groq")).settle("provider-failure");
+    }
+    expect(admissionSnapshot("groq").circuitOpen).toBe(true);
+    expect(admissionSnapshot("gemini").circuitOpen).toBe(false);
+    // While groq is broken, gemini still serves without shedding.
+    const lease = await admitAiCall();
+    lease.settle("success");
+  });
+
+  test("a reset clears every provider's gate", async () => {
+    (await admitAiCall("groq")).settle("provider-failure");
+    (await admitAiCall("groq")).settle("success");
+    __resetAdmissionForTests();
+    for (const provider of ["gemini", "groq"] as const) {
+      const snap = admissionSnapshot(provider);
+      expect(snap.admitted).toBe(0);
+      expect(snap.shedBusy).toBe(0);
+      expect(snap.circuitOpen).toBe(false);
+      // A reset refunds the provider's whole bucket.
+      expect(snap.tokensAvailable).toBe(snap.perMinuteLimit);
+    }
+  });
+});
