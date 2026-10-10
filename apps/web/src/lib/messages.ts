@@ -663,6 +663,9 @@ export const en = {
     "Kiftet can't promise a pass, and nobody honestly can. What it shows is a before and after on the ideas you studied, so you know what you fixed and what's still missing.",
   "faq-beta-note":
     "Kiftet is in beta — these answers describe how it works today, and some will change by the official launch.",
+  "faq-search-placeholder": "Search the questions",
+  "faq-search-empty":
+    "Nothing matched that. Try another word, or ask us on the channel.",
 
   // ── Launch waitlist ────────────────────────────────────────
   // The reward is stated up front, with the two things a person has to do
@@ -1475,6 +1478,8 @@ export const am: Record<MessageKey, string> = {
     "ኪፍተት ማለፍን ተስፋ ሊሰጥ አይችልም፣ በእውነት ማንም አይችልም። የሚያሳየው ባጠናኸው ሃሳቦች ላይ ከዚህ በፊትና ከዚህ በኋላን ነው፣ የጠገንከውንና አሁንም የጎደለውን እንድታውቅ።",
   "faq-beta-note":
     "ኪፍተት አሁን በቤታ ውስጥ ነው — እነዚህ መልሶች ዛሬ እንዴት እንደሚሰራ ይገልጻሉ፤ አንዳንዶቹ በይፋዊ ምረቃ ጊዜ ይለወጣሉ።",
+  "faq-search-placeholder": "ጥያቄዎቹን ፈልግ",
+  "faq-search-empty": "የሚመሳሰል አልተገኘም። ሌላ ቃል ሞክር፣ ወይም በቻናሉ ላይ ጠይቀን።",
 
   // ── Launch waitlist ────────────────────────────────────────
   "waitlist-chip": "የመስተጀት ዝርዝር",

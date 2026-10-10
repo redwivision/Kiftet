@@ -1,6 +1,13 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
-import { Mic, RefreshCcw, ScanSearch, Volume2 } from "lucide-react";
+import {
+  CircleAlert,
+  Mic,
+  RefreshCcw,
+  ScanSearch,
+  Search,
+  Volume2,
+} from "lucide-react";
 import {
   type CSSProperties,
   type ReactNode,
@@ -134,6 +141,16 @@ export default function Home() {
   const cta = useOnScreen<HTMLElement>();
   const { t } = useLanguage();
   const { launch, pending, failure } = useDemoLaunch();
+  const [faqQuery, setFaqQuery] = useState("");
+  const faqTerm = faqQuery.trim().toLowerCase();
+  // Filter over both the question and its answer, so a student can search for
+  // the word they actually remember ("offline", "Amharic") and still land on
+  // the question that answers it — not only one that matches a title.
+  const faqItems = faqTerm
+    ? FAQ.filter(({ q, a }) =>
+        `${t(q)} ${t(a)}`.toLowerCase().includes(faqTerm),
+      )
+    : FAQ;
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
@@ -540,30 +557,58 @@ export default function Home() {
           >
             {t("faq-title")}
           </h2>
-          <p
-            className="kft-rise text-muted-foreground text-sm leading-6"
+          <div
+            role="note"
+            className="kft-rise flex items-start gap-2.5 rounded-xl border border-rust/40 bg-rust/[0.08] px-3.5 py-2.5"
             style={{ "--kft-i": "90ms" } as CSSProperties}
           >
-            {t("faq-beta-note")}
-          </p>
+            <CircleAlert
+              className="mt-0.5 size-4 shrink-0 text-rust"
+              aria-hidden="true"
+            />
+            <p className="font-medium text-rust text-sm leading-6">
+              {t("faq-beta-note")}
+            </p>
+          </div>
         </div>
 
-        <dl className="grid gap-4 sm:grid-cols-2">
-          {FAQ.map(({ q, a }, i) => (
-            <div
-              key={q}
-              className="surface kft-rise p-5"
-              style={{ "--kft-i": `${120 + i * 60}ms` } as CSSProperties}
-            >
-              <dt className="font-medium text-[0.95rem] text-foreground leading-6">
-                {t(q)}
-              </dt>
-              <dd className="mt-2 text-muted-foreground text-sm leading-6">
-                {t(a)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <div className="relative mb-6 max-w-md">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={faqQuery}
+            onChange={(e) => setFaqQuery(e.target.value)}
+            placeholder={t("faq-search-placeholder")}
+            aria-label={t("faq-search-placeholder")}
+            className="w-full rounded-full border border-border bg-background/60 py-2.5 pr-4 pl-10 text-foreground text-sm outline-none transition-colors duration-200 placeholder:text-muted-foreground focus-visible:border-gold/50 focus-visible:ring-2 focus-visible:ring-gold/20"
+          />
+        </div>
+
+        {faqItems.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            {t("faq-search-empty")}
+          </p>
+        ) : (
+          <dl className="grid gap-4 sm:grid-cols-2">
+            {faqItems.map(({ q, a }, i) => (
+              <div
+                key={q}
+                className={cn("surface p-5", !faqTerm && "kft-rise")}
+                style={{ "--kft-i": `${120 + i * 60}ms` } as CSSProperties}
+              >
+                <dt className="font-medium text-[0.95rem] text-foreground leading-6">
+                  {t(q)}
+                </dt>
+                <dd className="mt-2 text-muted-foreground text-sm leading-6">
+                  {t(a)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </section>
 
       {/* ── CTA ───────────────────────────────────────────────── */}
