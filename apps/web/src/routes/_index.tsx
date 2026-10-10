@@ -76,13 +76,21 @@ const PASS_RATES = [
    survives the scroll to the CTA is the one that stops the click. */
 const FAQ = [
   { q: "faq-what-q", a: "faq-what-a" },
-  { q: "faq-free-q", a: "faq-free-a" },
-  { q: "faq-install-q", a: "faq-install-a" },
-  { q: "faq-data-q", a: "faq-data-a" },
-  { q: "faq-phone-q", a: "faq-phone-a" },
-  { q: "faq-instructor-q", a: "faq-instructor-a" },
-  { q: "faq-waitlist-q", a: "faq-waitlist-a" },
+  { q: "faq-speak-q", a: "faq-speak-a" },
   { q: "faq-syllabus-q", a: "faq-syllabus-a" },
+  { q: "faq-amharic-q", a: "faq-amharic-a" },
+  { q: "faq-offline-q", a: "faq-offline-a" },
+  { q: "faq-different-q", a: "faq-different-a" },
+  { q: "faq-aiwrong-q", a: "faq-aiwrong-a" },
+  { q: "faq-data-q", a: "faq-data-a" },
+  { q: "faq-voice-q", a: "faq-voice-a" },
+  { q: "faq-textbook-q", a: "faq-textbook-a" },
+  { q: "faq-phone-q", a: "faq-phone-a" },
+  { q: "faq-install-q", a: "faq-install-a" },
+  { q: "faq-free-q", a: "faq-free-a" },
+  { q: "faq-instructor-q", a: "faq-instructor-a" },
+  { q: "faq-exam-q", a: "faq-exam-a" },
+  { q: "faq-waitlist-q", a: "faq-waitlist-a" },
 ] as const satisfies readonly { q: MessageKey; a: MessageKey }[];
 
 /* Reveals a string word-by-word: each word slides up and straightens out of
@@ -457,10 +465,10 @@ export default function Home() {
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium text-[0.78rem] text-gold">
-                Physics · Grade 11
+                {t("byob-card-subject")}
               </p>
               <h3 className="truncate font-display font-semibold text-xl tracking-tight">
-                Waves and Optics
+                {t("byob-card-unit")}
               </h3>
             </div>
             <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90">
@@ -468,16 +476,18 @@ export default function Home() {
             </span>
           </div>
           <ul className="divide-y divide-border/60">
-            {[
-              ["Sound Waves", "closed"],
-              ["Wave Properties", "closed"],
-              ["Reflection and Refraction", "open"],
-              ["Lenses and Mirrors", "open"],
-              ["Optical Instruments", "open"],
-              ["Light and Colour", "open"],
-            ].map(([chapter, state], i) => (
+            {(
+              [
+                ["byob-card-chapter-1", "closed"],
+                ["byob-card-chapter-2", "closed"],
+                ["byob-card-chapter-3", "open"],
+                ["byob-card-chapter-4", "open"],
+                ["byob-card-chapter-5", "open"],
+                ["byob-card-chapter-6", "open"],
+              ] as const
+            ).map(([chapterKey, state], i) => (
               <li
-                key={chapter}
+                key={chapterKey}
                 className="flex items-center justify-between gap-3 py-2.5"
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -497,7 +507,7 @@ export default function Home() {
                       state === "closed" ? "text-foreground" : "text-fog/60",
                     )}
                   >
-                    {chapter}
+                    {t(chapterKey)}
                   </p>
                 </div>
                 {state === "closed" ? (
@@ -530,6 +540,12 @@ export default function Home() {
           >
             {t("faq-title")}
           </h2>
+          <p
+            className="kft-rise text-muted-foreground text-sm leading-6"
+            style={{ "--kft-i": "90ms" } as CSSProperties}
+          >
+            {t("faq-beta-note")}
+          </p>
         </div>
 
         <dl className="grid gap-4 sm:grid-cols-2">
@@ -665,8 +681,8 @@ function DemoCard() {
  * student than any percentage.
  *
  * Biology 12 on purpose. We do not claim Mathematics or Physics (a spoken
- * explanation cannot show that someone can calculate), so the hero must not
- * quietly contradict that with a Physics screenshot.
+ * explanation cannot show that someone can calculate), so the page stays on
+ * word-based subjects — this checklist and the "Bring your own book" card both.
  */
 function DiagnosisSection() {
   const { t } = useLanguage();

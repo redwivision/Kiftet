@@ -576,6 +576,14 @@ export const en = {
   "preview-on-book": "Preview it on your book",
   "no-pdf":
     "No PDF? Paste the chapter text instead — the loop doesn't care where a chapter begins.",
+  "byob-card-subject": "Biology · Grade 12",
+  "byob-card-unit": "Human Body System",
+  "byob-card-chapter-1": "Nervous System",
+  "byob-card-chapter-2": "Endocrine System",
+  "byob-card-chapter-3": "Circulatory System",
+  "byob-card-chapter-4": "Respiratory System",
+  "byob-card-chapter-5": "Digestive System",
+  "byob-card-chapter-6": "Excretory System",
   chunks: "{n} chunks",
   "study-loop-ready": "Study loop ready",
   "lines-up-next": "lines up next",
@@ -628,7 +636,33 @@ export const en = {
     "Leave your number, join our Telegram group and send one line about what you found — that locks in one month of Kiftet Premium for launch day.",
   "faq-syllabus-q": "Which subjects and grades?",
   "faq-syllabus-a":
-    "It follows the national syllabus and the textbook you actually study from. Upload your own book and every chapter in it becomes its own plan.",
+    "It's built for secondary school (Grades 9–12) and works best with subjects you explain in words — Biology, History, Geography, Civics and languages. Maths, Physics and Chemistry lean on worked problems, so Kiftet can't grade them properly yet. It follows the national syllabus and the textbook you actually study from: upload your own book and every chapter becomes its own plan.",
+  "faq-speak-q": "Do I have to speak out loud?",
+  "faq-speak-a":
+    "No — you can type your answer instead. Speaking is the better test of what you really know, but typing is always there for a quiet room or a microphone that won't work.",
+  "faq-voice-q": "Is my voice recorded or saved?",
+  "faq-voice-a":
+    "Kiftet doesn't save your audio. Your voice goes to our voice service (Voxide) to be turned into text, and we keep that text with your answer. Grading uses an AI service (Gemini, with Groq as a backup), and our servers, the database (Neon) and both AI services sit outside Ethiopia — so your answer text leaves the country. It stays with your study history until you ask us to remove it.",
+  "faq-amharic-q": "Does it work in Amharic?",
+  "faq-amharic-a":
+    "Yes — the interface, the lessons and the questions can all be in አማርኛ or English. Reading a lesson aloud in Amharic needs an Amharic voice on your phone; if your phone doesn't have one, the lesson is still there as text you can read.",
+  "faq-offline-q": "Does it work without internet?",
+  "faq-offline-a":
+    "Partly. If your connection drops mid-session, Kiftet keeps your answer on your phone and grades it once you're back online — it never shows a score it hasn't worked out. Grading itself needs a connection.",
+  "faq-different-q": "How is this different from ChatGPT or past questions?",
+  "faq-different-a":
+    "A chatbot can write a study guide for a whole chapter, and past questions tell you how many you got right. Kiftet tells you which specific ideas you didn't learn — and whether you left them out or got them wrong. Then it teaches only those, and tests you again in different words.",
+  "faq-aiwrong-q": "Can the AI get it wrong?",
+  "faq-aiwrong-a":
+    "Yes. Kiftet uses AI to compare what you said with the chapter's ideas, and AI can misjudge. That's why you see the idea-by-idea list instead of one score, so you can check it against your book. When the AI service is busy, the result is labelled an estimate.",
+  "faq-textbook-q": "Is my textbook uploaded to your servers?",
+  "faq-textbook-a":
+    "Your original file stays on your device, and scanned pages are read on your phone. Only the text of the chapters you import is sent to Kiftet to build your plan, and the book's contents list is saved to your account so you can come back to it. If a page can't be read, Kiftet says so instead of guessing.",
+  "faq-exam-q": "Will it help me pass the exam?",
+  "faq-exam-a":
+    "Kiftet can't promise a pass, and nobody honestly can. What it shows is a before and after on the ideas you studied, so you know what you fixed and what's still missing.",
+  "faq-beta-note":
+    "Kiftet is in beta — these answers describe how it works today, and some will change by the official launch.",
 
   // ── Launch waitlist ────────────────────────────────────────
   // The reward is stated up front, with the two things a person has to do
@@ -1362,6 +1396,14 @@ export const am: Record<MessageKey, string> = {
     "ፋይሉ በመሣሪያህ ላይ ይነበባል። ጽሑፉ ብቻ ነው የሚላከው፣ ምዕራፍ በምዕራፍ — ስለዚህ ሙሉ መጽሐፍ በአንድ ጊዜ ከባድ አፕሎድ አይሆንም። በትምህርት ቤት ኢንተርኔትም ይሰራል።",
   "preview-on-book": "በመጽሐፍህ ላይ ሞከረህ ተመልከት",
   "no-pdf": "PDF የለህም? ይልቁንም የምዕራፉን ጽሑፍ ገልብጥ — ዑደቱ ምዕራፍ ከየት እንደሚጀመር አይጨነቅም።",
+  "byob-card-subject": "ባዮሎጂ · ክፍል 12",
+  "byob-card-unit": "የሰው አካል ሥርዓት",
+  "byob-card-chapter-1": "የነርቭ ሥርዓት",
+  "byob-card-chapter-2": "የኢንዶክራይን ሥርዓት",
+  "byob-card-chapter-3": "የደም ዝውውር ሥርዓት",
+  "byob-card-chapter-4": "የመተንፈሻ ሥርዓት",
+  "byob-card-chapter-5": "የምግብ መፍጫ ሥርዓት",
+  "byob-card-chapter-6": "የመፍሰሻ ሥርዓት",
   chunks: "{n} ክፍሎች",
   "study-loop-ready": "የጥናት ዑደት ዝግጁ",
   "lines-up-next": "ቀጥሎ ይሰለፋል",
@@ -1401,12 +1443,38 @@ export const am: Record<MessageKey, string> = {
   "faq-instructor-q": "መምህራንን ይተካል?",
   "faq-instructor-a":
     "አይ። ዛሬ ማታ ሰዓታትህን ከምታውቃቸው ነገሮች ላይ እንዴት እንደሚውዱ ያሳያል — ስለዚህ የሚፈጅከው ጊዜ የበለጠ ጥሩ ይሆናል።",
-  "faq-waitlist-q": "በዝርዝሩ ብቀላቅል ምን እ얻ኛ?",
+  "faq-waitlist-q": "በዝርዝሩ ብቀላቅል ምን አገኛለሁ?",
   "faq-waitlist-a":
     "ስልክህን በውስጥ አድርግ፣ ቻናላችን ተቀላቅል፣ ስለ ያገርከው አንድ ቃል ላክ — ይህ በመጀመሪያ ቀን አንድ ወር ፕሪሚየም ያደርጋል።",
   "faq-syllabus-q": "የትኞቹ የትምህርት ትዕዛዞችና ክፍሎች?",
   "faq-syllabus-a":
-    "ብሔራዊ ስርአተ-ትምህርትና በትክክል የምታጠናውን መጽሐፍ ይከተላል። የራስህን መጽሐፍ ጫን — ውስጡ በመጽሐፍ ምዕራፍ ምዕራፍ የራሱ ፕላን ይሆናል።",
+    "ለሁለተኛ ደረጃ ትምህርት (ክፍል 9–12) የተሰራ ሲሆን በቃላት የምትገልጻቸው ትምህርቶች ላይ በተሻለ ይሰራል — ባዮሎጂ፣ ታሪክ፣ ጂኦግራፊ፣ የዜጋነትና ቋንቋዎች። ሒሳብ፣ ፊዚክስና ኬሚስትሪ በስሌት ላይ የተመሰረቱ ስለሆኑ ኪፍተት ገና በአግባቡ ሊገመግማቸው አይችልም። ብሔራዊ ስርአተ-ትምህርትንና በትክክል የምታጠናውን መጽሐፍ ይከተላል፤ የራስህን መጽሐፍ ጫን — ውስጡ ምዕራፍ ሁሉ የራሱ ፕላን ይሆናል።",
+  "faq-speak-q": "ጮክ ብዬ መናገር አለብኝ?",
+  "faq-speak-a":
+    "አይ። በምትኩ መጻፍ ትችላለህ። ጮክ ብሎ መናገር በእውነት የምታውቀውን ለመለካት የተሻለ ነው፤ ነገር ግን ጸጥ ባለ ቦታ ወይም ማይክራፎን ሲያቅት መጻፍ ሁልጊዜ አለ።",
+  "faq-voice-q": "ድምጼ ይቀዳል ወይስ ይቀመጣል?",
+  "faq-voice-a":
+    "ኪፍተት ድምጽህን አያስቀምጥም። ንግግርን ወደ ጽሑፍ ለመቀየር ድምጽህ ወደ ድምጽ አገልግሎታችን (Voxide) ይላካል፤ እኛ የምናስቀምጠው የመልስህን ጽሑፍ ከዚህ ሙከራ ጋር ነው፣ ድምጹን አይደለም። ግምገማው በAI አገልግሎት (Gemini፣ አማራጭ ደግሞ Groq) ይከናወናል። አገልጋዮቻችን፣ ዳታቤዙ (Neon) እና ሁለቱም የAI አገልግሎቶች ከኢትዮጵያ ውጭ ናቸው፣ ስለዚህ የመልስህ ጽሑፍ ከአገር ይወጣል። እስክትጠይቀን ድረስ ከትምህርት ታሪክህ ጋር ይቀመጣል።",
+  "faq-amharic-q": "በአማርኛ ይሰራል?",
+  "faq-amharic-a":
+    "አዎ — ገጹ፣ ትምህርቶቹና ጥያቄዎቹ በአማርኛ ወይም በእንግሊዝኛ ሊሆኑ ይችላሉ። ትምህርትን በአማርኛ ጮክ አድርጎ ለማንበብ ስልክህ የአማርኛ ድምጽ ሊኖረው ይገባል፤ ከሌለው ትምህርቱ አሁንም እንደ ጽሑፍ ለማንበብ አለ።",
+  "faq-offline-q": "ኢንተርኔት ሳይኖር ይሰራል?",
+  "faq-offline-a":
+    "በከፊል። በክፍለ ጊዜ መሃል ግንኙነትህ ከተቋረጠ ኪፍተት መልስህን በስልክህ ላይ ይይዛል፤ እንደገና ስትገናኝ ይገመግማል — ያላሰላውን ነጥብ በጭራሽ አያሳይም። ግምገማው ግን ግንኙነት ይፈልጋል።",
+  "faq-different-q": "ከChatGPT ወይስ ካለፉት ጥያቄዎች ምን ይለያል?",
+  "faq-different-a":
+    "ቻትቦት ለሙሉ ምዕራፍ የጥናት መመሪያ ሊጽፍ ይችላል፣ ያለፉት ጥያቄዎች ደግሞ ስንት እንዳሳለፍክ ይነግሩሃል። ኪፍተት ግን የትኞቹን ሃሳቦች እንዳልተማርክ ይነግርሃል — እነሱንም ረስተሃል ወይስ ተሳስተሃል። ከዚያ እነሱን ብቻ አስተምሮ በሌላ አገላለጽ እንደገና ይፈትንሃል።",
+  "faq-aiwrong-q": "AI ሊሳሳት ይችላል?",
+  "faq-aiwrong-a":
+    "አዎ። ኪፍተት በAI ተጠቅሞ የተናገርከውን ከምዕራፉ ሃሳቦች ጋር ያመዛዝናል፣ AI ግን ሊሳሳት ይችላል። ለዚህም ከአንድ ነጥብ ይልቅ ሃሳብ-በሃሳብ ዝርዝሩን ታያለህ፣ ከመጽሐፍህ ጋር አወዳድረህ እንድታረጋግጥ። የAI አገልግሎቱ ሲጨናነቅ ውጤቱ ግምት ተብሎ ይመዘገባል።",
+  "faq-textbook-q": "መጽሐፍቴ ወደ አገልጋዮቻችሁ ይሰቀላል?",
+  "faq-textbook-a":
+    "ዋናው ፋይልህ በመሳሪያህ ላይ ይቀመጣል፣ የተቀነጠሱ ገጾችም በስልክህ ላይ ይነበባሉ። የምታስገባቸው ምዕራፎች ጽሑፍ ብቻ ፕላንህን ለመስራት ወደ ኪፍተት ይላካል፣ የመጽሐፉ ማውጫም ተመልሰህ እንድትጠቀምበት በመለያህ ይቀመጣል። ገጽ ሊነበብ ካልቻለ ኪፍተት ሳይገምት ይነግርሃል።",
+  "faq-exam-q": "ፈተናውን እንዳሳልፍ ይረዳኛል?",
+  "faq-exam-a":
+    "ኪፍተት ማለፍን ተስፋ ሊሰጥ አይችልም፣ በእውነት ማንም አይችልም። የሚያሳየው ባጠናኸው ሃሳቦች ላይ ከዚህ በፊትና ከዚህ በኋላን ነው፣ የጠገንከውንና አሁንም የጎደለውን እንድታውቅ።",
+  "faq-beta-note":
+    "ኪፍተት አሁን በቤታ ውስጥ ነው — እነዚህ መልሶች ዛሬ እንዴት እንደሚሰራ ይገልጻሉ፤ አንዳንዶቹ በይፋዊ ምረቃ ጊዜ ይለወጣሉ።",
 
   // ── Launch waitlist ────────────────────────────────────────
   "waitlist-chip": "የመስተጀት ዝርዝር",
