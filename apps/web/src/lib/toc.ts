@@ -67,7 +67,8 @@ const SECTION_RE = new RegExp(
  * count too ("Part III"), because the heading scanner has always accepted
  * them.
  */
-const UNIT_WORD = String.raw`unit|chapter|lesson|part|module|topic|section|boqonnaa|ምዕራፍ|ክፍል|ትምህርት`;
+const UNIT_WORD =
+  "unit|chapter|lesson|part|module|topic|section|boqonnaa|ምዕራፍ|ክፍል|ትምህርት";
 /** A unit's own number: an integer, a dotted integer ("2.1"), or a roman numeral. */
 const UNIT_NUM = String.raw`\d{1,3}(?:\s*\.\s*\d+)*|[IVXLCDM]{1,7}`;
 const UNIT_RE = new RegExp(
