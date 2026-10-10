@@ -16,7 +16,7 @@ import { __overrideProviderForTests, ai, aiTelemetrySnapshot } from "./gemini";
 const GEMINI_KEY = "gemini-test-key";
 const GROQ_KEY = "groq-test-key";
 
-// The exact JSON llama-3.3-70b would hand back through JSON mode. parseGaps
+// The exact JSON gpt-oss-120b would hand back through JSON mode. parseGaps
 // turns it into a GapAnalysis.
 const GROQ_GRADE = JSON.stringify({
   covered: ["current flows through a resistor"],
@@ -72,7 +72,7 @@ describe("provider failover", () => {
     // Groq answered — telemetry names the provider, so a 2am reading can tell
     // "Groq handled it" from "we silently degraded."
     expect(aiTelemetrySnapshot().lastProvider).toBe("groq");
-    expect(aiTelemetrySnapshot().lastModel).toBe("llama-3.3-70b-versatile");
+    expect(aiTelemetrySnapshot().lastModel).toBe("openai/gpt-oss-120b");
   });
 
   test("with only groq wired, the seam still serves instead of degrading", async () => {
@@ -89,5 +89,24 @@ describe("provider failover", () => {
 
     expect(gaps.estimated).toBe(false);
     expect(aiTelemetrySnapshot().lastProvider).toBe("groq");
+  });
+
+  test("a status-less Gemini failure (timeout) still hands off to groq", async () => {
+    // withTimeout rejects with a plain Error — no `status`. Classification must
+    // not treat "Gemini is slow/unreachable" as "this request is bad": both are
+    // reasons to move to the next provider, not to give up the ladder.
+    __overrideProviderForTests("gemini", async () => {
+      throw new Error("AI request timed out after 32000ms");
+    });
+
+    const concepts = [
+      { conceptText: "voltage drop", isMisconception: false, weight: 1 },
+    ];
+
+    const gaps = await ai.gradeRecall("voltage drop", concepts);
+
+    expect(gaps.estimated).toBe(false);
+    expect(aiTelemetrySnapshot().lastProvider).toBe("groq");
+    expect(aiTelemetrySnapshot().lastModel).toBe("openai/gpt-oss-120b");
   });
 });

@@ -49,11 +49,12 @@ export const DEFAULT_MODEL = MODEL_FALLBACKS[0];
  * Only when both providers are down does a student see the deterministic
  * fallback or the honest "busy" refusal.
  *
- * `llama-3.3-70b-versatile` is the general-purpose rung: it has reliable JSON
+ * `openai/gpt-oss-120b` is the general-purpose rung: it has reliable JSON
  * mode, handles Amharic, and its free tier (~30 req/min) comfortably absorbs
- * the 5/minute that Gemini's breaker would leave behind.
+ * the 5/minute that Gemini's breaker would leave behind. It is named from a
+ * live /v1/models listing (this account's Groq plan carries no llama entry).
  */
-export const GROQ_MODELS = ["llama-3.3-70b-versatile"] as const;
+export const GROQ_MODELS = ["openai/gpt-oss-120b"] as const;
 
 export const DEFAULT_GROQ_MODEL = GROQ_MODELS[0];
 
@@ -857,10 +858,10 @@ const AI_TOTAL_BUDGET_MS = 24_000;
 // rather than by waiting.
 const GEMINI_MAX_ATTEMPTS = MODEL_FALLBACKS.length + 1;
 
-// Only transient conditions are retried. A 400 (malformed request) or 404 will
-// fail identically every time, and retrying it just burns quota we have per
-// project, not per user.
-const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+// A request-level rejection (4xx, except 429) will fail on every provider the
+// same way, so retrying it across the ladder only burns quota we have per
+// project, not per user. Every other failure — 429, 5xx, or a status-less
+// timeout/network error — moves to the next model or provider instead.
 const RETRY_BASE_DELAY_MS = 500;
 
 /** The Gemini SDK surfaces the HTTP status on `ApiError.status`; be defensive
@@ -869,11 +870,6 @@ function statusOf(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) return undefined;
   const status = (error as { status?: unknown }).status;
   return typeof status === "number" ? status : undefined;
-}
-
-function isRetryable(error: unknown): boolean {
-  const status = statusOf(error);
-  return status !== undefined && RETRYABLE_STATUS.has(status);
 }
 
 /**
@@ -1104,9 +1100,13 @@ async function ask(
           : "provider-failure",
       );
 
-      // A malformed request will not fare better on another provider; give up
-      // the whole ladder rather than hand a bad prompt to Groq as well.
-      if (!isRetryable(error)) break;
+      // Only a request-level rejection ends the ladder: a 4xx means we sent
+      // something unacceptable, and the next provider would decline the same
+      // prompt. Everything else — 429, 5xx, a status-less timeout or network
+      // error — hands the request to the next model or provider, because Groq
+      // may be healthy at the very moment Gemini is not.
+      const failedStatus = statusOf(error);
+      if (failedStatus !== undefined && isCallerError(failedStatus)) break;
       // Every model of every provider tried and failed within the budget.
       if (index === attempts.length - 1) break;
 
@@ -1234,8 +1234,8 @@ async function groqGenerate(
     const message = (data as { error?: { message?: string } } | null)?.error
       ?.message;
     // Attach the HTTP status exactly like the Gemini SDK's `ApiError` does, so
-    // `statusOf`/`isRetryable` classify Groq failures with no provider-specific
-    // branches.
+    // `statusOf`/`isCallerError` classify Groq failures with no
+    // provider-specific branches.
     const err = new Error(
       message ?? `Groq request failed (${response.status})`,
     ) as Error & {
