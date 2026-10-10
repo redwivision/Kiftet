@@ -808,6 +808,13 @@ export const en = {
   "tab-lesson": "Short lesson — Kiftet",
   "tab-retest": "Test — Kiftet",
   "tab-result": "Result — Kiftet",
+
+  // ── Install nudge (tier 3) ────────────────────────────────────
+  // Offered at most once, after the first completed loop, and only where it
+  // can mean something: a touch device that is not already installed. A nudge
+  // about the home screen belongs on a phone, not on a desktop browser.
+  "hint-add-home":
+    "Add Kiftet to your home screen so your next loop is one tap away.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1545,6 +1552,7 @@ export const am: Record<MessageKey, string> = {
   "tab-lesson": "አጭር ማብራሪያ — ኪፍተት",
   "tab-retest": "ድጋሚ ፈተና — ኪፍተት",
   "tab-result": "ውጤት — ኪፍተት",
+  "hint-add-home": "ኪፍተትን በስልክህ መነሻ ገጽ ላይ ጨምር — ቀጣዩ ዙርህ በአንድ ንክኪ ይገኛል።",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

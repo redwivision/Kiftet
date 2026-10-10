@@ -38,6 +38,11 @@ import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
 import { haptic } from "@/lib/haptics";
+import {
+  markInstallHintOffered,
+  readInstallEnv,
+  shouldOfferInstall,
+} from "@/lib/install";
 import { countWords, findBoundaryEnd, leadingText } from "@/lib/intent";
 import type { ConceptMeta } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
@@ -101,6 +106,36 @@ function FirstRunHint() {
       <button
         type="button"
         onClick={dismiss}
+        className="shrink-0 rounded-full border border-gold/30 px-3 py-1.5 font-medium text-gold text-xs transition-colors duration-200 hover:bg-gold/10"
+      >
+        {t("hint-dismiss")}
+      </button>
+    </div>
+  );
+}
+
+// Offered once, on the result of the first completed loop, and only on a touch
+// device that is not already installed. Unlike FirstRunHint this is one-time by
+// construction: the moment it appears we record that it was offered, so no
+// later loop repeats it. A nudge about the home screen should feel like a
+// well-timed suggestion, not a banner that keeps coming back.
+function AddToHomeHint() {
+  const { t } = useLanguage();
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!shouldOfferInstall(readInstallEnv())) return;
+    markInstallHintOffered();
+    setShown(true);
+  }, []);
+  if (!shown) return null;
+  return (
+    <div className="mx-auto mt-6 flex max-w-md items-center justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3">
+      <p className="text-foreground/85 text-sm leading-6">
+        {t("hint-add-home")}
+      </p>
+      <button
+        type="button"
+        onClick={() => setShown(false)}
         className="shrink-0 rounded-full border border-gold/30 px-3 py-1.5 font-medium text-gold text-xs transition-colors duration-200 hover:bg-gold/10"
       >
         {t("hint-dismiss")}
@@ -293,6 +328,7 @@ function StudyScreen() {
             {state.phase === "result" && (
               <ResultPhase onDone={done} onTryAgain={retryAgain} />
             )}
+            {state.phase === "result" && <AddToHomeHint />}
           </div>
         </div>
       </div>
