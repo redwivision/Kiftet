@@ -52,7 +52,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
     {
       name: "description",
       content:
-        "Kiftet listens to what you remember, finds the ideas you're missing, and gives you the shortest plan to learn them — built for Ethiopia's national exam.",
+        "Kiftet listens to what you remember, finds the ideas you're missing, and gives you the shortest plan to learn them — built for Ethiopian students.",
     },
     { name: "theme-color", content: "#0A0B0D" },
     { property: "og:type", content: "website" },
@@ -67,7 +67,7 @@ export function meta(): ReturnType<Route.MetaFunction> {
     {
       property: "og:description",
       content:
-        "Kiftet listens to what you remember, finds the ideas you're missing, and gives you the shortest plan to learn them — built for Ethiopia's national exam.",
+        "Kiftet listens to what you remember, finds the ideas you're missing, and gives you the shortest plan to learn them — built for Ethiopian students.",
     },
     {
       property: "og:image",

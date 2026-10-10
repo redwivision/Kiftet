@@ -32,7 +32,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Kiftet listens to what you remember, finds the ideas you're missing, and gives you the shortest plan to learn them — built for Ethiopia's national exam.",
+        "Kiftet listens to what you remember, finds the ideas you're missing, and gives you the shortest plan to learn them — built for Ethiopian students.",
     },
   ];
 }
