@@ -81,6 +81,31 @@ export const en = {
   "stop-reading": "Stop reading",
   "read-it-to-me": "Read it to me",
   "ready-to-be-tested": "I'm ready to be tested",
+  // Study plan (the lesson phase is now a plan). The steps are an ORDER and a
+  // reason — the deep/short content still lives in the guide and microlesson.
+  "see-study-plan": "See your study plan",
+  "plan-title": "Your study plan",
+  "plan-text":
+    "A short roadmap over exactly what you're missing — nothing you already know. Work it in order, then test yourself.",
+  "plan-minutes": "About {n} minutes",
+  "plan-estimated":
+    "Lots of students are studying right now, so this plan comes from the rules — wrong ideas first, then the missing ones by weight. The extra tips are off for now.",
+  "plan-step-of": "Step {a} of {b}",
+  "plan-gap-fix-first": "Fix this first",
+  "plan-missing": "Missing",
+  "plan-deep-label": "In depth",
+  "plan-preview-label": "The short version",
+  "plan-video": "Watch a video about “{topic}”",
+  "plan-article": "Search for “{topic}”",
+  "plan-classic-lesson": "Classic lesson (Beta)",
+  "plan-classic-caption":
+    "See the one-lesson view while we test the plan. Same content, different shape.",
+  "plan-back": "Back to your plan",
+  "plan-no-steps":
+    "Nothing left to plan — give yourself a quick out-loud recap, then test yourself.",
+  "plan-demo-sample": "Show me with a sample answer",
+  "plan-demo-sample-note":
+    "No recording needed — watch the whole loop run on a prepared answer, then sign up to do it for real.",
   "back-to-gaps": "Back to what's missing",
   "question-of": "Question {a} of {b}",
   "all-answered": "All answered",
@@ -819,6 +844,29 @@ export const am: Record<MessageKey, string> = {
   "stop-reading": "ማንበብ አቁም",
   "read-it-to-me": "አንብብልኝ",
   "ready-to-be-tested": "ለመፈተን ዝግጁ ነኝ",
+  "see-study-plan": "የጥናት እቅድህን ተመልከት",
+  "plan-title": "የጥናት እቅድህ",
+  "plan-text":
+    "በትክክል ያመለጠህን ብቻ የያዘ አጭር መንገድ — ቀድሞ የምታውቀው የለም። በቅደም ተከተል ስራ፣ ከዚያም እራስህን ፈትን።",
+  "plan-minutes": "በግምት {n} ደቂቃ",
+  "plan-estimated":
+    "አሁን ብዙ ተማሪዎች በጥናት ላይ ናቸው፣ ስለዚህ እቅዱ ከደንቦቹ ተሰርቷል — መጀመሪያ የተሳሳቱ አመለካከቶች፣ ከዚያም ያመለጡት በክብደት። ተጨማሪ ምክሮች ለአሁን ጠፍተዋል።",
+  "plan-step-of": "ደረጃ {a} ከ {b}",
+  "plan-gap-fix-first": "ይህን መጀመሪያ አስተካክል",
+  "plan-missing": "ያመለጠ",
+  "plan-deep-label": "በዝርዝር",
+  "plan-preview-label": "አጭሩ ስሪት",
+  "plan-video": "በ“{topic}” ላይ ቪዲዮ ተመልከት",
+  "plan-article": "“{topic}”ን ፈልግ",
+  "plan-classic-lesson": "ክላሲክ ማብራሪያ (ቤታ)",
+  "plan-classic-caption":
+    "እቅዱን በምንሞክርበት ጊዜ የአንድ-ማብራሪያውን እይታ ተመልከት። ተመሳሳይ ይዘት፣ የተለየ ቅርፅ።",
+  "plan-back": "ወደ እቅድህ ተመለስ",
+  "plan-no-steps":
+    "የሚታቀድ ነገር አልቀረም — በድምፅ በፍጥነት ጠቅለል አድርገህ ንገር፣ ከዚያም እራስህን ፈትን።",
+  "plan-demo-sample": "በናሙና መልስ አሳየኝ",
+  "plan-demo-sample-note":
+    "መቅጃ አያስፈልግም — የተዘጋጀ መልስ ተጠቅሞ ሙሉ ዑደቱን ተመልከት፣ ከዚያም ለእውነት ለመስራት መለያ ፍጠር።",
   "back-to-gaps": "ወደ ክፍተቶቼ ተመለስ",
   "question-of": "ጥያቄ {a} ከ {b}",
   "all-answered": "ሁሉም ተመልሷል",

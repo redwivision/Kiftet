@@ -2,9 +2,18 @@ import { Button } from "@kiftet/ui/components/button";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
-import { Check, CircleAlert, MicOff, Square, Volume2, X } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  MicOff,
+  Play,
+  Search,
+  Square,
+  Volume2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   getVoxideClient,
   hasVoxideKey,
@@ -19,6 +28,7 @@ import { InkSettling } from "@/components/ink-settling";
 import { useLanguage } from "@/components/language-provider";
 import {
   type Gaps,
+  type StudyPlan,
   StudyProvider,
   useStudy,
 } from "@/components/study-provider";
@@ -45,6 +55,13 @@ const ACTIVE: VoxideStatus[] = [
   "thinking",
   "executing",
 ];
+
+// The sample answer demo visitors can submit without speaking a word. Written
+// to land where the demo chapter expects: a few concepts named right, a few
+// left out, and one classic muddle ("chloroplasts are in animal cells") so the
+// plan has a "fix this first" step to show off.
+const DEMO_SAMPLE_RECALL =
+  "The cell is the basic unit of all living things. The plasma membrane controls what goes in and out. The nucleus holds the DNA and controls the cell. Ribosomes build proteins, and the cytoplasm is the fluid inside the cell. Mitochondria release energy. Chloroplasts are found in animal cells where they store energy.";
 
 // Everything the student said since the capture window opened. A long recall
 // streams in as many partial transcript chunks, and Voxide only finalizes a
@@ -117,6 +134,10 @@ function StudyScreen() {
   const { t } = useLanguage();
   const { state, retryAgain, retryLast, completeSession, clearError } =
     useStudy();
+  // A demo room is trying the product; a signed-in student is dedicating.
+  // The same loop serves both, but the demo wears a banner and gets a
+  // no-effort on-ramp (sample answer) so the loop is visible in one minute.
+  const demo = getDemoUser();
 
   if (state.chapterLoading) {
     return (
@@ -150,6 +171,20 @@ function StudyScreen() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+      {demo && (
+        <div className="surface mb-6 flex flex-wrap items-center justify-between gap-3 border p-4 text-sm">
+          <p className="text-muted-foreground">
+            <span className="font-medium text-gold">{t("demo-label")}</span>
+            {t("demo-banner")}
+          </p>
+          <Link
+            to="/login"
+            className="font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
+          >
+            {t("create-free-account")}
+          </Link>
+        </div>
+      )}
       <div className="surface overflow-hidden">
         <SessionHeader
           subject={state.chapter.subject}
@@ -665,6 +700,7 @@ function RecallPhase() {
     (text: string) => submitRecall(text),
     [submitRecall],
   );
+  const demoRoom = getDemoUser();
 
   if (state.queued?.kind === "recall") {
     return (
@@ -683,6 +719,22 @@ function RecallPhase() {
         textDefault={!hasVoxideKey()}
         busy={state.busy}
       />
+      {demoRoom && (
+        <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
+          <p className="text-muted-foreground text-xs leading-5">
+            {t("plan-demo-sample-note")}
+          </p>
+          <Button
+            className="mt-2.5"
+            variant="outline"
+            size="sm"
+            disabled={state.busy}
+            onClick={() => void submitRecall(DEMO_SAMPLE_RECALL)}
+          >
+            {state.busy ? t("preparing") : t("plan-demo-sample")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -763,7 +815,7 @@ function GapsPhase() {
           disabled={state.busy}
           onClick={() => void fetchLesson()}
         >
-          {state.busy ? t("preparing") : t("hear-short-version")}
+          {state.busy ? t("preparing") : t("see-study-plan")}
         </Button>
         <button
           type="button"
@@ -777,6 +829,186 @@ function GapsPhase() {
   );
 }
 
+// The lesson-phase plan: the roadmap is what the student reads first.
+// The links below never come from the model — only the search topic does, and
+// the client compiles the URLs, so a hallucinated address is structurally
+// impossible.
+function searchUrls(topic: string): { video: string; article: string } {
+  const q = encodeURIComponent(topic);
+  return {
+    video: `https://www.youtube.com/results?search_query=${q}`,
+    article: `https://www.google.com/search?q=${q}`,
+  };
+}
+
+function PlanView({
+  plan,
+  lessonText,
+  recording,
+  narrate,
+  stopReading,
+}: {
+  plan: StudyPlan;
+  lessonText: string | null;
+  recording: boolean;
+  narrate: (text: string) => void;
+  stopReading: () => void;
+}) {
+  const { t } = useLanguage();
+  const sentences = useMemo(
+    () => splitSentences(lessonText ?? ""),
+    [lessonText],
+  );
+  return (
+    <div className="space-y-4">
+      <p className="text-muted-foreground text-sm">
+        {t("plan-minutes", { n: plan.estMinutes })}
+      </p>
+      <ol className="space-y-3">
+        {plan.steps.map((step, i) => {
+          const links = step.searchTopic ? searchUrls(step.searchTopic) : null;
+          return (
+            <li
+              key={`${step.gapType}-${step.concept}`}
+              className="rounded-2xl border border-border/70 bg-card/50 p-4 dark:border-white/10"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-medium text-[0.72rem] text-muted-foreground uppercase tracking-wide">
+                  {t("plan-step-of", { a: i + 1, b: plan.steps.length })}
+                </p>
+                {step.gapType === "misconception" ? (
+                  <span className="rounded-full border border-rust/30 bg-rust/10 px-2.5 py-0.5 font-medium text-[0.7rem] text-rust">
+                    {t("plan-gap-fix-first")}
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 font-medium text-[0.7rem] text-muted-foreground">
+                    {t("plan-missing")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 font-medium text-[0.95rem] text-foreground leading-6">
+                {step.concept}
+              </p>
+              {step.whyFirst && (
+                <p className="mt-1 text-muted-foreground text-sm leading-6">
+                  {step.whyFirst}
+                </p>
+              )}
+              {links && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <a
+                    href={links.video}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-[0.78rem] transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+                  >
+                    <Play className="size-3.5" aria-hidden="true" />
+                    {t("plan-video", { topic: step.searchTopic ?? "" })}
+                  </a>
+                  <a
+                    href={links.article}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-[0.78rem] transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+                  >
+                    <Search className="size-3.5" aria-hidden="true" />
+                    {t("plan-article", { topic: step.searchTopic ?? "" })}
+                  </a>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      {lessonText && (
+        <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 dark:border-white/10">
+          <p className="k-label mb-2">{t("plan-preview-label")}</p>
+          <div className="read-panel px-0 py-0 text-[0.95rem] leading-7">
+            {sentences.length > 1
+              ? sentences.map((sentence, i) => (
+                  <span key={`${i}-${sentence}`}>{sentence} </span>
+                ))
+              : lessonText}
+          </div>
+          <div className="mt-3 flex justify-end">
+            {recording ? (
+              <Button variant="outline" size="sm" onClick={stopReading}>
+                <Square className="size-3.5" aria-hidden="true" />
+                {t("stop-reading")}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => narrate(lessonText)}
+              >
+                <Volume2 className="size-4" aria-hidden="true" />
+                {t("read-it-to-me")}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The classic-lesson text panel: the sentence-chunked read view with its
+// read-aloud control. Shared by the Beta toggle and the no-plan fallback.
+function LessonTextPanel({
+  lessonText,
+  sentences,
+  activeSentence,
+  recording,
+  narrate,
+  stopReading,
+}: {
+  lessonText: string | null;
+  sentences: string[];
+  activeSentence: number | null;
+  recording: boolean;
+  narrate: () => void;
+  stopReading: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <>
+      <div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
+        {sentences.length > 1
+          ? sentences.map((sentence, i) => (
+              <span
+                key={`${i}-${sentence}`}
+                className={cn(
+                  "rounded px-0.5 transition-colors duration-150",
+                  activeSentence === i && "bg-gold/15 text-foreground",
+                )}
+              >
+                {sentence}{" "}
+              </span>
+            ))
+          : (lessonText ?? "Writing the lesson…")}
+      </div>
+
+      {lessonText && (
+        <div className="flex items-center justify-center gap-2">
+          {recording ? (
+            <Button variant="outline" size="sm" onClick={stopReading}>
+              <Square className="size-3.5" aria-hidden="true" />
+              {t("stop-reading")}
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={narrate}>
+              <Volume2 className="size-4" aria-hidden="true" />
+              {t("read-it-to-me")}
+            </Button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 function LessonPhase() {
   const { state, startRetest, viewGaps } = useStudy();
   const { t, lang } = useLanguage();
@@ -787,6 +1019,12 @@ function LessonPhase() {
   // answered with dead air or a silent button.
   const [reading, setReading] = useState(false);
   const stopRef = useRef<() => void>(null);
+  // The lesson phase is a PLAN by default; the single-lesson view is handed
+  // over behind the classic-lesson (Beta) toggle so we can test both shapes.
+  const [view, setView] = useState<"plan" | "classic">("plan");
+  const plan = state.plan;
+  const hasPlan = Boolean(plan && plan.steps.length > 0);
+  const showPlan = hasPlan && view === "plan";
   const [activeSentence, setActiveSentence] = useState<number | null>(null);
   const sentences = useMemo(
     () => splitSentences(state.lessonText ?? ""),
@@ -867,59 +1105,97 @@ function LessonPhase() {
 
   return (
     <div className="space-y-6">
-      <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
-      {lang === "am" && (
-        <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
-          {t("fluency-am")}
-        </p>
-      )}
-      {/* The guide is the real lesson: ordered sections the student reads. The
-          single read-aloud script is the fallback for when it is unavailable. */}
-      {state.guide?.length ? (
-        <GuideView
-          sections={state.guide}
-          estimated={state.guideEstimated}
-          onRecall={(section) =>
-            section.recall &&
-            void narrate(`${section.what} ${section.recall}`, "button")
-          }
-        />
+      {showPlan && plan ? (
+        <>
+          <PhaseHeading title={t("plan-title")} text={t("plan-text")} />
+          {plan.estimated && (
+            <p className="rounded-lg border border-border bg-muted px-3 py-2 text-muted-foreground text-sm">
+              {t("plan-estimated")}
+            </p>
+          )}
+          <PlanView
+            plan={plan}
+            lessonText={state.lessonText}
+            recording={reading}
+            narrate={(text) => void narrate(text, "button")}
+            stopReading={stopReading}
+          />
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setView("classic")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-muted-foreground text-xs transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+            >
+              {t("plan-classic-lesson")}
+            </button>
+          </div>
+          <p className="text-center text-muted-foreground text-xs">
+            {t("plan-classic-caption")}
+          </p>
+        </>
+      ) : hasPlan ? (
+        <>
+          <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
+          {lang === "am" && (
+            <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
+              {t("fluency-am")}
+            </p>
+          )}
+          {state.guide?.length ? (
+            <GuideView
+              sections={state.guide}
+              estimated={state.guideEstimated}
+              onRecall={(section) =>
+                section.recall &&
+                void narrate(`${section.what} ${section.recall}`, "button")
+              }
+            />
+          ) : (
+            <LessonTextPanel
+              lessonText={state.lessonText}
+              sentences={sentences}
+              activeSentence={activeSentence}
+              recording={reading}
+              narrate={() => void narrate(state.lessonText ?? "", "button")}
+              stopReading={stopReading}
+            />
+          )}
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setView("plan")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-muted-foreground text-xs transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+            >
+              {t("plan-back")}
+            </button>
+          </div>
+        </>
       ) : (
         <>
-          <div className="read-panel px-5 py-5 text-[0.95rem] leading-7">
-            {sentences.length > 1
-              ? sentences.map((sentence, i) => (
-                  <span
-                    key={`${i}-${sentence}`}
-                    className={cn(
-                      "rounded px-0.5 transition-colors duration-150",
-                      activeSentence === i && "bg-gold/15 text-foreground",
-                    )}
-                  >
-                    {sentence}{" "}
-                  </span>
-                ))
-              : (state.lessonText ?? "Writing the lesson…")}
-          </div>
-
-          {state.lessonText && (
-            <div className="flex items-center justify-center gap-2">
-              {reading ? (
-                <Button variant="outline" size="sm" onClick={stopReading}>
-                  <Square className="size-3.5" aria-hidden="true" />
-                  {t("stop-reading")}
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void narrate(state.lessonText ?? "")}
-                >
-                  <Volume2 className="size-4" aria-hidden="true" />
-                  {t("read-it-to-me")}
-                </Button>
-              )}
-            </div>
+          <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
+          {lang === "am" && (
+            <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
+              {t("fluency-am")}
+            </p>
+          )}
+          {state.guide?.length ? (
+            <GuideView
+              sections={state.guide}
+              estimated={state.guideEstimated}
+              onRecall={(section) =>
+                section.recall &&
+                void narrate(`${section.what} ${section.recall}`, "button")
+              }
+            />
+          ) : (
+            <LessonTextPanel
+              lessonText={state.lessonText}
+              sentences={sentences}
+              activeSentence={activeSentence}
+              recording={reading}
+              narrate={() => void narrate(state.lessonText ?? "", "button")}
+              stopReading={stopReading}
+            />
           )}
         </>
       )}

@@ -1074,6 +1074,46 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────
+// Study plan
+// ────────────────────────────────────────────────────────────────
+
+// One model call ordered over the same gap lists as the microlesson, but
+// budgeted like the guide: when the window is spent the rules still hand back
+// a plan (misconceptions first, missing by weight) rather than a 429 — the
+// plan is the phase, so a hard error there would take the whole phase down.
+const planSchema = z.object({
+  missing: z.array(z.string().trim().min(1).max(500)).max(50),
+  misconceptions: z.array(z.string().trim().min(1).max(500)).max(50),
+  language: z.enum(["en", "am"]).optional(),
+});
+
+router.post("/sessions/:id/plan", async (req, res) => {
+  const parsed = planSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Session not found", 404);
+
+  const concepts = await chapterConcepts(chapterId);
+
+  const gapAnalysis = gapAnalysisFrom(
+    {
+      missing: parsed.data.missing,
+      misconceptions: parsed.data.misconceptions,
+    },
+    concepts,
+  );
+
+  const plan = await ai.generateStudyPlan(
+    gapAnalysis,
+    concepts,
+    parsed.data.language,
+    { skipAi: !allowAiRequest(req) },
+  );
+  ok(res, plan);
+});
+
+// ────────────────────────────────────────────────────────────────
 // Guide
 // ────────────────────────────────────────────────────────────────
 

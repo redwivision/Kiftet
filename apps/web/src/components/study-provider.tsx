@@ -80,6 +80,22 @@ export type Guide = {
   language: "en" | "am";
 };
 
+/** ONE step of the study plan — an ORDER and a reason, not the content. */
+export type StudyPlanStep = {
+  concept: string;
+  gapType: "missing" | "misconception";
+  weight: number;
+  whyFirst?: string;
+  searchTopic?: string;
+};
+
+/** A personalized roadmap over the student's gaps, shown in the lesson phase. */
+export type StudyPlan = {
+  steps: StudyPlanStep[];
+  estMinutes: number;
+  estimated: boolean;
+};
+
 export type SessionResult = {
   before: number | null;
   after: number | null;
@@ -114,6 +130,9 @@ export type StudyState = {
    *  actually reads. */
   guide: GuideSection[] | null;
   guideEstimated: boolean;
+  /** The study plan — the roadmap shown in the lesson phase. Fetched alongside
+   *  the lesson, best-effort: absent means the classic lesson view renders. */
+  plan: StudyPlan | null;
   retestLoading: boolean;
   questions: SessionQuestion[];
   currentQuestion: number;
@@ -141,6 +160,7 @@ export type StudyAction =
   | { type: "RECALL_FULL"; gaps: Gaps }
   | { type: "LESSON"; text: string }
   | { type: "GUIDE"; guide: GuideSection[]; estimated: boolean }
+  | { type: "PLAN"; plan: StudyPlan }
   | { type: "QUESTIONS"; questions: SessionQuestion[] }
   | {
       type: "RESTORE_RETEST";
@@ -175,6 +195,7 @@ function initialState(_sessionId: string): StudyState {
     lessonLoading: false,
     guide: null,
     guideEstimated: false,
+    plan: null,
     retestLoading: false,
     questions: [],
     currentQuestion: 0,
@@ -275,6 +296,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         phase: "gaps",
         gaps: action.gaps,
         lessonText: null,
+        plan: null,
         questions: [],
         answered: [],
         result: null,
@@ -288,6 +310,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         phase: "result",
         gaps: action.gaps,
         allCovered: true,
+        plan: null,
         result: {
           before: Math.round(action.gaps.score),
           after: null,
@@ -312,6 +335,8 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         guide: action.guide,
         guideEstimated: action.estimated,
       };
+    case "PLAN":
+      return { ...state, plan: action.plan, error: null, notice: null };
     case "QUESTIONS":
       return {
         ...state,
@@ -365,6 +390,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         gaps: null,
         allCovered: false,
         lessonText: null,
+        plan: null,
         questions: [],
         currentQuestion: 0,
         answered: [],
@@ -562,12 +588,28 @@ export function StudyProvider({
     // read-aloud script built from them. Two requests, not one: the sections
     // are what the student reads and they come from the shared cache, while the
     // read-aloud is still per-session because it stitches this student's
-    // concepts into one continuous script.
+    // concepts into one continuous script. The plan rides along, best-effort —
+    // a failed plan must never take the phase down, we just render the classic
+    // lesson instead.
     const fetchGuide = chapterId
       ? api<Guide>(
           `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}`,
         )
       : Promise.resolve<Guide | null>(null);
+
+    // Best-effort and intentionally not awaited: the plan may land after the
+    // lesson has, and the phase renders the classic lesson until then (or
+    // forever, if the request fails).
+    void api<StudyPlan>(`/sessions/${sessionId}/plan`, {
+      method: "POST",
+      body: JSON.stringify({
+        missing: gaps.missing,
+        misconceptions: gaps.misconceptions,
+        language: lang,
+      }),
+    })
+      .then((plan) => dispatch({ type: "PLAN", plan }))
+      .catch(() => {});
 
     return run(
       () =>

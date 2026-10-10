@@ -83,6 +83,42 @@ export type MicroLesson = {
 };
 
 /**
+ * ONE step of the study plan — a roadmap over this student's gaps.
+ *
+ * The plan is an ORDER and a reason, not the content: the deep/preview
+ * content lives in the guide and microlesson, which the browser fetches
+ * alongside it. Serving the ordering this thinly is what keeps a plan to a
+ * single model call.
+ */
+export type StudyPlanStep = {
+  /** Exact conceptText from the checklist. */
+  concept: string;
+  /** Where this gap sits: a wrong belief outranks a blank. */
+  gapType: "missing" | "misconception";
+  /** The concept's importance, 1-5, from the checklist (server-computed, never
+   *  trusted to the model). */
+  weight: number;
+  /** One short line: why this step comes here FOR THIS STUDENT. Absent on the
+   *  deterministic fallback. */
+  whyFirst?: string;
+  /** The concept named in 2-6 plain search words, in the student's language.
+   *  The client compiles safe search links from it; the model is never allowed
+   *  to send a URL, because an invented URL is worse than none. */
+  searchTopic?: string;
+};
+
+/** A personalized study roadmap over the student's gaps. */
+export type StudyPlan = {
+  steps: StudyPlanStep[];
+  /** Deterministic read on length — a cap that the ordering must stay under,
+   *  never trusted to the model, so the number is honest in every mode. */
+  estMinutes: number;
+  /** True when the ordering came from the rules (no narration, no links). The
+   *  UI must label it as such rather than silently dressing up a fallback. */
+  estimated: boolean;
+};
+
+/**
  * One concept's guide section — the unit the whole phase is built on.
  *
  * Deliberately NOT a student: it depends on the concept, the chapter text and
@@ -168,6 +204,19 @@ export type AiService = {
     concepts: ConceptChecklistItem[],
     language?: ContentLanguage,
   ): Promise<MicroLesson>;
+  /**
+   * Order a student's gaps into a study roadmap: wrong beliefs first, then
+   * the missing ideas by weight, each step with one line of reasoning and a
+   * web-searchable phrase — never a URL. The ordering rules also run as the
+   * deterministic fallback, so a plan always exists even when no key is set
+   * or the budget is spent.
+   */
+  generateStudyPlan(
+    gaps: GapAnalysis,
+    concepts: ConceptChecklistItem[],
+    language?: ContentLanguage,
+    options?: { skipAi?: boolean },
+  ): Promise<StudyPlan>;
   /**
    * Explain one concept. Student-independent by construction — it is not given
    * any gap or mastery data, because if it were it could not be shared.
@@ -461,6 +510,131 @@ function fallbackQuestions(
         : `Explain “${t}” in your own words, as if explaining it to a friend.`,
     targetConcept: t,
   }));
+}
+
+// A rough, honest read on how long the plan will take. Wrong beliefs cost the
+// most to undo, so a misconception step is weighted heavier than a blank.
+// Deterministic by construction — the number is a cap the UI quotes as a cap.
+function estimatePlanMinutes(
+  steps: { gapType: "missing" | "misconception" }[],
+): number {
+  if (!steps.length) return 1;
+  const raw = steps.reduce(
+    (total, step) => total + (step.gapType === "misconception" ? 2 : 1.5),
+    0,
+  );
+  return Math.min(20, Math.max(1, Math.round(raw)));
+}
+
+/**
+ * The ordering the rules give, and the whole answer when no key is set or the
+ * budget is gone. Misconceptions first, then missing by weight, ties broken by
+ * the checklist's own order — the same spine the model refines, so the fallback
+ * is a real plan, not a stub: just without the one-line reasons or search
+ * topics, which it marks honestly via `estimated`.
+ */
+export function fallbackPlan(
+  gaps: GapAnalysis,
+  concepts: ConceptChecklistItem[],
+): StudyPlan {
+  const weightBy = new Map(
+    concepts.map((c) => [c.conceptText.trim().toLowerCase(), c.weight]),
+  );
+  const indexBy = new Map(
+    concepts.map((c, i) => [c.conceptText.trim().toLowerCase(), i]),
+  );
+  const misconceptions = new Set(
+    gaps.misconceptions.map((c) => c.trim().toLowerCase()),
+  );
+  const named = new Set(
+    [...gaps.misconceptions, ...gaps.missing].map((c) =>
+      c.trim().toLowerCase(),
+    ),
+  );
+  const gapRank = (key: string) => (misconceptions.has(key) ? 0 : 1);
+  const steps: StudyPlanStep[] = concepts
+    .filter((c) => named.has(c.conceptText.trim().toLowerCase()))
+    .sort((a, b) => {
+      const ka = a.conceptText.trim().toLowerCase();
+      const kb = b.conceptText.trim().toLowerCase();
+      if (gapRank(ka) !== gapRank(kb)) return gapRank(ka) - gapRank(kb);
+      if (a.weight !== b.weight) return b.weight - a.weight;
+      return (indexBy.get(ka) ?? 0) - (indexBy.get(kb) ?? 0);
+    })
+    .map((c) => {
+      const key = c.conceptText.trim().toLowerCase();
+      return {
+        concept: c.conceptText,
+        gapType: misconceptions.has(key) ? "misconception" : "missing",
+        weight: weightBy.get(key) ?? c.weight,
+      };
+    });
+  return { steps, estMinutes: estimatePlanMinutes(steps), estimated: true };
+}
+
+// trust boundary: the model names concepts and we must only keep names that
+// are real gaps. A drifted or invented name is dropped, the real concept's
+// spelling is used, and the weight is always recomputed from the checklist.
+export function sanitizePlanSteps(
+  value: unknown,
+  gaps: GapAnalysis,
+  concepts: ConceptChecklistItem[],
+): StudyPlanStep[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const rawSteps = (value as { steps?: unknown }).steps;
+  if (!Array.isArray(rawSteps)) return [];
+  const weightBy = new Map(
+    concepts.map((c) => [c.conceptText.trim().toLowerCase(), c.weight]),
+  );
+  const misconceptions = new Set(
+    gaps.misconceptions.map((c) => c.trim().toLowerCase()),
+  );
+  const allowed = new Set(
+    [...gaps.misconceptions, ...gaps.missing].map((c) =>
+      c.trim().toLowerCase(),
+    ),
+  );
+  const seen = new Set<string>();
+  const steps: StudyPlanStep[] = [];
+  for (const raw of rawSteps) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const o = raw as Record<string, unknown>;
+    const name = typeof o.concept === "string" ? o.concept.trim() : "";
+    const key = name.toLowerCase();
+    if (!key || !allowed.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    const gapType =
+      misconceptions.has(key) ||
+      concepts.some(
+        (c) => c.isMisconception && c.conceptText.trim().toLowerCase() === key,
+      )
+        ? "misconception"
+        : "missing";
+    const canonical =
+      concepts.find((c) => c.conceptText.trim().toLowerCase() === key)
+        ?.conceptText ?? name;
+    const whyFirst =
+      typeof o.whyFirst === "string" ? o.whyFirst.trim().slice(0, 300) : "";
+    const searchTopic =
+      typeof o.searchTopic === "string"
+        ? o.searchTopic.trim().slice(0, 160)
+        : "";
+    steps.push({
+      concept: canonical,
+      gapType,
+      weight: weightBy.get(key) ?? 1,
+      ...(whyFirst ? { whyFirst } : {}),
+      ...(searchTopic ? { searchTopic } : {}),
+    });
+  }
+  return steps;
+}
+
+function planUserPrompt(
+  gaps: GapAnalysis,
+  concepts: ConceptChecklistItem[],
+): string {
+  return `CONCEPT CHECKLIST (exact names, weights):\n${conceptsChecklist(concepts)}\n\nSTUDENT GAPS:\n${gapsSummary(gaps)}\n\nOrder EVERY gap exactly once.`;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -1036,6 +1210,25 @@ const LESSON_SYSTEM =
   "no headers, no markdown, no bullet lists, 4-8 sentences total, one plain analogy, ends with a one-line recall prompt to the student. " +
   'Return STRICT JSON: {"text":"the lesson"}.';
 
+// The plan is a *short* roadmap — the whole point of the phase. "A lesson for
+// every gap" is what the microlesson and the guide are for; this prompt is
+// deliberately written so the model orders and names, and nothing else. And
+// one hard rule: search topics, never URLs.
+const PLAN_SYSTEM =
+  "You plan a student's study session from a gap analysis. Each gap is either 'missing' " +
+  "(they did not really learn it) or a 'misconception' (they said it wrong, and the wrong " +
+  "model blocks the right one). " +
+  "Build a SHORT, EFFECTIVE roadmap — this is their plan, not their lesson. Every gap exactly once, ordered to work FOR THIS STUDENT. " +
+  "Rules, in order of importance: " +
+  "1. Misconceptions first, because a wrong belief must be corrected before the idea it blocks can land. " +
+  "2. Then the missing ideas, heaviest (weight) first. " +
+  "3. Keep the exact conceptText names verbatim. " +
+  'For each step, "whyFirst" is ONE short sentence a voice engine can read aloud, saying why this ' +
+  "gap comes now for THIS student — e.g. 'you had this backwards, so we fix it first'. " +
+  'Also set "searchTopic": the concept named in 2-6 plain web-search words in the student\'s language ' +
+  "- never a URL, never a platform name. " +
+  'Return STRICT JSON, no prose, no markdown: {"steps":[{"concept":"...","gapType":"missing"|"misconception","whyFirst":"...","searchTopic":"..."}]}.';
+
 const SECTION_SYSTEM =
   "You explain ONE concept to a Grade 12 student revising this chapter. " +
   "Return STRICT JSON, no prose, no markdown: " +
@@ -1265,6 +1458,32 @@ export const ai: AiService = {
       return malformed("generateMicroLesson", fallback);
     } catch (error) {
       return degraded("generateMicroLesson", error, fallback);
+    }
+  },
+
+  async generateStudyPlan(
+    gaps: GapAnalysis,
+    concepts: ConceptChecklistItem[],
+    language: ContentLanguage = "en",
+    options: { skipAi?: boolean } = {},
+  ): Promise<StudyPlan> {
+    const fallback = () => fallbackPlan(gaps, concepts);
+    if (options.skipAi) return fallback();
+    if (!isAiAvailable()) return fallback();
+    try {
+      const raw = await ask(
+        PLAN_SYSTEM + outputInstruction(language),
+        planUserPrompt(gaps, concepts),
+      );
+      const steps = sanitizePlanSteps(parseJson<unknown>(raw), gaps, concepts);
+      if (!steps.length) return malformed("generateStudyPlan", fallback);
+      return {
+        steps,
+        estMinutes: estimatePlanMinutes(steps),
+        estimated: false,
+      };
+    } catch (error) {
+      return degraded("generateStudyPlan", error, fallback);
     }
   },
 
