@@ -329,12 +329,9 @@ allocation drive concept ordering in the Phase 11 guide. Details in
 
 ### Open forks — decisions needed before step 4
 
-- **Surface.** The existing loop is a *session*, and a session is structurally
-  one chapter; but the agreed scope is "chapter(s) and/or topic(s), the
-  student's choice," which can span chapters. Either the guide lives inside the
-  session loop and scope is capped at one chapter, or a new **Plan** surface is
-  defined first and the retest becomes an optional tool inside it. The second
-  matches what was actually asked for, and it is much larger.
+- **Plan scope is one chapter per study session.** The grounded plan is the
+  delivery step after diagnosis, inside the existing loop; the existing retest
+  follows the last attempted check. Multi-chapter planning remains out of scope.
 - **Keep guide content typed.** The shipped guide flow uses structured
   `GuideSection` values; the legacy microlesson still uses `lessonText`. Do not
   serialize the guide into that string field when adding scope selection or

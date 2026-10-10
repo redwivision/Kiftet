@@ -3,17 +3,16 @@ import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
 import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
 import {
+  BookOpen,
   Check,
   CircleAlert,
   MicOff,
-  Play,
-  Search,
   Square,
   Volume2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import {
   getVoxideClient,
   hasVoxideKey,
@@ -356,7 +355,9 @@ function StudyScreen({ demo }: { demo: boolean }) {
 
           <div className="animate-fade-in" key={state.phase}>
             {state.phase === "recall" && <RecallPhase demo={demo} />}
-            {state.phase === "gaps" && <GapsPhase />}
+            {state.phase === "gaps" && (
+              <GapsPhase startHereConcept={state.plan?.steps[0]?.concept} />
+            )}
             {state.phase === "lesson" && <LessonPhase />}
             {state.phase === "retest" && <RetestPhase />}
             {state.phase === "result" && (
@@ -477,11 +478,13 @@ function VoiceCapture({
   textDefault,
   busy,
   placeholder,
+  buttonLabel,
 }: {
   submit: (text: string) => Promise<void>;
   textDefault: boolean;
   busy: boolean;
   placeholder?: string;
+  buttonLabel?: string;
 }) {
   const { state, setNotice, clearNotice } = useStudy();
   const { t } = useLanguage();
@@ -703,7 +706,12 @@ function VoiceCapture({
       )}
 
       {effectiveText && (
-        <TextRecorder busy={busy} submit={submit} placeholder={placeholder} />
+        <TextRecorder
+          busy={busy}
+          submit={submit}
+          placeholder={placeholder}
+          buttonLabel={buttonLabel}
+        />
       )}
 
       {!voiceDead && (
@@ -901,9 +909,16 @@ function RecallPhase({ demo }: { demo: boolean }) {
   );
 }
 
-function GapsPhase() {
+function GapsPhase({ startHereConcept }: { startHereConcept?: string }) {
   const { state, fetchLesson, startRetest } = useStudy();
   const { t } = useLanguage();
+  const [budgetMinutes, setBudgetMinutes] = useState<10 | 20 | 40>(() => {
+    if (typeof window === "undefined") return 20;
+    const saved = window.localStorage.getItem("kiftet-plan-budget");
+    return saved === "10" || saved === "20" || saved === "40"
+      ? (Number(saved) as 10 | 20 | 40)
+      : 20;
+  });
   const gaps = state.gaps;
   const [meta, setMeta] = useState<Record<string, ConceptMeta>>({});
 
@@ -970,12 +985,42 @@ function GapsPhase() {
         mastery={gaps.mastery}
         score={gaps.score}
         estimated={gaps.estimated}
+        startHereConcept={startHereConcept}
       />
       <div className="space-y-2 pt-2">
+        <fieldset className="space-y-2">
+          <legend className="font-medium text-muted-foreground text-sm">
+            {t("plan-budget-question")}
+          </legend>
+          <div className="grid grid-cols-3 gap-2">
+            {([10, 20, 40] as const).map((minutes) => (
+              <button
+                key={minutes}
+                type="button"
+                aria-pressed={budgetMinutes === minutes}
+                onClick={() => {
+                  setBudgetMinutes(minutes);
+                  window.localStorage.setItem(
+                    "kiftet-plan-budget",
+                    String(minutes),
+                  );
+                }}
+                className={cn(
+                  "rounded-xl border px-3 py-2 text-sm transition-colors",
+                  budgetMinutes === minutes
+                    ? "border-gold/50 bg-gold/10 text-foreground"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t("plan-budget-option", { n: minutes })}
+              </button>
+            ))}
+          </div>
+        </fieldset>
         <Button
           className="w-full justify-center"
           disabled={state.busy}
-          onClick={() => void fetchLesson()}
+          onClick={() => void fetchLesson(budgetMinutes)}
         >
           {state.busy ? t("preparing") : t("see-study-plan")}
         </Button>
@@ -991,137 +1036,188 @@ function GapsPhase() {
   );
 }
 
-// The lesson-phase plan: the roadmap is what the student reads first.
-// The links below never come from the model — only the search topic does, and
-// the client compiles the URLs, so a hallucinated address is structurally
-// impossible.
-function searchUrls(topic: string): { video: string; article: string } {
-  const q = encodeURIComponent(topic);
-  return {
-    video: `https://www.youtube.com/results?search_query=${q}`,
-    article: `https://www.google.com/search?q=${q}`,
-  };
-}
-
 function PlanView({
   plan,
-  lessonText,
-  recording,
-  narrate,
-  stopReading,
+  onCheck,
+  startRetest,
 }: {
   plan: StudyPlan;
-  lessonText: string | null;
-  recording: boolean;
-  narrate: (text: string) => void;
-  stopReading: () => void;
+  onCheck: (concept: string, text: string) => Promise<void>;
+  startRetest: () => Promise<void>;
 }) {
   const { t } = useLanguage();
-  const sentences = useMemo(
-    () => splitSentences(lessonText ?? ""),
-    [lessonText],
-  );
+  const { sessionId = "study" } = useParams();
+  const progressKey = `kiftet-plan-progress:${sessionId}`;
+  const [stepIndex, setStepIndex] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const saved = Number(window.sessionStorage.getItem(progressKey));
+    return Number.isInteger(saved) && saved >= 0
+      ? Math.min(saved, plan.steps.length)
+      : 0;
+  });
+  const advance = () => {
+    setStepIndex((index) => {
+      const next = Math.min(index + 1, plan.steps.length);
+      window.sessionStorage.setItem(progressKey, String(next));
+      return next;
+    });
+  };
+  const submitCheck = async (concept: string, text: string) => {
+    await onCheck(concept, text);
+    if (stepIndex + 1 >= plan.steps.length) {
+      window.sessionStorage.setItem(progressKey, String(plan.steps.length));
+      setStepIndex(plan.steps.length);
+      await startRetest();
+      return;
+    }
+    advance();
+  };
+  const current = plan.steps[stepIndex];
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground text-sm">
-        {t("plan-minutes", { n: plan.estMinutes })}
-      </p>
-      <ol className="space-y-3">
-        {plan.steps.map((step, i) => {
-          const links = step.searchTopic ? searchUrls(step.searchTopic) : null;
-          return (
-            <li
-              key={`${step.gapType}-${step.concept}`}
-              className="rounded-2xl border border-border/70 bg-card/50 p-4 dark:border-white/10"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-[0.72rem] text-muted-foreground">
-                  {t("plan-step-of", { a: i + 1, b: plan.steps.length })}
-                </p>
-                {step.gapType === "misconception" ? (
-                  <span className="rounded-full border border-rust/30 bg-rust/10 px-2.5 py-0.5 font-medium text-[0.7rem] text-rust">
-                    {t("plan-gap-fix-first")}
-                  </span>
-                ) : (
-                  <span className="rounded-full border border-border bg-muted px-2.5 py-0.5 font-medium text-[0.7rem] text-muted-foreground">
-                    {t("plan-missing")}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1.5 font-medium text-[0.95rem] text-foreground leading-6">
-                {step.concept}
-              </p>
-              {step.whyFirst && (
-                <p className="mt-1 text-muted-foreground text-sm leading-6">
-                  {step.whyFirst}
-                </p>
-              )}
-              {links && (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <a
-                    href={links.video}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-[0.78rem] transition-colors duration-200 hover:border-gold/40 hover:text-gold"
-                  >
-                    <Play className="size-3.5" aria-hidden="true" />
-                    {t("plan-video", { topic: step.searchTopic ?? "" })}
-                  </a>
-                  <a
-                    href={links.article}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-[0.78rem] transition-colors duration-200 hover:border-gold/40 hover:text-gold"
-                  >
-                    <Search className="size-3.5" aria-hidden="true" />
-                    {t("plan-article", { topic: step.searchTopic ?? "" })}
-                  </a>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-
-      {lessonText && (
-        <div className="rounded-2xl border border-border/60 bg-muted/40 p-4 dark:border-white/10">
-          <p className="k-label mb-2">{t("plan-preview-label")}</p>
-          <div className="read-panel px-0 py-0 text-[0.95rem] leading-7">
-            {sentences.length > 1
-              ? sentences.map((sentence, i) => (
-                  <span key={`${i}-${sentence}`}>{sentence} </span>
-                ))
-              : lessonText}
+      {current ? (
+        <>
+          <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/50 p-4">
+            <MasteryRing
+              percent={(stepIndex / plan.steps.length) * 100}
+              size={48}
+              estimated={plan.estimated}
+            />
+            <p className="font-medium text-foreground text-sm">
+              {t("plan-step-header", {
+                a: stepIndex + 1,
+                b: plan.steps.length,
+                n: current.estimatedMinutes,
+              })}
+            </p>
           </div>
-          <div className="mt-3 flex justify-end">
-            {recording ? (
-              <span className="group relative inline-flex">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={stopReading}
-                  aria-keyshortcuts="Escape"
-                >
-                  <Square className="size-3.5" aria-hidden="true" />
-                  {t("stop-reading")}
-                </Button>
-                <span className="absolute top-1/2 left-full ml-2 -translate-y-1/2">
-                  <ShortcutHint keys="Esc" label={t("shortcut-pause-label")} />
-                </span>
+          <section className="rounded-2xl border border-border/70 bg-card/50 p-4">
+            <div className="flex items-start gap-2 text-muted-foreground text-xs">
+              <BookOpen className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                {current.anchor.chapter}
+                {current.anchor.heading ? ` · ${current.anchor.heading}` : ""}
+                {current.anchor.page !== null
+                  ? ` · ${t("plan-page", { n: current.anchor.page })}`
+                  : ""}
               </span>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => narrate(lessonText)}
-              >
-                <Volume2 className="size-4" aria-hidden="true" />
-                {t("read-it-to-me")}
-              </Button>
+            </div>
+            <h3 className="mt-3 font-display font-semibold text-foreground text-lg leading-7">
+              {current.concept}
+            </h3>
+            {current.studentWords && (
+              <p className="mt-2 text-muted-foreground text-sm leading-6">
+                {t("plan-you-said", { words: current.studentWords })}
+              </p>
             )}
-          </div>
+            <div className="mt-3 space-y-2 text-[0.95rem] text-foreground/90 leading-7">
+              {current.body.map((block, index) => (
+                <p key={`${index}-${block}`}>{block}</p>
+              ))}
+              {current.type === "CONTRAST" && current.contrast && (
+                <>
+                  <p>
+                    <span className="font-medium">{t("plan-book-says")} </span>
+                    {current.contrast.bookSays}
+                  </p>
+                  <p>
+                    <span className="font-medium">
+                      {t("plan-feels-right")}{" "}
+                    </span>
+                    {current.contrast.feelsRightBecause}
+                  </p>
+                  <p>
+                    <span className="font-medium">
+                      {t("plan-fails-because")}{" "}
+                    </span>
+                    {current.contrast.failsBecause}
+                  </p>
+                </>
+              )}
+              {current.type === "CONTRAST" && !current.contrast && (
+                <p className="text-muted-foreground text-sm">
+                  {t("plan-compare-with-book")}
+                </p>
+              )}
+            </div>
+            {current.chapterExplains === false && (
+              <p className="mt-3 rounded-xl bg-muted px-3 py-2 text-muted-foreground text-sm leading-6">
+                {t("plan-chapter-mentions-only")}
+              </p>
+            )}
+            <p className="mt-3 border-border border-l-2 pl-3 text-muted-foreground text-sm leading-6">
+              {t("plan-check-prompt", { prompt: current.check.sayItBack })}
+            </p>
+            {current.check.whyIsThisTrue && (
+              <p className="mt-2 text-muted-foreground text-sm">
+                {current.check.whyIsThisTrue}
+              </p>
+            )}
+          </section>
+          <VoiceCapture
+            key={current.concept}
+            submit={(text) => submitCheck(current.concept, text)}
+            textDefault
+            busy={false}
+            placeholder={t("plan-check-placeholder")}
+            buttonLabel={t("plan-check-submit")}
+          />
+        </>
+      ) : (
+        <div className="rounded-xl border border-border/70 bg-card/50 p-4 text-muted-foreground text-sm">
+          {t("plan-no-steps")}
         </div>
       )}
+
+      {plan.nextSession.length > 0 && (
+        <details className="rounded-xl border border-border/60 px-4 py-3">
+          <summary className="cursor-pointer text-muted-foreground text-sm">
+            {t("plan-next-session", { n: plan.nextSession.length })}
+          </summary>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-muted-foreground text-sm">
+            {plan.nextSession.map((concept) => (
+              <li key={concept}>{concept}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {plan.skippedKnown.count > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {t("plan-skipped-known", {
+            n: plan.skippedKnown.count,
+            minutes: plan.skippedKnown.estimatedTimeSavedMinutes,
+          })}
+        </p>
+      )}
+      <ol className="space-y-1 border-border/50 border-t pt-3">
+        {plan.steps.map((step, index) => (
+          <li
+            key={step.concept}
+            className={cn(
+              "flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs",
+              index === stepIndex ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <span>{index < stepIndex ? "✓" : `${index + 1}.`}</span>
+            <span>{step.concept}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="flex justify-center">
+        <Button
+          variant="outline"
+          disabled={Boolean(current)}
+          onClick={() => void startRetest()}
+        >
+          {t("ready-to-be-tested")}
+        </Button>
+      </div>
+      <span className="sr-only" aria-live="polite">
+        {t("plan-progress", {
+          a: Math.min(stepIndex, plan.steps.length),
+          b: plan.steps.length,
+        })}
+      </span>
     </div>
   );
 }
@@ -1203,7 +1299,7 @@ function LessonTextPanel({
 }
 
 function LessonPhase() {
-  const { state, startRetest, viewGaps } = useStudy();
+  const { state, startRetest, submitPlanCheck, viewGaps } = useStudy();
   const { t, lang } = useLanguage();
   const narratedRef = useRef<string | null>(null);
   // A single acknowledged "something is being read aloud" state for both
@@ -1212,12 +1308,8 @@ function LessonPhase() {
   // answered with dead air or a silent button.
   const [reading, setReading] = useState(false);
   const stopRef = useRef<() => void>(null);
-  // The lesson phase is a PLAN by default; the single-lesson view is handed
-  // over behind the classic-lesson (Beta) toggle so we can test both shapes.
-  const [view, setView] = useState<"plan" | "classic">("plan");
   const plan = state.plan;
-  const hasPlan = Boolean(plan && plan.steps.length > 0);
-  const showPlan = hasPlan && view === "plan";
+  const showPlan = Boolean(plan);
   const [activeSentence, setActiveSentence] = useState<number | null>(null);
   const sentences = useMemo(
     () => splitSentences(state.lessonText ?? ""),
@@ -1324,25 +1416,11 @@ function LessonPhase() {
           )}
           <PlanView
             plan={plan}
-            lessonText={state.lessonText}
-            recording={reading}
-            narrate={(text) => void narrate(text, "button")}
-            stopReading={stopReading}
+            onCheck={submitPlanCheck}
+            startRetest={startRetest}
           />
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={() => setView("classic")}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-muted-foreground text-xs transition-colors duration-200 hover:border-gold/40 hover:text-gold"
-            >
-              {t("plan-classic-lesson")}
-            </button>
-          </div>
-          <p className="text-center text-muted-foreground text-xs">
-            {t("plan-classic-caption")}
-          </p>
         </>
-      ) : hasPlan ? (
+      ) : state.guide?.length ? (
         <>
           <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
           {lang === "am" && (
@@ -1378,10 +1456,10 @@ function LessonPhase() {
           <div className="flex justify-center">
             <button
               type="button"
-              onClick={() => setView("plan")}
+              onClick={viewGaps}
               className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-muted-foreground text-xs transition-colors duration-200 hover:border-gold/40 hover:text-gold"
             >
-              {t("plan-back")}
+              {t("back-to-gaps")}
             </button>
           </div>
         </>

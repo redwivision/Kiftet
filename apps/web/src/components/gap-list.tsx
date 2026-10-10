@@ -27,6 +27,7 @@ interface CoverageViewProps {
    *  `mastery` only when a caller has no score to show. */
   score?: number;
   estimated?: boolean;
+  startHereConcept?: string;
   className?: string;
 }
 
@@ -62,6 +63,7 @@ export function CoverageView({
   mastery,
   score,
   estimated = false,
+  startHereConcept,
   className,
 }: CoverageViewProps) {
   const { t } = useLanguage();
@@ -257,6 +259,11 @@ export function CoverageView({
                     className="mt-[7px] size-1.5 shrink-0 rounded-full border border-rust"
                   />
                   <span className="min-w-0 break-words">{concept}</span>
+                  {startHereConcept === concept && (
+                    <span className="ml-auto shrink-0 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 font-medium text-[0.72rem] text-gold">
+                      {t("cov-start-here")}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -277,7 +284,7 @@ export function CoverageView({
             {t("cov-almost-text")}
           </p>
           <ul className="space-y-2">
-            {byImportance(groups.almost, meta).map((concept, i) => (
+            {byImportance(groups.almost, meta).map((concept) => (
               <li
                 key={concept}
                 className="flex items-baseline gap-2 text-foreground/90 text-sm"
@@ -288,7 +295,7 @@ export function CoverageView({
                   className="translate-y-[3px]"
                 />
                 <span className="min-w-0 break-words">{concept}</span>
-                {i === 0 && (
+                {startHereConcept === concept && (
                   <span className="ml-auto shrink-0 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 font-medium text-[0.72rem] text-gold">
                     {t("cov-start-here")}
                   </span>
@@ -321,6 +328,11 @@ export function CoverageView({
                   className="translate-y-[3px]"
                 />
                 <span className="min-w-0 break-words">{concept}</span>
+                {startHereConcept === concept && (
+                  <span className="ml-auto shrink-0 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 font-medium text-[0.72rem] text-gold">
+                    {t("cov-start-here")}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

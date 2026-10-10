@@ -285,6 +285,32 @@ asked of a model — a model asked for a location invents one.
 
 ---
 
+### 5.6c Study plan — one grounded step per diagnosed gap
+
+The study plan follows diagnosis; it does not replace or re-grade it. The
+client sends the existing mastery map and the student's selected 10/20/40
+minute budget to `POST /sessions/:id/plan`. The server maps levels 0/1/2 to
+BUILD/FINISH/CONTRAST, selects the highest-value concepts that fit, then
+presents misconceptions first, remaining concepts in book order, and FINISH
+steps last. Unselected gaps remain under "Next session"; level-3 concepts are
+reported as known rather than assigned another lesson.
+
+Each step points to a deterministic excerpt and offset in that student's own
+chapter. Generated body and contrast fields are accepted only when each is an
+exact chapter-text substring. Invalid content is retried once, then replaced
+with the excerpt and a say-it-back prompt. The concept name, student wording,
+and minutes are assembled per response; only base chapter content is cached by
+chapter, concept, step type, language, and plan version. There are no search
+links or external resources.
+
+Checks are attempts, not completion toggles. `POST
+/sessions/:id/plan/check` records a typed or spoken response idempotently, and
+the browser queues it offline. After the final step, the existing retest
+starts. The dashboard's optional "Review due" chip uses the most recent saved
+mastery check and a two-day threshold; it sends no notification.
+
+---
+
 ### 5.7 Retest — "prove you learned it"
 
 The retest has two parts: generating questions, then grading each answer. One

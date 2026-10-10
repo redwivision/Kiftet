@@ -20,10 +20,10 @@ import {
   type ChecklistRow,
   cacheChapters,
   cacheChecklist,
-  cacheLesson,
   cacheQuestions,
-  getCachedLesson,
+  cacheStudyPlan,
   getCachedQuestions,
+  getCachedStudyPlan,
 } from "@/lib/store";
 
 export type Phase = "recall" | "gaps" | "lesson" | "retest" | "result";
@@ -80,18 +80,39 @@ export type Guide = {
   language: "en" | "am";
 };
 
-/** ONE step of the study plan — an ORDER and a reason, not the content. */
+/** One source-grounded, mastery-specific study-plan step. */
 export type StudyPlanStep = {
   concept: string;
   gapType: "missing" | "misconception";
   weight: number;
+  type: "BUILD" | "CONTRAST" | "FINISH";
+  masteryLevel: MasteryLevel;
+  estimatedMinutes: number;
+  anchor: {
+    chapter: string;
+    heading: string | null;
+    page: number | null;
+    offset: number;
+    excerpt: string;
+  };
+  body: string[];
+  contrast: {
+    bookSays: string;
+    feelsRightBecause: string;
+    failsBecause: string;
+  } | null;
+  chapterExplains: boolean | null;
+  check: { sayItBack: string; whyIsThisTrue?: string };
+  studentWords: string | null;
   whyFirst?: string;
-  searchTopic?: string;
 };
 
 /** A personalized roadmap over the student's gaps, shown in the lesson phase. */
 export type StudyPlan = {
   steps: StudyPlanStep[];
+  nextSession: string[];
+  skippedKnown: { count: number; estimatedTimeSavedMinutes: number };
+  budgetMinutes: number;
   estMinutes: number;
   estimated: boolean;
 };
@@ -254,14 +275,6 @@ export function masteryQuery(gaps: Gaps): string {
     .join(",")}`;
 }
 
-// Order-insensitive concept-set comparison, used to decide how honest the copy
-// on a cached lesson can be ("covers the same gaps" vs "gaps have changed").
-function sameConceptSet(a: string[], b: string[]): boolean {
-  return (
-    a.length === b.length && [...a].every((concept) => b.includes(concept))
-  );
-}
-
 // Maps a stored cache language to its readable label in the current script.
 // Runs inside the provider (needs `t`), so it's a small hook-local helper.
 function languageLabel(
@@ -413,7 +426,8 @@ interface StudyContextValue {
   beginRecall: () => void;
   viewGaps: () => void;
   submitRecall: (text: string) => Promise<void>;
-  fetchLesson: () => Promise<void>;
+  fetchLesson: (budgetMinutes?: 10 | 20 | 40) => Promise<void>;
+  submitPlanCheck: (concept: string, text: string) => Promise<void>;
   goLesson: () => void;
   startRetest: () => Promise<void>;
   submitAnswer: (text: string) => Promise<void>;
@@ -579,100 +593,51 @@ export function StudyProvider({
     [run, sessionId, t],
   );
 
-  const fetchLesson = useCallback(() => {
-    const gaps = stateRef.current.gaps;
-    const chapterId = stateRef.current.chapter?.id;
-    if (!gaps) return Promise.resolve();
+  const fetchLesson = useCallback(
+    (budgetMinutes: 10 | 20 | 40 = 20) => {
+      const gaps = stateRef.current.gaps;
+      const chapterId = stateRef.current.chapter?.id;
+      if (!gaps) return Promise.resolve();
 
-    // The guide is the ordered sections; the microlesson is the single
-    // read-aloud script built from them. Two requests, not one: the sections
-    // are what the student reads and they come from the shared cache, while the
-    // read-aloud is still per-session because it stitches this student's
-    // concepts into one continuous script. The plan rides along, best-effort —
-    // a failed plan must never take the phase down, we just render the classic
-    // lesson instead.
-    const fetchGuide = chapterId
-      ? api<Guide>(
-          `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}`,
-        )
-      : Promise.resolve<Guide | null>(null);
-
-    // Best-effort and intentionally not awaited: the plan may land after the
-    // lesson has, and the phase renders the classic lesson until then (or
-    // forever, if the request fails).
-    void api<StudyPlan>(`/sessions/${sessionId}/plan`, {
-      method: "POST",
-      body: JSON.stringify({
-        missing: gaps.missing,
-        misconceptions: gaps.misconceptions,
-        language: lang,
-      }),
-    })
-      .then((plan) => dispatch({ type: "PLAN", plan }))
-      .catch(() => {});
-
-    return run(
-      () =>
-        Promise.all([
-          api<{ text: string }>(`/sessions/${sessionId}/microlesson`, {
+      if (!chapterId) return Promise.resolve();
+      return run(async () => {
+        try {
+          const plan = await api<StudyPlan>(`/sessions/${sessionId}/plan`, {
             method: "POST",
             body: JSON.stringify({
               missing: gaps.missing,
               misconceptions: gaps.misconceptions,
+              mastery: gaps.mastery ?? {},
+              budgetMinutes,
               language: lang,
             }),
-          }),
-          fetchGuide,
-        ])
-          .then(([lesson, guide]) => {
-            // Bet 3: keep the freshly generated lesson on the phone so it
-            // can be re-read (honestly flagged) if the connection drops
-            // later in the loop.
-            void cacheLesson(
-              sessionId,
-              lesson.text,
-              gaps.missing,
-              gaps.misconceptions,
-              lang,
-            );
-            dispatch({ type: "LESSON", text: lesson.text });
-            if (guide) {
-              dispatch({
-                type: "GUIDE",
-                guide: guide.sections,
-                estimated: guide.estimated,
-              });
-            }
-          })
-          .catch(async (err: unknown) => {
-            // Offline: fall back to the lesson saved on this phone — it
-            // covers the same gaps unless the grading changed since. A
-            // cached lesson is content, not a score, so this needs no
-            // reconnect reload.
-            if (err instanceof ApiError && err.status === 0) {
-              const cached = await getCachedLesson(sessionId);
-              if (!cached?.text) throw err;
-              dispatch({ type: "LESSON", text: cached.text });
-              const language = cached.language ?? "en";
-              const sameGaps =
-                sameConceptSet(cached.missing, gaps.missing) &&
-                sameConceptSet(cached.misconceptions, gaps.misconceptions);
-              const message =
-                language !== lang
-                  ? t("lesson-cached-lang", {
-                      lang: languageLabel(language, t),
-                    })
-                  : sameGaps
-                    ? t("lesson-cached-same")
-                    : t("lesson-cached-changed");
-              dispatch({ type: "NOTICE", message });
-              return;
-            }
-            throw err;
-          }),
-      undefined,
-    );
-  }, [run, sessionId, lang, t]);
+          });
+          dispatch({ type: "PLAN", plan });
+          await cacheStudyPlan({
+            sessionId,
+            chapterId,
+            language: lang,
+            budgetMinutes,
+            plan,
+            cachedAt: Date.now(),
+          });
+          dispatch({ type: "LESSON", text: "" });
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 0) throw error;
+          const cached = await getCachedStudyPlan(
+            sessionId,
+            lang,
+            budgetMinutes,
+          );
+          if (!cached) throw error;
+          dispatch({ type: "PLAN", plan: cached.plan });
+          dispatch({ type: "LESSON", text: "" });
+          dispatch({ type: "NOTICE", message: t("plan-cached-offline") });
+        }
+      }, undefined);
+    },
+    [run, sessionId, lang, t],
+  );
 
   const goLesson = useCallback(() => {
     // Back into the lesson without a fresh API call when it's already loaded.
@@ -804,6 +769,30 @@ export function StudyProvider({
       });
     },
     [run, sessionId, t],
+  );
+
+  const submitPlanCheck = useCallback(
+    async (concept: string, text: string) => {
+      const attemptId = crypto.randomUUID();
+      try {
+        await api(`/sessions/${sessionId}/plan/check`, {
+          method: "POST",
+          body: JSON.stringify({ attemptId, concept, transcriptText: text }),
+        });
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 0) throw error;
+        await enqueueOutbox({
+          id: attemptId,
+          kind: "plan-check",
+          sessionId,
+          attemptId,
+          payload: { transcriptText: text, concept },
+          createdAt: Date.now(),
+        });
+        dispatch({ type: "NOTICE", message: t("plan-check-queued") });
+      }
+    },
+    [sessionId, t],
   );
 
   const fetchResult = useCallback(
@@ -1000,6 +989,7 @@ export function StudyProvider({
         goLesson,
         startRetest,
         submitAnswer,
+        submitPlanCheck,
         fetchResult,
         retryAgain,
         retryLast,

@@ -39,6 +39,13 @@ type SessionHistory = {
   durationMs: number | null;
 };
 
+type ReviewDue = {
+  chapterId: string;
+  chapterTitle: string;
+  concept: string;
+  lastCheckedAt: string;
+};
+
 type AiBudget = {
   demo: boolean;
   limitPerMinute: number;
@@ -96,6 +103,8 @@ export default function Dashboard() {
   // it so the room never pretends a saved list is live data.
   const [offlineList, setOfflineList] = useState(false);
   const [history, setHistory] = useState<SessionHistory[]>([]);
+  const [reviewsDue, setReviewsDue] = useState<ReviewDue[]>([]);
+  const [reviewError, setReviewError] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [budget, setBudget] = useState<AiBudget | null>(null);
@@ -218,6 +227,15 @@ export default function Dashboard() {
       })
       .catch(() => {
         // Non-fatal: cards just render without a history line.
+      });
+    api<ReviewDue[]>("/review-due")
+      .then((rows) => {
+        if (cancelled) return;
+        setReviewsDue(rows);
+        setReviewError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewError(true);
       });
     return () => {
       cancelled = true;
@@ -454,6 +472,12 @@ export default function Dashboard() {
         </div>
       )}
 
+      {reviewError && (
+        <p className="mb-4 text-muted-foreground text-xs">
+          {t("review-due-error")}
+        </p>
+      )}
+
       {chapters && chapters.length === 0 && (
         <div className="surface flex flex-col items-center gap-5 p-10 text-center">
           <ConceptGraph className="h-28 w-auto text-gold" />
@@ -499,6 +523,9 @@ export default function Dashboard() {
                     title={title}
                     starting={starting === chapter.id}
                     percent={last?.after ?? 0}
+                    reviewDue={reviewsDue.find(
+                      (item) => item.chapterId === chapter.id,
+                    )}
                     onStart={() => start(chapter)}
                   />
                   <ChapterHistory last={last} />
@@ -517,12 +544,14 @@ function ChapterCard({
   title,
   starting,
   percent,
+  reviewDue,
   onStart,
 }: {
   chapter: ChapterInfo;
   title: string;
   starting: boolean;
   percent: number;
+  reviewDue?: ReviewDue;
   onStart: () => void;
 }) {
   const { t } = useLanguage();
@@ -553,6 +582,12 @@ function ChapterCard({
       <p className="mt-3 text-muted-foreground text-sm">
         {chapter.textbookTitle}
       </p>
+
+      {reviewDue && (
+        <p className="mt-3 inline-flex rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-gold text-xs">
+          {t("review-due", { concept: reviewDue.concept })}
+        </p>
+      )}
 
       <p className="mt-5 font-medium text-foreground/90 text-xs">
         {t("card-promise")}

@@ -1,5 +1,5 @@
 // Bet 3 (STRATEGY.md): the offline-first loop's local data layer — a tiny
-// promise IndexedDB store, no dependencies. Seven object stores:
+// promise IndexedDB store, no dependencies. Eight object stores:
 //
 //   chapters   — the owned-chapter list, keyed by chapter id
 //   checklist  — a chapter's concept checklist, keyed by chapter id
@@ -13,6 +13,7 @@
 //   textbook-files — source PDFs or pasted text, stored on this device only;
 //                     account metadata and the saved table of contents sync
 //                     separately, never the original file
+//   plans      — offline plan copies keyed by session, language, and budget
 //
 // Everything is SSR-safe: in a server build (or a browser without IndexedDB)
 // every call resolves to a no-op/empty result instead of throwing.
@@ -32,7 +33,7 @@ export type CachedQuestion = {
 };
 
 const DB_NAME = "kiftet-store";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORES = [
   "chapters",
   "checklist",
@@ -41,6 +42,7 @@ const STORES = [
   "questions",
   "ocr",
   "textbook-files",
+  "plans",
 ] as const;
 
 type StoreName = (typeof STORES)[number];
@@ -127,6 +129,48 @@ export type CachedChapter = {
 export async function cacheChapters(rows: CachedChapter[]): Promise<void> {
   if (!dbAvailable()) return;
   await Promise.all(rows.map((row) => putStore("chapters", row, row.id)));
+}
+
+export type CachedStudyPlan = {
+  sessionId: string;
+  chapterId: string;
+  language: "en" | "am";
+  budgetMinutes: 10 | 20 | 40;
+  plan: import("@/components/study-provider").StudyPlan;
+  cachedAt: number;
+};
+
+function studyPlanKey(
+  sessionId: string,
+  language: "en" | "am",
+  budgetMinutes: 10 | 20 | 40,
+): string {
+  return `${sessionId}:${language}:${budgetMinutes}`;
+}
+
+export async function cacheStudyPlan(row: CachedStudyPlan): Promise<void> {
+  if (!dbAvailable()) return;
+  await putStore(
+    "plans",
+    row,
+    studyPlanKey(row.sessionId, row.language, row.budgetMinutes),
+  );
+}
+
+export async function getCachedStudyPlan(
+  sessionId: string,
+  language: "en" | "am",
+  budgetMinutes: 10 | 20 | 40,
+): Promise<CachedStudyPlan | undefined> {
+  if (!dbAvailable()) return undefined;
+  return tx(
+    "plans",
+    "readonly",
+    (store) =>
+      store.get(studyPlanKey(sessionId, language, budgetMinutes)) as IDBRequest<
+        CachedStudyPlan | undefined
+      >,
+  );
 }
 
 export async function getCachedChapters(): Promise<CachedChapter[]> {

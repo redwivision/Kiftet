@@ -13,7 +13,7 @@
 import { ApiError, api } from "@/lib/api";
 import { allStore, dbAvailable, putStore, removeStore } from "@/lib/store";
 
-export type OutboxKind = "recall" | "answer";
+export type OutboxKind = "recall" | "answer" | "plan-check";
 
 export type OutboxItem = {
   id: string;
@@ -25,6 +25,7 @@ export type OutboxItem = {
   payload: {
     transcriptText: string;
     questionIndex?: number;
+    concept?: string;
   };
   createdAt: number;
 };
@@ -86,7 +87,9 @@ export async function flushOutbox(): Promise<number> {
       const path =
         item.kind === "recall"
           ? `/sessions/${item.sessionId}/recall`
-          : `/sessions/${item.sessionId}/retest/answer`;
+          : item.kind === "answer"
+            ? `/sessions/${item.sessionId}/retest/answer`
+            : `/sessions/${item.sessionId}/plan/check`;
       await api(path, {
         method: "POST",
         body: JSON.stringify({ ...item.payload, attemptId: item.attemptId }),
