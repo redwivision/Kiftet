@@ -63,6 +63,48 @@ const ACTIVE: VoxideStatus[] = [
 const DEMO_SAMPLE_RECALL =
   "The cell is the basic unit of all living things. The plasma membrane controls what goes in and out. The nucleus holds the DNA and controls the cell. Ribosomes build proteins, and the cytoplasm is the fluid inside the cell. Mitochondria release energy. Chloroplasts are found in animal cells where they store energy.";
 
+// The one-time first-run nudge: shown under the ring on a student's first
+// recall, dismissed forever after. Remembered locally, not on the account —
+// the point is helping a person get started, not tracking them.
+const HINT_KEY = "kiftet-recall-hint-dismissed";
+
+function FirstRunHint() {
+  const { t } = useLanguage();
+  // Hidden on the server and on first client paint, then revealed once we can
+  // read the local flag — reading it during render would desync hydration.
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(HINT_KEY) !== "1") setDismissed(false);
+    } catch {
+      // Private mode: leave the hint hidden rather than nag.
+    }
+  }, []);
+  if (dismissed) return null;
+  const dismiss = () => {
+    try {
+      localStorage.setItem(HINT_KEY, "1");
+    } catch {
+      // Private mode: the hint just reappears next time. Not worth an error.
+    }
+    setDismissed(true);
+  };
+  return (
+    <div className="mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3">
+      <p className="text-foreground/85 text-sm leading-6">
+        {t("hint-first-recall")}
+      </p>
+      <button
+        type="button"
+        onClick={dismiss}
+        className="shrink-0 rounded-full border border-gold/30 px-3 py-1.5 font-medium text-gold text-xs transition-colors duration-200 hover:bg-gold/10"
+      >
+        {t("hint-dismiss")}
+      </button>
+    </div>
+  );
+}
+
 // Everything the student said since the capture window opened. A long recall
 // streams in as many partial transcript chunks, and Voxide only finalizes a
 // turn once Gemini sends turn_complete — which can lag behind the student
@@ -719,6 +761,7 @@ function RecallPhase() {
         textDefault={!hasVoxideKey()}
         busy={state.busy}
       />
+      {!demoRoom && <FirstRunHint />}
       {demoRoom && (
         <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
           <p className="text-muted-foreground text-xs leading-5">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { setChapter, setSession } from "@/components/assistant";
 import { useLanguage } from "@/components/language-provider";
+import { MasteryRing } from "@/components/mastery-ring";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser } from "@/lib/demo";
@@ -406,25 +407,28 @@ function UnitCard({
         </div>
         <div className="flex items-center gap-3">
           {unit.total > 0 ? (
-            <p className="text-right">
-              <span
-                className={`font-medium text-sm ${
-                  pct >= 100
-                    ? "text-sage"
-                    : pct > 0
-                      ? "text-gold"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {t("chapter-covered", {
-                  covered: unit.covered,
-                  total: unit.total,
-                })}
-              </span>
-              <span className="block text-[0.78rem] text-muted-foreground">
-                {t("pct-unit", { pct })}
-              </span>
-            </p>
+            <>
+              <MasteryRing percent={pct} size={44} />
+              <p className="text-right">
+                <span
+                  className={`font-medium text-sm ${
+                    pct >= 100
+                      ? "text-sage"
+                      : pct > 0
+                        ? "text-gold"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {t("chapter-covered", {
+                    covered: unit.covered,
+                    total: unit.total,
+                  })}
+                </span>
+                <span className="block text-[0.78rem] text-muted-foreground">
+                  {t("pct-unit", { pct })}
+                </span>
+              </p>
+            </>
           ) : (
             <p className="text-[0.78rem] text-muted-foreground">
               {t("no-chapters-mapped")}
@@ -461,6 +465,7 @@ function UnitCard({
                     off the edge. Wrapping plus a width cap on the select keeps
                     all three reachable without a horizontal scroll. */}
                 <div className="flex flex-wrap items-center gap-2">
+                  <MasteryRing percent={ch.coverage?.after ?? 0} size={28} />
                   {covered ? (
                     <span className="shrink-0 rounded-full border border-sage/30 bg-sage/10 px-2.5 py-0.5 font-medium text-[0.78rem] text-sage">
                       {ch.coverage?.before ?? "—"}% → {ch.coverage?.after}%

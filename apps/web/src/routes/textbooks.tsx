@@ -11,8 +11,8 @@ import { toast } from "sonner";
 import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import { HierarchyReport } from "@/components/hierarchy-report";
-import { InkPage } from "@/components/ink-page";
 import { useLanguage } from "@/components/language-provider";
+import { MasteryRing } from "@/components/mastery-ring";
 import { TocPicker } from "@/components/toc-picker";
 import { api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -907,9 +907,11 @@ export default function Textbooks() {
 function TocPreview({
   node,
   chapters,
+  index = 0,
 }: {
   node: ImportTocNode;
   chapters: LibraryChapter[];
+  index?: number;
 }) {
   const { t } = useLanguage();
   const imported = chapters.some(
@@ -918,12 +920,20 @@ function TocPreview({
       chapter.title.startsWith(`${node.title} (part `),
   );
   return (
-    <li className="text-sm leading-6">
+    <li
+      className="animate-fade-up text-sm leading-6"
+      style={{ animationDelay: `${Math.min(index, 14) * 40}ms` }}
+    >
       {/* TOC titles arrive from a scanned PDF, so they are as long as the
           textbook's own headings run. min-w-0 + break-words lets them wrap
           instead of shoving the "already here" pill off the row. */}
-      <div className="flex items-start justify-between gap-3">
-        <span className="min-w-0 break-words">{node.title}</span>
+      <div className="flex items-start gap-2.5">
+        <MasteryRing
+          percent={imported ? 100 : 0}
+          size={22}
+          className="mt-0.5"
+        />
+        <span className="min-w-0 flex-1 break-words">{node.title}</span>
         {imported && (
           <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 font-medium text-[0.7rem] text-gold">
             {t("already-here")}
@@ -932,8 +942,13 @@ function TocPreview({
       </div>
       {node.children.length > 0 && (
         <ul className="mt-1 space-y-1 border-border/60 border-l pl-3">
-          {node.children.map((child) => (
-            <TocPreview key={child.id} node={child} chapters={chapters} />
+          {node.children.map((child, i) => (
+            <TocPreview
+              key={child.id}
+              node={child}
+              chapters={chapters}
+              index={index + i + 1}
+            />
           ))}
         </ul>
       )}
@@ -1089,10 +1104,36 @@ function AddTextbook({
   };
 
   if (step === "planning") {
+    // A skeleton shaped like the tree that is coming, so the surface does not
+    // jump when the real contents replace it. The reading label says what is
+    // happening; the bars are only ever a promise of the layout, never data.
+    const widths = [72, 54, 46, 62, 40, 52, 48, 58];
+    const indents = [0, 24, 44, 0, 24, 44, 0, 24];
     return (
-      <section className="surface flex flex-col items-center gap-5 p-10 text-center">
-        <InkPage />
-        <p className="text-muted-foreground text-sm">{t("reading-device")}</p>
+      <section className="surface p-5 sm:p-6">
+        <p className="k-label">{t("textbook-contents")}</p>
+        <div aria-hidden="true" className="mt-5 space-y-3">
+          {widths.map((width, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3"
+              style={{ paddingLeft: indents[i] }}
+            >
+              <span className="size-4 shrink-0 rounded-full border border-border" />
+              <span
+                className="h-3.5 rounded-full bg-muted/60 dark:bg-white/[0.06]"
+                style={{ width: `${width}%` }}
+              />
+            </div>
+          ))}
+        </div>
+        <p className="mt-5 flex items-center gap-2 text-muted-foreground text-sm">
+          <span
+            className="size-1.5 animate-pulse rounded-full bg-gold"
+            aria-hidden="true"
+          />
+          {t("reading-device")}
+        </p>
       </section>
     );
   }
