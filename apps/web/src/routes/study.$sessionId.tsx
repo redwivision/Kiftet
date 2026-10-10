@@ -48,6 +48,7 @@ import {
 import { useLoopTabChrome } from "@/lib/tab-chrome";
 import { visibleChapterTitle } from "@/lib/textbook";
 import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
+import { useWakeLock } from "@/lib/wake-lock";
 import type { Route } from "./+types/study.$sessionId";
 
 const ACTIVE: VoxideStatus[] = [
@@ -185,6 +186,10 @@ function StudyScreen() {
   // Tier 3: the tab names the phase and the favicon is the ring closing as the
   // loop advances. Called before the early returns below so hook order holds.
   useLoopTabChrome(state.phase);
+  // Tier 3: hold the screen on through the two phases the student just sits
+  // and works — speaking a recall, reading a lesson. A phone that sleeps then
+  // is a dropped voice session, and the loop's rhythm breaks with it.
+  useWakeLock(state.phase === "recall" || state.phase === "lesson");
 
   if (state.chapterLoading) {
     return (
