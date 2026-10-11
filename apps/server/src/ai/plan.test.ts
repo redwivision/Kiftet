@@ -344,6 +344,28 @@ describe("grounded plan content", () => {
     });
   });
 
+  test("accepts a CONTRAST step whose contrast is honestly null", () => {
+    // The prompt tells the model to return contrast=null when the passage
+    // names the idea but cannot support a book/feels/fails split — the shape
+    // production actually returns. Rejecting it made every such step fall back
+    // even though its grounded body was real.
+    const anchor = RAW.slice(0, RAW.indexOf(" Inside,"));
+    const content = validateGroundedPlanContent(
+      {
+        body: [anchor],
+        contrast: null,
+        chapterExplains: false,
+      },
+      RAW,
+      "CONTRAST",
+      anchor,
+    );
+    expect(content?.estimated).toBe(false);
+    expect(content?.contrast).toBeNull();
+    expect(content?.chapterExplains).toBe(false);
+    expect(content?.body).toEqual([anchor]);
+  });
+
   test("accepts verbatim blocks that differ from the source only in hard-wrap whitespace", () => {
     // Textbook text is hard-wrapped mid-sentence; the model returns the words
     // with single spaces. A raw `includes` rejects every such block, so every

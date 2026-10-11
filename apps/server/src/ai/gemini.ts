@@ -949,35 +949,38 @@ export function validateGroundedPlanContent(
   const contrastData = data.contrast;
   let contrast: StudyPlanContent["contrast"] = null;
   if (type === "CONTRAST") {
-    if (
-      !contrastData ||
-      typeof contrastData !== "object" ||
-      Array.isArray(contrastData)
-    )
-      return;
-    const entry = contrastData as Record<string, unknown>;
-    const keys = ["bookSays", "feelsRightBecause", "failsBecause"] as const;
-    const parts: string[] = [];
-    for (const key of keys) {
-      if (typeof entry[key] !== "string") return;
-      const part = canonicalVerbatim(nfkcChapter, entry[key] as string);
+    // The prompt tells the model to set contrast=null when the passage names
+    // the idea but cannot support a bookSays/feelsRightBecause/failsBecause
+    // split; rejecting that (as before) made every such CONTRAST step fall
+    // back even though its body was grounded. A null contrast is a valid,
+    // honest answer — the step still carries the exact source text.
+    if (contrastData !== null && contrastData !== undefined) {
+      if (typeof contrastData !== "object" || Array.isArray(contrastData))
+        return;
+      const entry = contrastData as Record<string, unknown>;
+      const keys = ["bookSays", "feelsRightBecause", "failsBecause"] as const;
+      const parts: string[] = [];
+      for (const key of keys) {
+        if (typeof entry[key] !== "string") return;
+        const part = canonicalVerbatim(nfkcChapter, entry[key] as string);
+        if (
+          !part ||
+          part.length > 400 ||
+          matchSpan(nfkcAnchor, part) === undefined
+        )
+          return;
+        parts.push(part);
+      }
+      const [bookSays, feelsRightBecause, failsBecause] = parts;
       if (
-        !part ||
-        part.length > 400 ||
-        matchSpan(nfkcAnchor, part) === undefined
+        bookSays === undefined ||
+        feelsRightBecause === undefined ||
+        failsBecause === undefined
       )
         return;
-      parts.push(part);
+      contrast = { bookSays, feelsRightBecause, failsBecause };
     }
-    const [bookSays, feelsRightBecause, failsBecause] = parts;
-    if (
-      bookSays === undefined ||
-      feelsRightBecause === undefined ||
-      failsBecause === undefined
-    )
-      return;
-    contrast = { bookSays, feelsRightBecause, failsBecause };
-  } else if (contrastData !== null) return;
+  } else if (contrastData !== null && contrastData !== undefined) return;
   return {
     body: blocks,
     contrast,
@@ -2271,7 +2274,8 @@ export const ai: AiService = {
       "For CONTRAST steps, also provide contrast.bookSays, contrast.feelsRightBecause, and contrast.failsBecause, each an exact source substring; if the text cannot support any field, set contrast=null and chapterExplains=false. " +
       "For other step types, set contrast=null. " +
       "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
-      "Index entries must match exactly the numbers in the request; reply with all of them." +
+      "Index entries must match exactly the numbers in the request; reply with all of them. " +
+      'Return strict JSON: {"steps":[{"index":1,"body":["exact chapter excerpt"],"chapterExplains":true,"contrast":null}]}.' +
       outputInstruction(language);
     const user =
       `CHAPTER TEXT:\n${chapterText.slice(0, 24000)}\n\n` +
