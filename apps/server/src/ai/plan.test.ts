@@ -205,6 +205,26 @@ describe("study plan personalization", () => {
     expect(planArchetype("Mathematics")).toBe("GENERIC");
   });
 
+  test("the Geography check names a place instead of leaking template scaffolding", () => {
+    const result = buildStudyPlan(
+      gaps([0, 0, 0, 0, 0, 0]),
+      CONCEPTS,
+      "Landforms of Ethiopia",
+      RAW,
+      new Map(),
+      "Geography",
+      "en",
+      40,
+    );
+    expect(result.steps.length).toBeGreaterThan(0);
+    for (const step of result.steps) {
+      // The old wording ("If the passage provides them...") had no referent and
+      // read as an unfilled template to the student.
+      expect(step.check.sayItBack).not.toContain("provides them");
+      expect(step.check.sayItBack).toContain("names a place");
+    }
+  });
+
   test("step estimate includes reading, spoken prompt, and the check allowance", () => {
     expect(estimateStudyStepMinutes(["one two three"], "say these words")).toBe(
       1,
@@ -322,5 +342,34 @@ describe("grounded plan content", () => {
       chapterExplains: null,
       estimated: true,
     });
+  });
+
+  test("accepts verbatim blocks that differ from the source only in hard-wrap whitespace", () => {
+    // Textbook text is hard-wrapped mid-sentence; the model returns the words
+    // with single spaces. A raw `includes` rejects every such block, so every
+    // generated step falls back — the exact failure students saw in production.
+    const hardWrapped =
+      "Inside, the cytoplasm is a watery fluid that holds the\n" +
+      "organelles. The nucleus sits at the centre and stores the genetic material.";
+    const anchor =
+      "Inside, the cytoplasm is a watery fluid that holds the organelles.";
+    const content = validateGroundedPlanContent(
+      {
+        body: [
+          "Inside, the cytoplasm is a watery fluid",
+          "that holds the organelles.",
+        ],
+        contrast: null,
+        chapterExplains: true,
+      },
+      hardWrapped,
+      "BUILD",
+      anchor,
+    );
+    expect(content?.estimated).toBe(false);
+    expect(content?.body).toEqual([
+      "Inside, the cytoplasm is a watery fluid",
+      "that holds the organelles.",
+    ]);
   });
 });

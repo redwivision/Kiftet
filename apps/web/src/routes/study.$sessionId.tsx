@@ -1500,13 +1500,15 @@ function LessonPhase() {
       )}
 
       <div className="space-y-2 pt-1">
-        <Button
-          className="w-full justify-center"
-          disabled={state.busy}
-          onClick={() => void startRetest()}
-        >
-          {t("ready-to-be-tested")}
-        </Button>
+        {!showPlan && (
+          <Button
+            className="w-full justify-center"
+            disabled={state.busy}
+            onClick={() => void startRetest()}
+          >
+            {t("ready-to-be-tested")}
+          </Button>
+        )}
         <button
           type="button"
           className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"

@@ -685,8 +685,8 @@ function localizedCheck(
       ? "ጽሑፉ ከደገፈው መሠረት፣ ክስተቱንና ውጤቱን አገናኝ።"
       : "Use only what the passage supports to connect the cause, event, and consequence.",
     PLACE_SYSTEM: am
-      ? "ጽሑፉ ካቀረበ፣ ቦታውን፣ ምክንያቱንና ምሳሌውን ግለጽ።"
-      : "If the passage provides them, explain where, why there, and one example.",
+      ? "ጽሑፉ ቦታ ካሰፈረ፣ የት እንደሆነ፣ ለምን በዚያ እንደሆነና አንድ ምሳሌ ግለጽ።"
+      : "If the passage names a place, say where it is, why it is there, and give one example.",
     PRINCIPLE: am
       ? "ደንቡን በቀላል ቃላት ግለጽ፤ ጽሑፉ ካካተተው ሁኔታ ጋር አያይዘው።"
       : "State the rule in plain words and apply it to a case only if the passage includes one.",
@@ -734,6 +734,23 @@ export function fallbackStudyPlanContent(excerpt: string): StudyPlanContent {
   };
 }
 
+/**
+ * Whitespace-insensitive containment for a grounded quote.
+ *
+ * Textbook text is hard-wrapped mid-sentence, so a verbatim block the model
+ * copies back differs from the source only in where the line breaks fall. A
+ * raw `includes` rejected every such block against the chapter text, so no
+ * generated step content was ever accepted and every plan fell back to its
+ * bare excerpt. Collapsing runs of whitespace keeps the guarantee — the words
+ * must still be present, in order, verbatim — while tolerating the wrapping
+ * the student's own book uses.
+ */
+function containsVerbatim(haystack: string, needle: string): boolean {
+  return haystack
+    .replace(/\s+/g, " ")
+    .includes(needle.replace(/\s+/g, " ").trim());
+}
+
 /** Only quoted spans from the supplied chapter text may become plan blocks. */
 export function validateGroundedPlanContent(
   value: unknown,
@@ -752,8 +769,8 @@ export function validateGroundedPlanContent(
         typeof block !== "string" ||
         !block.trim() ||
         block.trim().length > 400 ||
-        !chapterText.includes(block.trim()) ||
-        !anchorExcerpt.includes(block.trim()) ||
+        !containsVerbatim(chapterText, block) ||
+        !containsVerbatim(anchorExcerpt, block) ||
         /https?:\/\/|www\.|youtube|google/i.test(block),
     ) ||
     typeof data.chapterExplains !== "boolean"
@@ -776,8 +793,8 @@ export function validateGroundedPlanContent(
           typeof value[key] !== "string" ||
           !value[key].trim() ||
           value[key].trim().length > 400 ||
-          !chapterText.includes(value[key].trim()) ||
-          !anchorExcerpt.includes(value[key].trim()),
+          !containsVerbatim(chapterText, value[key] as string) ||
+          !containsVerbatim(anchorExcerpt, value[key] as string),
       )
     )
       return;

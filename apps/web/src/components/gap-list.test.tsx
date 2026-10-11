@@ -108,6 +108,7 @@ test("'Start here' marks only the highest-gain almost", () => {
       misconceptions={[names.wrong]}
       mastery={mastery as never}
       meta={meta}
+      startHereConcept={names.almost}
     />,
   );
   // The almost panel exists and its first row carries exactly one marker.
