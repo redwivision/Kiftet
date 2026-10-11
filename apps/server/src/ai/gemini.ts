@@ -762,7 +762,7 @@ export function validateGroundedPlanContent(
   const data = value as Record<string, unknown>;
   if (
     !Array.isArray(data.body) ||
-    data.body.length < 2 ||
+    data.body.length < 1 ||
     data.body.length > 4 ||
     data.body.some(
       (block) =>
