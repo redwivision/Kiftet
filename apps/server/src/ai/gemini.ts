@@ -751,6 +751,24 @@ function containsVerbatim(haystack: string, needle: string): boolean {
     .includes(needle.replace(/\s+/g, " ").trim());
 }
 
+function groundingWindow(
+  chapterText: string,
+  excerpt: string,
+  maxChars = 700,
+): string {
+  const hay = chapterText.replace(/\s+/g, " ").trim();
+  const needle = excerpt.replace(/\s+/g, " ").trim();
+  const at = hay.indexOf(needle);
+  if (at < 0) return needle;
+  const start = at;
+  const hardEnd = Math.min(hay.length, start + Math.max(maxChars, needle.length));
+  let end = start + needle.length;
+  const afterAnchor = hay.slice(end, hardEnd);
+  const nextBreak = afterAnchor.search(/[.!?](?=\s|$)/);
+  if (nextBreak >= 0) end += nextBreak + 1;
+  return hay.slice(start, end).trim();
+}
+
 /** Only quoted spans from the supplied chapter text may become plan blocks. */
 export function validateGroundedPlanContent(
   value: unknown,
@@ -1996,7 +2014,7 @@ export const ai: AiService = {
     const system =
       "Create the textbook-only body for one study-plan step. The diagnosis is already done; do not re-grade it. " +
       `The step type is ${type} for the exact concept ${JSON.stringify(conceptText)}. ` +
-      "Return 1–4 short blocks, each copied verbatim from the anchor excerpt. " +
+      "Return 1–4 short blocks, each copied verbatim from the anchor passage. " +
       "Do not paraphrase or add a word, fact, example, heading, URL, web search, or outside knowledge. " +
       "If the chapter mentions the concept but does not explain it, set chapterExplains=false and use only the relevant exact excerpt. " +
       (type === "CONTRAST"
@@ -2005,7 +2023,8 @@ export const ai: AiService = {
       "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
       'Return strict JSON: {"body":["exact chapter excerpt"],"chapterExplains":true}.' +
       outputInstruction(language);
-    const user = `CONCEPT: ${conceptText}\nSTEP TYPE: ${type}\nANCHOR: ${excerpt}\n\nCHAPTER TEXT:\n${chapterText.slice(0, 24000)}`;
+    const grounding = groundingWindow(chapterText, excerpt);
+    const user = `CONCEPT: ${conceptText}\nSTEP TYPE: ${type}\nANCHOR PASSAGE: ${grounding}\n\nCHAPTER TEXT:\n${chapterText.slice(0, 24000)}`;
     try {
       for (let attemptNumber = 0; attemptNumber < 2; attemptNumber += 1) {
         const remaining = deadline - Date.now();
@@ -2018,11 +2037,12 @@ export const ai: AiService = {
           user,
           { schema, timeoutMs: remaining },
         );
+        const grounding = groundingWindow(chapterText, excerpt);
         const content = validateGroundedPlanContent(
           parseJson<unknown>(raw),
           chapterText,
           type,
-          excerpt,
+          grounding,
         );
         if (content) return content;
       }
