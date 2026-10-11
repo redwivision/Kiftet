@@ -367,9 +367,107 @@ describe("grounded plan content", () => {
       anchor,
     );
     expect(content?.estimated).toBe(false);
+    // Blocks are canonicalised back to the book's own text, hard wrap intact —
+    // the line that fell across "holds the" / "organelles" reads in the plan
+    // exactly as it wraps in the PDF.
     expect(content?.body).toEqual([
       "Inside, the cytoplasm is a watery fluid",
-      "that holds the organelles.",
+      "that holds the\norganelles.",
     ]);
+  });
+
+  test("tolerates case and typography a model changes while copying", () => {
+    // The book typesets "cell's" with a curly apostrophe; the model answers
+    // with a straight one and different casing. Folded the same way, the words
+    // still match in order — and the stored block is the book's own span.
+    const source =
+      "Inside, the cell\u2019s membrane lets certain molecules pass.";
+    const content = validateGroundedPlanContent(
+      {
+        body: ["INSIDE, THE CELL'S MEMBRANE lets certain molecules pass"],
+        contrast: null,
+        chapterExplains: true,
+      },
+      source,
+      "BUILD",
+      source,
+    );
+    expect(content?.estimated).toBe(false);
+    // The stored block is the book's own span — the model's all-caps straight-
+    // apostrophe copy maps back to the source's curly-apostrophe casing.
+    expect(content?.body).toEqual([
+      "Inside, the cell\u2019s membrane lets certain molecules pass",
+    ]);
+  });
+
+  test("falls back to the whole excerpt as a single block when no sentence break exists", () => {
+    const partial = RAW.slice(0, 105);
+    expect(fallbackStudyPlanContent(partial)).toEqual({
+      body: [partial.trim()],
+      contrast: null,
+      chapterExplains: null,
+      estimated: true,
+    });
+  });
+
+  test("the deterministic fallback splits the anchor into readable blocks", () => {
+    const excerpt = "The membrane lets some molecules pass. It blocks others.";
+    const fallback = fallbackStudyPlanContent(excerpt);
+    expect(fallback.body).toEqual([
+      "The membrane lets some molecules pass.",
+      "It blocks others.",
+    ]);
+    expect(fallback.estimated).toBe(true);
+    expect(fallback.chapterExplains).toBeNull();
+  });
+
+  test("batches every missing step into one grounded call", async () => {
+    __resetAdmissionForTests();
+    process.env.GEMINI_API_KEY = "test-key";
+    delete process.env.GROQ_API_KEY;
+    __overrideProviderForTests("gemini", async () =>
+      JSON.stringify({
+        steps: [
+          {
+            index: 1,
+            body: [
+              "The plasma membrane surrounds the cell and controls which substances enter and leave",
+              "letting some molecules pass while blocking others",
+            ],
+            chapterExplains: true,
+            contrast: {
+              bookSays: "The plasma membrane surrounds the cell",
+              feelsRightBecause: "controls which substances enter and leave",
+              failsBecause: "blocking others",
+            },
+          },
+          {
+            index: 2,
+            body: [
+              "This sentence was invented and appears nowhere in the chapter",
+            ],
+            chapterExplains: true,
+            contrast: null,
+          },
+        ],
+      }),
+    );
+
+    const anchor = RAW.slice(0, RAW.indexOf(" Inside,"));
+    const generated = await ai.generateStudyPlanContentBatch(RAW, [
+      { conceptText: PLASMA_MEMBRANE, type: "CONTRAST", excerpt: anchor },
+      {
+        conceptText: CYTOPLASM,
+        type: "BUILD",
+        excerpt: "Cytoplasm holds the organelles.",
+      },
+    ]);
+    const contrastKey = `${PLASMA_MEMBRANE.trim().toLowerCase()}|CONTRAST`;
+    const buildKey = `${CYTOPLASM.trim().toLowerCase()}|BUILD`;
+    expect(generated.get(contrastKey)?.estimated).toBe(false);
+    expect(generated.get(contrastKey)?.contrast).not.toBeNull();
+    // The invented index 2 did not match any source span, so it is dropped for
+    // the caller to fall back — never persisted as a "grounded" plan.
+    expect(generated.get(buildKey)).toBeUndefined();
   });
 });

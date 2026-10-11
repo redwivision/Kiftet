@@ -10,6 +10,7 @@ import {
   CHECK_SECONDS,
   READING_WORDS_PER_MINUTE,
   SPOKEN_WORDS_PER_MINUTE,
+  STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
   STUDY_PLAN_MAX_STEPS,
 } from "./plan-config";
@@ -170,6 +171,14 @@ export type StudyPlanContent = {
   estimated: boolean;
 };
 
+/** One plan step whose content still needs generating — concept and type come
+ *  from the built plan, plus the anchored passage it must copy from. */
+export type PlanContentRequest = {
+  conceptText: string;
+  type: StudyPlanStep["type"];
+  excerpt: string;
+};
+
 export type PlanArchetype =
   | "PROCESS"
   | "CAUSAL"
@@ -272,6 +281,24 @@ export type AiService = {
     language?: ContentLanguage,
     options?: { skipAi?: boolean; timeoutMs?: number },
   ): Promise<StudyPlanContent>;
+  /**
+   * Grounded content for the plan steps a student still needs, in ONE provider
+   * call. A plan can ask for up to five step bodies; five separate calls
+   * trips the free-tier Gemini bucket behind a single click, which is the
+   * exact way production plans degraded to their bare excerpt. batching the
+   * missing steps keeps the whole plan priced as one request — the same as a
+   * recall grade — while a partially-grounded reply still returns the steps
+   * that validated, so the caller falls back only for the rest.
+   *
+   * Keyed by `${conceptText.trim().toLowerCase()}|${type}` to match the plan
+   * cache. Steps the model could not ground are simply absent.
+   */
+  generateStudyPlanContentBatch(
+    chapterText: string,
+    requests: PlanContentRequest[],
+    language?: ContentLanguage,
+    options?: { skipAi?: boolean; timeoutMs?: number },
+  ): Promise<Map<string, StudyPlanContent>>;
   /**
    * Explain one concept. Student-independent by construction — it is not given
    * any gap or mastery data, because if it were it could not be shared.
@@ -727,7 +754,7 @@ function localizedCheck(
 
 export function fallbackStudyPlanContent(excerpt: string): StudyPlanContent {
   return {
-    body: excerpt.trim() ? [excerpt.trim()] : [],
+    body: fallbackPlanBlocks(excerpt),
     contrast: null,
     chapterExplains: null,
     estimated: true,
@@ -735,20 +762,131 @@ export function fallbackStudyPlanContent(excerpt: string): StudyPlanContent {
 }
 
 /**
- * Whitespace-insensitive containment for a grounded quote.
- *
- * Textbook text is hard-wrapped mid-sentence, so a verbatim block the model
- * copies back differs from the source only in where the line breaks fall. A
- * raw `includes` rejected every such block against the chapter text, so no
- * generated step content was ever accepted and every plan fell back to its
- * bare excerpt. Collapsing runs of whitespace keeps the guarantee — the words
- * must still be present, in order, verbatim — while tolerating the wrapping
- * the student's own book uses.
+ * The deterministic fallback body: the anchored excerpt itself, served as a
+ * few short reading blocks instead of one wall of text. Entirely the student's
+ * own chapter wording, never generated — split at sentence boundaries (and, if
+ * a sentence outlasts a block, at a word boundary) so a plan built while no
+ * provider is answering still reads like a lesson rather than a dump.
  */
-function containsVerbatim(haystack: string, needle: string): boolean {
-  return haystack
-    .replace(/\s+/g, " ")
-    .includes(needle.replace(/\s+/g, " ").trim());
+function fallbackPlanBlocks(
+  excerpt: string,
+  maxBlocks = 4,
+  maxChars = 340,
+): string[] {
+  const text = excerpt.trim().replace(/\s+/g, " ");
+  if (!text) return [];
+  const sentences =
+    text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
+  const seeds = sentences.length > 0 ? sentences : [text];
+  const blocks: string[] = [];
+  for (let sentence of seeds) {
+    while (sentence.length > maxChars) {
+      const cut = sentence.lastIndexOf(" ", maxChars);
+      if (cut <= maxChars / 2) break;
+      blocks.push(sentence.slice(0, cut));
+      sentence = sentence.slice(cut).trim();
+    }
+    blocks.push(sentence);
+    if (blocks.length >= maxBlocks) break;
+  }
+  return blocks.slice(0, maxBlocks);
+}
+
+// Typographic characters a model nearly always renders differently from the
+// student's PDF — a straight apostrophe for a curly one, a hyphen for an em
+// dash, a straight quote for a typographic quote. They differ in the
+// character, not in the words, so under a byte-exact comparison they turn a
+// paragraph the model copied verbatim into "not verbatim".
+const PUNCT_MAP: Record<string, string> = {
+  "\u2018": "'",
+  "\u2019": "'",
+  "\u201A": "'",
+  "\u201B": "'",
+  "\u201C": '"',
+  "\u201D": '"',
+  "\u201E": '"',
+  "\u201F": '"',
+  "\u2010": "-",
+  "\u2011": "-",
+  "\u2012": "-",
+  "\u2013": "-",
+  "\u2014": "-",
+  "\u2015": "-",
+  "\u2026": "...",
+  "\u00A0": " ",
+  "\u2007": " ",
+  "\u2009": " ",
+  "\u202F": " ",
+};
+
+/** Fold one character for tolerant matching: typography to ASCII, any run of
+ *  whitespace to a single space, case to lowercase, invisible characters away
+ *  entirely. */
+function foldChar(ch: string): string {
+  const mapped = PUNCT_MAP[ch];
+  if (mapped !== undefined) return mapped;
+  if (/\s/u.test(ch)) return " ";
+  const code = ch.charCodeAt(0);
+  if (
+    code === 0x00ad ||
+    (code >= 0x200b && code <= 0x200d) ||
+    code === 0xfeff
+  ) {
+    return "";
+  }
+  return ch.toLowerCase();
+}
+
+/** Folded form of the input plus a map from every folded character to its
+ *  index in the same string after NFKC normalization. That back-map is what
+ *  lets a tolerant match hand back byte-exact spans of the student's text. */
+function normalizeFoldWithMap(input: string): {
+  folded: string;
+  toNfkc: number[];
+} {
+  const nfkc = input.normalize("NFKC");
+  let folded = "";
+  const toNfkc: number[] = [];
+  for (let i = 0; i < nfkc.length; i += 1) {
+    const out = foldChar(nfkc.charAt(i));
+    if (out === "") continue;
+    if (out === " " && folded.endsWith(" ")) continue;
+    folded += out;
+    toNfkc.push(i);
+  }
+  return { folded, toNfkc };
+}
+
+function normalizeFold(input: string): string {
+  return normalizeFoldWithMap(input).folded;
+}
+
+/** Tolerant verbatim containment: the quote's words must be present, in order,
+ *  spelled the same, after folding case, typography and whitespace. Returns
+ *  the NFKC'd span it matched, so the caller can store the true source text. */
+function matchSpan(
+  source: string,
+  quote: string,
+): { start: number; end: number } | undefined {
+  const { folded: nSource, toNfkc } = normalizeFoldWithMap(source);
+  const nQuote = normalizeFold(quote).trim();
+  if (!nQuote) return undefined;
+  const at = nSource.indexOf(nQuote);
+  if (at < 0 || at + nQuote.length > toNfkc.length) return undefined;
+  const start = toNfkc[at];
+  const end = toNfkc[at + nQuote.length - 1];
+  if (start === undefined || end === undefined) return undefined;
+  return { start, end: end + 1 };
+}
+
+/** The byte-exact NFKC'd source span a quote corresponds to, or none. The
+ *  stored block is the book's own text, never the model's transcription of
+ *  it, so a student reading a plan step reads the chapter — verbatim. */
+function canonicalVerbatim(source: string, quote: string): string | undefined {
+  const nfkc = source.normalize("NFKC");
+  const span = matchSpan(nfkc, quote);
+  if (!span) return undefined;
+  return nfkc.slice(span.start, span.end).trim();
 }
 
 function groundingWindow(
@@ -756,21 +894,22 @@ function groundingWindow(
   excerpt: string,
   maxChars = 700,
 ): string {
-  const hay = chapterText.replace(/\s+/g, " ").trim();
-  const needle = excerpt.replace(/\s+/g, " ").trim();
-  const at = hay.indexOf(needle);
-  if (at < 0) return needle;
-  const start = at;
+  const nfkc = chapterText.normalize("NFKC");
+  const span = matchSpan(nfkc, excerpt);
+  if (!span) return excerpt.trim();
+  const start = span.start;
+  const needleLen = normalizeFold(excerpt).trim().length;
   const hardEnd = Math.min(
-    hay.length,
-    start + Math.max(maxChars, needle.length),
+    nfkc.length,
+    start + Math.max(maxChars, needleLen) + 16,
   );
-  let end = start + needle.length;
-  const afterAnchor = hay.slice(end, hardEnd);
+  const afterAnchor = nfkc.slice(span.end, hardEnd);
   const nextBreak = afterAnchor.search(/[.!?](?=\s|$)/);
-  if (nextBreak >= 0) end += nextBreak + 1;
-  return hay.slice(start, end).trim();
+  const end = nextBreak >= 0 ? span.end + nextBreak + 1 : span.end;
+  return nfkc.slice(start, end).trim();
 }
+
+const SOURCE_LINK_RE = /https?:\/\/|www\.|youtube|google/i;
 
 /** Only quoted spans from the supplied chapter text may become plan blocks. */
 export function validateGroundedPlanContent(
@@ -785,18 +924,28 @@ export function validateGroundedPlanContent(
     !Array.isArray(data.body) ||
     data.body.length < 1 ||
     data.body.length > 4 ||
-    data.body.some(
-      (block) =>
-        typeof block !== "string" ||
-        !block.trim() ||
-        block.trim().length > 400 ||
-        !containsVerbatim(chapterText, block) ||
-        !containsVerbatim(anchorExcerpt, block) ||
-        /https?:\/\/|www\.|youtube|google/i.test(block),
-    ) ||
     typeof data.chapterExplains !== "boolean"
   )
     return;
+  const nfkcChapter = chapterText.normalize("NFKC");
+  const nfkcAnchor = anchorExcerpt.trim()
+    ? anchorExcerpt.normalize("NFKC")
+    : nfkcChapter;
+  const blocks: string[] = [];
+  for (const raw of data.body) {
+    if (typeof raw !== "string") return;
+    // Canonicalize so the stored block is the book's text, then trust only
+    // blocks that live inside the anchored passage the model was told to copy.
+    const block = canonicalVerbatim(nfkcChapter, raw);
+    if (
+      !block ||
+      block.length > 400 ||
+      SOURCE_LINK_RE.test(block) ||
+      matchSpan(nfkcAnchor, block) === undefined
+    )
+      return;
+    blocks.push(block);
+  }
   const contrastData = data.contrast;
   let contrast: StudyPlanContent["contrast"] = null;
   if (type === "CONTRAST") {
@@ -806,27 +955,31 @@ export function validateGroundedPlanContent(
       Array.isArray(contrastData)
     )
       return;
-    const value = contrastData as Record<string, unknown>;
+    const entry = contrastData as Record<string, unknown>;
     const keys = ["bookSays", "feelsRightBecause", "failsBecause"] as const;
-    if (
-      keys.some(
-        (key) =>
-          typeof value[key] !== "string" ||
-          !value[key].trim() ||
-          value[key].trim().length > 400 ||
-          !containsVerbatim(chapterText, value[key] as string) ||
-          !containsVerbatim(anchorExcerpt, value[key] as string),
+    const parts: string[] = [];
+    for (const key of keys) {
+      if (typeof entry[key] !== "string") return;
+      const part = canonicalVerbatim(nfkcChapter, entry[key] as string);
+      if (
+        !part ||
+        part.length > 400 ||
+        matchSpan(nfkcAnchor, part) === undefined
       )
+        return;
+      parts.push(part);
+    }
+    const [bookSays, feelsRightBecause, failsBecause] = parts;
+    if (
+      bookSays === undefined ||
+      feelsRightBecause === undefined ||
+      failsBecause === undefined
     )
       return;
-    contrast = {
-      bookSays: (value.bookSays as string).trim(),
-      feelsRightBecause: (value.feelsRightBecause as string).trim(),
-      failsBecause: (value.failsBecause as string).trim(),
-    };
+    contrast = { bookSays, feelsRightBecause, failsBecause };
   } else if (contrastData !== null) return;
   return {
-    body: data.body.map((block) => (block as string).trim()),
+    body: blocks,
     contrast,
     chapterExplains: data.chapterExplains,
     estimated: false,
@@ -2040,7 +2193,6 @@ export const ai: AiService = {
           user,
           { schema, timeoutMs: remaining },
         );
-        const grounding = groundingWindow(chapterText, excerpt);
         const content = validateGroundedPlanContent(
           parseJson<unknown>(raw),
           chapterText,
@@ -2052,6 +2204,126 @@ export const ai: AiService = {
       return malformed("generateStudyPlanContent", fallback);
     } catch (error) {
       return degraded("generateStudyPlanContent", error, fallback);
+    }
+  },
+
+  async generateStudyPlanContentBatch(
+    chapterText: string,
+    requests: PlanContentRequest[],
+    language: ContentLanguage = "en",
+    options: { skipAi?: boolean; timeoutMs?: number } = {},
+  ): Promise<Map<string, StudyPlanContent>> {
+    const fallback = () => new Map<string, StudyPlanContent>();
+    if (options.skipAi || !anyAiAvailable() || requests.length === 0)
+      return fallback();
+    const deadline =
+      Date.now() +
+      Math.min(
+        AI_TOTAL_BUDGET_MS,
+        options.timeoutMs ?? STUDY_PLAN_CONTENT_BUDGET_MS,
+      );
+    const schema = {
+      type: "object",
+      properties: {
+        steps: {
+          type: "array",
+          minItems: 1,
+          maxItems: requests.length,
+          items: {
+            type: "object",
+            properties: {
+              index: {
+                type: "integer",
+                minimum: 1,
+                maximum: requests.length,
+              },
+              body: {
+                type: "array",
+                minItems: 1,
+                maxItems: 4,
+                items: { type: "string" },
+              },
+              chapterExplains: { type: "boolean" },
+              contrast: {
+                type: ["object", "null"],
+                properties: {
+                  bookSays: { type: "string" },
+                  feelsRightBecause: { type: "string" },
+                  failsBecause: { type: "string" },
+                },
+                required: ["bookSays", "feelsRightBecause", "failsBecause"],
+                additionalProperties: false,
+              },
+            },
+            required: ["index", "body", "chapterExplains", "contrast"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["steps"],
+      additionalProperties: false,
+    };
+    const system =
+      "Create the textbook-only body for each numbered study-plan step. The diagnoses are already done; do not re-grade them. " +
+      "For every index listed in the request, return the matching structured entry. " +
+      "Return 1–4 short blocks per step, each copied verbatim from that step's anchor passage. " +
+      "Do not paraphrase or add a word, fact, example, heading, URL, web search, or outside knowledge. " +
+      "For CONTRAST steps, also provide contrast.bookSays, contrast.feelsRightBecause, and contrast.failsBecause, each an exact source substring; if the text cannot support any field, set contrast=null and chapterExplains=false. " +
+      "For other step types, set contrast=null. " +
+      "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
+      "Index entries must match exactly the numbers in the request; reply with all of them." +
+      outputInstruction(language);
+    const user =
+      `CHAPTER TEXT:\n${chapterText.slice(0, 24000)}\n\n` +
+      requests
+        .map(
+          (request, index) =>
+            `${index + 1}. CONCEPT: ${request.conceptText}\n   STEP TYPE: ${request.type}\n   ANCHOR PASSAGE: ${groundingWindow(chapterText, request.excerpt)}`,
+        )
+        .join("\n\n");
+    try {
+      for (let attemptNumber = 0; attemptNumber < 2; attemptNumber += 1) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) return fallback();
+        const raw = await ask(
+          system +
+            (attemptNumber === 1
+              ? " Your previous answer did not validate. Retry with only exact verbatim substrings from each step's anchor excerpt."
+              : ""),
+          user,
+          { schema, timeoutMs: remaining },
+        );
+        const data = parseJson<{ steps?: unknown[] }>(raw);
+        if (!data || !Array.isArray(data.steps)) continue;
+        const contents = new Map<string, StudyPlanContent>();
+        for (const entry of data.steps) {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry))
+            continue;
+          const item = entry as Record<string, unknown>;
+          const numeric =
+            typeof item.index === "number" ? item.index : Number(item.index);
+          const request =
+            requests[Number.isInteger(numeric) ? numeric - 1 : -1];
+          if (!request) continue;
+          const content = validateGroundedPlanContent(
+            item,
+            chapterText,
+            request.type,
+            groundingWindow(chapterText, request.excerpt),
+          );
+          if (content)
+            contents.set(
+              `${request.conceptText.trim().toLowerCase()}|${request.type}`,
+              content,
+            );
+        }
+        // A partially-grounded reply is still a win: the steps that validated
+        // are real, and the caller falls back for the rest.
+        if (contents.size > 0) return contents;
+      }
+      return malformed("generateStudyPlanContentBatch", fallback);
+    } catch (error) {
+      return degraded("generateStudyPlanContentBatch", error, fallback);
     }
   },
 

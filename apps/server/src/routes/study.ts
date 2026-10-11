@@ -20,6 +20,7 @@ import {
   ai,
   aiTelemetrySnapshot,
   buildStudyPlan,
+  fallbackStudyPlanContent,
   focusScore,
   type GuideSection,
   gapAnalysisFrom,
@@ -1261,49 +1262,60 @@ router.post("/sessions/:id/plan", async (req, res) => {
     language,
     parsed.data.budgetMinutes,
   );
-  for (const step of initial.steps) {
+  const missingSteps = initial.steps.filter((step) => {
     const key = `${step.concept.trim().toLowerCase()}|${step.type}`;
-    if (contentByConcept.has(key)) continue;
+    return !contentByConcept.has(key);
+  });
+  // The whole plan generates in ONE provider call (see the batch method's own
+  // comment for why five separate calls degrades under the free-tier bucket),
+  // and that batch is charged once against the student's interactive window —
+  // the plan is one act they paid for with the recall a minute earlier, not a
+  // five-request flurry that empties the shared allowance and turns the plan
+  // into the anchored excerpt, which is what students were actually seeing.
+  if (missingSteps.length > 0) {
     const timeoutMs = contentDeadline - Date.now();
     const skipAi = timeoutMs <= 0 || !allowAiRequest(req);
-    let content: StudyPlanContent;
+    let generated: Map<string, StudyPlanContent>;
     try {
-      content = await ai.generateStudyPlanContent(
-        step.concept,
-        step.type,
+      generated = await ai.generateStudyPlanContentBatch(
         chapterRow.rawText,
-        step.anchor.excerpt,
+        missingSteps.map((step) => ({
+          conceptText: step.concept,
+          type: step.type,
+          excerpt: step.anchor.excerpt,
+        })),
         language,
         { skipAi, timeoutMs },
       );
     } catch (error) {
       if (!isAiBusy(error)) throw error;
       console.warn(
-        "[study-plan] AI capacity unavailable; using the anchored excerpt",
+        "[study-plan] AI capacity unavailable; using anchored excerpts",
       );
-      content = {
-        body: [step.anchor.excerpt],
-        contrast: null,
-        chapterExplains: null,
-        estimated: true,
-      };
+      generated = new Map<string, StudyPlanContent>();
     }
-    contentByConcept.set(key, content);
-    if (!skipAi && !content.estimated) {
-      await db()
-        .insert(planContent)
-        .values({
-          id: crypto.randomUUID(),
-          chapterId,
-          conceptText: step.concept,
-          stepType: step.type,
-          language,
-          planVersion: STUDY_PLAN_VERSION,
-          body: content.body,
-          contrast: content.contrast,
-          chapterExplains: content.chapterExplains,
-        })
-        .onConflictDoNothing();
+    for (const step of initial.steps) {
+      const key = `${step.concept.trim().toLowerCase()}|${step.type}`;
+      if (contentByConcept.has(key)) continue;
+      const content =
+        generated.get(key) ?? fallbackStudyPlanContent(step.anchor.excerpt);
+      contentByConcept.set(key, content);
+      if (!skipAi && !content.estimated) {
+        await db()
+          .insert(planContent)
+          .values({
+            id: crypto.randomUUID(),
+            chapterId,
+            conceptText: step.concept,
+            stepType: step.type,
+            language,
+            planVersion: STUDY_PLAN_VERSION,
+            body: content.body,
+            contrast: content.contrast,
+            chapterExplains: content.chapterExplains,
+          })
+          .onConflictDoNothing();
+      }
     }
   }
   const plan = buildStudyPlan(
