@@ -1974,7 +1974,7 @@ export const ai: AiService = {
       properties: {
         body: {
           type: "array",
-          minItems: 2,
+          minItems: 1,
           maxItems: 4,
           items: { type: "string" },
         },
@@ -1996,14 +1996,14 @@ export const ai: AiService = {
     const system =
       "Create the textbook-only body for one study-plan step. The diagnosis is already done; do not re-grade it. " +
       `The step type is ${type} for the exact concept ${JSON.stringify(conceptText)}. ` +
-      "Return 2-4 short blocks, each copied verbatim from the anchor excerpt. " +
+      "Return 1–4 short blocks, each copied verbatim from the anchor excerpt. " +
       "Do not paraphrase or add a word, fact, example, heading, URL, web search, or outside knowledge. " +
       "If the chapter mentions the concept but does not explain it, set chapterExplains=false and use only the relevant exact excerpt. " +
       (type === "CONTRAST"
         ? "Also provide contrast.bookSays, contrast.feelsRightBecause, and contrast.failsBecause, each an exact source substring; if the text cannot support any field, set contrast=null and chapterExplains=false."
         : "Set contrast=null.") +
       "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
-      'Return strict JSON: {"body":["exact chapter excerpt","exact chapter excerpt"],"chapterExplains":true}.' +
+      'Return strict JSON: {"body":["exact chapter excerpt"],"chapterExplains":true}.' +
       outputInstruction(language);
     const user = `CONCEPT: ${conceptText}\nSTEP TYPE: ${type}\nANCHOR: ${excerpt}\n\nCHAPTER TEXT:\n${chapterText.slice(0, 24000)}`;
     try {
