@@ -761,7 +761,10 @@ function groundingWindow(
   const at = hay.indexOf(needle);
   if (at < 0) return needle;
   const start = at;
-  const hardEnd = Math.min(hay.length, start + Math.max(maxChars, needle.length));
+  const hardEnd = Math.min(
+    hay.length,
+    start + Math.max(maxChars, needle.length),
+  );
   let end = start + needle.length;
   const afterAnchor = hay.slice(end, hardEnd);
   const nextBreak = afterAnchor.search(/[.!?](?=\s|$)/);
