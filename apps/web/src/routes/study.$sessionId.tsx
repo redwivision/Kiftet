@@ -1,7 +1,6 @@
 import { Button } from "@kiftet/ui/components/button";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
-import { useVoxideVoice, type VoxideStatus } from "@voxide/react";
 import {
   BookOpen,
   Check,
@@ -13,13 +12,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import {
-  getVoxideClient,
-  hasVoxideKey,
-  setCaptureActive,
-  speakViaVoxide,
-  stopVoiceNarration,
-} from "@/components/assistant";
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { GuideView } from "@/components/guide-view";
@@ -33,7 +25,8 @@ import {
   StudyProvider,
   useStudy,
 } from "@/components/study-provider";
-import { VoxideRing } from "@/components/voxide-ring";
+import { VoiceRing } from "@/components/voice-ring";
+import { useVoiceSession } from "@/hooks/use-voice-session";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser, isDemoVisitor } from "@/lib/demo";
@@ -54,17 +47,14 @@ import {
 } from "@/lib/store";
 import { useLoopTabChrome } from "@/lib/tab-chrome";
 import { visibleChapterTitle } from "@/lib/textbook";
-import { speakAloud, splitSentences, stopReadingAloud } from "@/lib/voice";
+import {
+  speakAloud,
+  splitSentences,
+  stopReadingAloud,
+  type VoiceState,
+} from "@/lib/voice";
 import { useWakeLock } from "@/lib/wake-lock";
 import type { Route } from "./+types/study.$sessionId";
-
-const ACTIVE: VoxideStatus[] = [
-  "connecting",
-  "listening",
-  "speaking",
-  "thinking",
-  "executing",
-];
 
 // The sample answer demo visitors can submit without speaking a word. Written
 // to land where the demo chapter expects: a few concepts named right, a few
@@ -173,25 +163,6 @@ function ShareCardButton() {
   );
 }
 
-// Everything the student said since the capture window opened. A long recall
-// streams in as many partial transcript chunks, and Voxide only finalizes a
-// turn once Gemini sends turn_complete — which can lag behind the student
-// tapping the ring. Filtering to "final" alone would drop the whole recall;
-// joining every user chunk (partial or final) rebuilds the full spoken answer.
-// Module-level so the effects below can depend on it directly.
-function transcriptOf(
-  msgs: { role: string; text: string }[],
-  start: number,
-): string {
-  return msgs
-    .slice(start)
-    .filter((m) => m.role === "user" && Boolean(m.text.trim()))
-    .map((m) => m.text.trim())
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export function meta(_args: Route.MetaArgs) {
   return [
     { title: "Study — Kiftet" },
@@ -229,9 +200,14 @@ export default function StudyRoute({ params }: Route.ComponentProps) {
   // browser (a social sign-in that never cleared it, say), the session wins,
   // so the loop never wears demo chrome in front of them.
   const demo = isDemoVisitor(session, getDemoUser());
+  // Speaking is a signed-in feature. A stranger in the demo room gets the same
+  // loop by typing (and the sample answer), never the mic — the account is what
+  // makes a spoken explanation worth recording, and it keeps the anonymous room
+  // from becoming a free transcription endpoint.
+  const voiceAllowed = Boolean(session);
   return (
     <StudyProvider sessionId={params.sessionId}>
-      <StudyScreen demo={demo} />
+      <StudyScreen demo={demo} voiceAllowed={voiceAllowed} />
     </StudyProvider>
   );
 }
@@ -244,7 +220,13 @@ function NavigateToLogin() {
   return null;
 }
 
-function StudyScreen({ demo }: { demo: boolean }) {
+function StudyScreen({
+  demo,
+  voiceAllowed,
+}: {
+  demo: boolean;
+  voiceAllowed: boolean;
+}) {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { state, retryAgain, retryLast, completeSession, clearError } =
@@ -354,12 +336,18 @@ function StudyScreen({ demo }: { demo: boolean }) {
           )}
 
           <div className="animate-fade-in" key={state.phase}>
-            {state.phase === "recall" && <RecallPhase demo={demo} />}
+            {state.phase === "recall" && (
+              <RecallPhase demo={demo} voiceAllowed={voiceAllowed} />
+            )}
             {state.phase === "gaps" && (
               <GapsPhase startHereConcept={state.plan?.steps[0]?.concept} />
             )}
-            {state.phase === "lesson" && <LessonPhase />}
-            {state.phase === "retest" && <RetestPhase />}
+            {state.phase === "lesson" && (
+              <LessonPhase voiceAllowed={voiceAllowed} />
+            )}
+            {state.phase === "retest" && (
+              <RetestPhase voiceAllowed={voiceAllowed} />
+            )}
             {state.phase === "result" && (
               <ResultPhase onDone={done} onTryAgain={retryAgain} />
             )}
@@ -473,57 +461,49 @@ function SessionHeader({
 
 // ── Voice capture ───────────────────────────────────────────────
 
+// The one way to give an answer, spoken or typed. Voice rides on the browser's
+// own SpeechRecognition behind lib/voice.ts (`useVoiceSession`); when it is
+// missing, or disallowed in the signed-out demo room, or the mic errors, the
+// same component degrades to the text recorder so the loop never dead-ends.
 function VoiceCapture({
   submit,
-  textDefault,
+  voiceAllowed,
   busy,
   placeholder,
   buttonLabel,
 }: {
   submit: (text: string) => Promise<void>;
-  textDefault: boolean;
+  voiceAllowed: boolean;
   busy: boolean;
   placeholder?: string;
   buttonLabel?: string;
 }) {
   const { state, setNotice, clearNotice } = useStudy();
   const { t } = useLanguage();
-  const voice = useVoxideVoice(hasVoxideKey() ? getVoxideClient() : null);
-  const [showText, setShowText] = useState(textDefault);
+  const voice = useVoiceSession();
+  // The browser voice layer only exists on the client, and only where
+  // SpeechRecognition does. Deciding that after mount keeps SSR and the first
+  // client paint in agreement (a mismatch would flash the wrong control).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const voiceReady = mounted && voiceAllowed && voice.isSupported;
+  const [showText, setShowText] = useState(false);
+  const effectiveText = showText || !voiceReady;
 
-  // Voice "dead" conditions that force text mode: no key, init stuck, quota out.
-  const [timedOut, setTimedOut] = useState(false);
-  const client = hasVoxideKey() ? getVoxideClient() : null;
-  useEffect(() => {
-    if (!client) return;
-    if (client.isInitialized) return;
-    const timer = setTimeout(() => {
-      if (!client.isInitialized) setTimedOut(true);
-    }, 6000);
-    const off = client.on("ready", () => setTimedOut(false));
-    return () => {
-      clearTimeout(timer);
-      off();
-    };
-  }, [client]);
-
-  const voiceDead = !client || timedOut || voice.errorCode === "usage_limit";
-  const effectiveText = showText || voiceDead;
-
-  // Capture window state: reset the transcript slice whenever we enter a fresh
-  // listening session (new phase, or a new retest question).
-  const baseRef = useRef<number | null>(null);
-  const wasActiveRef = useRef(false);
-  const submittedRef = useRef(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const noticeRef = useRef<string | null>(state.notice);
   noticeRef.current = state.notice;
-  // The latest voice state, readable from inside an effect or a timer without
-  // that effect having to re-run on every streamed chunk. Effects below are
-  // keyed on the values that should *trigger* them; the rest is read from here.
   const voiceRef = useRef(voice);
   voiceRef.current = voice;
+  // The answer so far: the finalized transcript plus whatever is still interim.
+  // Read through a ref from timers and effects so it is never frozen at the
+  // value it had when the effect first ran.
+  const spoken = `${voice.transcript} ${voice.interim}`
+    .replace(/\s+/g, " ")
+    .trim();
+  const spokenRef = useRef(spoken);
+  spokenRef.current = spoken;
 
   const baseKey =
     state.phase === "retest"
@@ -534,105 +514,107 @@ function VoiceCapture({
   // grace timer so a timer left over from a previous question tears itself down
   // instead of nudging a student who has already moved on.
   const windowKeyRef = useRef(baseKey);
+  // True once this window's answer has been handed to `submit`, so the
+  // listening→idle edge never sends the same words twice.
+  const submittedRef = useRef(false);
+  // True once the student (or the end-of-speech cue) has asked to stop, so an
+  // empty result is reported rather than silently swallowed.
+  const stoppingRef = useRef(false);
 
-  // Open a fresh capture window. Deliberately keyed on `baseKey` alone: this
-  // must fire once per phase/question, not every time a partial transcript
-  // chunk lands — the "as of right now" values come from the ref.
+  // Open a fresh capture window when the phase or question changes: forget the
+  // previous turn and clear any stale nudge. Deliberately keyed on `baseKey`
+  // alone — it must fire once per phase/question, not per streamed chunk.
   useEffect(() => {
     windowKeyRef.current = baseKey;
-    const v = voiceRef.current;
-    baseRef.current = v.messages.length;
-    wasActiveRef.current = ACTIVE.includes(v.status);
     submittedRef.current = false;
+    stoppingRef.current = false;
+    voiceRef.current.reset();
     clearNotice();
   }, [baseKey, clearNotice]);
-
-  // While this capture owns the mic, end-of-speech cues ("that's all I
-  // remember") belong to the answer being recorded — a "bye" mid-answer must
-  // not be read as a whole-session goodbye.
-  useEffect(() => {
-    setCaptureActive(ACTIVE.includes(voice.status));
-    return () => setCaptureActive(false);
-  }, [voice.status]);
 
   // A single quiet tick the moment the mic starts listening, so the ring
   // answering under your finger is felt, not only seen. Silent where the
   // hardware or the person's reduced-motion setting says no.
   useEffect(() => {
-    if (voice.status !== "listening") return;
+    if (voice.state !== "listening") return;
     haptic(10);
-  }, [voice.status]);
+  }, [voice.state]);
 
-  // Auto-end: when the student signals they've finished speaking, finalize
-  // the capture on the spot and hang up — the loop advances to the next step
-  // without waiting for a tap on the ring. Re-runs per streamed chunk, which
-  // is the point: the cue may only be complete on the last one.
+  // Auto-end: when the student signals they've finished speaking ("that's all I
+  // remember"), finalize on the spot so the loop advances without a second tap.
+  // Keyed on the transcript + interim so it re-runs per streamed chunk — the
+  // cue may only be complete on the last one. A cue mid-sentence is not an
+  // ending — only fire when it is in the last words of the turn, counted with
+  // countWords so Amharic is measured in Amharic.
   useEffect(() => {
     if (busyRef.current) return;
-    if (voice.status !== "listening") return;
-    if (baseRef.current === null) return;
-    const spoken = transcriptOf(voice.messages, baseRef.current);
-    const marker = findBoundaryEnd(spoken);
+    if (voice.state !== "listening") return;
+    const now = `${voice.transcript} ${voice.interim}`
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!now) return;
+    const marker = findBoundaryEnd(now);
     if (!marker) return;
-    // A cue mid-sentence ("I'm done with the electron carriers", "በኢልትሮኖን ካሪየርስ ጠናቋለሁ") is not an
-    // ending — only fire when the cue is in the last words of the turn. Counted
-    // with countWords so the remainder is measured in the language spoken; the
-    // ASCII strip this replaced deleted every Ethiopic codepoint first, which
-    // left the guard permanently reading zero words in Amharic.
-    if (countWords(spoken.slice(marker.index + marker.phrase.length)) > 6) {
-      return;
-    }
-    const finished = leadingText(spoken, marker.index);
+    if (countWords(now.slice(marker.index + marker.phrase.length)) > 6) return;
+    // Everything before the cue is the answer; the cue itself is not part of it.
+    const finished = leadingText(now, marker.index).trim();
+    stoppingRef.current = true;
     submittedRef.current = true;
-    setCaptureActive(false);
+    voice.stop();
     if (finished) {
       void submit(finished);
     } else {
       setNotice(t("voice-catch-none"));
     }
-    void voice.disconnect();
-  }, [submit, t, voice.messages, voice.status, voice.disconnect, setNotice]);
+  }, [
+    voice.state,
+    voice.transcript,
+    voice.interim,
+    voice.stop,
+    submit,
+    t,
+    setNotice,
+  ]);
 
-  // Listen → hang up: when capture goes from active to inactive, everything
-  // said since the window opened is the answer.
+  // Finalize: when capture goes from listening to idle, everything said is the
+  // answer. `onend` hands over the one consolidated final transcript, so by the
+  // time the state is idle `voice.transcript` holds the whole turn.
   useEffect(() => {
     if (busyRef.current) return;
-    if (submittedRef.current) return; // already finalized by auto-end
-    const isActive = ACTIVE.includes(voice.status);
-    const wasActive = wasActiveRef.current;
-    wasActiveRef.current = isActive;
-    if (!wasActive || isActive || baseRef.current === null || busyRef.current)
-      return;
-    // Messages come through the ref on purpose: this must fire once, on the
-    // active → inactive edge, not on every streamed partial chunk.
-    const spoken = transcriptOf(voiceRef.current.messages, baseRef.current);
-    if (spoken) {
-      void submit(spoken);
-    } else if (voice.status !== "error") {
+    if (voice.state !== "idle") return;
+    if (submittedRef.current) return;
+    const now = `${voice.transcript} ${voice.interim}`
+      .replace(/\s+/g, " ")
+      .trim();
+    if (now) {
+      submittedRef.current = true;
+      void submit(now);
+    } else if (stoppingRef.current) {
+      stoppingRef.current = false;
       setNotice(t("voice-catch-deferred"));
     }
-  }, [submit, t, voice.status, setNotice]);
+  }, [voice.state, voice.transcript, voice.interim, submit, t, setNotice]);
 
   // Grace state: after a long stretch of no speech while listening, reassure the
   // student instead of timing them out. Never emits failure copy on our own.
-  // The message count is read through the ref on every tick — reading it from
-  // the closure would freeze it at mount and fire a false nudge mid-answer.
+  // The transcript is read through a ref on every tick — reading it from the
+  // closure would freeze it at mount and fire a false nudge mid-answer.
   useEffect(() => {
-    if (voice.status !== "listening" || baseRef.current === null) return;
+    if (voice.state !== "listening") return;
     // Pinned to the window it started in: a tick that finds the student has
     // moved on retires the timer instead of nudging them.
     const windowKey = baseKey;
-    let lastCount = voiceRef.current.messages.length;
+    let last = spokenRef.current;
     let lastChangedAt = Date.now();
     const timer = setInterval(() => {
       if (windowKey !== windowKeyRef.current) {
         clearInterval(timer);
         return;
       }
-      const count = voiceRef.current.messages.length;
-      if (count !== lastCount) {
+      const now = spokenRef.current;
+      if (now !== last) {
         if (noticeRef.current) clearNotice();
-        lastCount = count;
+        last = now;
         lastChangedAt = Date.now();
         return;
       }
@@ -641,24 +623,36 @@ function VoiceCapture({
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [voice.status, baseKey, clearNotice, setNotice, t]);
+  }, [voice.state, baseKey, clearNotice, setNotice, t]);
 
-  const captured = transcriptOf(voice.messages, baseRef.current ?? 0);
-  const lastJustSaid = captured || undefined;
+  // Tap once to open the mic, tap again to close it and send what was said.
+  const toggle = () => {
+    if (voice.state === "listening") {
+      stoppingRef.current = true;
+      voice.stop();
+      return;
+    }
+    if (voice.state === "idle") {
+      clearNotice();
+      voice.start();
+    }
+  };
+
+  const lastJustSaid = spoken || undefined;
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col items-center gap-3">
         {effectiveText ? (
-          <div className="grid size-40 place-items-center rounded-full border-2 border-border border-dashed text-muted-foreground/40 dark:border-white/20">
-            <MicOff className="size-10" aria-hidden="true" />
+          <div className="grid size-32 place-items-center rounded-full border-2 border-border border-dashed text-muted-foreground/40 dark:border-white/20">
+            <MicOff className="size-8" aria-hidden="true" />
           </div>
         ) : (
-          <VoxideRing
-            autoArm={false}
-            // Planned: arm the mic when the phase opens (pass
-            // state.phase === "recall" || state.phase === "retest"
-            // once VoxideRing's voice-first flow ships).
+          <VoiceRing
+            state={voice.state}
+            onToggle={toggle}
+            ariaLabel={captureCaption(voice.state, state.phase, t)}
+            shortcutLabel={t("shortcut-talk-label")}
           />
         )}
 
@@ -667,11 +661,18 @@ function VoiceCapture({
             className="max-w-md text-center font-medium text-foreground/80 text-sm leading-6"
             aria-live="polite"
           >
-            {captureCaption(voice.status, state.phase, t)}
+            {captureCaption(voice.state, state.phase, t)}
           </p>
         )}
 
-        {!effectiveText && voice.status === "listening" && <ElapsedTimer />}
+        {/* Why there is no ring — signed-out, or a browser without speech. */}
+        {effectiveText && mounted && (
+          <p className="max-w-md text-center text-muted-foreground text-sm leading-6">
+            {voiceAllowed ? t("voice-unsupported") : t("voice-signin-only")}
+          </p>
+        )}
+
+        {!effectiveText && voice.state === "listening" && <ElapsedTimer />}
 
         {busy && (
           <p className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -679,16 +680,10 @@ function VoiceCapture({
             {t("recall-reading")}
           </p>
         )}
-
-        {voice.errorCode === "usage_limit" && (
-          <p className="max-w-md rounded-lg border border-rust/30 bg-rust/10 px-3 py-2 text-muted-foreground text-xs leading-5">
-            {t("voice-service-busy")}
-          </p>
-        )}
       </div>
 
       {/* What you said, read back — rendered exactly once. */}
-      {lastJustSaid && (
+      {!effectiveText && lastJustSaid && (
         <div className="mx-auto max-w-md rounded-2xl border border-sage/25 bg-sage/[0.06] px-4 py-3 text-sm">
           <p className="mb-1 font-medium text-[0.78rem] text-sage">
             {t("what-you-said")}
@@ -705,6 +700,13 @@ function VoiceCapture({
         </div>
       )}
 
+      {/* The mic failed mid-turn: say so instead of leaving a dead ring. */}
+      {!effectiveText && voice.error && (
+        <p className="mx-auto max-w-md rounded-lg border border-rust/30 bg-rust/10 px-3 py-2 text-center text-muted-foreground text-xs leading-5">
+          {t("voice-error")}
+        </p>
+      )}
+
       {effectiveText && (
         <TextRecorder
           busy={busy}
@@ -714,7 +716,7 @@ function VoiceCapture({
         />
       )}
 
-      {!voiceDead && (
+      {voiceReady && (
         <div className="text-center">
           <button
             type="button"
@@ -731,40 +733,34 @@ function VoiceCapture({
 
 type Translate = ReturnType<typeof useLanguage>["t"];
 
-// The ring is push-to-talk, so these captions can't reuse the `vt-*` strings
-// the always-on Voxide ring uses — same states, but the verbs differ ("tap the
-// ring when you're done" vs "tap again to stop me"). The idle line also swaps
-// on the retest pass, because recalling and answering want different prompts.
-const CAPTION_KEYS: Record<string, Record<string, MessageKey>> = {
+// The ring is push-to-talk, so its captions are the `st-*` strings: "tap the
+// ring when you're done", not the always-on verbs. The idle line swaps on the
+// retest pass, because recalling and answering want different prompts.
+const CAPTION_KEYS: Record<
+  "recall" | "answer",
+  Record<VoiceState, MessageKey>
+> = {
   recall: {
     idle: "st-recall-idle",
-    armed: "st-armed",
-    connecting: "st-connecting",
     listening: "st-listening",
     thinking: "st-thinking",
     speaking: "st-speaking",
-    executing: "st-executing",
-    error: "st-error",
   },
   answer: {
     idle: "st-answer-idle",
-    armed: "st-armed",
-    connecting: "st-connecting",
     listening: "st-listening",
     thinking: "st-thinking",
     speaking: "st-speaking",
-    executing: "st-executing",
-    error: "st-error",
   },
 };
 
 function captureCaption(
-  status: VoxideStatus,
+  state: VoiceState,
   phase: string,
   t: Translate,
 ): string {
   const table = phase === "retest" ? CAPTION_KEYS.answer : CAPTION_KEYS.recall;
-  return t(table[status] ?? table.idle);
+  return t(table[state]);
 }
 
 // A calm elapsed clock, shown only while the mic is listening. It answers the
@@ -861,7 +857,13 @@ function QueuedPanel({ text }: { text: string }) {
   );
 }
 
-function RecallPhase({ demo }: { demo: boolean }) {
+function RecallPhase({
+  demo,
+  voiceAllowed,
+}: {
+  demo: boolean;
+  voiceAllowed: boolean;
+}) {
   const { state, submitRecall } = useStudy();
   const { t } = useLanguage();
   // Stable so VoiceCapture's capture effects can depend on it honestly instead
@@ -885,7 +887,7 @@ function RecallPhase({ demo }: { demo: boolean }) {
       <PhaseHeading title={t("recall-title")} text={t("recall-text")} />
       <VoiceCapture
         submit={submitText}
-        textDefault={!hasVoxideKey()}
+        voiceAllowed={voiceAllowed}
         busy={state.busy}
       />
       {!demo && <FirstRunHint />}
@@ -1040,10 +1042,12 @@ function PlanView({
   plan,
   onCheck,
   startRetest,
+  voiceAllowed,
 }: {
   plan: StudyPlan;
   onCheck: (concept: string, text: string) => Promise<void>;
   startRetest: () => Promise<void>;
+  voiceAllowed: boolean;
 }) {
   const { t } = useLanguage();
   const { sessionId = "study" } = useParams();
@@ -1157,7 +1161,7 @@ function PlanView({
           <VoiceCapture
             key={current.concept}
             submit={(text) => submitCheck(current.concept, text)}
-            textDefault
+            voiceAllowed={voiceAllowed}
             busy={false}
             placeholder={t("plan-check-placeholder")}
             buttonLabel={t("plan-check-submit")}
@@ -1298,14 +1302,12 @@ function LessonTextPanel({
   );
 }
 
-function LessonPhase() {
+function LessonPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
   const { state, startRetest, submitPlanCheck, viewGaps } = useStudy();
   const { t, lang } = useLanguage();
-  const narratedRef = useRef<string | null>(null);
-  // A single acknowledged "something is being read aloud" state for both
-  // engines: the agent's natural voice and the browser-TTS fallback.
-  // Every interaction flips it immediately, so a tap on the button is never
-  // answered with dead air or a silent button.
+  // A single acknowledged "something is being read aloud" flag. Every
+  // interaction flips it immediately, so a tap on the button is never answered
+  // with dead air or a silent button.
   const [reading, setReading] = useState(false);
   const stopRef = useRef<() => void>(null);
   const plan = state.plan;
@@ -1315,56 +1317,22 @@ function LessonPhase() {
     () => splitSentences(state.lessonText ?? ""),
     [state.lessonText],
   );
-  // Points at the current `narrate` (defined below) so the auto-narrate effect
-  // can call it without depending on its identity.
-  const narrateRef = useRef<
-    ((text: string, mode?: "auto" | "button") => Promise<void>) | null
-  >(null);
 
-  // Voice + TEXT: the micro-lesson is meant to be taught, not just read. When
-  // a voice conversation is possible, hand the lesson text to the agent so it
-  // reads it with its natural voice while the text stays on screen. The agent
-  // connects on demand — a student who typed their recall gets the same
-  // spoken lesson as one who talked. The robotic browser voice is never used
-  // automatically — only from the button, as a deliberate fallback.
-  // (Voice-first auto-arming of the ring is planned, not active — see
-  // VoxideRing.)
-  useEffect(() => {
-    const text = state.lessonText;
-    if (!text || text === narratedRef.current) return;
-    narratedRef.current = text;
-    if (!hasVoxideKey()) return;
-    const client = getVoxideClient();
-    if (!client) return;
-    // Through a ref: `narrate` is rebuilt every render, and depending on it
-    // would re-arm the narration on every render. The lesson text is the only
-    // thing that should start a read-aloud.
-    void narrateRef.current?.(text, "auto");
-  }, [state.lessonText]);
-
-  // One narration entry point. Acknowledges immediately (reading state),
-  // prefers the agent's natural voice, and falls back to the browser voice
-  // with a sentence read-along. `mode: "auto"` never falls back to browser
-  // TTS — only the explicit button does.
-  const narrate = async (t: string, mode: "auto" | "button" = "button") => {
-    if (!t) return;
-    // Stop anything already playing so a second "Read it to me" replaces
-    // the first instead of stacking a double read-back.
+  // Voice + TEXT: the micro-lesson is meant to be taught, not just read. The
+  // browser's own speech synthesis reads it aloud while the text stays on
+  // screen, with each sentence highlighted as it is spoken. Only ever started
+  // by an explicit tap — the browser voice is deliberate, never automatic.
+  // One narration entry point. Acknowledges immediately (reading state) so a
+  // tap on the button is never answered with dead air.
+  const narrate = (text: string) => {
+    if (!text) return;
+    // Stop anything already playing so a second "Read it to me" replaces the
+    // first instead of stacking a double read-back.
     stopRef.current?.();
-    setReading(true);
-    setActiveSentence(mode === "auto" ? null : sentences.length > 1 ? 0 : null);
-    const voiced = await speakViaVoxide(t);
-    if (voiced) return; // agent read it; stays "reading" until stopped
-    if (mode === "auto") {
-      setReading(false);
-      setActiveSentence(null);
-      return;
-    }
-    // acknowledged fallback: Voxide failed/absent → browser TTS.
     setReading(true);
     setActiveSentence(sentences.length > 1 ? 0 : null);
     speakAloud(
-      t,
+      text,
       (i) => setActiveSentence(i),
       () => {
         setReading(false);
@@ -1373,11 +1341,8 @@ function LessonPhase() {
     );
   };
 
-  narrateRef.current = narrate;
-
   const stopReading = () => {
     stopReadingAloud();
-    stopVoiceNarration();
     setReading(false);
     setActiveSentence(null);
   };
@@ -1418,6 +1383,7 @@ function LessonPhase() {
             plan={plan}
             onCheck={submitPlanCheck}
             startRetest={startRetest}
+            voiceAllowed={voiceAllowed}
           />
         </>
       ) : state.guide?.length ? (
@@ -1437,7 +1403,7 @@ function LessonPhase() {
               estimated={state.guideEstimated}
               onRecall={(section) =>
                 section.recall &&
-                void narrate(`${section.what} ${section.recall}`, "button")
+                void narrate(`${section.what} ${section.recall}`)
               }
             />
           ) : (
@@ -1446,11 +1412,9 @@ function LessonPhase() {
               sentences={sentences}
               activeSentence={activeSentence}
               recording={reading}
-              narrate={() => void narrate(state.lessonText ?? "", "button")}
+              narrate={() => void narrate(state.lessonText ?? "")}
               stopReading={stopReading}
-              onReplaySentence={(i) =>
-                void narrate(sentences[i] ?? "", "button")
-              }
+              onReplaySentence={(i) => void narrate(sentences[i] ?? "")}
             />
           )}
           <div className="flex justify-center">
@@ -1480,7 +1444,7 @@ function LessonPhase() {
               estimated={state.guideEstimated}
               onRecall={(section) =>
                 section.recall &&
-                void narrate(`${section.what} ${section.recall}`, "button")
+                void narrate(`${section.what} ${section.recall}`)
               }
             />
           ) : (
@@ -1489,11 +1453,9 @@ function LessonPhase() {
               sentences={sentences}
               activeSentence={activeSentence}
               recording={reading}
-              narrate={() => void narrate(state.lessonText ?? "", "button")}
+              narrate={() => void narrate(state.lessonText ?? "")}
               stopReading={stopReading}
-              onReplaySentence={(i) =>
-                void narrate(sentences[i] ?? "", "button")
-              }
+              onReplaySentence={(i) => void narrate(sentences[i] ?? "")}
             />
           )}
         </>
@@ -1521,7 +1483,7 @@ function LessonPhase() {
   );
 }
 
-function RetestPhase() {
+function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
   const { state, submitAnswer, fetchResult } = useStudy();
   const { t, lang } = useLanguage();
   const { questions, currentQuestion, answered } = state;
@@ -1581,7 +1543,7 @@ function RetestPhase() {
             ) : (
               <VoiceCapture
                 submit={submitText}
-                textDefault={!hasVoxideKey()}
+                voiceAllowed={voiceAllowed}
                 busy={state.busy}
                 placeholder={t("type-answer-out-loud")}
               />

@@ -215,6 +215,11 @@ export const en = {
     "I didn't catch any words yet — tap the ring or type whenever you're ready.",
   "voice-catch-deferred":
     "I didn't catch that — no rush. Tap the ring and try again whenever you're ready.",
+  "voice-signin-only":
+    "Voice is for signed-in students — sign up to talk. You can type your answer now.",
+  "voice-unsupported":
+    "This browser can't record voice — try Chrome, or type your answer.",
+  "voice-error": "I couldn't hear that — try again, or type your answer.",
 
   // ── Dashboard chrome ─────────────────────────────────────────
   "study-room": "Your study room",
@@ -482,7 +487,6 @@ export const en = {
   "go-to-chapters": "Go to your chapters",
   "voice-test": "Voice test",
   loading: "Loading…",
-  "voxide-key-missing": "Voxide key missing",
   transcript: "Transcript",
   "nothing-yet": "Nothing yet — say something…",
   "you-label": "You",
@@ -664,7 +668,7 @@ export const en = {
     "No — you can type your answer instead. Speaking is the better test of what you really know, but typing is always there for a quiet room or a microphone that won't work.",
   "faq-voice-q": "Is my voice recorded or saved?",
   "faq-voice-a":
-    "Kiftet doesn't save your audio. Your voice goes to our voice service (Voxide) to be turned into text, and we keep that text with your answer. Grading uses an AI service (Gemini, with Groq as a backup), and our servers, the database (Neon) and both AI services sit outside Ethiopia — so your answer text leaves the country. It stays with your study history until you ask us to remove it.",
+    "Kiftet doesn't save your audio. Your voice is turned into text by your browser's built-in speech service (in Chrome, Google's), which processes it in real time; Kiftet keeps only the resulting text with your answer and never stores the recording. Grading uses an AI service (Gemini, with Groq as a backup), and our servers, the database (Neon) and both AI services sit outside Ethiopia — so your answer text leaves the country. It stays with your study history until you ask us to remove it.",
   "faq-amharic-q": "Does it work in Amharic?",
   "faq-amharic-a":
     "Yes — the interface, the lessons and the questions can all be in አማርኛ or English. Reading a lesson aloud in Amharic needs an Amharic voice on your phone; if your phone doesn't have one, the lesson is still there as text you can read.",
@@ -1078,6 +1082,10 @@ export const am: Record<MessageKey, string> = {
   "voice-still-listening": "አሁንም እያዳመጥኩ ነው — ጊዜ ውሰድ።",
   "voice-catch-none": "ገና ቃላት አልያዝኩም — ሲዘጋጁ ቀለበቱን ንካ ወይም ጻፍ።",
   "voice-catch-deferred": "ያንን አልያዝኩም — አትቸኩል። ቀለበቱን ንካ፣ ሲዘጋጁ እንደገና ሞክር።",
+  "voice-signin-only":
+    "ድምጽ የተመዘገቡ ተማሪዎች ብቻ ነው — ለመናገር ይመዝገቡ። አሁን መልስህን መጻፍ ትችላለህ።",
+  "voice-unsupported": "ይህ አሳሽ ድምጽ መቅዳት አይችልም — Chrome ሞክር ወይም መልስህን ጻፍ።",
+  "voice-error": "ያንን መስማት አልቻልኩም — እንደገና ሞክር ወይም መልስህን ጻፍ።",
 
   // ── Dashboard chrome ─────────────────────────────────────────
   "study-room": "የጥናት ክፍሉ",
@@ -1331,7 +1339,6 @@ export const am: Record<MessageKey, string> = {
   "go-to-chapters": "ወደ ምዕራፎችህ ሂድ",
   "voice-test": "የድምጽ ፈተና",
   loading: "በመጫን ላይ…",
-  "voxide-key-missing": "የ Voxide ቁልፍ የለም",
   transcript: "ግልባጭ",
   "nothing-yet": "ገና ምንም የለም — አንድ ነገር ተናገር…",
   "you-label": "አንተ",
@@ -1498,7 +1505,7 @@ export const am: Record<MessageKey, string> = {
     "አይ። በምትኩ መጻፍ ትችላለህ። ጮክ ብሎ መናገር በእውነት የምታውቀውን ለመለካት የተሻለ ነው፤ ነገር ግን ጸጥ ባለ ቦታ ወይም ማይክራፎን ሲያቅት መጻፍ ሁልጊዜ አለ።",
   "faq-voice-q": "ድምጼ ይቀዳል ወይስ ይቀመጣል?",
   "faq-voice-a":
-    "ኪፍተት ድምጽህን አያስቀምጥም። ንግግርን ወደ ጽሑፍ ለመቀየር ድምጽህ ወደ ድምጽ አገልግሎታችን (Voxide) ይላካል፤ እኛ የምናስቀምጠው የመልስህን ጽሑፍ ከዚህ ሙከራ ጋር ነው፣ ድምጹን አይደለም። ግምገማው በAI አገልግሎት (Gemini፣ አማራጭ ደግሞ Groq) ይከናወናል። አገልጋዮቻችን፣ ዳታቤዙ (Neon) እና ሁለቱም የAI አገልግሎቶች ከኢትዮጵያ ውጭ ናቸው፣ ስለዚህ የመልስህ ጽሑፍ ከአገር ይወጣል። እስክትጠይቀን ድረስ ከትምህርት ታሪክህ ጋር ይቀመጣል።",
+    "ኪፍተት ድምጽህን አያስቀምጥም። ንግግርህን ወደ ጽሑፍ የሚቀይረው የአሳሽህ አብሮ የተሰራ የንግግር አገልግሎት ነው (በ Chrome ውስጥ የGoogle አገልግሎት)፣ በእውነተኛ ጊዜ የሚሰራ፤ ኪፍተት የሚያስቀምጠው የመልስህን ጽሑፍ ከሙከራው ጋር ብቻ ነው — ቀረጻውን አይደለም። ግምገማው በAI አገልግሎት (Gemini፣ አማራጭ ደግሞ Groq) ይከናወናል። አገልጋዮቻችን፣ ዳታቤዙ (Neon) እና ሁለቱም የAI አገልግሎቶች ከኢትዮጵያ ውጭ ናቸው፣ ስለዚህ የመልስህ ጽሑፍ ከአገር ይወጣል። እስክትጠይቀን ድረስ ከትምህርት ታሪክህ ጋር ይቀመጣል።",
   "faq-amharic-q": "በአማርኛ ይሰራል?",
   "faq-amharic-a":
     "አዎ — ገጹ፣ ትምህርቶቹና ጥያቄዎቹ በአማርኛ ወይም በእንግሊዝኛ ሊሆኑ ይችላሉ። ትምህርትን በአማርኛ ጮክ አድርጎ ለማንበብ ስልክህ የአማርኛ ድምጽ ሊኖረው ይገባል፤ ከሌለው ትምህርቱ አሁንም እንደ ጽሑፍ ለማንበብ አለ።",

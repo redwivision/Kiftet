@@ -42,7 +42,7 @@ Not cosmetic — both were live in the study loop:
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Skeleton — domain, API shell, AI seam | ✅ Done |
-| 1 | Voice spine — Voxide capture/playback + voice-state UI | ✅ Done |
+| 1 | Voice spine — browser Web Speech capture/read-back + voice-state UI | ✅ Done |
 | 2 | AI loop — real Gemini: extraction, grading, micro-lessons, retest | ✅ Done |
 | 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ Done |
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
@@ -401,14 +401,15 @@ room candle. All plain CSS keyframes behind utilities in `index.css`, collapsed
 by `prefers-reduced-motion`. See [`STRATEGY.md`](../STRATEGY.md) for the five
 product bets that steer the next phases.
 
-> **The voice seam, honestly.** The SDK owns the orb + its word-by-word
-> caption (no hide flag in `VoxideAppearance`). We never bet the platform on
-> that: grading runs on the **joined transcript of every user chunk** — partial
-> and final alike — because a long recall streams in as many pieces and
-> filtering to "final" alone would silently drop most of what the student said
-> (`transcriptOf` in `study.$sessionId.tsx`). The calm replies + read-back come
-> from the browser natively — `speechSynthesis` for reading our reply aloud,
-> no vendor TTS-commit. Voice = the seam; Gemini + text = load-bearing.
+> **The voice seam, honestly.** Voice = the push-to-talk ring plus read-back,
+> both riding the browser's own speech services behind one `lib/voice.ts`
+> `VoiceClient` seam — no vendor SDK, no key, no quota. We never bet the
+> platform on vendor chrome: grading runs on the **consolidated final
+> transcript** of the turn (`onend` emits it once in
+> `WebSpeechVoiceClient`), and the read-back comes from `speechSynthesis`
+> sentence by sentence with a read-along. Voice capture is for signed-in
+> students; the demo and unsupported browsers get a clear label and the typed
+> path. Voice = the seam; Gemini + text = load-bearing.
 
 The rule that runs this branch: **build one phase, test it, fix it, write the
 testing guide, only then start the next.** Nobody ever fires all phases at once —

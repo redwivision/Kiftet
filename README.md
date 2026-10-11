@@ -10,7 +10,7 @@ Turn any textbook chapter into a **spoken, adaptive review** that closes exactly
 
 **Live preview** → [kiftet.ethiodeploy.com](https://kiftet.ethiodeploy.com)
 
-`Bun` · `TypeScript` · `React 19` · `React Router 8` · `Tailwind v4` · `Express` · `Better Auth` · `Drizzle` · `Neon Postgres` · `Google Gemini` · `Voxide`
+`Bun` · `TypeScript` · `React 19` · `React Router 8` · `Tailwind v4` · `Express` · `Better Auth` · `Drizzle` · `Neon Postgres` · `Google Gemini` · `Web Speech`
 
 </div>
 
@@ -73,7 +73,7 @@ Explaining something out loud is not a feature bolted on to satisfy a requiremen
 | Auth | **Better Auth** — email & password, optional Google/Facebook/GitHub OAuth, sessions, rate limiting | batteries included; typed via the schema |
 | Database | **Neon** — serverless Postgres via **Drizzle ORM** | persistent, survives redeploys, pooled + direct connection strings |
 | AI | **Google Gemini** (one seam: `apps/server/src/ai/gemini.ts`) | concept extraction, gap diagnosis, lesson + retest generation |
-| Voice | **Voxide** (optional) | speech-to-text + text-to-speech; typed/browser-speech fallback |
+| Voice | **Web Speech** (browser) | speech-to-text + text-to-speech via the browser's built-in speech service (Chrome's SpeechRecognition); always a typed fallback. Voice is for signed-in students — demo guests get the clear-label typed path |
 
 ## Repository layout
 

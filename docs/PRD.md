@@ -66,9 +66,9 @@ assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
 
 ### MVP (must work for the demo)
 - Textbook chapter ingestion → automatic concept + common-misconception extraction (AI-generated, not hand-authored — this is what lets "every topic in the book" work without manually writing a checklist per topic).
-- Voice capture of student's cold explanation (Voxide).
+- Voice capture of the student's cold explanation (browser Web Speech; signed-in only, typed path always available).
 - Gap analysis against the extracted checklist.
-- Targeted study-guide generation (structured, Voxide-capable for playback).
+- Targeted study-guide generation (structured, with read-aloud playback).
 - Retest with varied-phrasing questions on gap concepts only.
 - Before/after score display.
 - Works end-to-end on at least 2–3 chapters across different topic types to prove generalization, not a single cherry-picked demo path — **choosing conceptual subjects**, per the subject boundary above.
@@ -99,7 +99,7 @@ assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
 
 | Sponsor | Role in the product |
 |---|---|
-| **Voxide** | The core mechanic, both directions — capturing the spoken explanation and delivering the spoken micro-lesson. Not a bolt-on feature. |
+| **Browser speech (Web Speech)** | The core mechanic — capturing the spoken explanation and delivering the spoken micro-lesson via the browser's built-in speech service (Chrome's `SpeechRecognition` + `speechSynthesis`). Not a bolt-on feature: the whole study loop is spoken-first, typed always available. |
 | **EthioDeploy** | Hosts the full web app (frontend + backend). Built as a web app specifically so this applies cleanly. |
 | **Scholarxiv** | Used to ground the misconception-detection logic in real pedagogical research on common student errors per topic, and to log the team's ideation trail. |
 | **Links.et** | Institutional licensing payments from schools/tutoring centers. |

@@ -8,7 +8,6 @@ import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import { HierarchyReport } from "@/components/hierarchy-report";
 import { useLanguage } from "@/components/language-provider";
@@ -652,8 +651,6 @@ export default function Textbooks() {
           body: JSON.stringify({ chapterId }),
         },
       );
-      setSession(sessionId);
-      setChapter(chapterId);
       navigate(`/study/${sessionId}`, { replace: true });
     } catch (err) {
       toast.error(apiError(err));

@@ -1,36 +1,30 @@
-import { cn } from "@kiftet/ui/lib/utils";
-import { useVoxideVoice } from "@voxide/react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { getVoxideClient, hasVoxideKey } from "@/components/assistant";
 import { useLanguage } from "@/components/language-provider";
-import { VoxideRing } from "@/components/voxide-ring";
+import { VoiceRing } from "@/components/voice-ring";
+import { useVoiceSession } from "@/hooks/use-voice-session";
 import type { MessageKey } from "@/lib/messages";
+import type { VoiceState } from "@/lib/voice";
 
-// Dev-only harness: exercises the raw voice ring without the study loop.
-// In a production build the route renders a quiet dead end instead — the
-// page is part of the demo story only in development.
+// Dev-only harness: exercises the raw push-to-talk ring without the study
+// loop. In a production build the route renders a quiet dead end instead —
+// the page is part of the demo story only in development.
 
-const STATUS_LABEL: Record<string, MessageKey> = {
+const STATE_LABEL: Record<VoiceState, MessageKey> = {
   idle: "vt-idle",
-  armed: "vt-armed",
-  connecting: "vt-connecting",
   listening: "vt-listening",
   thinking: "vt-thinking",
   speaking: "vt-speaking",
-  executing: "vt-executing",
-  error: "vt-error",
 };
 
 export default function VoiceTest() {
   const { t } = useLanguage();
   const [ready, setReady] = useState(false);
-  const [hasKey, setHasKey] = useState(false);
+  const voice = useVoiceSession();
 
-  useEffect(() => {
-    setReady(true);
-    setHasKey(hasVoxideKey());
-  }, []);
+  // The browser voice layer only exists on the client, and only where
+  // SpeechRecognition does — decide after mount so the first paint matches.
+  useEffect(() => setReady(true), []);
 
   // Production builds never expose the harness — just a calm way back.
   if (import.meta.env.PROD) {
@@ -50,8 +44,16 @@ export default function VoiceTest() {
     );
   }
 
-  const voice = useVoxideVoice(ready && hasKey ? getVoxideClient() : null);
-  const statusKey = STATUS_LABEL[voice.status] ?? "vt-idle";
+  const toggle = () => {
+    if (voice.state === "listening") {
+      voice.stop();
+    } else if (voice.state === "idle") {
+      voice.start();
+    }
+  };
+
+  const spoken = `${voice.transcript} ${voice.interim}`.trim();
+  const label = t(STATE_LABEL[voice.state]);
 
   return (
     <main className="mx-auto grid w-full max-w-md content-center gap-8 px-6 py-12">
@@ -60,7 +62,7 @@ export default function VoiceTest() {
           {t("voice-test")}
         </h1>
         <p className="text-muted-foreground text-sm">
-          Phase 1+2 · Voxide voice agent + study capabilities.
+          Browser voice · push-to-talk harness.
         </p>
       </div>
 
@@ -68,31 +70,21 @@ export default function VoiceTest() {
         <div className="grid min-h-40 place-items-center text-muted-foreground text-sm">
           {t("loading")}
         </div>
-      ) : !hasKey ? (
+      ) : !voice.isSupported ? (
         <div className="rounded-lg border border-rust/50 bg-rust/10 px-4 py-3 text-manuscript/85 text-sm">
-          <p className="mb-1 font-medium">{t("voxide-key-missing")}</p>
-          <p className="text-manuscript/60">
-            Set{" "}
-            <code className="rounded bg-night-deep px-1">VITE_VOXIDE_KEY</code>{" "}
-            in <code className="rounded bg-night-deep px-1">apps/web/.env</code>{" "}
-            with the publishable key from{" "}
-            <a
-              href="https://voxide.app/dashboard"
-              className="underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              voxide.app/dashboard
-            </a>
-            .
-          </p>
+          {t("voice-unsupported")}
         </div>
       ) : (
         <>
           <div className="flex flex-col items-center gap-4">
-            <VoxideRing />
+            <VoiceRing
+              state={voice.state}
+              onToggle={toggle}
+              ariaLabel={label}
+              shortcutLabel={t("shortcut-talk-label")}
+            />
             <p className="h-5 font-medium text-manuscript/70 text-sm">
-              {t(statusKey)}
+              {label}
             </p>
           </div>
 
@@ -100,25 +92,15 @@ export default function VoiceTest() {
             <p className="text-muted-foreground text-xs uppercase tracking-widest">
               {t("transcript")}
             </p>
-            {voice.messages.length ? (
-              voice.messages.map((m, i) => (
-                <p
-                  key={i}
-                  className={cn(
-                    "text-sm leading-relaxed",
-                    m.role === "ai"
-                      ? "text-manuscript/90"
-                      : "text-manuscript/60",
-                  )}
-                >
-                  <span className="font-semibold text-gold/80">
-                    {m.role === "ai" ? t("kiftet-label") : t("you-label")}
-                  </span>
-                  : {m.text}
-                </p>
-              ))
+            {spoken ? (
+              <p className="text-manuscript/90 text-sm leading-relaxed">
+                {spoken}
+              </p>
             ) : (
               <p className="text-manuscript/40 text-sm">{t("nothing-yet")}</p>
+            )}
+            {voice.error && (
+              <p className="text-rust text-sm">{t("voice-error")}</p>
             )}
           </div>
         </>

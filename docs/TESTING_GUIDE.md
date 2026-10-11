@@ -105,7 +105,15 @@ Phase-specific instructions begin below.
 
 ---
 
-## Phase 1 — Voice spine (Voxide)
+## Phase 1 — Voice spine (Web Speech)
+
+> **Update (voice layer final):** Voxide has been removed entirely. Voice is
+> the browser's own speech services behind `lib/voice.ts` (`VoiceClient` +
+> `WebSpeechVoiceClient` + `useVoiceSession`), rendered by
+> `components/voice-ring.tsx`, gated to signed-in students in
+> `routes/study.$sessionId.tsx` (`voiceAllowed`). Sections below that mention
+> the Voxide SDK, `VITE_VOXIDE_KEY` or `components/assistant.tsx` are
+> historical and superseded by this note and by the code.
 
 ### How I tested
 
@@ -283,6 +291,12 @@ deterministic floor:
 ---
 
 ## Voxide integration (voice agent)
+
+> **Superseded.** Voxide (`@voxide/react`), `components/assistant.tsx`, and
+> `<VoxideWidget>` are gone. There is no voice agent anymore — the loop's
+> answers go through the push-to-talk ring → browser `SpeechRecognition` →
+> text; read-back is `speechSynthesis`. The historical notes below are kept as
+> a record of what was tried and why it was replaced.
 
 ### How I tested
 

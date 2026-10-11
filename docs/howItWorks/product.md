@@ -38,7 +38,7 @@ is at least **three or four programs cooperating**:
        │                                │
        │  audio in / voice out          │  prompts in / answers out
        ▼                                ▼
-   Voice provider (Voxide)          AI model (Google Gemini)
+   Voice provider (browser speech)    AI model (Google Gemini)
 ```
 
 - **Browser UI** — the part on the student's phone/laptop. It shows screens,
@@ -50,7 +50,10 @@ is at least **three or four programs cooperating**:
 - **Database** — permanent storage. When the student closes their phone, data
   must survive. Lives in [`packages/db`](../packages/db).
 - **Voice provider** — the product's signature feature: speech-to-text (hears
-  the student) and text-to-speech (talks back). The sponsor product **Voxide**.
+  the student) and text-to-speech (talks back), via the browser's built-in
+  speech services (Chrome `SpeechRecognition` + `speechSynthesis`). Voice is
+  for signed-in students; demo guests and unsupported browsers get the typed
+  path with a clear label.
 - **AI model** — Google Gemini does the reasoning: understanding the student's
   spoken explanation, spotting gaps, writing the micro-lesson, and generating
   retest questions.

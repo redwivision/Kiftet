@@ -26,7 +26,7 @@ Four programs cooperate, and exactly two of them talk to the outside world:
 2. **Backend API** — the server. It receives requests, does the thinking, saves
    and reads data, and answers.
 3. **Database** — permanent storage. What survives after the phone is closed.
-4. **Voice provider (Voxide)** — hears the student and talks back.
+4. **Voice provider (browser Web Speech)** — hears the student and talks back.
 5. **AI model (Gemini)** — does the reasoning: understanding the spoken
    explanation, spotting gaps, writing the lesson, grading retests.
 
@@ -423,46 +423,45 @@ Data kept: study_session UPDATE (status = "completed", completedAt = now)
 
 ---
 
-### 5.10 Voice agent — a single-job assistant
+### 5.10 Voice capture — the push-to-talk ring
 
-The voice agent (Voxide) is a conversational assistant that knows **what** the
-student is studying (the subject, chapter, and current step) but not the lesson
-content or the score breakdown — that detailed thinking stays with Gemini, the
-grader. Its only *action* is closing the session.
+The ring is the one entry point for an answer, spoken or typed. When the
+student is signed in and the browser supports speech (Chrome `SpeechRecognition`
+via the `lib/voice.ts` seam, wrapped in `useVoiceSession`), tapping the ring
+captures what they say; everything spoken is transcribed on-device through the
+browser's speech service and submitted as text. The recall and retest loops
+grade against that text — the voice layer never grades, and the on-screen loop
+remains the single source of truth. Demo guests and unsupported browsers see a
+clear "voice is for signed-in students" / unsupported label and the typed
+recorder instead.
 
 ```mermaid
 flowchart LR
-  A["1 · app briefs the agent<br/>subject, chapter, step"] --> B["2 · agent chats about<br/>the topic — no grading"]
-  B -. "student says bye" .-> C["3 · one capability<br/>completeSession"]
-  C --> D["4 · farewell ~150 ms<br/>then hang up"]
+  A["1 · TAP THE RING<br/>mic opens (signed-in + supported only)"] --> B["2 · STREAM<br/>interim words appear live"]
+  B --> C["3 · TAP AGAIN / DONE CUE<br/>consolidated final transcript"]
+  C --> D["4 · SUBMIT AS TEXT<br/>to the recall / retest grade"]
 ```
 
-> **Trace:** brief the agent → chat (topic only) → farewell heard → one
-> capability → hang up.
-
-Why exactly one capability? Because one source of truth is easier than two.
-Everything that *grades* — the recall, the retest answers, the lessons — is
-driven by the on-screen loop, so the agent can never create a duplicate attempt
-or get out of sync with what's on the screen.
+> **Trace:** tap → listen → finalize → submit text. Same seam covers the
+> explicit "Read it to me" read-back and the lesson narration via `speakAloud`.
 
 ---
 
-### 5.11 Natural voice read-back — replacing robotic TTS
+### 5.11 Natural voice read-back — the lesson reads itself (on tap)
 
-When a lesson arrives it reads itself aloud so the student can follow both the
-text and the voice:
+When a lesson arrives it offers to read itself aloud so the student can follow
+both the text and the voice:
 
 ```mermaid
 flowchart LR
-  A["1 · LESSON ARRIVES<br/>speaks itself aloud"] --> B["2 · AGENT READS<br/>natural voice, sentence<br/>by sentence"]
+  A["1 · READ IT TO ME<br/>explicit tap only"] --> B["2 · BROWSER SPEAKS<br/>speechSynthesis, sentence<br/>by sentence"]
   B --> C["3 · spoken sentence<br/>highlighted (read-along)"]
-  C --> D["4 · STOP READING<br/>cancels both engines"]
-  B -. "no voice layer" .-> E["'Read it to me' button<br/>browser TTS, same<br/>read-along"]
+  C --> D["4 · STOP READING<br/>cancels the read"]
 ```
 
-> **Trace:** lesson → natural read → highlight → stop on demand. The browser
-> voice is never automatic — it only runs from the explicit button, and a read
-> is cut off if the student leaves the screen mid-sentence.
+> **Trace:** tap → browser TTS → highlight → stop on demand. The browser voice
+> is never automatic — it only runs from the explicit button, and a read is cut
+> off if the student leaves the screen mid-sentence.
 
 The browser voice (`speakAloud`) picks the least robotic English voice
 available and reads at a slightly relaxed pace. A safety beat also keeps it

@@ -3,9 +3,12 @@
 > Part of the [how-it-works index](README.md).
 
 
-1. **Voice is the core, not a bolt-on.** The PRD says Voxide is the mechanic —
-   capture the student's explanation, speak the lesson. So we build the voice
+1. **Voice is the core, not a bolt-on.** Capturing the student's spoken
+   explanation and speaking the lesson is the mechanic. So we build the voice
    spine early (Phase 1), even though the AI brains come later (Phase 2).
+   Voice rides the browser's own speech services (Web Speech) behind one seam;
+   the typed path is always available, and voice is enabled for signed-in
+   students only.
 
 2. **AI sits behind one seam.** Only `apps/server/src/ai/gemini.ts` knows the
    vendor. If we need a fallback chain (OpenAI, Anthropic) or if costs change,
@@ -89,10 +92,10 @@
     as `Record<MessageKey, string>` where `MessageKey = keyof typeof en`, so
     every user-visible string — including validator messages, toasts and the
     study ring's own push-to-talk captions — cannot silently fall back to
-    English. The ring's captions are deliberately *not* the Voxide `vt-*`
-    strings: those describe an always-on agent you interrupt, this one
-    describes a recording you finish, and reusing them would tell the student
-    the wrong thing about the control they are touching.
+    English. The ring's captions are deliberately distinct from the `vt-*`
+    dev-harness strings: those describe states on the voice-test page, this
+    one describes a recording you finish, and reusing them would tell the
+    student the wrong thing about the control they are touching.
 
 12. **A formatter the repo doesn't agree with is a trap.** `biome.json` sets
     `indentStyle: "tab"`, but `packages/ui` had been committed at 2-space, so

@@ -44,6 +44,18 @@ export function useVoiceSession() {
     client.stopListening();
   }, [client]);
 
+  const cancel = useCallback(() => {
+    client.cancelListening();
+  }, [client]);
+
+  /** Forget the current turn. Called when a capture window opens or closes so
+   *  the next answer starts from a clean transcript, never the previous one. */
+  const reset = useCallback(() => {
+    setTranscript("");
+    setInterim("");
+    setError(null);
+  }, []);
+
   const speak = useCallback(
     (text: string) => {
       setError(null);
@@ -65,6 +77,8 @@ export function useVoiceSession() {
     lastTranscript: lastTranscriptRef.current,
     start,
     stop,
+    cancel,
+    reset,
     speak,
     cancelSpeech,
   };

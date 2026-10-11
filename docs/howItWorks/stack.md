@@ -59,7 +59,7 @@ dependency and dev-dependency, audited line-by-line — is in [the inventory](in
 | Database toolkit | **Drizzle ORM** | Lets us write the schema in TypeScript. "Migrations" (change history of the schema) are generated with drizzle-kit, not hand-written. |
 | Auth | **Better Auth** | Login, signup, password hashing, session cookies — the hard, security-critical parts are battle-tested and we don't reinvent them. |
 | AI | **Google Gemini** (`@google/genai`) | Chosen for cost + speed. Encapsulated in one service so we can swap providers later. |
-| Voice | **Voxide** (`@voxide/react`) | The sponsor product — the signature mechanic (STT + TTS). The official React SDK drives the voice session in the browser and is integrated now. |
+| Voice | **Web Speech** (browser) | Speech-to-text and text-to-speech through the browser's built-in speech service (Chrome's `SpeechRecognition`), wrapped in a single `VoiceClient` seam (`apps/web/src/lib/voice.ts` + `useVoiceSession`). Voice is for signed-in students; demo guests and unsupported browsers get the clear-label typed path. |
 | Env / secrets | **Varlock** | Typesafe `.env` values, generated TS bindings, and plugin integration for Vite. |
 | PWA / offline | **vite-plugin-pwa** | Makes the app installable and usable offline (exam halls have no signal). The cache strategy is deliberate: navigations are `NetworkOnly` with an `offline.html` precache fallback, so an offline cold load never serves a document from a previous deploy; the Google font sheet `StaleWhileRevalidate` and font files `CacheFirst`, so the brand still renders offline. See [decisions §10](decisions.md). |
 | Lint + format | **Biome** | One fast tool for both; replaces ESLint + Prettier. |

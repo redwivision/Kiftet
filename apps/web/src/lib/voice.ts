@@ -10,11 +10,9 @@ export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
 // next thing the student says rather than needing a reload.
 let activeLanguage: Language = "en";
 
-// Listeners let the voice *vendor* adapters follow the pref without the React
-// provider having to import them. Importing assistant.tsx (and with it the
-// whole Voxide SDK) into <LanguageProvider> would put that bundle on the
-// landing page and every signed-out route, so the dependency runs the other
-// way: the adapter subscribes, the provider only announces.
+// Listeners let anything outside React follow the language pref without the
+// provider importing it. The provider only announces; the voice layer reads
+// the pref when it starts a recognition turn or builds an utterance.
 const languageListeners = new Set<(lang: Language) => void>();
 
 export function onVoiceLanguageChange(
@@ -86,11 +84,11 @@ export function stopReadingAloud(): void {
   synth.resume?.();
 }
 
-// The product's voice contract. Everything in the app talks through this
-// seam and never to a vendor directly — see docs/howItWorks/dataflow.md §5 "sep of
-// concerns". speakAloud is the last-resort read-back, kept as an explicit
-// option: the natural voice path is Voxide's agent (see speakViaVoxide), and
-// the browser's speechSynthesis is only the fallback for "Read it to me".
+// The product's voice contract. Everything in the app talks through this seam
+// and never to a vendor directly — see docs/howItWorks/dataflow.md §5 "sep of
+// concerns". speakAloud is the read-back for "Read it to me" and the lesson
+// narration: the browser's own speechSynthesis, sentence by sentence, with the
+// current sentence highlighted as it is spoken.
 export function speakAloud(
   text: string,
   onChunk?: (index: number) => void,
@@ -352,18 +350,22 @@ class WebSpeechVoiceClient implements VoiceClient {
     this.recognition.interimResults = true;
 
     this.recognition.onresult = (event) => {
+      // Finals are accumulated, not emitted per-result: Chrome emits several
+      // final fragments across a long continuous turn, and emitting each one
+      // *and* the whole turn again on end would deliver the answer twice. The
+      // single consolidated final is handed over in onend; interim text streams
+      // live so the student still watches their words appear as they speak.
       let interimText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         const text = result?.[0]?.transcript ?? "";
         if (result?.isFinal) {
           this.spokenTranscript = `${this.spokenTranscript} ${text}`.trim();
-          this.callbacks.onTranscript?.(text, true);
         } else {
           interimText += text;
         }
       }
-      if (interimText) this.callbacks.onTranscript?.(interimText, false);
+      this.callbacks.onTranscript?.(interimText, false);
     };
 
     this.recognition.onerror = (event) => {

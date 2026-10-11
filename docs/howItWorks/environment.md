@@ -24,7 +24,6 @@ wrong.
 | `GROQ_API_KEY` | Server | Failover LLM provider (Groq). Serves the same requests while Gemini is rate-limited or exhausted, at Groq's own allowance | Gemini quota storms degrade to templates instead of being absorbed — set this if you care about uptime |
 | `VITE_SERVER_URL` | Web (client) | API origin without `/api`; use a LAN-reachable API address for phone testing | API calls go to the web dev server or the phone's own `localhost` |
 | `VITE_SITE_URL` | Web (client) | Public origin of the web app (e.g. `https://app.kiftet.com`); makes `og:image`/`twitter:image` absolute | Relative share images — social previews may not render |
-| `VITE_VOXIDE_KEY` | Web (client) | Voxide publishable key | Voice features disabled; typed fallback activates |
 
 **How to set them:**
 - **Local dev:** every package has a `.env.schema` file with safe placeholder

@@ -1,7 +1,7 @@
 // End-of-speech intent detection.
 //
-// Voxide keeps the mic open until the agent decides the turn is done, so the
-// study loop has always relied on a ring tap to close a recall or an answer.
+// The browser keeps the mic open until the turn is closed, so the study loop
+// has always relied on a ring tap to close a recall or an answer.
 // These helpers let the app recognise the student's own "I'm done" cues and
 // close the turn itself — no tap needed — and separate them from real
 // farewells ("bye", "I'm done studying") that should end the whole session.

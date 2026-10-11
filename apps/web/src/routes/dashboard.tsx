@@ -2,7 +2,6 @@ import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { setChapter, setSession } from "@/components/assistant";
 import { ConceptGraph } from "@/components/concept-graph";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
@@ -266,8 +265,6 @@ export default function Dashboard() {
           body: JSON.stringify({ chapterId: chapter.id }),
         },
       );
-      setSession(sessionId);
-      setChapter(chapter.id);
       navigate(`/study/${sessionId}`, { replace: true });
     } catch (err) {
       setError(apiError(err));

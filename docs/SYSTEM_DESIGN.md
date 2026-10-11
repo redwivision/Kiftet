@@ -20,7 +20,7 @@ shipped behavior is distinguished from planned product work.
 
 Browser-only: PDF text/bookmark reading and Tesseract WASM OCR;
 the PDF file itself is never uploaded.
-Voice capture: Voxide SDK. App read-aloud: browser speechSynthesis.
+Voice capture + read-aloud: browser Web Speech (`SpeechRecognition` + `speechSynthesis`) behind the `lib/voice.ts` seam.
 ```
 
 The web app and API run as one production service. Gemini calls pass through a
@@ -68,8 +68,7 @@ The authoritative schema and migration history are in
 2. **Build the checklist.** The API merges contents-page topics, in book
    order, with concepts and misconceptions extracted from chapter prose.
    Duplicate ideas are reconciled, and the result is stored once per chapter.
-3. **Capture recall.** The student speaks through Voxide or types. The client
-   submits the transcript to the API.
+3. **Capture recall.** The student speaks (browser Web Speech, signed-in only) or types. The client submits the transcript to the API.
 4. **Diagnose per concept.** Gemini evaluates the transcript against the
    checklist and assigns mastery levels from 0 to 3. The API derives the
    covered/missing/misconception lists and weighted score from that map.
@@ -108,8 +107,10 @@ health and telemetry routes; see the API reference and
 
 ## 5. Integrations and boundaries
 
-- **Voxide** provides browser voice capture/agent interaction. Typed input is
-  available, and app read-aloud uses native browser speech synthesis.
+- **Browser Web Speech** provides voice capture (`SpeechRecognition`) and
+  read-aloud (`speechSynthesis`), wrapped in the `lib/voice.ts` seam. Voice
+  capture is enabled for signed-in students only; demo guests and unsupported
+  browsers see a clear label and the always-available typed path.
 - **Google Gemini** provides concept extraction, grading, guide sections and
   retest generation. The deterministic fallbacks are explicit and surfaced
   where their output is only an estimate.
