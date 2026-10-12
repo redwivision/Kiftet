@@ -18,6 +18,7 @@ import { BrandMark, GapClosingMark } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { GuideView } from "@/components/guide-view";
 import { InkSettling } from "@/components/ink-settling";
+import { KiftetLoader, LoadingVeil } from "@/components/kiftet-loader";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing, SegmentedRing } from "@/components/mastery-ring";
 import { ShortcutHint } from "@/components/shortcut-hint";
@@ -247,7 +248,7 @@ function StudyScreen({
   if (state.chapterLoading) {
     return (
       <main className="mx-auto grid w-full max-w-md content-center justify-items-center gap-4 px-6 py-24 text-muted-foreground">
-        <InkSettling />
+        <KiftetLoader size={56} label={t("opening")} />
         <p className="text-sm">{t("opening")}</p>
       </main>
     );
@@ -276,6 +277,7 @@ function StudyScreen({
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+      <LoadingVeil show={state.busy} label={t("loading")} />
       {demo && (
         <div className="surface mb-6 flex flex-wrap items-center justify-between gap-3 border p-4 text-sm">
           <p className="text-muted-foreground">

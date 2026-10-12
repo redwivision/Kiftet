@@ -705,6 +705,13 @@ export function estimateStudyStepMinutes(excerpt: string): number {
   return Math.min(8, Math.max(3, Math.round(minutes)));
 }
 
+/** Pure reading time for a passage — no search/watch allowance, at least a
+ *  minute. Used to price the time a student saves by skipping what they know. */
+export function readingMinutes(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / READING_WORDS_PER_MINUTE));
+}
+
 export function planArchetype(
   subject: string,
   conceptText = "",
@@ -826,14 +833,19 @@ export function buildStudyPlan(
     searchQuery: item.searchQuery,
     studentWords: item.studentWords,
   }));
-  const knownCount = concepts.filter(
+  const knownConcepts = concepts.filter(
     (concept) =>
       !concept.isMisconception && levelOf(mastery, concept.conceptText) === 3,
-  ).length;
-  const chapterReadMinutes = Math.ceil(
-    rawText.trim().split(/\s+/).filter(Boolean).length /
-      READING_WORDS_PER_MINUTE,
   );
+  // Time saved is the reading the student avoids by skipping the ideas they
+  // already know — not "whole chapter minus the plan", which fell as the budget
+  // grew (a bigger plan meant *less* time saved), the opposite of what the line
+  // promises. Priced from each known concept's own excerpt, so it tracks the
+  // diagnosis and is independent of the budget.
+  const savedMinutes = knownConcepts.reduce((total, concept) => {
+    const anchor = sourceAnchor(concept.conceptText, rawText);
+    return total + (anchor ? readingMinutes(anchor.quote) : 0);
+  }, 0);
   const planMinutes = steps.reduce(
     (total, step) => total + step.estimatedMinutes,
     0,
@@ -849,8 +861,8 @@ export function buildStudyPlan(
       )
       .map((concept) => concept.conceptText),
     skippedKnown: {
-      count: knownCount,
-      estimatedTimeSavedMinutes: Math.max(0, chapterReadMinutes - planMinutes),
+      count: knownConcepts.length,
+      estimatedTimeSavedMinutes: savedMinutes,
     },
     budgetMinutes,
     estMinutes: planMinutes,

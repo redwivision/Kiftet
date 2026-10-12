@@ -239,6 +239,21 @@ describe("study plan personalization", () => {
     const result = plan([2, 0, 0, 0, 0, 0], 20);
     expect(JSON.stringify(result)).not.toMatch(/youtube|google|https?:\/\//i);
   });
+
+  test("reading time saved tracks the known ideas, not the budget", () => {
+    const manyKnown = plan([3, 3, 3, 3, 3, 3], 20);
+    const fewKnown = plan([3, 3, 0, 0, 0, 0], 20);
+    expect(manyKnown.skippedKnown.count).toBe(6);
+    expect(manyKnown.skippedKnown.estimatedTimeSavedMinutes).toBeGreaterThan(0);
+    // Knowing more saves more reading.
+    expect(manyKnown.skippedKnown.estimatedTimeSavedMinutes).toBeGreaterThan(
+      fewKnown.skippedKnown.estimatedTimeSavedMinutes,
+    );
+    // A larger budget does not change the time saved by skipping.
+    expect(plan([3, 3, 0, 0, 0, 0], 10).skippedKnown).toEqual(
+      plan([3, 3, 0, 0, 0, 0], 40).skippedKnown,
+    );
+  });
 });
 
 describe("model-written why lines", () => {

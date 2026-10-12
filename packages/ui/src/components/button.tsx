@@ -1,7 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cn } from "@kiftet/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Loader2Icon } from "lucide-react";
 
 /* The control layer is where a product is judged — it is what the hand
    touches, so it has to speak the same language as the brand layer. The
@@ -45,6 +44,26 @@ const buttonVariants = cva(
   },
 );
 
+function SpinnerRing() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className="size-4 animate-spin"
+    >
+      {/* The brand's open ring, spinning — a gap that resolves. Uses only the
+          built-in spin so the ui package needs no project-specific keyframes. */}
+      <path
+        d="M22 12a10 10 0 1 1-3.5-7.62"
+        stroke="currentColor"
+        strokeWidth={2.4}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function Button({
   className,
   variant = "default",
@@ -72,7 +91,7 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     >
-      {loading && <Loader2Icon className="animate-spin" />}
+      {loading && <SpinnerRing />}
       {children}
     </ButtonPrimitive>
   );

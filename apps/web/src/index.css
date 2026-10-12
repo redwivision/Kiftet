@@ -390,6 +390,10 @@
 	   progress bar would need to know a chunk's size, and guessing wrong
 	   reads worse than admitting we don't. */
   --animate-ink-sweep: ink-sweep 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* The loader nib: a short bright arc travelling around the open ring, so a
+     wait reads as ink being written around the gap rather than a stock spinner.
+     Ends anywhere on the ring, so the reduced-motion frame is still a ring. */
+  --animate-mark-travel: mark-travel 1.3s linear infinite;
 
   @keyframes fade-up {
     from {
@@ -565,6 +569,11 @@
       stroke-dashoffset: 0;
       opacity: 1;
       color: var(--color-sage);
+    }
+  }
+  @keyframes mark-travel {
+    to {
+      transform: rotate(360deg);
     }
   }
 }
@@ -762,6 +771,13 @@
 }
 
 @layer components {
+  /* The rotating nib inside the loader ring. SVG elements default to a
+     view-box transform origin, so the rotation has to be told to use the
+     element's own box, or the arc orbits off-centre. */
+  .loader-nib {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
   /* Quiet hairline panel — the default stage surface. */
   .surface {
     @apply rounded-3xl border border-border/70 shadow-[0_20px_60px_-24px_rgba(10,16,32,0.55)];
