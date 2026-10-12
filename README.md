@@ -13,7 +13,7 @@ Turn any textbook chapter into a **spoken, adaptive review** that closes exactly
 `Bun` · `TypeScript` · `React 19` · `React Router 8` · `Tailwind v4` · `Express` · `Better Auth` · `Drizzle` · `Neon Postgres` · `Google Gemini` · `Web Speech`
 
 </div>
-
+___
 
 ## The problem
 
