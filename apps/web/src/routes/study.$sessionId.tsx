@@ -6,6 +6,8 @@ import {
   Check,
   CircleAlert,
   MicOff,
+  PlayCircle,
+  Search,
   Square,
   Volume2,
   X,
@@ -342,9 +344,7 @@ function StudyScreen({
             {state.phase === "gaps" && (
               <GapsPhase startHereConcept={state.plan?.steps[0]?.concept} />
             )}
-            {state.phase === "lesson" && (
-              <LessonPhase voiceAllowed={voiceAllowed} />
-            )}
+            {state.phase === "lesson" && <LessonPhase />}
             {state.phase === "retest" && (
               <RetestPhase voiceAllowed={voiceAllowed} />
             )}
@@ -1040,137 +1040,165 @@ function GapsPhase({ startHereConcept }: { startHereConcept?: string }) {
 
 function PlanView({
   plan,
-  onCheck,
   startRetest,
-  voiceAllowed,
 }: {
   plan: StudyPlan;
-  onCheck: (concept: string, text: string) => Promise<void>;
   startRetest: () => Promise<void>;
-  voiceAllowed: boolean;
 }) {
   const { t } = useLanguage();
   const { sessionId = "study" } = useParams();
-  const progressKey = `kiftet-plan-progress:${sessionId}`;
-  const [stepIndex, setStepIndex] = useState(() => {
-    if (typeof window === "undefined") return 0;
-    const saved = Number(window.sessionStorage.getItem(progressKey));
-    return Number.isInteger(saved) && saved >= 0
-      ? Math.min(saved, plan.steps.length)
-      : 0;
+  const doneKey = `kiftet-plan-done:${sessionId}`;
+  const [done, setDone] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved: unknown = JSON.parse(
+        window.sessionStorage.getItem(doneKey) ?? "[]",
+      );
+      return new Set(
+        Array.isArray(saved)
+          ? saved.filter((value): value is string => typeof value === "string")
+          : [],
+      );
+    } catch {
+      return new Set();
+    }
   });
-  const advance = () => {
-    setStepIndex((index) => {
-      const next = Math.min(index + 1, plan.steps.length);
-      window.sessionStorage.setItem(progressKey, String(next));
+  const toggleDone = (concept: string) => {
+    setDone((previous) => {
+      const next = new Set(previous);
+      if (next.has(concept)) next.delete(concept);
+      else next.add(concept);
+      window.sessionStorage.setItem(doneKey, JSON.stringify([...next]));
       return next;
     });
   };
-  const submitCheck = async (concept: string, text: string) => {
-    await onCheck(concept, text);
-    if (stepIndex + 1 >= plan.steps.length) {
-      window.sessionStorage.setItem(progressKey, String(plan.steps.length));
-      setStepIndex(plan.steps.length);
-      await startRetest();
-      return;
-    }
-    advance();
+
+  const total = plan.steps.length;
+  const doneCount = plan.steps.filter((step) => done.has(step.concept)).length;
+  const searchLinks = (query: string) => {
+    const encoded = encodeURIComponent(query);
+    return {
+      youtube: `https://www.youtube.com/results?search_query=${encoded}`,
+      google: `https://www.google.com/search?q=${encoded}`,
+    };
   };
-  const current = plan.steps[stepIndex];
+
   return (
     <div className="space-y-4">
-      {current ? (
+      {total === 0 ? (
+        <div className="rounded-xl border border-border/70 bg-card/50 p-4 text-muted-foreground text-sm">
+          {t("plan-no-steps")}
+        </div>
+      ) : (
         <>
           <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/50 p-4">
             <MasteryRing
-              percent={(stepIndex / plan.steps.length) * 100}
+              percent={(doneCount / total) * 100}
               size={48}
               estimated={plan.estimated}
             />
             <p className="font-medium text-foreground text-sm">
-              {t("plan-step-header", {
-                a: stepIndex + 1,
-                b: plan.steps.length,
-                n: current.estimatedMinutes,
-              })}
+              {t("plan-progress", { a: doneCount, b: total })}
             </p>
           </div>
-          <section className="rounded-2xl border border-border/70 bg-card/50 p-4">
-            <div className="flex items-start gap-2 text-muted-foreground text-xs">
-              <BookOpen className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                {current.anchor.chapter}
-                {current.anchor.heading ? ` · ${current.anchor.heading}` : ""}
-                {current.anchor.page !== null
-                  ? ` · ${t("plan-page", { n: current.anchor.page })}`
-                  : ""}
-              </span>
-            </div>
-            <h3 className="mt-3 font-display font-semibold text-foreground text-lg leading-7">
-              {current.concept}
-            </h3>
-            {current.studentWords && (
-              <p className="mt-2 text-muted-foreground text-sm leading-6">
-                {t("plan-you-said", { words: current.studentWords })}
-              </p>
-            )}
-            <div className="mt-3 space-y-2 text-[0.95rem] text-foreground/90 leading-7">
-              {current.body.map((block, index) => (
-                <p key={`${index}-${block}`}>{block}</p>
-              ))}
-              {current.type === "CONTRAST" && current.contrast && (
-                <>
-                  <p>
-                    <span className="font-medium">{t("plan-book-says")} </span>
-                    {current.contrast.bookSays}
-                  </p>
-                  <p>
-                    <span className="font-medium">
-                      {t("plan-feels-right")}{" "}
+          <ol className="space-y-3">
+            {plan.steps.map((step, index) => {
+              const isDone = done.has(step.concept);
+              const links = searchLinks(step.searchQuery);
+              return (
+                <li
+                  key={step.concept}
+                  className={cn(
+                    "rounded-2xl border p-4 transition-colors",
+                    isDone
+                      ? "border-gold/30 bg-gold/[0.06]"
+                      : "border-border/70 bg-card/50",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground text-xs">
+                      {index + 1}
                     </span>
-                    {current.contrast.feelsRightBecause}
-                  </p>
-                  <p>
-                    <span className="font-medium">
-                      {t("plan-fails-because")}{" "}
-                    </span>
-                    {current.contrast.failsBecause}
-                  </p>
-                </>
-              )}
-              {current.type === "CONTRAST" && !current.contrast && (
-                <p className="text-muted-foreground text-sm">
-                  {t("plan-compare-with-book")}
-                </p>
-              )}
-            </div>
-            {current.chapterExplains === false && (
-              <p className="mt-3 rounded-xl bg-muted px-3 py-2 text-muted-foreground text-sm leading-6">
-                {t("plan-chapter-mentions-only")}
-              </p>
-            )}
-            <p className="mt-3 border-border border-l-2 pl-3 text-muted-foreground text-sm leading-6">
-              {t("plan-check-prompt", { prompt: current.check.sayItBack })}
-            </p>
-            {current.check.whyIsThisTrue && (
-              <p className="mt-2 text-muted-foreground text-sm">
-                {current.check.whyIsThisTrue}
-              </p>
-            )}
-          </section>
-          <VoiceCapture
-            key={current.concept}
-            submit={(text) => submitCheck(current.concept, text)}
-            voiceAllowed={voiceAllowed}
-            busy={false}
-            placeholder={t("plan-check-placeholder")}
-            buttonLabel={t("plan-check-submit")}
-          />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display font-semibold text-foreground text-lg leading-7">
+                        {step.concept}
+                      </h3>
+                      <p className="mt-1 text-muted-foreground text-xs">
+                        {t("plan-minutes", { n: step.estimatedMinutes })}
+                      </p>
+                      <p className="mt-2 text-foreground/85 text-sm leading-6">
+                        {step.whyFirst}
+                      </p>
+                      <p className="mt-2 font-medium text-foreground text-sm">
+                        {step.action}
+                      </p>
+                      <p className="text-muted-foreground text-sm leading-6">
+                        {t("plan-search-label", { query: step.searchQuery })}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a
+                          href={links.youtube}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+                        >
+                          <PlayCircle className="size-4" aria-hidden="true" />
+                          {t("plan-search-youtube")}
+                        </a>
+                        <a
+                          href={links.google}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+                        >
+                          <Search className="size-4" aria-hidden="true" />
+                          {t("plan-search-google")}
+                        </a>
+                      </div>
+                      <details className="mt-3">
+                        <summary className="cursor-pointer text-muted-foreground text-xs">
+                          {t("plan-in-book")}
+                        </summary>
+                        <p className="mt-1 flex items-start gap-2 text-muted-foreground text-xs leading-5">
+                          <BookOpen
+                            className="mt-0.5 size-4 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span>
+                            {step.anchor.chapter}
+                            {step.anchor.heading
+                              ? ` · ${step.anchor.heading}`
+                              : ""}
+                            {step.anchor.page !== null
+                              ? ` · ${t("plan-page", { n: step.anchor.page })}`
+                              : ""}
+                            {step.anchor.excerpt
+                              ? ` · “${step.anchor.excerpt}”`
+                              : ""}
+                          </span>
+                        </p>
+                      </details>
+                      <button
+                        type="button"
+                        aria-pressed={isDone}
+                        onClick={() => toggleDone(step.concept)}
+                        className={cn(
+                          "mt-3 inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm transition-colors duration-200",
+                          isDone
+                            ? "border-gold/50 bg-gold/10 text-gold"
+                            : "border-border text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Check className="size-4" aria-hidden="true" />
+                        {t("plan-mark-done")}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </>
-      ) : (
-        <div className="rounded-xl border border-border/70 bg-card/50 p-4 text-muted-foreground text-sm">
-          {t("plan-no-steps")}
-        </div>
       )}
 
       {plan.nextSession.length > 0 && (
@@ -1193,35 +1221,11 @@ function PlanView({
           })}
         </p>
       )}
-      <ol className="space-y-1 border-border/50 border-t pt-3">
-        {plan.steps.map((step, index) => (
-          <li
-            key={step.concept}
-            className={cn(
-              "flex items-start gap-2 rounded-lg px-2 py-1.5 text-xs",
-              index === stepIndex ? "text-foreground" : "text-muted-foreground",
-            )}
-          >
-            <span>{index < stepIndex ? "✓" : `${index + 1}.`}</span>
-            <span>{step.concept}</span>
-          </li>
-        ))}
-      </ol>
       <div className="flex justify-center">
-        <Button
-          variant="outline"
-          disabled={Boolean(current)}
-          onClick={() => void startRetest()}
-        >
+        <Button variant="outline" onClick={() => void startRetest()}>
           {t("ready-to-be-tested")}
         </Button>
       </div>
-      <span className="sr-only" aria-live="polite">
-        {t("plan-progress", {
-          a: Math.min(stepIndex, plan.steps.length),
-          b: plan.steps.length,
-        })}
-      </span>
     </div>
   );
 }
@@ -1302,8 +1306,8 @@ function LessonTextPanel({
   );
 }
 
-function LessonPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
-  const { state, startRetest, submitPlanCheck, viewGaps } = useStudy();
+function LessonPhase() {
+  const { state, startRetest, viewGaps } = useStudy();
   const { t, lang } = useLanguage();
   // A single acknowledged "something is being read aloud" flag. Every
   // interaction flips it immediately, so a tap on the button is never answered
@@ -1379,12 +1383,7 @@ function LessonPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
               {t("plan-estimated")}
             </p>
           )}
-          <PlanView
-            plan={plan}
-            onCheck={submitPlanCheck}
-            startRetest={startRetest}
-            voiceAllowed={voiceAllowed}
-          />
+          <PlanView plan={plan} startRetest={startRetest} />
         </>
       ) : state.guide?.length ? (
         <>

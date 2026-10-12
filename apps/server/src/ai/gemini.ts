@@ -7,9 +7,7 @@ import {
   isAiBusy,
 } from "./admission";
 import {
-  CHECK_SECONDS,
   READING_WORDS_PER_MINUTE,
-  SPOKEN_WORDS_PER_MINUTE,
   STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
   STUDY_PLAN_MAX_STEPS,
@@ -117,17 +115,17 @@ export type MicroLesson = {
 };
 
 /**
- * One grounded, mastery-specific step in the student's study plan.
+ * One gap-specific step in the student's study plan.
+ *
+ * A step is a *route*, not a lesson: it tells the student why this gap is
+ * theirs, what to do about it, and hands them a ready-made search — never a
+ * question to answer. Testing belongs to the retest; the plan only points.
  */
 export type StudyPlanStep = {
   /** Exact conceptText from the checklist. */
   concept: string;
   gapType: "missing" | "misconception";
   weight: number;
-  /** One short line: why this step comes here FOR THIS STUDENT. Absent on the
-   *  deterministic fallback. */
-  whyFirst?: string;
-  type: "BUILD" | "CONTRAST" | "FINISH";
   masteryLevel: MasteryLevel;
   estimatedMinutes: number;
   anchor: {
@@ -137,17 +135,13 @@ export type StudyPlanStep = {
     offset: number;
     excerpt: string;
   };
-  body: string[];
-  contrast: {
-    bookSays: string;
-    feelsRightBecause: string;
-    failsBecause: string;
-  } | null;
-  chapterExplains: boolean | null;
-  check: {
-    sayItBack: string;
-    whyIsThisTrue?: string;
-  };
+  /** One short line: why this step comes here FOR THIS STUDENT. Model-written
+   *  when available, the deterministic diagnosis line otherwise. */
+  whyFirst: string;
+  /** Localized action verb: Learn it / Complete it / Tell them apart. */
+  action: string;
+  /** A subject-shaped search query for YouTube/Google. */
+  searchQuery: string;
   studentWords: string | null;
 };
 
@@ -164,18 +158,13 @@ export type StudyPlan = {
   estimated: boolean;
 };
 
-export type StudyPlanContent = {
-  body: string[];
-  contrast: StudyPlanStep["contrast"];
-  chapterExplains: boolean | null;
-  estimated: boolean;
-};
-
-/** One plan step whose content still needs generating — concept and type come
- *  from the built plan, plus the anchored passage it must copy from. */
-export type PlanContentRequest = {
+/** One plan step whose "why this is yours" line still needs writing. The
+ *  diagnosis travels with it so the line reflects the gap, not the topic. */
+export type PlanWhyRequest = {
   conceptText: string;
-  type: StudyPlanStep["type"];
+  gapType: StudyPlanStep["gapType"];
+  masteryLevel: MasteryLevel;
+  studentWords: string | null;
   excerpt: string;
 };
 
@@ -273,32 +262,20 @@ export type AiService = {
     concepts: ConceptChecklistItem[],
     language?: ContentLanguage,
   ): Promise<MicroLesson>;
-  generateStudyPlanContent(
-    conceptText: string,
-    type: StudyPlanStep["type"],
-    chapterText: string,
-    excerpt: string,
-    language?: ContentLanguage,
-    options?: { skipAi?: boolean; timeoutMs?: number },
-  ): Promise<StudyPlanContent>;
   /**
-   * Grounded content for the plan steps a student still needs, in ONE provider
-   * call. A plan can ask for up to five step bodies; five separate calls
-   * trips the free-tier Gemini bucket behind a single click, which is the
-   * exact way production plans degraded to their bare excerpt. batching the
-   * missing steps keeps the whole plan priced as one request — the same as a
-   * recall grade — while a partially-grounded reply still returns the steps
-   * that validated, so the caller falls back only for the rest.
+   * One "why this step is yours" line per plan step, in ONE provider call —
+   * the whole plan priced as a single request. The line is orienting, not a
+   * fact: the caller falls back to the deterministic diagnosis line for any
+   * concept the model skips, so a partial reply still yields a usable plan.
    *
-   * Keyed by `${conceptText.trim().toLowerCase()}|${type}` to match the plan
-   * cache. Steps the model could not ground are simply absent.
+   * Keyed by `conceptText.trim().toLowerCase()`.
    */
-  generateStudyPlanContentBatch(
+  generatePlanWhyFirst(
     chapterText: string,
-    requests: PlanContentRequest[],
+    requests: PlanWhyRequest[],
     language?: ContentLanguage,
     options?: { skipAi?: boolean; timeoutMs?: number },
-  ): Promise<Map<string, StudyPlanContent>>;
+  ): Promise<Map<string, string>>;
   /**
    * Explain one concept. Student-independent by construction — it is not given
    * any gap or mastery data, because if it were it could not be shared.
@@ -638,10 +615,94 @@ function fallbackQuestions(
   }));
 }
 
-export function planStepType(level: MasteryLevel): StudyPlanStep["type"] {
-  if (level === 2) return "CONTRAST";
-  if (level === 1) return "FINISH";
-  return "BUILD";
+/**
+ * The verb a plan step leads with. It names the move for the failure mode —
+ * missing, half-remembered, or mixed up with a neighbour — so the roadmap
+ * reads as an action the student takes, not a question they answer.
+ */
+export function planAction(
+  level: MasteryLevel,
+  language: ContentLanguage,
+): string {
+  const am = language === "am";
+  if (level === 2) return am ? "ልዩ አድርጋቸው" : "Tell them apart";
+  if (level === 1) return am ? "አጠናቅቀው" : "Complete it";
+  return am ? "ተማረው" : "Learn it";
+}
+
+/** The subject-shaped suffix on a search query, so "what to search" reflects
+ *  the kind of thinking this subject needs — an ordered process, a cause and
+ *  its consequence, a place and its reason, a rule applied to a case. */
+export function searchSuffix(
+  archetype: PlanArchetype,
+  language: ContentLanguage,
+): string {
+  const am = language === "am";
+  const map: Record<PlanArchetype, string> = {
+    PROCESS: am ? "ደረጃዎች በማብራሪያ" : "steps explained",
+    CAUSAL: am ? "መንስኤና ውጤት" : "causes and effects",
+    PLACE_SYSTEM: am ? "ማብራሪያ" : "explained",
+    PRINCIPLE: am ? "ደንብና ምሳሌ" : "rule and example",
+    LANGUAGE: am ? "ትርጉምና አጠቃቀም" : "meaning and usage",
+    GENERIC: am ? "ማብራሪያ" : "explained",
+  };
+  return map[archetype];
+}
+
+/**
+ * A ready-made search query for one step: the concept, the subject, and a
+ * subject-shaped suffix. Deterministic and free — the student still chooses
+ * what to open, which is exactly why no URL is ever invented here.
+ */
+export function searchQueryFor(
+  concept: string,
+  subject: string,
+  archetype: PlanArchetype,
+  language: ContentLanguage,
+): string {
+  const term = concept.trim().replace(/[.?!,;:]+$/, "");
+  const parts = [term];
+  const named = subject.trim();
+  if (named && !term.toLowerCase().includes(named.toLowerCase()))
+    parts.push(named);
+  parts.push(searchSuffix(archetype, language));
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The deterministic "why this step is yours" line — used when the model
+ * cannot write one and as the honest baseline. It states the diagnosis, never
+ * a fact about the subject.
+ */
+export function planWhyFirst(
+  level: MasteryLevel,
+  studentWords: string | null,
+  language: ContentLanguage,
+): string {
+  const am = language === "am";
+  if (level === 2) {
+    return studentWords
+      ? am
+        ? `“${studentWords}” አልክ — ጽሑፉ ግን በተለየ መንገድ ይላል።`
+        : `You said “${studentWords}” — the chapter says it differently.`
+      : am
+        ? "ተመሳሳይ ሃሳቦችን ቀላቅለሃል።"
+        : "You mixed this up with a similar idea.";
+  }
+  if (level === 1) {
+    return am
+      ? "ጠቀስከው፣ ግን ሙሉ በሙሉ አልሆነም።"
+      : "You mentioned this, but not fully.";
+  }
+  return am ? "በማስታወስህ አልነበረም — እዚህ ጀምር።" : "Not in your recall — start here.";
+}
+
+export function estimateStudyStepMinutes(excerpt: string): number {
+  const words = excerpt.trim().split(/\s+/).filter(Boolean).length;
+  // Reading the passage, plus a fixed allowance for the search-and-watch the
+  // step actually asks for. Clamped so a long excerpt cannot dominate a plan.
+  const minutes = 3 + words / READING_WORDS_PER_MINUTE;
+  return Math.min(8, Math.max(3, Math.round(minutes)));
 }
 
 export function planArchetype(
@@ -674,327 +735,12 @@ export function planArchetype(
   return "GENERIC";
 }
 
-export function estimateStudyStepMinutes(
-  body: string[],
-  checkPrompt: string | string[],
-  additionalReading = "",
-): number {
-  const readingWords = [...body, additionalReading]
-    .join(" ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
-  const spokenWords = (Array.isArray(checkPrompt) ? checkPrompt : [checkPrompt])
-    .join(" ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
-  const minutes =
-    readingWords / READING_WORDS_PER_MINUTE +
-    spokenWords / SPOKEN_WORDS_PER_MINUTE +
-    CHECK_SECONDS / 60;
-  return Math.max(1, Math.ceil(minutes));
-}
-
-function localizedCheck(
-  type: StudyPlanStep["type"],
-  concept: string,
-  archetype: PlanArchetype,
-  language: ContentLanguage,
-  studentWords: string | null,
-): { sayItBack: string; whyIsThisTrue?: string } {
-  const am = language === "am";
-  const archetypeMove: Record<PlanArchetype, string> = {
-    PROCESS: am
-      ? "ከጽሑፉ የተጠቀሱትን ደረጃዎች አስቀምጥ፤ ካልተጠቀሱ መዋቅሩንና ተግባሩን አገናኝ።"
-      : "Put any stages named in the passage in order; if none are named, pair the structure with its stated function.",
-    CAUSAL: am
-      ? "ጽሑፉ ከደገፈው መሠረት፣ ክስተቱንና ውጤቱን አገናኝ።"
-      : "Use only what the passage supports to connect the cause, event, and consequence.",
-    PLACE_SYSTEM: am
-      ? "ጽሑፉ ቦታ ካሰፈረ፣ የት እንደሆነ፣ ለምን በዚያ እንደሆነና አንድ ምሳሌ ግለጽ።"
-      : "If the passage names a place, say where it is, why it is there, and give one example.",
-    PRINCIPLE: am
-      ? "ደንቡን በቀላል ቃላት ግለጽ፤ ጽሑፉ ካካተተው ሁኔታ ጋር አያይዘው።"
-      : "State the rule in plain words and apply it to a case only if the passage includes one.",
-    LANGUAGE: am
-      ? "ቃሉን በጽሑፉ ውስጥ ባለው አውድ አስረዳ።"
-      : "Explain how the idea is used in the context shown in the passage.",
-    GENERIC: am
-      ? "በጽሑፉ የተደገፈውን ብቻ በራስህ ቃላት ግለጽ።"
-      : "Explain only what this passage supports in your own words.",
-  };
-  let sayItBack: string;
-  if (type === "FINISH") {
-    if (am) {
-      sayItBack = studentWords
-        ? `“${studentWords}” አልክ። አጠናቅቀው፦ ይህ የሚሆነው ምክንያቱም ___. ${archetypeMove[archetype]}`
-        : `“${concept}”ን አጠናቅቀው፦ ለምን እንደሚሆን ግለጽ። ${archetypeMove[archetype]}`;
-    } else {
-      sayItBack = studentWords
-        ? `You said “${studentWords}.” Finish it: it happens because ___. ${archetypeMove[archetype]}`
-        : `Finish “${concept}”: explain why it happens. ${archetypeMove[archetype]}`;
-    }
-  } else if (type === "CONTRAST") {
-    sayItBack = am
-      ? `“${concept}” ላይ ከሁለቱ የትኛው እውነት ነው፣ ለምንስ? ${archetypeMove[archetype]}`
-      : `Which account of “${concept}” is true, and why? ${archetypeMove[archetype]}`;
-  } else {
-    sayItBack = am
-      ? `ሳታይ “${concept}”ን በራስህ ቃላት ግለጽ። ${archetypeMove[archetype]}`
-      : `Without looking, explain “${concept}” in your own words. ${archetypeMove[archetype]}`;
-  }
-  return {
-    sayItBack,
-    ...(type === "BUILD" || type === "CONTRAST"
-      ? { whyIsThisTrue: am ? "ይህ ለምን እውነት ነው?" : "Why is this true?" }
-      : {}),
-  };
-}
-
-export function fallbackStudyPlanContent(excerpt: string): StudyPlanContent {
-  return {
-    body: fallbackPlanBlocks(excerpt),
-    contrast: null,
-    chapterExplains: null,
-    estimated: true,
-  };
-}
-
-/**
- * The deterministic fallback body: the anchored excerpt itself, served as a
- * few short reading blocks instead of one wall of text. Entirely the student's
- * own chapter wording, never generated — split at sentence boundaries (and, if
- * a sentence outlasts a block, at a word boundary) so a plan built while no
- * provider is answering still reads like a lesson rather than a dump.
- */
-function fallbackPlanBlocks(
-  excerpt: string,
-  maxBlocks = 4,
-  maxChars = 340,
-): string[] {
-  const text = excerpt.trim().replace(/\s+/g, " ");
-  if (!text) return [];
-  const sentences =
-    text.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g)?.map((s) => s.trim()) ?? [];
-  const seeds = sentences.length > 0 ? sentences : [text];
-  const blocks: string[] = [];
-  for (let sentence of seeds) {
-    while (sentence.length > maxChars) {
-      const cut = sentence.lastIndexOf(" ", maxChars);
-      if (cut <= maxChars / 2) break;
-      blocks.push(sentence.slice(0, cut));
-      sentence = sentence.slice(cut).trim();
-    }
-    blocks.push(sentence);
-    if (blocks.length >= maxBlocks) break;
-  }
-  return blocks.slice(0, maxBlocks);
-}
-
-// Typographic characters a model nearly always renders differently from the
-// student's PDF — a straight apostrophe for a curly one, a hyphen for an em
-// dash, a straight quote for a typographic quote. They differ in the
-// character, not in the words, so under a byte-exact comparison they turn a
-// paragraph the model copied verbatim into "not verbatim".
-const PUNCT_MAP: Record<string, string> = {
-  "\u2018": "'",
-  "\u2019": "'",
-  "\u201A": "'",
-  "\u201B": "'",
-  "\u201C": '"',
-  "\u201D": '"',
-  "\u201E": '"',
-  "\u201F": '"',
-  "\u2010": "-",
-  "\u2011": "-",
-  "\u2012": "-",
-  "\u2013": "-",
-  "\u2014": "-",
-  "\u2015": "-",
-  "\u2026": "...",
-  "\u00A0": " ",
-  "\u2007": " ",
-  "\u2009": " ",
-  "\u202F": " ",
-};
-
-/** Fold one character for tolerant matching: typography to ASCII, any run of
- *  whitespace to a single space, case to lowercase, invisible characters away
- *  entirely. */
-function foldChar(ch: string): string {
-  const mapped = PUNCT_MAP[ch];
-  if (mapped !== undefined) return mapped;
-  if (/\s/u.test(ch)) return " ";
-  const code = ch.charCodeAt(0);
-  if (
-    code === 0x00ad ||
-    (code >= 0x200b && code <= 0x200d) ||
-    code === 0xfeff
-  ) {
-    return "";
-  }
-  return ch.toLowerCase();
-}
-
-/** Folded form of the input plus a map from every folded character to its
- *  index in the same string after NFKC normalization. That back-map is what
- *  lets a tolerant match hand back byte-exact spans of the student's text. */
-function normalizeFoldWithMap(input: string): {
-  folded: string;
-  toNfkc: number[];
-} {
-  const nfkc = input.normalize("NFKC");
-  let folded = "";
-  const toNfkc: number[] = [];
-  for (let i = 0; i < nfkc.length; i += 1) {
-    const out = foldChar(nfkc.charAt(i));
-    if (out === "") continue;
-    if (out === " " && folded.endsWith(" ")) continue;
-    folded += out;
-    toNfkc.push(i);
-  }
-  return { folded, toNfkc };
-}
-
-function normalizeFold(input: string): string {
-  return normalizeFoldWithMap(input).folded;
-}
-
-/** Tolerant verbatim containment: the quote's words must be present, in order,
- *  spelled the same, after folding case, typography and whitespace. Returns
- *  the NFKC'd span it matched, so the caller can store the true source text. */
-function matchSpan(
-  source: string,
-  quote: string,
-): { start: number; end: number } | undefined {
-  const { folded: nSource, toNfkc } = normalizeFoldWithMap(source);
-  const nQuote = normalizeFold(quote).trim();
-  if (!nQuote) return undefined;
-  const at = nSource.indexOf(nQuote);
-  if (at < 0 || at + nQuote.length > toNfkc.length) return undefined;
-  const start = toNfkc[at];
-  const end = toNfkc[at + nQuote.length - 1];
-  if (start === undefined || end === undefined) return undefined;
-  return { start, end: end + 1 };
-}
-
-/** The byte-exact NFKC'd source span a quote corresponds to, or none. The
- *  stored block is the book's own text, never the model's transcription of
- *  it, so a student reading a plan step reads the chapter — verbatim. */
-function canonicalVerbatim(source: string, quote: string): string | undefined {
-  const nfkc = source.normalize("NFKC");
-  const span = matchSpan(nfkc, quote);
-  if (!span) return undefined;
-  return nfkc.slice(span.start, span.end).trim();
-}
-
-function groundingWindow(
-  chapterText: string,
-  excerpt: string,
-  maxChars = 700,
-): string {
-  const nfkc = chapterText.normalize("NFKC");
-  const span = matchSpan(nfkc, excerpt);
-  if (!span) return excerpt.trim();
-  const start = span.start;
-  const needleLen = normalizeFold(excerpt).trim().length;
-  const hardEnd = Math.min(
-    nfkc.length,
-    start + Math.max(maxChars, needleLen) + 16,
-  );
-  const afterAnchor = nfkc.slice(span.end, hardEnd);
-  const nextBreak = afterAnchor.search(/[.!?](?=\s|$)/);
-  const end = nextBreak >= 0 ? span.end + nextBreak + 1 : span.end;
-  return nfkc.slice(start, end).trim();
-}
-
-const SOURCE_LINK_RE = /https?:\/\/|www\.|youtube|google/i;
-
-/** Only quoted spans from the supplied chapter text may become plan blocks. */
-export function validateGroundedPlanContent(
-  value: unknown,
-  chapterText: string,
-  type: StudyPlanStep["type"],
-  anchorExcerpt = chapterText,
-): StudyPlanContent | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return;
-  const data = value as Record<string, unknown>;
-  if (
-    !Array.isArray(data.body) ||
-    data.body.length < 1 ||
-    data.body.length > 4 ||
-    typeof data.chapterExplains !== "boolean"
-  )
-    return;
-  const nfkcChapter = chapterText.normalize("NFKC");
-  const nfkcAnchor = anchorExcerpt.trim()
-    ? anchorExcerpt.normalize("NFKC")
-    : nfkcChapter;
-  const blocks: string[] = [];
-  for (const raw of data.body) {
-    if (typeof raw !== "string") return;
-    // Canonicalize so the stored block is the book's text, then trust only
-    // blocks that live inside the anchored passage the model was told to copy.
-    const block = canonicalVerbatim(nfkcChapter, raw);
-    if (
-      !block ||
-      block.length > 400 ||
-      SOURCE_LINK_RE.test(block) ||
-      matchSpan(nfkcAnchor, block) === undefined
-    )
-      return;
-    blocks.push(block);
-  }
-  const contrastData = data.contrast;
-  let contrast: StudyPlanContent["contrast"] = null;
-  if (type === "CONTRAST") {
-    // The prompt tells the model to set contrast=null when the passage names
-    // the idea but cannot support a bookSays/feelsRightBecause/failsBecause
-    // split; rejecting that (as before) made every such CONTRAST step fall
-    // back even though its body was grounded. A null contrast is a valid,
-    // honest answer — the step still carries the exact source text.
-    if (contrastData !== null && contrastData !== undefined) {
-      if (typeof contrastData !== "object" || Array.isArray(contrastData))
-        return;
-      const entry = contrastData as Record<string, unknown>;
-      const keys = ["bookSays", "feelsRightBecause", "failsBecause"] as const;
-      const parts: string[] = [];
-      for (const key of keys) {
-        if (typeof entry[key] !== "string") return;
-        const part = canonicalVerbatim(nfkcChapter, entry[key] as string);
-        if (
-          !part ||
-          part.length > 400 ||
-          matchSpan(nfkcAnchor, part) === undefined
-        )
-          return;
-        parts.push(part);
-      }
-      const [bookSays, feelsRightBecause, failsBecause] = parts;
-      if (
-        bookSays === undefined ||
-        feelsRightBecause === undefined ||
-        failsBecause === undefined
-      )
-        return;
-      contrast = { bookSays, feelsRightBecause, failsBecause };
-    }
-  } else if (contrastData !== null && contrastData !== undefined) return;
-  return {
-    body: blocks,
-    contrast,
-    chapterExplains: data.chapterExplains,
-    estimated: false,
-  };
-}
-
 export function buildStudyPlan(
   gaps: GapAnalysis,
   concepts: ConceptChecklistItem[],
   chapterTitle: string,
   rawText: string,
-  contentByConcept: Map<string, StudyPlanContent>,
+  whyFirstByConcept: Map<string, string>,
   subject: string,
   language: ContentLanguage,
   budgetMinutes = STUDY_PLAN_DEFAULT_BUDGET,
@@ -1005,45 +751,29 @@ export function buildStudyPlan(
       const level = levelOf(mastery, concept.conceptText);
       const anchor = sourceAnchor(concept.conceptText, rawText);
       if (concept.isMisconception || level === 3 || !anchor) return null;
-      const type = planStepType(level);
-      const key = `${concept.conceptText.trim().toLowerCase()}|${type}`;
-      const fallback = fallbackStudyPlanContent(anchor.quote);
-      const content = contentByConcept.get(key) ?? fallback;
+      const key = concept.conceptText.trim().toLowerCase();
+      const archetype = planArchetype(subject, concept.conceptText);
       const studentWords =
         level === 1 || level === 2
           ? (gaps.evidence?.[concept.conceptText] ?? null)
           : null;
-      const check = localizedCheck(
-        type,
-        concept.conceptText,
-        planArchetype(subject, concept.conceptText),
-        language,
-        studentWords,
-      );
-      const additionalReading = [
-        studentWords ?? "",
-        ...(content.contrast
-          ? [
-              content.contrast.bookSays,
-              content.contrast.feelsRightBecause,
-              content.contrast.failsBecause,
-            ]
-          : []),
-      ].join(" ");
-      const minutes = estimateStudyStepMinutes(
-        content.body,
-        [check.sayItBack, check.whyIsThisTrue ?? ""],
-        additionalReading,
-      );
+      const minutes = estimateStudyStepMinutes(anchor.quote);
+      const modelWhy = whyFirstByConcept.get(key)?.trim();
       return {
         concept,
         index,
         level,
-        type,
         anchor,
         key,
-        content,
-        check,
+        studentWords,
+        whyFirst: modelWhy || planWhyFirst(level, studentWords, language),
+        action: planAction(level, language),
+        searchQuery: searchQueryFor(
+          concept.conceptText,
+          subject,
+          archetype,
+          language,
+        ),
         minutes,
         score:
           (concept.weight * (3 - level) * (level === 2 ? 1.5 : 1)) / minutes,
@@ -1082,7 +812,6 @@ export function buildStudyPlan(
     concept: item.concept.conceptText,
     gapType: item.level === 2 ? "misconception" : "missing",
     weight: item.concept.weight,
-    type: item.type,
     masteryLevel: item.level,
     estimatedMinutes: item.minutes,
     anchor: {
@@ -1092,14 +821,10 @@ export function buildStudyPlan(
       offset: item.anchor.offset,
       excerpt: item.anchor.quote,
     },
-    body: item.content.body,
-    contrast: item.content.contrast,
-    chapterExplains: item.content.chapterExplains,
-    check: item.check,
-    studentWords:
-      item.level === 1 || item.level === 2
-        ? (gaps.evidence?.[item.concept.conceptText] ?? null)
-        : null,
+    whyFirst: item.whyFirst,
+    action: item.action,
+    searchQuery: item.searchQuery,
+    studentWords: item.studentWords,
   }));
   const knownCount = concepts.filter(
     (concept) =>
@@ -1120,9 +845,7 @@ export function buildStudyPlan(
         (concept) =>
           !concept.isMisconception &&
           levelOf(mastery, concept.conceptText) !== 3 &&
-          !selected.has(
-            `${concept.conceptText.trim().toLowerCase()}|${planStepType(levelOf(mastery, concept.conceptText))}`,
-          ),
+          !selected.has(concept.conceptText.trim().toLowerCase()),
       )
       .map((concept) => concept.conceptText),
     skippedKnown: {
@@ -1131,7 +854,7 @@ export function buildStudyPlan(
     },
     budgetMinutes,
     estMinutes: planMinutes,
-    estimated: ordered.some((item) => item.content.estimated),
+    estimated: ordered.some((item) => !whyFirstByConcept.get(item.key)),
   };
 }
 
@@ -2133,90 +1856,23 @@ export const ai: AiService = {
     }
   },
 
-  async generateStudyPlanContent(
-    conceptText: string,
-    type: StudyPlanStep["type"],
+  /**
+   * One "why this step is yours" line per plan step, in ONE provider call.
+   *
+   * This is the orientation the plan lives on: not a fact about the subject,
+   * but the diagnosis handed back — "you said X, the chapter says it
+   * differently". It is asked of the model in a single batched call, so the
+   * whole plan costs one request, and falls back to the deterministic
+   * diagnosis line for any concept the model skips, so a partial reply still
+   * yields a usable plan.
+   */
+  async generatePlanWhyFirst(
     chapterText: string,
-    excerpt: string,
+    requests: PlanWhyRequest[],
     language: ContentLanguage = "en",
     options: { skipAi?: boolean; timeoutMs?: number } = {},
-  ): Promise<StudyPlanContent> {
-    const fallback = () => fallbackStudyPlanContent(excerpt);
-    if (options.skipAi || !anyAiAvailable()) return fallback();
-    const deadline =
-      Date.now() +
-      Math.min(AI_TOTAL_BUDGET_MS, options.timeoutMs ?? AI_TOTAL_BUDGET_MS);
-    const schema = {
-      type: "object",
-      properties: {
-        body: {
-          type: "array",
-          minItems: 1,
-          maxItems: 4,
-          items: { type: "string" },
-        },
-        chapterExplains: { type: "boolean" },
-        contrast: {
-          type: ["object", "null"],
-          properties: {
-            bookSays: { type: "string" },
-            feelsRightBecause: { type: "string" },
-            failsBecause: { type: "string" },
-          },
-          required: ["bookSays", "feelsRightBecause", "failsBecause"],
-          additionalProperties: false,
-        },
-      },
-      required: ["body", "chapterExplains", "contrast"],
-      additionalProperties: false,
-    };
-    const system =
-      "Create the textbook-only body for one study-plan step. The diagnosis is already done; do not re-grade it. " +
-      `The step type is ${type} for the exact concept ${JSON.stringify(conceptText)}. ` +
-      "Return 1–4 short blocks, each copied verbatim from the anchor passage. " +
-      "Do not paraphrase or add a word, fact, example, heading, URL, web search, or outside knowledge. " +
-      "If the chapter mentions the concept but does not explain it, set chapterExplains=false and use only the relevant exact excerpt. " +
-      (type === "CONTRAST"
-        ? "Also provide contrast.bookSays, contrast.feelsRightBecause, and contrast.failsBecause, each an exact source substring; if the text cannot support any field, set contrast=null and chapterExplains=false."
-        : "Set contrast=null.") +
-      "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
-      'Return strict JSON: {"body":["exact chapter excerpt"],"chapterExplains":true}.' +
-      outputInstruction(language);
-    const grounding = groundingWindow(chapterText, excerpt);
-    const user = `CONCEPT: ${conceptText}\nSTEP TYPE: ${type}\nANCHOR PASSAGE: ${grounding}\n\nCHAPTER TEXT:\n${chapterText.slice(0, 24000)}`;
-    try {
-      for (let attemptNumber = 0; attemptNumber < 2; attemptNumber += 1) {
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) return fallback();
-        const raw = await ask(
-          system +
-            (attemptNumber === 1
-              ? " Your previous answer did not validate. Retry with only exact verbatim substrings from the anchor excerpt."
-              : ""),
-          user,
-          { schema, timeoutMs: remaining },
-        );
-        const content = validateGroundedPlanContent(
-          parseJson<unknown>(raw),
-          chapterText,
-          type,
-          grounding,
-        );
-        if (content) return content;
-      }
-      return malformed("generateStudyPlanContent", fallback);
-    } catch (error) {
-      return degraded("generateStudyPlanContent", error, fallback);
-    }
-  },
-
-  async generateStudyPlanContentBatch(
-    chapterText: string,
-    requests: PlanContentRequest[],
-    language: ContentLanguage = "en",
-    options: { skipAi?: boolean; timeoutMs?: number } = {},
-  ): Promise<Map<string, StudyPlanContent>> {
-    const fallback = () => new Map<string, StudyPlanContent>();
+  ): Promise<Map<string, string>> {
+    const fallback = () => new Map<string, string>();
     if (options.skipAi || !anyAiAvailable() || requests.length === 0)
       return fallback();
     const deadline =
@@ -2240,25 +1896,9 @@ export const ai: AiService = {
                 minimum: 1,
                 maximum: requests.length,
               },
-              body: {
-                type: "array",
-                minItems: 1,
-                maxItems: 4,
-                items: { type: "string" },
-              },
-              chapterExplains: { type: "boolean" },
-              contrast: {
-                type: ["object", "null"],
-                properties: {
-                  bookSays: { type: "string" },
-                  feelsRightBecause: { type: "string" },
-                  failsBecause: { type: "string" },
-                },
-                required: ["bookSays", "feelsRightBecause", "failsBecause"],
-                additionalProperties: false,
-              },
+              why: { type: "string" },
             },
-            required: ["index", "body", "chapterExplains", "contrast"],
+            required: ["index", "why"],
             additionalProperties: false,
           },
         },
@@ -2267,22 +1907,18 @@ export const ai: AiService = {
       additionalProperties: false,
     };
     const system =
-      "Create the textbook-only body for each numbered study-plan step. The diagnoses are already done; do not re-grade them. " +
-      "For every index listed in the request, return the matching structured entry. " +
-      "Return 1–4 short blocks per step, each copied verbatim from that step's anchor passage. " +
-      "Do not paraphrase or add a word, fact, example, heading, URL, web search, or outside knowledge. " +
-      "For CONTRAST steps, also provide contrast.bookSays, contrast.feelsRightBecause, and contrast.failsBecause, each an exact source substring; if the text cannot support any field, set contrast=null and chapterExplains=false. " +
-      "For other step types, set contrast=null. " +
-      "Otherwise set chapterExplains=true. Keep the source wording and script unchanged. " +
-      "Index entries must match exactly the numbers in the request; reply with all of them. " +
-      'Return strict JSON: {"steps":[{"index":1,"body":["exact chapter excerpt"],"chapterExplains":true,"contrast":null}]}.' +
+      "For each numbered study-plan step, write ONE short orienting line (at most 18 words) telling the student why this step is here FOR THEM. " +
+      "Base it only on the concept, the failure mode, and the student's own words when given — never introduce a fact, example, number, or claim the anchor does not already state. " +
+      "Do not greet, do not ask a question, and do not quote the passage. " +
+      "Index entries must match the numbers in the request; reply with all of them. " +
+      'Return strict JSON: {"steps":[{"index":1,"why":"..."}]}.' +
       outputInstruction(language);
     const user =
-      `CHAPTER TEXT:\n${chapterText.slice(0, 24000)}\n\n` +
+      `CHAPTER TEXT (context only, do not quote):\n${chapterText.slice(0, 12000)}\n\n` +
       requests
         .map(
           (request, index) =>
-            `${index + 1}. CONCEPT: ${request.conceptText}\n   STEP TYPE: ${request.type}\n   ANCHOR PASSAGE: ${groundingWindow(chapterText, request.excerpt)}`,
+            `${index + 1}. CONCEPT: ${request.conceptText}\n   FAILURE MODE: ${request.gapType}\n   STUDENT SAID: ${request.studentWords ?? "(nothing on this)"}\n   ANCHOR: ${request.excerpt}`,
         )
         .join("\n\n");
     try {
@@ -2292,14 +1928,14 @@ export const ai: AiService = {
         const raw = await ask(
           system +
             (attemptNumber === 1
-              ? " Your previous answer did not validate. Retry with only exact verbatim substrings from each step's anchor excerpt."
+              ? " Your previous answer was unusable. Return one short why line per index as strict JSON."
               : ""),
           user,
           { schema, timeoutMs: remaining },
         );
         const data = parseJson<{ steps?: unknown[] }>(raw);
         if (!data || !Array.isArray(data.steps)) continue;
-        const contents = new Map<string, StudyPlanContent>();
+        const whys = new Map<string, string>();
         for (const entry of data.steps) {
           if (!entry || typeof entry !== "object" || Array.isArray(entry))
             continue;
@@ -2309,25 +1945,16 @@ export const ai: AiService = {
           const request =
             requests[Number.isInteger(numeric) ? numeric - 1 : -1];
           if (!request) continue;
-          const content = validateGroundedPlanContent(
-            item,
-            chapterText,
-            request.type,
-            groundingWindow(chapterText, request.excerpt),
-          );
-          if (content)
-            contents.set(
-              `${request.conceptText.trim().toLowerCase()}|${request.type}`,
-              content,
-            );
+          const why = typeof item.why === "string" ? item.why.trim() : "";
+          if (!why || why.length > 180 || /https?:\/\/|www\./i.test(why))
+            continue;
+          whys.set(request.conceptText.trim().toLowerCase(), why);
         }
-        // A partially-grounded reply is still a win: the steps that validated
-        // are real, and the caller falls back for the rest.
-        if (contents.size > 0) return contents;
+        if (whys.size > 0) return whys;
       }
-      return malformed("generateStudyPlanContentBatch", fallback);
+      return malformed("generatePlanWhyFirst", fallback);
     } catch (error) {
-      return degraded("generateStudyPlanContentBatch", error, fallback);
+      return degraded("generatePlanWhyFirst", error, fallback);
     }
   },
 

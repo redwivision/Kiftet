@@ -75,12 +75,11 @@ export type Guide = {
   language: "en" | "am";
 };
 
-/** One source-grounded, mastery-specific study-plan step. */
+/** One gap-specific study-plan step: a route, not a lesson. */
 export type StudyPlanStep = {
   concept: string;
   gapType: "missing" | "misconception";
   weight: number;
-  type: "BUILD" | "CONTRAST" | "FINISH";
   masteryLevel: MasteryLevel;
   estimatedMinutes: number;
   anchor: {
@@ -90,16 +89,10 @@ export type StudyPlanStep = {
     offset: number;
     excerpt: string;
   };
-  body: string[];
-  contrast: {
-    bookSays: string;
-    feelsRightBecause: string;
-    failsBecause: string;
-  } | null;
-  chapterExplains: boolean | null;
-  check: { sayItBack: string; whyIsThisTrue?: string };
+  whyFirst: string;
+  action: string;
+  searchQuery: string;
   studentWords: string | null;
-  whyFirst?: string;
 };
 
 /** A personalized roadmap over the student's gaps, shown in the lesson phase. */
@@ -422,7 +415,6 @@ interface StudyContextValue {
   viewGaps: () => void;
   submitRecall: (text: string) => Promise<void>;
   fetchLesson: (budgetMinutes?: 10 | 20 | 40) => Promise<void>;
-  submitPlanCheck: (concept: string, text: string) => Promise<void>;
   goLesson: () => void;
   startRetest: () => Promise<void>;
   submitAnswer: (text: string) => Promise<void>;
@@ -709,30 +701,6 @@ export function StudyProvider({
     [run, sessionId, t],
   );
 
-  const submitPlanCheck = useCallback(
-    async (concept: string, text: string) => {
-      const attemptId = crypto.randomUUID();
-      try {
-        await api(`/sessions/${sessionId}/plan/check`, {
-          method: "POST",
-          body: JSON.stringify({ attemptId, concept, transcriptText: text }),
-        });
-      } catch (error) {
-        if (!(error instanceof ApiError) || error.status !== 0) throw error;
-        await enqueueOutbox({
-          id: attemptId,
-          kind: "plan-check",
-          sessionId,
-          attemptId,
-          payload: { transcriptText: text, concept },
-          createdAt: Date.now(),
-        });
-        dispatch({ type: "NOTICE", message: t("plan-check-queued") });
-      }
-    },
-    [sessionId, t],
-  );
-
   const fetchResult = useCallback(
     () =>
       run(
@@ -925,7 +893,6 @@ export function StudyProvider({
         goLesson,
         startRetest,
         submitAnswer,
-        submitPlanCheck,
         fetchResult,
         retryAgain,
         retryLast,

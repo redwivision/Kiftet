@@ -6,13 +6,12 @@ import {
   buildStudyPlan,
   type ConceptChecklistItem,
   estimateStudyStepMinutes,
-  fallbackStudyPlanContent,
   type GapAnalysis,
   type MasteryLevel,
+  planAction,
   planArchetype,
-  planStepType,
-  type StudyPlanContent,
-  validateGroundedPlanContent,
+  planWhyFirst,
+  searchQueryFor,
 } from "./gemini";
 
 const RAW =
@@ -27,16 +26,8 @@ const PLASMA_MEMBRANE =
   "The plasma membrane controls which substances enter and leave";
 const CYTOPLASM = "Cytoplasm holds the organelles";
 const CONCEPTS: ConceptChecklistItem[] = [
-  {
-    conceptText: PLASMA_MEMBRANE,
-    isMisconception: false,
-    weight: 5,
-  },
-  {
-    conceptText: CYTOPLASM,
-    isMisconception: false,
-    weight: 3,
-  },
+  { conceptText: PLASMA_MEMBRANE, isMisconception: false, weight: 5 },
+  { conceptText: CYTOPLASM, isMisconception: false, weight: 3 },
   {
     conceptText: "The nucleus stores DNA and directs cell activities",
     isMisconception: false,
@@ -80,94 +71,133 @@ function gaps(
 function plan(
   levels: MasteryLevel[],
   budget: 10 | 20 | 40,
-  content: Map<string, StudyPlanContent> = new Map(),
+  whyFirstByConcept: Map<string, string> = new Map(),
 ) {
   return buildStudyPlan(
     gaps(levels),
     CONCEPTS,
     "Cell Structure and Function",
     RAW,
-    content,
+    whyFirstByConcept,
     "Biology",
     "en",
     budget,
   );
 }
 
-describe("study plan personalization", () => {
-  test("step type comes directly from mastery level", () => {
-    expect(
-      [0, 1, 2, 3].map((level) => planStepType(level as MasteryLevel)),
-    ).toEqual(["BUILD", "FINISH", "CONTRAST", "BUILD"]);
+describe("plan step shape", () => {
+  test("the action verb names the move for each failure mode", () => {
+    expect(planAction(0, "en")).toBe("Learn it");
+    expect(planAction(1, "en")).toBe("Complete it");
+    expect(planAction(2, "en")).toBe("Tell them apart");
+    expect(planAction(0, "am")).not.toBe("Learn it");
   });
 
-  test("PROCESS and CAUSAL steps use only subject-appropriate moves", () => {
-    const biology = plan([2, 3, 3, 3, 3, 3], 20).steps[0];
-    const historyText =
-      "The drought reduced crop yields. The reduced harvest raised food prices.";
-    const historyConcept: ConceptChecklistItem = {
-      conceptText: "The reduced harvest raised food prices",
-      isMisconception: false,
-      weight: 3,
-    };
-    const history = buildStudyPlan(
-      {
-        covered: [],
-        missing: [],
-        misconceptions: [],
-        mastery: { [historyConcept.conceptText]: 2 },
-        score: 0,
-        estimated: false,
-      },
-      [historyConcept],
-      "History — sample",
-      historyText,
-      new Map(),
-      "History",
+  test("the search query keeps the concept, adds the subject once, then a shaped suffix", () => {
+    expect(
+      searchQueryFor(
+        "The plasma membrane controls which substances enter and leave.",
+        "Biology",
+        "PROCESS",
+        "en",
+      ),
+    ).toBe(
+      "The plasma membrane controls which substances enter and leave Biology steps explained",
+    );
+    // The subject is not repeated when the concept already names it.
+    const again = searchQueryFor(
+      "Biology: cell transport",
+      "Biology",
+      "PROCESS",
+      "en",
+    );
+    expect(again.match(/Biology/g)).toHaveLength(1);
+    // Trailing punctuation is stripped so the query pastes cleanly.
+    expect(
+      searchQueryFor("Causes of the drought?", "History", "CAUSAL", "en"),
+    ).toBe("Causes of the drought History causes and effects");
+  });
+
+  test("the deterministic why line states the diagnosis, never a fact", () => {
+    expect(planWhyFirst(0, null, "en")).toBe(
+      "Not in your recall — start here.",
+    );
+    expect(planWhyFirst(1, null, "en")).toBe(
+      "You mentioned this, but not fully.",
+    );
+    expect(planWhyFirst(2, null, "en")).toBe(
+      "You mixed this up with a similar idea.",
+    );
+    expect(planWhyFirst(2, "it lets everything pass", "en")).toContain(
+      "it lets everything pass",
+    );
+    expect(planWhyFirst(0, null, "am")).not.toBe(
+      "Not in your recall — start here.",
+    );
+  });
+
+  test("step minutes are clamped between three and eight", () => {
+    expect(estimateStudyStepMinutes("one two three")).toBe(3);
+    expect(estimateStudyStepMinutes("word ".repeat(2000))).toBe(8);
+  });
+});
+
+describe("study plan personalization", () => {
+  test("every step carries a why, an action, a search query, and a real anchor", () => {
+    const result = plan([2, 0, 0, 0, 0, 0], 20);
+    expect(result.steps.length).toBeGreaterThan(0);
+    for (const step of result.steps) {
+      expect(step.whyFirst.length).toBeGreaterThan(0);
+      expect(step.action.length).toBeGreaterThan(0);
+      expect(step.searchQuery.length).toBeGreaterThan(0);
+      expect(step.anchor.excerpt.length).toBeGreaterThan(0);
+    }
+    // With no model lines, the plan is honestly marked as estimated.
+    expect(result.estimated).toBe(true);
+  });
+
+  test("a model-written why is used verbatim and clears the estimated flag", () => {
+    const result = buildStudyPlan(
+      gaps([0, 3, 3, 3, 3, 3]),
+      CONCEPTS,
+      "Cell Structure and Function",
+      RAW,
+      new Map([
+        [PLASMA_MEMBRANE.toLowerCase(), "You skipped the gatekeeper idea."],
+      ]),
+      "Biology",
       "en",
       20,
-    ).steps[0];
-    expect(biology?.check.sayItBack).toContain("stages named");
-    expect(history?.check.sayItBack).toContain("cause, event, and consequence");
+    );
+    const step = result.steps.find((s) => s.concept === PLASMA_MEMBRANE);
+    expect(step?.whyFirst).toBe("You skipped the gatekeeper idea.");
+    expect(result.estimated).toBe(false);
   });
 
   test("builds different plans for different students on the same chapter", () => {
-    const wrongMembrane = plan([2, 3, 3, 3, 3, 3], 20);
-    const missingCytoplasm = plan([3, 0, 3, 3, 3, 3], 20);
-    expect(wrongMembrane.steps[0]?.concept).toContain("plasma membrane");
-    expect(wrongMembrane.steps[0]?.type).toBe("CONTRAST");
-    expect(missingCytoplasm.steps[0]?.concept).toContain("Cytoplasm");
-    expect(missingCytoplasm.steps[0]?.type).toBe("BUILD");
+    const mixedUp = plan([2, 3, 3, 3, 3, 3], 20);
+    const missing = plan([3, 0, 3, 3, 3, 3], 20);
+    expect(mixedUp.steps[0]?.concept).toContain("plasma membrane");
+    expect(mixedUp.steps[0]?.gapType).toBe("misconception");
+    expect(missing.steps[0]?.concept).toContain("Cytoplasm");
+    expect(missing.steps[0]?.gapType).toBe("missing");
   });
 
   test("selects within the time budget and exposes leftovers", () => {
-    const longBodies = new Map<string, StudyPlanContent>(
-      CONCEPTS.map((concept) => [
-        `${concept.conceptText.toLowerCase()}|BUILD`,
-        {
-          body: [RAW.repeat(8)],
-          contrast: null,
-          chapterExplains: true,
-          estimated: false,
-        },
-      ]),
-    );
-    const short = plan([0, 0, 0, 0, 0, 0], 10, longBodies);
-    const long = plan([0, 0, 0, 0, 0, 0], 40, longBodies);
+    const short = plan([0, 0, 0, 0, 0, 0], 10);
+    const long = plan([0, 0, 0, 0, 0, 0], 40);
     expect(short.estMinutes).toBeLessThanOrEqual(10);
     expect(long.estMinutes).toBeLessThanOrEqual(40);
-    expect(short.steps.length).toBeLessThan(long.steps.length);
+    expect(short.steps.length).toBeLessThanOrEqual(long.steps.length);
     expect(long.steps.length).toBeLessThanOrEqual(5);
-    expect(short.nextSession.length).toBeGreaterThan(long.nextSession.length);
+    expect(short.nextSession.length).toBeGreaterThanOrEqual(
+      long.nextSession.length,
+    );
   });
 
-  test("puts misconceptions first, BUILD before the grouped FINISH round", () => {
+  test("puts misconceptions first", () => {
     const result = plan([1, 2, 0, 0, 3, 0], 40);
-    expect(result.steps[0]?.type).toBe("CONTRAST");
-    expect(result.steps.at(-1)?.type).toBe("FINISH");
-    expect(result.steps.filter((step) => step.type === "FINISH")).toHaveLength(
-      1,
-    );
+    expect(result.steps[0]?.gapType).toBe("misconception");
   });
 
   test("includes matched recall evidence only for unfinished or wrong ideas", () => {
@@ -205,66 +235,98 @@ describe("study plan personalization", () => {
     expect(planArchetype("Mathematics")).toBe("GENERIC");
   });
 
-  test("the Geography check names a place instead of leaking template scaffolding", () => {
-    const result = buildStudyPlan(
-      gaps([0, 0, 0, 0, 0, 0]),
-      CONCEPTS,
-      "Landforms of Ethiopia",
-      RAW,
-      new Map(),
-      "Geography",
-      "en",
-      40,
-    );
-    expect(result.steps.length).toBeGreaterThan(0);
-    for (const step of result.steps) {
-      // The old wording ("If the passage provides them...") had no referent and
-      // read as an unfilled template to the student.
-      expect(step.check.sayItBack).not.toContain("provides them");
-      expect(step.check.sayItBack).toContain("names a place");
-    }
-  });
-
-  test("step estimate includes reading, spoken prompt, and the check allowance", () => {
-    expect(estimateStudyStepMinutes(["one two three"], "say these words")).toBe(
-      1,
-    );
-    expect(
-      estimateStudyStepMinutes(
-        ["one two three"],
-        ["say these words", "why is this true?"],
-        "words ".repeat(200),
-      ),
-    ).toBeGreaterThan(1);
-  });
-
-  test("every plan step has a deterministic source anchor and no search links", () => {
+  test("the plan never invents a URL — search exits are the client's job", () => {
     const result = plan([2, 0, 0, 0, 0, 0], 20);
-    expect(result.steps.every((step) => step.anchor.excerpt.length > 0)).toBe(
-      true,
-    );
     expect(JSON.stringify(result)).not.toMatch(/youtube|google|https?:\/\//i);
   });
+});
 
-  test("AI plan content falls back inside its caller-supplied time budget", async () => {
+describe("model-written why lines", () => {
+  test("batches every step into one call and drops unusable entries", async () => {
+    __resetAdmissionForTests();
+    process.env.GEMINI_API_KEY = "test-key";
+    delete process.env.GROQ_API_KEY;
+    __overrideProviderForTests("gemini", async () =>
+      JSON.stringify({
+        steps: [
+          { index: 1, why: "You mixed the gate with the wall." },
+          { index: 2, why: "See https://example.com for more." },
+          { index: 3, why: "x".repeat(200) },
+          { index: 99, why: "An index that was never requested." },
+        ],
+      }),
+    );
+
+    const whys = await ai.generatePlanWhyFirst(RAW, [
+      {
+        conceptText: PLASMA_MEMBRANE,
+        gapType: "missing",
+        masteryLevel: 0,
+        studentWords: null,
+        excerpt: RAW.slice(0, 90),
+      },
+      {
+        conceptText: CYTOPLASM,
+        gapType: "missing",
+        masteryLevel: 0,
+        studentWords: null,
+        excerpt: "Inside, the cytoplasm is a watery fluid.",
+      },
+    ]);
+
+    expect(whys.get(PLASMA_MEMBRANE.toLowerCase())).toBe(
+      "You mixed the gate with the wall.",
+    );
+    // URL, over-long, and out-of-range entries are all refused.
+    expect(whys.get(CYTOPLASM.toLowerCase())).toBeUndefined();
+    expect(whys.size).toBe(1);
+  });
+
+  test("falls back to an empty map inside its caller-supplied time budget", async () => {
     __resetAdmissionForTests();
     process.env.GEMINI_API_KEY = "test-key";
     delete process.env.GROQ_API_KEY;
     __overrideProviderForTests("gemini", () => new Promise<string>(() => {}));
 
     const startedAt = performance.now();
-    const content = await ai.generateStudyPlanContent(
-      PLASMA_MEMBRANE,
-      "CONTRAST",
+    const whys = await ai.generatePlanWhyFirst(
       RAW,
-      RAW.slice(0, 110),
+      [
+        {
+          conceptText: PLASMA_MEMBRANE,
+          gapType: "missing",
+          masteryLevel: 0,
+          studentWords: null,
+          excerpt: RAW.slice(0, 90),
+        },
+      ],
       "en",
       { timeoutMs: 40 },
     );
 
     expect(performance.now() - startedAt).toBeLessThan(250);
-    expect(content.estimated).toBe(true);
-    expect(content.body).toEqual([RAW.slice(0, 110)]);
+    expect(whys.size).toBe(0);
+  });
+
+  test("makes no call when AI is skipped", async () => {
+    __overrideProviderForTests("gemini", () => {
+      throw new Error("should not be called");
+    });
+    const whys = await ai.generatePlanWhyFirst(
+      RAW,
+      [
+        {
+          conceptText: PLASMA_MEMBRANE,
+          gapType: "missing",
+          masteryLevel: 0,
+          studentWords: null,
+          excerpt: RAW.slice(0, 90),
+        },
+      ],
+      "en",
+      { skipAi: true },
+    );
+    expect(whys.size).toBe(0);
   });
 });
 
@@ -274,222 +336,4 @@ afterEach(() => {
   delete process.env.GEMINI_API_KEY;
   delete process.env.GROQ_API_KEY;
   __resetAdmissionForTests();
-});
-
-describe("grounded plan content", () => {
-  test("accepts only exact chapter spans and the expected structured shape", () => {
-    const anchorExcerpt = RAW.slice(0, RAW.indexOf(" Inside,"));
-    const good = validateGroundedPlanContent(
-      {
-        body: [anchorExcerpt.slice(0, 80), anchorExcerpt.slice(80)],
-        contrast: null,
-        chapterExplains: true,
-      },
-      RAW,
-      "BUILD",
-      anchorExcerpt,
-    );
-    expect(good?.estimated).toBe(false);
-    expect(
-      validateGroundedPlanContent(
-        {
-          body: [
-            "Inside, the cytoplasm is a watery fluid that holds the organelles.",
-          ],
-          contrast: null,
-          chapterExplains: true,
-        },
-        RAW,
-        "BUILD",
-        anchorExcerpt,
-      ),
-    ).toBeUndefined();
-    expect(
-      validateGroundedPlanContent(
-        {
-          body: ["See https://example.com"],
-          contrast: null,
-          chapterExplains: true,
-        },
-        RAW,
-        "BUILD",
-        anchorExcerpt,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("contrast requires three source-grounded parts; fallback stays deterministic", () => {
-    const anchorExcerpt = RAW.slice(0, RAW.indexOf(" Inside,"));
-    expect(
-      validateGroundedPlanContent(
-        {
-          body: [anchorExcerpt.slice(0, 80), anchorExcerpt.slice(80)],
-          contrast: {
-            bookSays: "The plasma membrane surrounds the cell",
-            feelsRightBecause: "The plasma membrane surrounds the cell",
-            failsBecause: "The plasma membrane surrounds the cell",
-          },
-          chapterExplains: true,
-        },
-        RAW,
-        "CONTRAST",
-        anchorExcerpt,
-      )?.contrast,
-    ).not.toBeNull();
-    expect(fallbackStudyPlanContent("An exact passage.")).toEqual({
-      body: ["An exact passage."],
-      contrast: null,
-      chapterExplains: null,
-      estimated: true,
-    });
-  });
-
-  test("accepts a CONTRAST step whose contrast is honestly null", () => {
-    // The prompt tells the model to return contrast=null when the passage
-    // names the idea but cannot support a book/feels/fails split — the shape
-    // production actually returns. Rejecting it made every such step fall back
-    // even though its grounded body was real.
-    const anchor = RAW.slice(0, RAW.indexOf(" Inside,"));
-    const content = validateGroundedPlanContent(
-      {
-        body: [anchor],
-        contrast: null,
-        chapterExplains: false,
-      },
-      RAW,
-      "CONTRAST",
-      anchor,
-    );
-    expect(content?.estimated).toBe(false);
-    expect(content?.contrast).toBeNull();
-    expect(content?.chapterExplains).toBe(false);
-    expect(content?.body).toEqual([anchor]);
-  });
-
-  test("accepts verbatim blocks that differ from the source only in hard-wrap whitespace", () => {
-    // Textbook text is hard-wrapped mid-sentence; the model returns the words
-    // with single spaces. A raw `includes` rejects every such block, so every
-    // generated step falls back — the exact failure students saw in production.
-    const hardWrapped =
-      "Inside, the cytoplasm is a watery fluid that holds the\n" +
-      "organelles. The nucleus sits at the centre and stores the genetic material.";
-    const anchor =
-      "Inside, the cytoplasm is a watery fluid that holds the organelles.";
-    const content = validateGroundedPlanContent(
-      {
-        body: [
-          "Inside, the cytoplasm is a watery fluid",
-          "that holds the organelles.",
-        ],
-        contrast: null,
-        chapterExplains: true,
-      },
-      hardWrapped,
-      "BUILD",
-      anchor,
-    );
-    expect(content?.estimated).toBe(false);
-    // Blocks are canonicalised back to the book's own text, hard wrap intact —
-    // the line that fell across "holds the" / "organelles" reads in the plan
-    // exactly as it wraps in the PDF.
-    expect(content?.body).toEqual([
-      "Inside, the cytoplasm is a watery fluid",
-      "that holds the\norganelles.",
-    ]);
-  });
-
-  test("tolerates case and typography a model changes while copying", () => {
-    // The book typesets "cell's" with a curly apostrophe; the model answers
-    // with a straight one and different casing. Folded the same way, the words
-    // still match in order — and the stored block is the book's own span.
-    const source =
-      "Inside, the cell\u2019s membrane lets certain molecules pass.";
-    const content = validateGroundedPlanContent(
-      {
-        body: ["INSIDE, THE CELL'S MEMBRANE lets certain molecules pass"],
-        contrast: null,
-        chapterExplains: true,
-      },
-      source,
-      "BUILD",
-      source,
-    );
-    expect(content?.estimated).toBe(false);
-    // The stored block is the book's own span — the model's all-caps straight-
-    // apostrophe copy maps back to the source's curly-apostrophe casing.
-    expect(content?.body).toEqual([
-      "Inside, the cell\u2019s membrane lets certain molecules pass",
-    ]);
-  });
-
-  test("falls back to the whole excerpt as a single block when no sentence break exists", () => {
-    const partial = RAW.slice(0, 105);
-    expect(fallbackStudyPlanContent(partial)).toEqual({
-      body: [partial.trim()],
-      contrast: null,
-      chapterExplains: null,
-      estimated: true,
-    });
-  });
-
-  test("the deterministic fallback splits the anchor into readable blocks", () => {
-    const excerpt = "The membrane lets some molecules pass. It blocks others.";
-    const fallback = fallbackStudyPlanContent(excerpt);
-    expect(fallback.body).toEqual([
-      "The membrane lets some molecules pass.",
-      "It blocks others.",
-    ]);
-    expect(fallback.estimated).toBe(true);
-    expect(fallback.chapterExplains).toBeNull();
-  });
-
-  test("batches every missing step into one grounded call", async () => {
-    __resetAdmissionForTests();
-    process.env.GEMINI_API_KEY = "test-key";
-    delete process.env.GROQ_API_KEY;
-    __overrideProviderForTests("gemini", async () =>
-      JSON.stringify({
-        steps: [
-          {
-            index: 1,
-            body: [
-              "The plasma membrane surrounds the cell and controls which substances enter and leave",
-              "letting some molecules pass while blocking others",
-            ],
-            chapterExplains: true,
-            contrast: {
-              bookSays: "The plasma membrane surrounds the cell",
-              feelsRightBecause: "controls which substances enter and leave",
-              failsBecause: "blocking others",
-            },
-          },
-          {
-            index: 2,
-            body: [
-              "This sentence was invented and appears nowhere in the chapter",
-            ],
-            chapterExplains: true,
-            contrast: null,
-          },
-        ],
-      }),
-    );
-
-    const anchor = RAW.slice(0, RAW.indexOf(" Inside,"));
-    const generated = await ai.generateStudyPlanContentBatch(RAW, [
-      { conceptText: PLASMA_MEMBRANE, type: "CONTRAST", excerpt: anchor },
-      {
-        conceptText: CYTOPLASM,
-        type: "BUILD",
-        excerpt: "Cytoplasm holds the organelles.",
-      },
-    ]);
-    const contrastKey = `${PLASMA_MEMBRANE.trim().toLowerCase()}|CONTRAST`;
-    const buildKey = `${CYTOPLASM.trim().toLowerCase()}|BUILD`;
-    expect(generated.get(contrastKey)?.estimated).toBe(false);
-    expect(generated.get(contrastKey)?.contrast).not.toBeNull();
-    // The invented index 2 did not match any source span, so it is dropped for
-    // the caller to fall back — never persisted as a "grounded" plan.
-    expect(generated.get(buildKey)).toBeUndefined();
-  });
 });

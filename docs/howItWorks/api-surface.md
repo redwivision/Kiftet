@@ -14,8 +14,7 @@ All routes live behind `/api`:
 | `GET /api/sessions/:id` | Session details + its attempts | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
-| `POST /api/sessions/:id/plan` | Build the grounded plan from diagnosed mastery and a 10/20/40 minute budget | 12 |
-| `POST /api/sessions/:id/plan/check` | Record one attempted plan check; idempotent per session/concept | 12 |
+| `POST /api/sessions/:id/plan` | Build the gap roadmap from diagnosed mastery and a 10/20/40 minute budget (deterministic; one batched call for the *why* lines) | 12 |
 | `GET /api/review-due` | Concepts whose latest mastery check is at least two days old | 12 |
 | `GET /api/chapters/:id/guide` | The ordered guide sections for this student (cached per chapter) | 0/11 (AI only on a cache miss) |
 | `POST /api/sessions/:id/retest` | Get new, differently-phrased questions for the gaps | 0/2 (AI in 2) |

@@ -4,8 +4,6 @@ import {
   conceptNode,
   guideSection,
   misconceptionHit,
-  planContent,
-  planStepCheck,
   studySession,
   syllabusUnit,
   type TextbookTocNode,
@@ -20,14 +18,12 @@ import {
   ai,
   aiTelemetrySnapshot,
   buildStudyPlan,
-  fallbackStudyPlanContent,
   focusScore,
   type GuideSection,
   gapAnalysisFrom,
   levelOf,
   type MasteryLevel,
   type MasteryMap,
-  type StudyPlanContent,
   triageConcepts,
 } from "../ai/gemini";
 import {
@@ -35,7 +31,6 @@ import {
   STUDY_PLAN_BUDGETS,
   STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
-  STUDY_PLAN_VERSION,
 } from "../ai/plan-config";
 import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
@@ -1231,57 +1226,33 @@ router.post("/sessions/:id/plan", async (req, res) => {
   }
 
   const language = parsed.data.language ?? "en";
-  const contentRows = await db()
-    .select()
-    .from(planContent)
-    .where(
-      and(
-        eq(planContent.chapterId, chapterId),
-        eq(planContent.language, language),
-        eq(planContent.planVersion, STUDY_PLAN_VERSION),
-      ),
-    );
-  const contentByConcept = new Map<string, StudyPlanContent>(
-    contentRows.map((row) => [
-      `${row.conceptText.trim().toLowerCase()}|${row.stepType}`,
-      {
-        body: row.body,
-        contrast: row.contrast,
-        chapterExplains: row.chapterExplains,
-        estimated: false,
-      },
-    ]),
-  );
+  // The plan is built from the diagnosis and the chapter text alone — no
+  // generated teaching, because a plan is a route, not a lesson. The only
+  // model call is the orienting "why this is yours" line, and that is one
+  // batched request priced like a recall grade, not a per-step flurry that
+  // empties the shared free-tier bucket behind a single click.
   const initial = buildStudyPlan(
     gaps,
     concepts,
     chapterRow.title,
     chapterRow.rawText,
-    contentByConcept,
+    new Map(),
     chapterRow.subject,
     language,
     parsed.data.budgetMinutes,
   );
-  const missingSteps = initial.steps.filter((step) => {
-    const key = `${step.concept.trim().toLowerCase()}|${step.type}`;
-    return !contentByConcept.has(key);
-  });
-  // The whole plan generates in ONE provider call (see the batch method's own
-  // comment for why five separate calls degrades under the free-tier bucket),
-  // and that batch is charged once against the student's interactive window —
-  // the plan is one act they paid for with the recall a minute earlier, not a
-  // five-request flurry that empties the shared allowance and turns the plan
-  // into the anchored excerpt, which is what students were actually seeing.
-  if (missingSteps.length > 0) {
+  let whyFirstByConcept = new Map<string, string>();
+  if (initial.steps.length > 0) {
     const timeoutMs = contentDeadline - Date.now();
     const skipAi = timeoutMs <= 0 || !allowAiRequest(req);
-    let generated: Map<string, StudyPlanContent>;
     try {
-      generated = await ai.generateStudyPlanContentBatch(
+      whyFirstByConcept = await ai.generatePlanWhyFirst(
         chapterRow.rawText,
-        missingSteps.map((step) => ({
+        initial.steps.map((step) => ({
           conceptText: step.concept,
-          type: step.type,
+          gapType: step.gapType,
+          masteryLevel: step.masteryLevel,
+          studentWords: step.studentWords,
           excerpt: step.anchor.excerpt,
         })),
         language,
@@ -1290,32 +1261,9 @@ router.post("/sessions/:id/plan", async (req, res) => {
     } catch (error) {
       if (!isAiBusy(error)) throw error;
       console.warn(
-        "[study-plan] AI capacity unavailable; using anchored excerpts",
+        "[study-plan] AI capacity unavailable; using the diagnosis lines",
       );
-      generated = new Map<string, StudyPlanContent>();
-    }
-    for (const step of initial.steps) {
-      const key = `${step.concept.trim().toLowerCase()}|${step.type}`;
-      if (contentByConcept.has(key)) continue;
-      const content =
-        generated.get(key) ?? fallbackStudyPlanContent(step.anchor.excerpt);
-      contentByConcept.set(key, content);
-      if (!skipAi && !content.estimated) {
-        await db()
-          .insert(planContent)
-          .values({
-            id: crypto.randomUUID(),
-            chapterId,
-            conceptText: step.concept,
-            stepType: step.type,
-            language,
-            planVersion: STUDY_PLAN_VERSION,
-            body: content.body,
-            contrast: content.contrast,
-            chapterExplains: content.chapterExplains,
-          })
-          .onConflictDoNothing();
-      }
+      whyFirstByConcept = new Map();
     }
   }
   const plan = buildStudyPlan(
@@ -1323,43 +1271,12 @@ router.post("/sessions/:id/plan", async (req, res) => {
     concepts,
     chapterRow.title,
     chapterRow.rawText,
-    contentByConcept,
+    whyFirstByConcept,
     chapterRow.subject,
     language,
     parsed.data.budgetMinutes,
   );
   ok(res, plan);
-});
-
-const planCheckSchema = z.object({
-  attemptId: z.string().min(1).max(100),
-  concept: z.string().trim().min(1).max(500),
-  transcriptText: z.string().trim().min(1).max(20_000),
-});
-
-router.post("/sessions/:id/plan/check", async (req, res) => {
-  const parsed = planCheckSchema.safeParse(req.body);
-  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
-  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
-  if (!chapterId) return err(res, "Session not found", 404);
-  const concepts = await chapterConcepts(chapterId);
-  const concept = concepts.find(
-    (item) =>
-      !item.isMisconception &&
-      item.conceptText.trim().toLowerCase() ===
-        parsed.data.concept.toLowerCase(),
-  );
-  if (!concept) return err(res, "Concept not found", 400);
-  await db()
-    .insert(planStepCheck)
-    .values({
-      id: parsed.data.attemptId,
-      sessionId: req.params.id,
-      conceptText: concept.conceptText,
-      responseText: parsed.data.transcriptText,
-    })
-    .onConflictDoNothing();
-  ok(res, { attempted: true });
 });
 
 // ────────────────────────────────────────────────────────────────

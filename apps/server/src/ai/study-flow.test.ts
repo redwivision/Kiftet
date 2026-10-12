@@ -5,7 +5,6 @@ import {
   ai,
   buildStudyPlan,
   type ConceptChecklistItem,
-  fallbackStudyPlanContent,
   focusScore,
 } from "./gemini";
 
@@ -70,18 +69,14 @@ describe("recall-to-retest study flow", () => {
       [CONCEPT],
       "Cell structure",
       CHAPTER,
-      new Map([
-        [
-          `${CONCEPT.conceptText.toLowerCase()}|CONTRAST`,
-          fallbackStudyPlanContent(CHAPTER),
-        ],
-      ]),
+      new Map([[CONCEPT.conceptText.toLowerCase(), "You flipped the rule."]]),
       "Biology",
       "en",
       20,
     );
     expect(plan.steps).toHaveLength(1);
-    expect(plan.steps[0]?.type).toBe("CONTRAST");
+    expect(plan.steps[0]?.gapType).toBe("misconception");
+    expect(plan.steps[0]?.whyFirst).toBe("You flipped the rule.");
     expect(plan.steps[0]?.anchor.excerpt).toContain("membrane");
     expect(plan.steps[0]?.studentWords).toBe(WRONG_RECALL);
 

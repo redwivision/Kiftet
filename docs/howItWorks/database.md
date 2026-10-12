@@ -15,8 +15,8 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `guide_section` | Cached guide content for one chapter concept and language | `chapterId`, `conceptText`, `language`, structured guide content and source anchor; unique `(chapterId, conceptText, language)` |
-| `plan_content` | Student-independent grounded content for one plan step | `chapterId`, `conceptText`, `stepType`, `language`, `planVersion`; unique across all five fields |
-| `plan_step_check` | One attempted plan check per concept per session | `sessionId`, `conceptText`, `responseText`; unique `(sessionId, conceptText)` |
+| `plan_content` | **Unused since v1.** Grounded per-step content cache from the pre-roadmap plan | `chapterId`, `conceptText`, `stepType`, `language`, `planVersion`; unique across all five fields |
+| `plan_step_check` | **Unused since v1.** The v0 plan's per-concept check (the plan is a roadmap now, not a quiz) | `sessionId`, `conceptText`, `responseText`; unique `(sessionId, conceptText)` |
 | `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
 | `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (mastery map, derived lists, optional matched evidence and estimate flag), `score` (int 0–100) |
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |

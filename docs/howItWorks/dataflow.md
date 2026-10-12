@@ -285,29 +285,39 @@ asked of a model — a model asked for a location invents one.
 
 ---
 
-### 5.6c Study plan — one grounded step per diagnosed gap
+### 5.6c Study plan — a roadmap, one card per diagnosed gap
 
-The study plan follows diagnosis; it does not replace or re-grade it. The
-client sends the existing mastery map and the student's selected 10/20/40
-minute budget to `POST /sessions/:id/plan`. The server maps levels 0/1/2 to
-BUILD/FINISH/CONTRAST, selects the highest-value concepts that fit, then
-presents misconceptions first, remaining concepts in book order, and FINISH
-steps last. Unselected gaps remain under "Next session"; level-3 concepts are
-reported as known rather than assigned another lesson.
+The study plan follows diagnosis; it does not replace, re-grade, or re-quiz it.
+That was the v0 mistake: the planning screen asked the student to answer the very
+gap the diagnosis had just concluded they have. The plan is a **roadmap**: it
+says what to study, in what order, and where to go.
 
-Each step points to a deterministic excerpt and offset in that student's own
-chapter. Generated body and contrast fields are accepted only when each is an
-exact chapter-text substring. Invalid content is retried once, then replaced
-with the excerpt and a say-it-back prompt. The concept name, student wording,
-and minutes are assembled per response; only base chapter content is cached by
-chapter, concept, step type, language, and plan version. There are no search
-links or external resources.
+The client sends the existing mastery map and the student's selected 10/20/40
+minute budget to `POST /sessions/:id/plan`. Selection is deterministic and free:
+levels 0/1/2 become *Learn it* / *Complete it* / *Tell them apart*; the
+highest-value concepts that fit the budget are chosen (misconceptions first, then
+book order), capped at five steps. Unselected gaps remain under "Next session";
+level-3 concepts are reported as known rather than assigned another step.
 
-Checks are attempts, not completion toggles. `POST
-/sessions/:id/plan/check` records a typed or spoken response idempotently, and
-the browser queues it offline. After the final step, the existing retest
-starts. The dashboard's optional "Review due" chip uses the most recent saved
-mastery check and a two-day threshold; it sends no notification.
+Each card points to a deterministic excerpt and offset in that student's own
+chapter (computed, never hallucinated), and carries a **deterministic search
+query** — concept + subject + a subject-shaped suffix — that the *client* turns
+into a YouTube or Google search link. The server never invents a URL.
+
+Only the one-line *why this is yours* is generated: a single batched provider
+call (`generatePlanWhyFirst`) writes one short orienting line per step from the
+concept, failure mode, and the student's own words. If the model is unavailable
+the line falls back to the deterministic diagnosis ("Not in your recall — start
+here."), and `estimated` marks when any line fell back. The plan is the same
+for a given diagnosis and budget regardless.
+
+Progress is a **tick-through checklist**, not an attempt: cards mark done for the
+session (`sessionStorage`), and `plan-progress` shows *n of m done*. The old
+`POST /sessions/:id/plan/check` endpoint and the `plan_content` /
+`plan_step_check` tables are unused. After the last card, the existing retest
+starts — the only graded step. The dashboard's optional "Review due" chip uses
+the most recent saved mastery check and a two-day threshold; it sends no
+notification.
 
 ---
 

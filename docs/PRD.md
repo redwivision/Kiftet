@@ -21,7 +21,7 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 
 - Concept-coverage delta per session (before vs. after score) — this is the core demo metric.
 - Median time per topic review session under 20 minutes.
-- Session completion rate (recall → micro-lesson → retest) for the demo dataset.
+- Session completion rate (recall → plan → retest) for the demo dataset.
 
 ## 4. Core user flow (per topic/chapter)
 
@@ -38,9 +38,11 @@ work.
 3. System transcribes and grades the explanation against that chapter's
    concept-and-misconception checklist, identifying specific gaps **per
    concept**, weighted by importance.
-4. System delivers a targeted, structured study guide addressing the
-   identified gaps — ordered by how much they matter, and cached so it's cheap
-   and instant after the first generation.
+4. System delivers a short, personalized **gap roadmap** addressing the
+   identified gaps — one card per gap concept, ordered by how much they matter,
+   each pointing to the exact place in the student's own book and to a
+   deterministic YouTube/Google search. Deterministic and instant; only the
+   one-line *why this is yours* is generated, in one batched call.
 5. **Optional:** student re-tests with differently-phrased questions on the same
    gap concepts — a real check of understanding, not parroting. Usable *before*
    studying (diagnose) or *after* (verify), graded against the same per-concept

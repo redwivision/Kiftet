@@ -9,12 +9,14 @@ preparing for the national exam. The idea is simple:
 
 > A student speaks or types what they remember about a topic. The app grades
 > each checklist concept, shows which ideas are unfinished or explained wrong,
-> then hands back a short plan built from an ordered guide linked back to the
-> student's book, and re-tests to check whether the gaps closed.
+> then hands back a short roadmap over exactly those gaps — each one linked to
+> the exact place in the student's book and to a YouTube/Google search — and
+> re-tests to check whether the gaps closed.
 
 The core loop is: **Recall → Diagnose → Relearn → Retest**. Diagnosis stores a
-0–3 mastery level per concept; the guide prioritizes wrong beliefs before
-unfinished and untouched concepts.
+0–3 mastery level per concept; the roadmap orders wrong beliefs before unfinished
+and untouched concepts, and leads each gap with the move its failure mode needs
+(*Tell them apart* / *Complete it* / *Learn it*).
 
 The bet behind the product: the national exam pass rate rose to 12.8% in 2026,
 which means 87.2% of students still failed. Students aren't failing from lack of
@@ -42,7 +44,7 @@ is at least **three or four programs cooperating**:
 ```
 
 - **Browser UI** — the part on the student's phone/laptop. It shows screens,
-  captures the microphone, plays back the lesson. In this project it lives in
+  captures the microphone, plays back the plan. In this project it lives in
   [`apps/web`](../apps/web).
 - **Backend API** — a program on a server that receives requests from the UI,
   does the thinking (calls the AI), saves and reads data, and sends answers back.
@@ -55,8 +57,8 @@ is at least **three or four programs cooperating**:
   for signed-in students; demo guests and unsupported browsers get the typed
   path with a clear label.
 - **AI model** — Google Gemini does the reasoning: understanding the student's
-  spoken explanation, spotting gaps, writing the micro-lesson, and generating
-  retest questions.
+  spoken explanation, spotting gaps, writing the one-line *why* on each plan
+  step, and generating retest questions.
 
 **"API"** = Application Programming Interface. It's just the list of things one
 program publicly lets other programs do. Think of a waiter: the kitchen (server)

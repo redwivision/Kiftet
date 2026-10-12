@@ -1,105 +1,99 @@
-# Relearn as a study plan — v1 direction
+# Relearn as a study plan — v1
 
-> Notes from a product discussion, kept here so the reasoning survives the
-> conversation. Decision still to be confirmed: see **Open questions** at the end.
+> Notes from a product discussion, updated to record the decisions that shipped.
+> The reasoning is kept so it survives the conversation.
 
-## What was proposed
+## What the plan is
 
-Short focused lessons are good, but they are not what a student who is actually
-trying to study needs. Kiftet will not try to cover the whole loop in the first
-version.
+The **relearn** step is a **roadmap**, not a lesson and not a quiz. It tells the
+student the shortest route over exactly what they are missing — nothing they
+already know — one card per gap concept, in leverage order, time-boxed to the
+budget they pick.
 
-The **relearn** step becomes a place where a student gets a smart study plan
-built from the subject and that specific topic. Studying Economics and currently
-on Consumer Behavior, the plan decides whether the right move is practice or
-memory techniques backed by real understanding — and might say *use NotebookLM to
-generate 20 questions*, then *watch this video for real understanding*, with
-recommended YouTube videos and articles for that topic.
+Each card carries:
+
+- the failed concept and its diagnosed failure mode,
+- a one-line *why this is yours* (the diagnosis handed back, not a fact),
+- an action verb (*Learn it* / *Complete it* / *Tell them apart*),
+- a deterministic search query with **YouTube** and **Google** exits,
+- the exact place in **their own book** (chapter, page, excerpt),
+- a *mark done* tick that persists for the session.
+
+It does not teach and it does not ask the student to answer a gap they have just
+been told they have. That was the v0 mistake: the planning screen felt like a
+retest because it quizzed the student on the very thing the diagnosis had
+already concluded they do not know.
+
+The screen ends with **Ready to be tested**, which leads into the retest — the
+only graded step in the loop. The plan is formative; the retest is the proof.
 
 ## Why this is the right call
 
 The generated micro-lesson is the weakest and most attackable part of the
-product.
+product. The diagnosis is genuinely differentiated. The loop logic is sound. But
+"AI speaks a 90-second lesson" is what a PhD in education pokes at, because short
+AI-generated explanations are usually *shallow* rather than wrong — and shallow
+is easy to expose.
 
-Everything else is defensible. The diagnosis is genuinely differentiated. The
-loop logic is sound. But "AI speaks a 90-second lesson" is exactly what a PhD in
-education will poke at, because short AI-generated explanations are usually
-*shallow* rather than wrong — and shallow is easy to expose. Staking the
-evaluation on the weakest asset is the wrong trade.
-
-A study plan is the opposite: far easier to make obviously useful, far less to
-hallucinate, and it matches what students actually do — YouTube, a textbook, and
-practice questions.
+A study plan is the opposite: easy to make obviously useful, hard to hallucinate,
+and it matches what students actually do — their textbook, YouTube, and practice.
 
 ## The one thing that decides product vs. toy
 
-**The plan must be generated from the diagnosis, not from the topic.**
+**The plan is generated from the diagnosis, not from the topic.**
 
 If the input is `Economics → Consumer Behavior`, this is a wrapper around a
-search box. The evaluator types the same thing into ChatGPT, gets a similar
-answer, and the moat evaporates in the room.
-
-What only Kiftet can produce:
+search box and the moat evaporates. What only Kiftet can produce is the sentence
+that names the failure mode and chooses the move:
 
 > You defined demand correctly but you confused the substitution and income
 > effects. That is not a coverage gap — you have seen both, you cannot tell them
-> apart. So: 6 comparison questions first (not 20 — more will not fix it), then
-> the 4-minute indifference-curve video, then re-speak the topic.
+> apart. So: tell them apart first, then re-speak the topic.
 
 The diagnosis already says **which failure mode** the student is in: missing
 entirely, half-remembered, or mixed up with a neighbour. Those three need three
-different study strategies, and choosing between them is the whole value. That
-is a sentence the evaluator cannot get anywhere else.
+different moves, and choosing between them is the whole value.
 
-## Three risks to design around now
+## Decisions
 
-**1. Curated links vs. generated links.**
-Live YouTube search from the model will serve wrong videos, dead links, and
-US-curriculum content that does not match the MoE syllabus. For 250 users,
-ship a hand-vetted resource list per chapter and let the model choose *which*
-entry and write *why* — never let it invent a URL. A wrong link destroys trust
-instantly.
+**1. Search exits, not curated links.** The plan never invents a URL. It builds a
+**deterministic** query — concept + subject + a subject-shaped suffix — and the
+client turns it into a YouTube or Google search link. For 250 users this avoids
+dead links and US-curriculum content, and it keeps the "what do I search"
+decision in the student's hands. A hand-vetted list per chapter is the eventual
+upgrade; not v1.
 
-**2. Data cost.**
-A plan saying "watch this 12-minute video" can be unaffordable. Flag duration
-and size, prefer short, always give a text fallback. Plans get screenshotted and
-shared — design for that literally.
+**2. The book is the anchor.** Every step points at the real character offset in
+the student's own chapter text, computed (not asked of the model), so a page
+number is never hallucinated. The book is the one resource we can vouch for.
 
-**3. The site must stop promising the old loop.** ✅ *resolved*
+**3. The *why* is model-written, with a deterministic fallback.** One batched
+provider call writes an orienting line per step so the plan reads as *yours*. If
+the model is unavailable, the line falls back to the deterministic diagnosis
+("Not in your recall — start here.") and the plan is still usable. `estimated`
+marks when any line fell back.
 
-The landing page now leads with the plan, not the lesson: `hero-sub` ends
-*"Not another question bank. A plan."*, `l-relearn-title` is *"Get the
-shortest route"*, and `demo-text` promises the shortest plan rather than a
-lesson. Nothing in student-facing copy, the page metadata, or this repo's
-product docs claims to instruct — the read-aloud step is described only as
-what the plan covers. Lessons are deliberately *not* named
-on the first screen: they are a discovery the student makes inside the
-product, which is where the surprise belongs.
+**4. Progress is a tick-through checklist**, not a re-test. Cards mark done for
+the session; `plan-progress` shows *n of m done*.
 
-The landing page also answers the eight questions a visitor actually arrives
-with (what it is, cost, install, data, phone number, instructor, waitlist reward,
-syllabus) immediately before the final call to action.
+**5. The retest survives** as the only graded step. The plan routes the student
+to it; the retest proves the gaps closed. ✅ *resolved*
+
+**6. The site already stopped promising the old loop.** ✅ *resolved* — the
+landing page leads with the plan; `hero-sub` ends *"Not another question bank. A
+plan."*, `l-relearn-title` is *"Get the shortest route"*. Nothing student-facing
+claims to instruct.
 
 ## Shape of v1
 
 ```
-UNDERSTAND   1 vetted video/reading, chosen for YOUR gap      (~4 min)
-PRACTICE     N questions, count set by the failure mode       (~10 min)
-CHECK        re-speak the topic, compared against last time   (~2 min)
+ONE CARD PER GAP      concept + why + action
+                      deterministic search query → YouTube / Google
+                      the exact place in your book
+                      mark done
+                      ↓
+READY TO BE TESTED    → the retest (the only graded step)
 ```
 
-Structure from the model, links from the vetted list, in the student's own
-language — three things already built.
-
-## Open questions
-
-1. **Does the retest survive?** It is the difference between "diagnose → plan"
-   (two steps, clean story) and a real loop. It also decides whether `CHECK` can
-   verify anything at all.
-2. **Where do resources come from** — hand-curated per chapter, model-chosen
-   from a vetted list, or live search? Strong recommendation: the middle one.
-3. **Which subject and chapter first?** Better to fully vet one than partially
-   vet three.
-4. **Is the spoken lesson gone, or demoted?** If gone, `hero-sub`, `loop-title`
-   and the whole `LOOP` section need rewriting *before* the evaluator sees them,
-   and that should happen in the same pass rather than after.
+Structure and search query are deterministic and free; only the *why* line is
+generated, in the student's own language.
