@@ -2,9 +2,18 @@ import type { Database } from "@kiftet/db";
 import * as schema from "@kiftet/db/schema/auth";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 
 import { sendEmail } from "./email";
 import { socialProviderConfig } from "./providers";
+
+// The email suffix every throwaway demo identity is minted under by
+// /demo/start. Exported so the server can import the one definition instead of
+// re-spelling the literal, and used here to refuse a real signup that claims it
+// — belt and braces alongside the `user.kind` discriminator, so a demo row and
+// a real account can never be confused for one another. See
+// docs/howItWorks/security.md §"Demo identity".
+export const DEMO_EMAIL_SUFFIX = "@demo.kiftet";
 
 // Re-exported so the server can answer "which providers are on?" from the same
 // function that decided which providers are on.
@@ -130,6 +139,25 @@ export function createAuth(
         trustedProviders: ["google", "facebook", "email-password"],
         allowDifferentEmails: false,
       },
+    },
+    hooks: {
+      // A @demo.kiftet address is reserved for throwaway demo identities: no
+      // real person owns one, and letting a signup take it would mean a real
+      // account squatting in the demo namespace. /demo/start writes its rows
+      // directly, never through this endpoint, so refusing the suffix here
+      // cannot break the demo itself.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/sign-up/email") return;
+        const email = ctx.body?.email;
+        if (
+          typeof email === "string" &&
+          email.trim().toLowerCase().endsWith(DEMO_EMAIL_SUFFIX)
+        ) {
+          throw new APIError("BAD_REQUEST", {
+            message: "That email address can't be used.",
+          });
+        }
+      }),
     },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,

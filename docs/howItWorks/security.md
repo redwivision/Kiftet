@@ -135,11 +135,28 @@ client can show the student's own local hour.
 
 **Demo identity is DB-backed:** an anonymous visit is authenticated by an
 `X-Demo-User-Id` header, and the header is trusted only when it resolves to a
-real user row with a `@demo.kiftet` email (created by `/demo/start`). Because
-that check is a database lookup rather than a memory set, a demo visitor
-survives server restarts and multi-instance deploys. `/demo/start` — the one
-endpoint a stranger may call — is throttled to **5 identity creations per
-minute per IP**.
+user row with `kind = 'demo'` (created by `/demo/start`, the only writer of that
+value — real sign-ups take the `student` default, and the sign-up endpoint
+refuses the reserved `@demo.kiftet` suffix outright). Because that check is a
+database lookup rather than a memory set, a demo visitor survives server
+restarts and multi-instance deploys. The discriminator is also what keeps demo
+traffic out of real-user data: the national misconception map
+(`GET /api/misconceptions`) counts `student` owners only. Demo identities
+expire — a janitor (`lib/demo-cleanup.ts`) sweeps demo users older than
+`DEMO_TTL_HOURS` (24 by default) hourly, and the FK cascade removes the
+textbook, chapters, concepts, sessions, attempts and misconception hits they
+left behind. `/demo/start` — the one endpoint a stranger may call — is throttled
+to **2 identity creations per minute per IP**.
+
+> **First-deploy caveat (known, accepted for now).** Until this shipped, no demo
+> row was ever deleted, so the *first* sweep removes the entire accumulated
+> backlog of demo identities older than the TTL in a single cascading `DELETE`.
+> At the scale the demo has run so far that is small and fine, but it is a
+> one-time unbounded delete: if the backlog turns out large, the first sweep
+> (fired ~30s after boot) could hold a connection and a lock for a while. If
+> that ever bites, the fix is to batch the sweep (`DELETE … LIMIT` in a loop)
+> rather than a single statement — deliberately not done yet, because it adds
+> moving parts for a problem that has not occurred.
 
 **Error handling:** the API answers every failure as JSON `{ error: "…" }` with
 copy written for the student, never an HTML stack page. Express's async

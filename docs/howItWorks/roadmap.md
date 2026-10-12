@@ -369,9 +369,13 @@ allocation drive concept ordering in the Phase 11 guide. Details in
 - [x] **`/health` depth** — `/health` also pings the DB (a real `SELECT 1`
       through the pool, 503 + `database_unreachable` on failure) so platform
       health checks catch a dead database, not just a listening socket.
-- [ ] **Demo janitor** — demo identity rows now persist (that's intentional);
-      add a scheduled job to delete stale demo users + their textbooks so they
-      don't accumulate.
+- [x] **Demo janitor** — demo identity rows persist on purpose (a visitor
+      survives a restart), so an in-process sweep (`lib/demo-cleanup.ts`) now
+      deletes demo users older than `DEMO_TTL_HOURS` (24h) hourly; the FK
+      cascade takes their textbooks, chapters, concepts, sessions, attempts and
+      misconception hits with them. `user.kind` marks a row `demo`, and the
+      national misconception map filters on `student`, so demos no longer leak
+      into real-user data either.
 - [ ] **`/sessions` N+1** — replace the per-row `resultSummary` loop in
       `GET /sessions` with one grouped query.
 - [ ] **Request IDs + structured logs** — tag each request with an id and log

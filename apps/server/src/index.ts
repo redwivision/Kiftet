@@ -15,6 +15,7 @@ import {
   errorMiddleware,
   installProcessGuards,
 } from "./error-handler";
+import { startDemoCleanup } from "./lib/demo-cleanup";
 import { requestLogger } from "./lib/http-log";
 import authProvidersRouter from "./routes/auth-providers";
 import demoRouter from "./routes/demo";
@@ -39,6 +40,10 @@ try {
   console.error(error);
   process.exit(1);
 }
+
+// Only reached once the schema has migrated, so the `kind` column the sweep
+// filters on is guaranteed to exist.
+startDemoCleanup();
 
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";

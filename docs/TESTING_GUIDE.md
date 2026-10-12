@@ -633,9 +633,15 @@ half-finished stream drive what we grade or read back.
 5. **Demo identity survives restart:** start a demo, record the
    `X-Demo-User-Id`, restart the server, then call `GET /api/ai/budget` with
    that header → `200` (identity is DB-backed now, it used to 401 after every
-   redeploy).
-6. **/demo/start throttling:** fire `POST /api/demo/start` more than 5 times in
+   redeploy). The row is marked `kind = 'demo'`; a forged header that matches no
+   demo row still → `401`.
+6. **/demo/start throttling:** fire `POST /api/demo/start` more than 2 times in
    a minute from one IP → `429` with the "Too many demo rooms…" message.
+7. **Demo janitor:** with `DEMO_TTL_HOURS` set low (e.g. `0` in a scratch
+   environment), a demo's row and its textbook disappear after the next sweep;
+   a `student` row is never touched.
+8. **Demo is not a national signal:** a misconception flagged inside a demo
+   session does not appear in `GET /api/misconceptions` (student owners only).
 
 ---
 

@@ -7,6 +7,22 @@ commits are intentionally consolidated; the complete record is `git log`.
 Current implementation details live in [`docs/howItWorks/`](docs/howItWorks/README.md)
 and the [roadmap](docs/howItWorks/roadmap.md).
 
+## 2026-10-12
+
+- **22:42+03:00 — Separate demo explorers from real users, and let demos
+  expire.** The `user` table now carries a `kind` discriminator
+  (`student` | `demo`), so a throwaway demo identity is no longer recognised by
+  its email shape — `X-Demo-User-Id` is trusted only when it resolves to a
+  `kind = 'demo'` row, which only `/demo/start` writes. That discriminator is
+  what the national misconception map now filters on, closing a leak where demo
+  sessions were counted as real signal (Bet 2). A janitor
+  (`lib/demo-cleanup.ts`) sweeps demo users older than `DEMO_TTL_HOURS` (24h by
+  default) hourly, and the FK cascade deletes their textbooks, chapters,
+  concepts, sessions, attempts and misconception hits — honouring the demo's
+  "expires on its own" copy. Registration also refuses the reserved
+  `@demo.kiftet` suffix. Migration `0011` adds the column and reclassifies
+  existing demo rows.
+
 ## 2026-10-03
 
 - **10:54+03:00 — Add GitHub as a social sign-in option** (`ed72102`). Add

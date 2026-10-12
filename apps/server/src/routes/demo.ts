@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { DEMO_EMAIL_SUFFIX } from "@kiftet/auth";
 import { chapter, conceptNode, textbook, user } from "@kiftet/db/schema";
-import { and, eq, like } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type Request, Router } from "express";
 import { env } from "../env.server";
 import { createDemoGate } from "../lib/demo-gate";
@@ -9,13 +10,14 @@ import { getDb } from "../services";
 // Demo visitors are anonymous. /demo/start fabricates a throwaway user +
 // chapter owned by that user; the identity is *DB-backed*, so an
 // X-Demo-User-Id header is trusted only when it resolves to a real user row
-// with a demo email address. Because the check is a row lookup (not an
-// in-memory set), a demo visitor survives server restarts and multi-instance
-// deploys. Real (better-auth) user ids are never demo ids — sign-up rejects
-// nothing, so a forged header must first own a `@demo.kiftet` user row, which
-// only /demo/start creates.
-const DEMO_EMAIL_SUFFIX = "@demo.kiftet";
-
+// marked `kind = 'demo'`. The discriminator, not the email shape, is the
+// authority: it is what real-user analytics filter on, and it survives an
+// email-suffix change without a second source of truth. Because the check is a
+// row lookup (not an in-memory set), a demo visitor survives server restarts
+// and multi-instance deploys. Real (better-auth) user ids are never demo ids:
+// every signup takes the `student` default, and sign-up refuses the reserved
+// @demo.kiftet suffix outright, so a forged header must first own a demo row —
+// which only /demo/start creates.
 export async function demoUserFor(req: Request): Promise<string | null> {
   const id = req.get("x-demo-user-id");
   if (!id) return null;
@@ -23,7 +25,7 @@ export async function demoUserFor(req: Request): Promise<string | null> {
     const rows = await getDb()
       .select({ id: user.id })
       .from(user)
-      .where(and(eq(user.id, id), like(user.email, `%${DEMO_EMAIL_SUFFIX}`)))
+      .where(and(eq(user.id, id), eq(user.kind, "demo")))
       .limit(1);
     return rows[0]?.id ?? null;
   } catch (error) {
@@ -151,8 +153,9 @@ router.post("/start", async (req, res) => {
     await db.insert(user).values({
       id: userId,
       name: "Demo Explorer",
-      email: `${userId}@demo.kiftet`,
+      email: `${userId}${DEMO_EMAIL_SUFFIX}`,
       emailVerified: true,
+      kind: "demo",
     });
     await db.insert(textbook).values({
       id: textbookId,

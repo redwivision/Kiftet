@@ -8,6 +8,7 @@ import {
   syllabusUnit,
   type TextbookTocNode,
   textbook,
+  user,
 } from "@kiftet/db/schema";
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
@@ -1007,6 +1008,11 @@ async function recordMisconceptionHits(
 // The aggregate map. Optional ?subject= Biology filter; otherwise nationwide.
 // Only clusters at or above the k-anonymity floor come back, newest-first by
 // how common they are.
+//
+// Real students only. A demo visitor runs the same grader and writes the same
+// misconception_hit rows, but a throwaway room is not a signal about the
+// national misconception map (Bet 2), so the demo owner is excluded here at the
+// source rather than left to be filtered by whoever reads the map.
 router.get("/misconceptions", async (req, res) => {
   const subject =
     typeof req.query.subject === "string" ? req.query.subject.trim() : null;
@@ -1022,8 +1028,14 @@ router.get("/misconceptions", async (req, res) => {
     .innerJoin(conceptNode, eq(misconceptionHit.conceptNodeId, conceptNode.id))
     .innerJoin(chapter, eq(conceptNode.chapterId, chapter.id))
     .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .innerJoin(user, eq(misconceptionHit.userId, user.id))
     .leftJoin(syllabusUnit, eq(chapter.unitId, syllabusUnit.id))
-    .where(and(subject ? eq(textbook.subject, subject) : undefined))
+    .where(
+      and(
+        subject ? eq(textbook.subject, subject) : undefined,
+        eq(user.kind, "student"),
+      ),
+    )
     .groupBy(
       conceptNode.conceptText,
       syllabusUnit.unitNumber,

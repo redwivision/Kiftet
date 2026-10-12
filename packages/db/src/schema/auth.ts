@@ -8,12 +8,24 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+// Who a `user` row actually is. A real, signed-up student is a `student`; a
+// throwaway identity minted by /demo/start for an anonymous visitor is a
+// `demo`. This is the discriminator that lets real-user analytics (and the
+// national misconception map) exclude demo traffic without a table split — the
+// study spine stays keyed on `user.id`, and a demo row is reclassified on the
+// backfill of migration 0011 rather than moved. Better Auth knows nothing about
+// this column, so every signup takes the `student` default; only /demo/start
+// writes `demo`. See docs/howItWorks/security.md §"Demo identity".
+export const USER_KINDS = ["student", "demo"] as const;
+export type UserKind = (typeof USER_KINDS)[number];
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  kind: text("kind", { enum: USER_KINDS }).default("student").notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
