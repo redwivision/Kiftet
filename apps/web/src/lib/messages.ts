@@ -501,7 +501,7 @@ export const en = {
   "voice-agent-dashboard": "Take me back to my chapters",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "For the Ethiopian national exam",
+  "hero-eyebrow": "For every Ethiopian student",
   "diag-eyebrow": "What it actually sees",
   "diag-title": "Not a score. A list of exactly what to fix.",
   "diag-sub":
@@ -523,13 +523,13 @@ export const en = {
   "demo-card-c-4": "Ribosomes and protein synthesis",
   "demo-card-c-5": "How organelles stay in their compartments",
   "hero-h1": "It looks familiar. Can you explain it?",
-  "hero-cta": "Try it now — no account",
-  "hero-micro": "3 minutes · no email or password",
+  "hero-cta": "Start with one round — no account",
+  "hero-micro": "3 minutes · free · no email or password",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "Ready to use it for real?",
   "stat-87a":
-    "of the {count} students who sat the 2026 national exam were still failed by the system — in the best result the country has recorded.",
+    "of the {count} students who sat the 2026 exam were still failed by the system — in the best result the country has recorded.",
   "stat-87b": "{schools} schools had zero students pass.",
   "stat-absent":
     "Students weren't absent. They sat through the classes. What's missing isn't exposure — it's knowing, before the exam, which specific ideas didn't really stick.",
@@ -545,8 +545,8 @@ export const en = {
   "rates-title":
     "The system is improving. That's not the same as reaching the student.",
   "rates-text":
-    "The national pass rate has climbed every year on record. Each step is real progress — and each one still leaves the overwhelming majority of students outside it. The reform moves at the country's pace. A student's exam doesn't wait.",
-  "pass-rate": "national pass rate",
+    "The pass rate has climbed every year on record. Each step is real progress — and each one still leaves the overwhelming majority of students outside it. The reform moves at the country's pace. A student's exam doesn't wait.",
+  "pass-rate": "pass rate",
   "pass-rate-best": "best year on record — and still 87 in 100 failed",
   "school-phone-title": "A school phone is enough",
   "school-phone-text":
@@ -584,7 +584,7 @@ export const en = {
     "Pick a chapter, press the ring, and start speaking. The picture of what you missed comes from your own words.",
   "open-study-room": "Open the study room",
   "footer-text":
-    "Closing the gap between what a class covers and what a student keeps. Built for the national exam — one chapter, one voice, one gap at a time.",
+    "Closing the gap between what a class covers and what a student keeps. Built for Ethiopian students — one chapter, one voice, one gap at a time.",
   "demo-chip": "Live demo · no account",
   "demo-title": "Feel it for yourself — one round of the loop, right now.",
   "demo-text":
@@ -818,7 +818,7 @@ export const en = {
 
   // ── First look (tier 1) ───────────────────────────────────────
   "hero-line":
-    "Kiftet hears you explain a chapter, then shows the ideas you can't — and the shortest way to learn them.",
+    "However much you remember, you're welcome here. Explain a chapter out loud and Kiftet shows the ideas to learn next — and the shortest way to learn them.",
   "example-label": "Example",
   "demo-ring-aria": "Try a live demo",
   "demo-ring-hint": "Tap the ring to try it",
@@ -1332,7 +1332,7 @@ export const am: Record<MessageKey, string> = {
   "voice-agent-dashboard": "ወደ ዳሽባርድ መልስኝ",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "ለኢትዮጵያ ብሔራዊ ፈተና",
+  "hero-eyebrow": "ለሁሉም ኢትዮጵያ ተማሪ",
   "diag-eyebrow": "በእውነት የሚያየው",
   "diag-title": "ውጤት አይደለም። በትክክል የሚስተካከል ዝርዝር።",
   "diag-sub": "አንድ ደቂቃ ተናገር — የተውካቸውንና የተሳሳትካቸውን ሀሳቦች ተመልከት።",
@@ -1353,13 +1353,13 @@ export const am: Record<MessageKey, string> = {
   "demo-card-c-4": "ሪቦሶሞችና የፕሮቴን ማስፈርጌት",
   "demo-card-c-5": "አካላቶች በምትሎቻቸው የሚቆዩበት መንገድ",
   "hero-h1": "የሚታወቅ ይመስላል። ግን ማስረዳት ትችላለህ?",
-  "hero-cta": "አሁን ሞክር — መለያ ሳያስፈልግ",
-  "hero-micro": "3 ደቂቃ · ኢሜይልም ሆነ የይለፍ ቃል የለም",
+  "hero-cta": "በአንድ ዙር ጀምር — መለያ ሳያስፈልግ",
+  "hero-micro": "3 ደቂቃ · ነፃ · ኢሜይልም ሆነ የይለፍ ቃል የለም",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
   "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
   "stat-87a":
-    "የ2026 ብሔራዊ ፈተናን ከተፈተኑት {count} ተማሪዎች ውስጥ አሁንም በስርዓቱ ወድቀዋል — አገሪቱ በመዘገበችው ምርጥ ውጤትም ቢሆን።",
+    "የ2026 ፈተናን ከተፈተኑት {count} ተማሪዎች ውስጥ አሁንም በስርዓቱ ወድቀዋል — አገሪቱ በመዘገበችው ምርጥ ውጤትም ቢሆን።",
   "stat-87b": "{schools} ትምህርት ቤቶች ውስጥ አንድም ተማሪ አላለፈም።",
   "stat-absent":
     "ተማሪዎቹ አልቀሩም። ትምህርታቸውን ተከታትለዋል። የጎደለው የትምህርት አጋጣሚ አይደለም — ከፈተናው በፊት የትኞቹ ሀሳቦች እንዳልተረጋገጡ ማወቅ ነው።",
@@ -1374,8 +1374,8 @@ export const am: Record<MessageKey, string> = {
     "ተማሪው ይላል። ቀለበቱ እያዳመጠ ነው፣ እየፈረደ አይደለም። ጮክ ብለህ የተናገርከው የተረጋገጠው ሙሉ መዝገብ ነው።",
   "rates-title": "ስርዓቱ እየተሻሻለ ነው። ተማሪውን ከመድረስ ግን የተለያየ ነገር ነው።",
   "rates-text":
-    "በመዝገቡ ላይ የብሔራዊ ማለፊያ መጠን በየዓመቱ ከፍ ብሏል። እያንዳንዱ እርምጃ እውነተኛ እድገት ነው — እያንዳንዱም አሁንም አብዛኞቹን ተማሪዎች ከእሱ ውጭ ይተዋል። ለውጡ በአገሪቱ ፍጥነት ይንቀሳቀሳል። የተማሪ ፈተና ግን አይጠብቅም።",
-  "pass-rate": "ብሔራዊ ማለፊያ መጠን",
+    "በመዝገቡ ላይ የማለፊያ መጠን በየዓመቱ ከፍ ብሏል። እያንዳንዱ እርምጃ እውነተኛ እድገት ነው — እያንዳንዱም አሁንም አብዛኞቹን ተማሪዎች ከእሱ ውጭ ይተዋል። ለውጡ በአገሪቱ ፍጥነት ይንቀሳቀሳል። የተማሪ ፈተና ግን አይጠብቅም።",
+  "pass-rate": "የማለፊያ መጠን",
   "pass-rate-best": "በመዝገቡ ምርጥ ዓመት — አሁንም ከ100 87ዎቹ ወድቀዋል",
   "school-phone-title": "የትምህርት ቤት ስልክ በቂ ነው",
   "school-phone-text":
@@ -1411,7 +1411,7 @@ export const am: Record<MessageKey, string> = {
   "cta-text": "ምዕራፍ ምረጥ፣ ቀለበቱን ተጫን፣ መናገር ጀምር። ምርመራው የሚመጣው ከራስህ ቃላት ነው።",
   "open-study-room": "የጥናት ክፍሉን ክፈት",
   "footer-text":
-    "ክፍል የሚሸፍነውን እና ተማሪ የሚይዘውን መካከል ያለውን ክፍተት በመዝጋት። ለብሔራዊ ፈተና የተሰራ — በአንድ ጊዜ አንድ ምዕራፍ፣ አንድ ድምጽ፣ አንድ ክፍተት።",
+    "ክፍል የሚሸፍነውን እና ተማሪ የሚይዘውን መካከል ያለውን ክፍተት በመዝጋት። ለኢትዮጵያ ተማሪዎች የተሰራ — በአንድ ጊዜ አንድ ምዕራፍ፣ አንድ ድምጽ፣ አንድ ክፍተት።",
   "demo-chip": "የቀጥታ ማሳያ · ያለ መለያ",
   "demo-title": "በራስህ ተማክር — አንድ ዙር የዑደቱን፣ አሁኑኑ።",
   "demo-text":
@@ -1617,7 +1617,7 @@ export const am: Record<MessageKey, string> = {
 
   // ── First look (tier 1) ───────────────────────────────────────
   "hero-line":
-    "ኪፍተት ምዕራፍ ስትገልጽ ያዳምጣል፣ ከዚያም የማትችላቸውን ሀሳቦችና እነሱን ለመማር የአጭሩን መንገድ ያሳያል።",
+    "የምታስታውሰው ቢያንስ ቢበዛ፣ እንኳን ደህና መጣህ። ምዕራፍ ጮክ ብለህ አስረዳ፣ ኪፍተትም ቀጥሎ የምትማራቸውን ሀሳቦችና የአጭሩን መንገድ ያሳይሃል።",
   "example-label": "ምሳሌ",
   "demo-ring-aria": "የቀጥታ ማሳያ ሞክር",
   "demo-ring-hint": "ለመሞከር ቀለበቱን ንካ",

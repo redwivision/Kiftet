@@ -41,7 +41,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "It looks familiar — can you explain it? Kiftet hears you explain a chapter, finds the ideas you can't, and gives you the shortest plan to learn them. Built for the Ethiopian national exam.",
+        "It looks familiar — can you explain it? Kiftet hears you explain a chapter, finds the ideas you can't, and gives you the shortest plan to learn them. Built for every Ethiopian student.",
     },
   ];
 }
