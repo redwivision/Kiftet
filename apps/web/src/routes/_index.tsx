@@ -13,6 +13,7 @@ import {
   Search,
   Volume2,
 } from "lucide-react";
+import { motion } from "motion/react";
 import {
   type ComponentType,
   type CSSProperties,
@@ -73,6 +74,71 @@ const HERO_CHIPS: readonly MessageKey[] = [
   "hero-chip-phone",
   "hero-chip-audio",
 ];
+
+/* One diagnosis, three subjects.
+ *
+ * Kiftet's promise is not "a Biology app" — it is "explain what you remember
+ * and we find the gaps". Letting a History or Geography student see their own
+ * chapter graded is the whole point of speaking to *every* Ethiopian student.
+ *
+ * The levels are identical for all three (two solid, one half-known, one stated
+ * wrong, one left open) so the punchline below the card stays true whichever a
+ * visitor picks; only the content and the importances change. Word-based
+ * subjects on purpose — a spoken answer can show you know History, but not that
+ * you can calculate, so the worked-problem sciences stay off the receipt. */
+const MICRO_DEMO_LEVELS: readonly MasteryLevel[] = [3, 3, 1, 2, 0];
+
+const MICRO_DEMO = [
+  {
+    id: "biology",
+    labelKey: "subject-biology",
+    unitKey: "demo-card-unit",
+    chapterKey: "demo-card-chapter",
+    conceptKeys: [
+      "demo-card-c-1",
+      "demo-card-c-2",
+      "demo-card-c-3",
+      "demo-card-c-4",
+      "demo-card-c-5",
+    ],
+    weights: [5, 3, 4, 2, 4],
+  },
+  {
+    id: "history",
+    labelKey: "subject-history",
+    unitKey: "demo-hist-unit",
+    chapterKey: "demo-hist-chapter",
+    conceptKeys: [
+      "demo-hist-c-1",
+      "demo-hist-c-2",
+      "demo-hist-c-3",
+      "demo-hist-c-4",
+      "demo-hist-c-5",
+    ],
+    weights: [4, 3, 4, 2, 3],
+  },
+  {
+    id: "geography",
+    labelKey: "subject-geography",
+    unitKey: "demo-geo-unit",
+    chapterKey: "demo-geo-chapter",
+    conceptKeys: [
+      "demo-geo-c-1",
+      "demo-geo-c-2",
+      "demo-geo-c-3",
+      "demo-geo-c-4",
+      "demo-geo-c-5",
+    ],
+    weights: [5, 4, 3, 3, 3],
+  },
+] as const satisfies readonly {
+  id: string;
+  labelKey: MessageKey;
+  unitKey: MessageKey;
+  chapterKey: MessageKey;
+  conceptKeys: readonly MessageKey[];
+  weights: readonly number[];
+}[];
 
 /* The aware visitor's three objections, answered in one line each. */
 const DIFF = [
@@ -574,44 +640,36 @@ export default function Home() {
 }
 
 /**
- * The receipt, spelled out.
+ * The receipt, spelled out — and switchable.
  *
  * The hero film shows the moment; this is the same diagnosis, stilled and
  * explained, so a visitor can read it at their own pace. It is a *different*
  * chapter from the film (Cell biology, where the film is Plant physiology), so
  * the page never shows the same receipt twice.
  *
- * Everything else here is a claim. This one shows a real Biology 12 checklist
- * and the levels a spoken recall lands on — "I said the word, I just didn't say
- * what it meant" is the feeling the product exists for. The four levels are
- * drawn by CoverageView itself (its legend covers them).
- *
- * Biology 12 on purpose. We do not claim Mathematics or Physics (a spoken
- * explanation cannot show that someone can calculate), so the page stays on
- * word-based subjects.
+ * The subject switch matters more than it looks: it lets a History or
+ * Geography student see their own chapter graded, which is the whole point of
+ * speaking to every Ethiopian student rather than only the science ones.
  */
 function DiagnosisSection() {
   const { t } = useLanguage();
   const reveal = useOnScreen<HTMLDivElement>();
+  const [subjectId, setSubjectId] = useState<string>(MICRO_DEMO[0].id);
+  const subject = MICRO_DEMO.find((s) => s.id === subjectId) ?? MICRO_DEMO[0];
 
-  // The checklist of one real Biology 12 unit, with the levels one student's
-  // spoken recall actually landed on. Kept as data, not JSX, so it renders
-  // through the same component the study screen uses.
-  const mastery: Record<string, MasteryLevel> = {
-    [t("demo-card-c-1")]: 3,
-    [t("demo-card-c-2")]: 3,
-    [t("demo-card-c-3")]: 1,
-    [t("demo-card-c-4")]: 2,
-    [t("demo-card-c-5")]: 0,
-  };
-  const meta: Record<string, ConceptMeta> = {
-    [t("demo-card-c-1")]: { weight: 5, isMisconception: false },
-    [t("demo-card-c-2")]: { weight: 3, isMisconception: false },
-    [t("demo-card-c-3")]: { weight: 4, isMisconception: false },
-    [t("demo-card-c-4")]: { weight: 2, isMisconception: false },
-    [t("demo-card-c-5")]: { weight: 4, isMisconception: false },
-  };
-  const name = (i: 1 | 2 | 3 | 4 | 5) => t(`demo-card-c-${i}` as MessageKey);
+  // The same levels every time, so the punchline beneath the card never lies.
+  const names = subject.conceptKeys.map((key) => t(key));
+  const mastery: Record<string, MasteryLevel> = {};
+  const meta: Record<string, ConceptMeta> = {};
+  subject.conceptKeys.forEach((key, i) => {
+    const label = t(key);
+    const level = MICRO_DEMO_LEVELS[i] ?? 0;
+    mastery[label] = level;
+    meta[label] = {
+      weight: subject.weights[i] ?? 1,
+      isMisconception: level === 2,
+    };
+  });
 
   return (
     <section className="mt-16" aria-labelledby="diagnosis-title">
@@ -632,13 +690,55 @@ function DiagnosisSection() {
           </p>
         </div>
 
+        {/* Three real receipts, one per word-based subject — so a visitor sees
+            their own subject, not just the one we happened to pick. */}
+        <div className="space-y-2.5">
+          <p className="k-label">{t("demo-pick-subject")}</p>
+          <div
+            role="radiogroup"
+            aria-label={t("demo-pick-subject")}
+            className="inline-flex flex-wrap gap-1 rounded-full border border-border/70 bg-panel/60 p-1"
+          >
+            {MICRO_DEMO.map((option) => {
+              const selected = option.id === subject.id;
+              return (
+                <label
+                  key={option.id}
+                  className={cn(
+                    "cursor-pointer rounded-full px-3.5 py-1.5 font-medium text-sm transition-colors duration-200 focus-within:outline-2 focus-within:outline-gold focus-within:outline-offset-2",
+                    selected
+                      ? "bg-gold/15 text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="demo-subject"
+                    value={option.id}
+                    checked={selected}
+                    onChange={() => setSubjectId(option.id)}
+                    className="sr-only"
+                  />
+                  {t(option.labelKey)}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="grid gap-5">
-          <div className="surface p-5 sm:p-6">
+          <motion.div
+            key={subject.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="surface p-5 sm:p-6"
+          >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="k-label">{t("demo-card-unit")}</p>
+                <p className="k-label">{t(subject.unitKey)}</p>
                 <h3 className="mt-1 truncate font-display font-semibold text-lg tracking-tight">
-                  {t("demo-card-chapter")}
+                  {t(subject.chapterKey)}
                 </h3>
               </div>
               <p className="shrink-0 font-medium text-muted-foreground text-xs">
@@ -646,14 +746,14 @@ function DiagnosisSection() {
               </p>
             </div>
             <CoverageView
-              covered={[name(1), name(2)]}
-              missing={[name(5)]}
-              misconceptions={[name(4)]}
+              covered={names.slice(0, 2)}
+              missing={names.slice(4, 5)}
+              misconceptions={names.slice(3, 4)}
               mastery={mastery}
               meta={meta}
-              score={weightedMastery(mastery, meta, Object.keys(mastery))}
+              score={weightedMastery(mastery, meta, names)}
             />
-          </div>
+          </motion.div>
           <p className="inner-surface border-gold/30 p-4 text-foreground text-sm leading-6">
             {t("diag-punchline")}
           </p>
@@ -767,7 +867,7 @@ function useDemoLaunch() {
     try {
       const userId = await startDemo();
       setDemoUser(userId);
-      navigate("/dashboard");
+      navigate("/dashboard", { viewTransition: true });
     } catch (error) {
       setFailure(apiError(error));
       setPending(false);

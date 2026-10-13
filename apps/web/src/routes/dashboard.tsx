@@ -523,6 +523,7 @@ export default function Dashboard() {
                     reviewDue={reviewsDue.find(
                       (item) => item.chapterId === chapter.id,
                     )}
+                    morph={i === 0}
                     onStart={() => start(chapter)}
                   />
                   <ChapterHistory last={last} />
@@ -542,6 +543,7 @@ function ChapterCard({
   starting,
   percent,
   reviewDue,
+  morph = false,
   onStart,
 }: {
   chapter: ChapterInfo;
@@ -549,6 +551,7 @@ function ChapterCard({
   starting: boolean;
   percent: number;
   reviewDue?: ReviewDue;
+  morph?: boolean;
   onStart: () => void;
 }) {
   const { t } = useLanguage();
@@ -569,7 +572,11 @@ function ChapterCard({
           </h2>
         </div>
         <span className="flex shrink-0 items-center gap-2">
-          <MasteryRing percent={percent} size={30} />
+          <MasteryRing
+            percent={percent}
+            size={30}
+            className={morph ? "[view-transition-name:kiftet-ring]" : undefined}
+          />
           <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
             {starting ? t("opening-ellipsis") : t("start-review")}
           </span>

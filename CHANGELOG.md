@@ -50,6 +50,20 @@ and the [roadmap](docs/howItWorks/roadmap.md).
   asks why." finish the stack. `motion` was added to the workspace catalog for
   the choreography; English and Amharic copy moved in lockstep.
 
+- **Prove it outside the sciences, and let the ring travel.** The diagnosis
+  receipt is now switchable across three word-based subjects — Biology, History
+  and Geography — so a History student sees their own chapter graded, not only
+  a Biology one. Each subject is a real unit (cell biology; Ethiopia 1855–1941
+  through Adwa; the landforms and Rift Valley of Ethiopia) drawn with the same
+  importance-weighted bars, and the levels are identical in every case (two
+  solid, one half-known, one stated wrong, one left open) so the punchline
+  beneath the card stays true whichever a visitor picks. Starting the demo now
+  crosses from the landing to the dashboard with a View Transition: the hero's
+  ring (`view-transition-name: kiftet-ring`) morphs into the chapter's ring on
+  the dashboard, with the browser's own graceful fallback (no View Transitions
+  API → a normal navigation) and a reduced-motion rule that skips it. English
+  and Amharic copy moved together.
+
 ## 2026-10-12
 
 - **22:42+03:00 — Separate demo explorers from real users, and let demos

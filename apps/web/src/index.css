@@ -736,6 +736,30 @@
     }
   }
 
+  /* The one cross-route transition: starting the demo morphs the hero's ring
+     into the chapter's ring on the dashboard. Both sides carry
+     `view-transition-name: kiftet-ring`; browsers without the View Transitions
+     API just navigate, and the reduced-motion rule above is invisible to
+     `::view-transition-*`, so it is repeated here for them. */
+  ::view-transition-group(kiftet-ring) {
+    animation-duration: 420ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  ::view-transition-old(kiftet-ring),
+  ::view-transition-new(kiftet-ring) {
+    animation-duration: 420ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    mix-blend-mode: normal;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      /* biome-ignore lint/complexity/noImportantStyles: must win against the default view-transition animations it is cancelling */
+      animation: none !important;
+    }
+  }
+
   ::selection {
     background: rgba(32, 29, 24, 0.22);
     color: #1b1a16;

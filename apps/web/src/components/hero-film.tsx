@@ -108,8 +108,10 @@ export function HeroFilm({ className }: { className?: string }) {
       </div>
 
       <div className="px-6 py-6">
-        {/* The stage: ring → listening → score */}
-        <div className="relative mx-auto grid size-52 place-items-center">
+        {/* The stage: ring → listening → score. Carries the shared
+            view-transition name, so starting the demo morphs this ring into
+            the chapter's ring on the dashboard (see the launch navigation). */}
+        <div className="relative mx-auto grid size-52 place-items-center [view-transition-name:kiftet-ring]">
           {/* The open ring drawing itself */}
           <motion.svg
             viewBox="0 0 100 100"
