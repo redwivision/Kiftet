@@ -742,12 +742,14 @@
      API just navigate, and the reduced-motion rule above is invisible to
      `::view-transition-*`, so it is repeated here for them. */
   ::view-transition-group(kiftet-ring) {
-    animation-duration: 420ms;
+    animation-duration: 400ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
+  /* The crossfade resolves in half the travel, so the two rings never ghost
+     over each other for the whole flight — the group's transform carries it. */
   ::view-transition-old(kiftet-ring),
   ::view-transition-new(kiftet-ring) {
-    animation-duration: 420ms;
+    animation-duration: 190ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
     mix-blend-mode: normal;
   }

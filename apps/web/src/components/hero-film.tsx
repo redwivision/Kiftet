@@ -108,44 +108,46 @@ export function HeroFilm({ className }: { className?: string }) {
       </div>
 
       <div className="px-6 py-6">
-        {/* The stage: ring → listening → score. Carries the shared
-            view-transition name, so starting the demo morphs this ring into
-            the chapter's ring on the dashboard (see the launch navigation). */}
-        <div className="relative mx-auto grid size-52 place-items-center [view-transition-name:kiftet-ring]">
-          {/* The open ring drawing itself */}
-          <motion.svg
-            viewBox="0 0 100 100"
-            fill="none"
+        {/* The stage: ring → listening → score. Only the rings carry the shared
+            view-transition name, so starting the demo morphs the hero ring into
+            the chapter's ring on the dashboard without dragging the mic, the
+            waveform or the number along for the ride. */}
+        <div className="relative mx-auto grid size-52 place-items-center">
+          {/* The morphing element: the rings alone. Before the answer lands it
+              is the open arc drawing itself; afterwards the settled score. */}
+          <div
             aria-hidden="true"
-            className="absolute inset-0 size-full text-gold"
-            animate={{ opacity: done ? 0 : 1 }}
-            transition={{ duration: 0.4 }}
+            className="absolute inset-0 grid place-items-center [view-transition-name:kiftet-ring]"
           >
-            <motion.path
-              d={OPEN_ARC}
-              stroke="currentColor"
-              strokeWidth={4}
-              strokeLinecap="round"
-              initial={false}
-              animate={{ pathLength: phase >= 1 ? 1 : 0 }}
-              transition={{ duration: reduce ? 0 : 0.9, ease: "easeOut" }}
-            />
-          </motion.svg>
+            {/* The open ring drawing itself */}
+            <motion.svg
+              viewBox="0 0 100 100"
+              fill="none"
+              className="absolute inset-0 size-full text-gold"
+              animate={{ opacity: done ? 0 : 1 }}
+              transition={{ duration: 0.4 }}
+            >
+              <motion.path
+                d={OPEN_ARC}
+                stroke="currentColor"
+                strokeWidth={4}
+                strokeLinecap="round"
+                initial={false}
+                animate={{ pathLength: phase >= 1 ? 1 : 0 }}
+                transition={{ duration: reduce ? 0 : 0.9, ease: "easeOut" }}
+              />
+            </motion.svg>
 
-          {/* The score, once the answer has been graded */}
-          <motion.div
-            aria-hidden={!done}
-            className="absolute inset-0 grid place-items-center"
-            initial={false}
-            animate={{ opacity: done ? 1 : 0 }}
-            transition={{ duration: 0.4, delay: done && !reduce ? 0.1 : 0 }}
-          >
-            <MasteryRing percent={done ? pct : 0} size={208} />
-            <p className="absolute font-display font-semibold text-4xl text-foreground tabular-nums tracking-[-0.03em]">
-              {pct}
-              <span className="text-muted-foreground text-xl">%</span>
-            </p>
-          </motion.div>
+            {/* The score ring, once the answer has been graded */}
+            <motion.div
+              className="absolute inset-0 grid place-items-center"
+              initial={false}
+              animate={{ opacity: done ? 1 : 0 }}
+              transition={{ duration: 0.4, delay: done && !reduce ? 0.1 : 0 }}
+            >
+              <MasteryRing percent={done ? pct : 0} size={208} />
+            </motion.div>
+          </div>
 
           {/* The centre while it listens */}
           <motion.div
@@ -159,6 +161,19 @@ export function HeroFilm({ className }: { className?: string }) {
               <Mic className="size-9" aria-hidden="true" />
             </span>
           </motion.div>
+
+          {/* The score itself — a sibling of the ring, so it fades with the page
+              rather than riding the ring into the dashboard. */}
+          <motion.p
+            aria-hidden={!done}
+            className="absolute font-display font-semibold text-4xl text-foreground tabular-nums tracking-[-0.03em]"
+            initial={false}
+            animate={{ opacity: done ? 1 : 0 }}
+            transition={{ duration: 0.4, delay: done && !reduce ? 0.1 : 0 }}
+          >
+            {pct}
+            <span className="text-muted-foreground text-xl">%</span>
+          </motion.p>
 
           {/* The voice: a waveform riding the gap while listening */}
           <div
