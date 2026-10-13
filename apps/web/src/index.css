@@ -394,6 +394,8 @@
      wait reads as ink being written around the gap rather than a stock spinner.
      Ends anywhere on the ring, so the reduced-motion frame is still a ring. */
   --animate-mark-travel: mark-travel 1.3s linear infinite;
+  /* The hero film's voice: thin bars riding the ring while it listens. */
+  --animate-hero-wave: hero-wave 1s ease-in-out infinite;
 
   @keyframes fade-up {
     from {
@@ -574,6 +576,15 @@
   @keyframes mark-travel {
     to {
       transform: rotate(360deg);
+    }
+  }
+  @keyframes hero-wave {
+    0%,
+    100% {
+      transform: scaleY(0.24);
+    }
+    50% {
+      transform: scaleY(1);
     }
   }
 }

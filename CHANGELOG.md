@@ -25,6 +25,31 @@ and the [roadmap](docs/howItWorks/roadmap.md).
   match; landing-only keys that died with the old sections were removed from
   both scripts so the corpus stays honest.
 
+- **Speak to every Ethiopian student, and open with a welcome.** Kiftet is not a
+  national-exam app and the landing no longer says it is. "For the national
+  exam" framing is gone from the hero eyebrow, the meta description, the footer,
+  the stakes stat and the pass-rate copy; the exam survives only where it is
+  evidence, never where it names the audience. The hero now opens by making
+  everyone welcome ("However much you remember, you're welcome here…") and its
+  call to action is softened to "Start with one round — no account" with a
+  "3 minutes · free · no email or password" reassurance. Amharic mirrored
+  throughout.
+
+- **Give the hero the product itself, performing.** The hero's single bold
+  moment is now a live-looking film rather than a static ring: the brand's open
+  ring draws itself, a waveform rides the gap while it listens, a real labelled
+  example answer resolves, and the ring spills that answer into the same
+  diagnosis the product gives — five concepts as importance-weighted bars, two
+  solid, one half-known, one stated wrong the classic way, one left open — then
+  settles into the score ring. It is a single pass, replayable, and collapses to
+  the final frame under `prefers-reduced-motion`. The old standalone demo card
+  was removed and the diagnosis receipt repurposed to a *different* chapter
+  (Cell biology) so the page never shows the same receipt twice. Trust chips
+  ("Free to start", "No account needed", "Works on any phone", "Your audio
+  isn't stored") and the reframe line "Past papers ask if you're right. Kiftet
+  asks why." finish the stack. `motion` was added to the workspace catalog for
+  the choreography; English and Amharic copy moved in lockstep.
+
 ## 2026-10-12
 
 - **22:42+03:00 — Separate demo explorers from real users, and let demos

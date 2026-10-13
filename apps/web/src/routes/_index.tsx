@@ -3,6 +3,7 @@ import { cn } from "@kiftet/ui/lib/utils";
 import {
   BookText,
   Bot,
+  Check,
   ChevronDown,
   CircleAlert,
   ListChecks,
@@ -19,12 +20,9 @@ import {
   useState,
 } from "react";
 import { Link, useNavigate } from "react-router";
-import {
-  BrandMark,
-  BrandSignature,
-  GapClosingMark,
-} from "@/components/brand-mark";
+import { BrandMark, BrandSignature } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
+import { HeroFilm } from "@/components/hero-film";
 import { useLanguage } from "@/components/language-provider";
 import type { MasteryLevel } from "@/components/study-provider";
 import WaitlistForm from "@/components/waitlist-form";
@@ -65,6 +63,16 @@ const PASS_RATES = [
   { year: "2025", rate: "8.4%" },
   { year: "2026", rate: "12.8%" },
 ] as const;
+
+/* The five answers a sceptical visitor needs before the button: what it costs,
+   whether they need an account, whether it runs on their phone, and whether
+   their voice is kept. Every one is verifiable against the FAQ. */
+const HERO_CHIPS: readonly MessageKey[] = [
+  "hero-chip-free",
+  "hero-chip-account",
+  "hero-chip-phone",
+  "hero-chip-audio",
+];
 
 /* The aware visitor's three objections, answered in one line each. */
 const DIFF = [
@@ -187,7 +195,6 @@ export default function Home() {
       {/* ── Hero: the promise, and the demo one tap away ──────── */}
       <section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
         <div ref={hero.ref} className={cn("space-y-6", hero.shown && "kft-in")}>
-          <p className="k-label text-gold">{t("hero-eyebrow")}</p>
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />
             <Words text={t("hero-h1")} />
@@ -219,34 +226,37 @@ export default function Home() {
               {t("how-loop-works")}
             </a>
           </div>
+
           {failure && (
             <p role="alert" className="text-rust text-sm">
               {failure}
             </p>
           )}
-          <p className="text-muted-foreground text-sm">{t("hero-micro")}</p>
+
+          <ul
+            className="kft-rise flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground text-sm"
+            style={{ "--kft-i": "400ms" } as CSSProperties}
+          >
+            {HERO_CHIPS.map((key) => (
+              <li key={key} className="flex items-center gap-1.5">
+                <Check className="size-4 text-gold" aria-hidden="true" />
+                {t(key)}
+              </li>
+            ))}
+          </ul>
+
+          <p
+            className="kft-rise max-w-xl font-medium text-foreground text-sm sm:text-base"
+            style={{ "--kft-i": "480ms" } as CSSProperties}
+          >
+            {t("hero-proof")}
+          </p>
         </div>
 
-        {/* The product, entered through the ring itself */}
-        <div className="flex flex-col items-center gap-6">
-          <button
-            type="button"
-            onClick={launch}
-            disabled={pending}
-            aria-label={t("demo-ring-aria")}
-            className="group relative grid size-32 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-4"
-          >
-            <span
-              aria-hidden="true"
-              className="absolute inset-0 animate-breathe rounded-full bg-gold/20 blur-2xl motion-reduce:animate-none"
-            />
-            <GapClosingMark
-              size={120}
-              className="relative text-gold transition-transform duration-300 ease-out group-hover:scale-[1.03] motion-reduce:transition-none"
-            />
-          </button>
-          <p className="text-muted-foreground text-sm">{t("demo-ring-hint")}</p>
-          <DemoCard />
+        {/* The product, performing: the open ring hears an answer and turns it
+            into a diagnosis of exactly what the student cannot explain. */}
+        <div className="flex justify-center">
+          <HeroFilm className="w-full max-w-md" />
         </div>
       </section>
 
@@ -563,74 +573,18 @@ export default function Home() {
   );
 }
 
-/* The product, shown as itself: a live-looking recall card that already
-   finished a diagnosis. Reuses the real CoverageView so the landing and the
-   product can never drift apart visually. */
-function DemoCard() {
-  const { t } = useLanguage();
-  const { launch, pending } = useDemoLaunch();
-  return (
-    <div
-      className="surface animate-rise-in overflow-hidden"
-      style={{ animationDelay: "0.15s" }}
-    >
-      <div className="border-border/60 border-b px-6 py-4 dark:border-white/10">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <BrandMark size={22} className="rounded-full" />
-            <p className="font-medium text-[0.78rem] text-muted-foreground">
-              Kiftet
-            </p>
-          </div>
-          <span className="rounded-full border border-border/70 px-2.5 py-0.5 font-medium text-[0.72rem] text-muted-foreground dark:border-white/15">
-            {t("example-label")}
-          </span>
-        </div>
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <p className="k-label">{t("demo-card-unit")}</p>
-          <span className="inline-flex items-center gap-1.5 font-medium text-[0.78rem] text-sage">
-            <span
-              className="size-1.5 rounded-full bg-sage"
-              aria-hidden="true"
-            />
-            {t("recalled")}
-          </span>
-        </div>
-        <h3 className="font-display font-semibold text-xl tracking-tight">
-          {t("demo-card-chapter")}
-        </h3>
-      </div>
-
-      <div className="p-6">
-        <CoverageView
-          covered={[t("demo-card-c-1"), t("demo-card-c-2"), t("demo-card-c-3")]}
-          missing={[t("demo-card-c-4"), t("demo-card-c-5")]}
-        />
-      </div>
-
-      <div className="border-border/60 border-t px-6 py-4 dark:border-white/10">
-        <Button
-          variant="outline"
-          onClick={launch}
-          disabled={pending}
-          className="w-full justify-center font-medium"
-        >
-          {t("see-your-chapter")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /**
- * The one receipt on the page.
+ * The receipt, spelled out.
+ *
+ * The hero film shows the moment; this is the same diagnosis, stilled and
+ * explained, so a visitor can read it at their own pace. It is a *different*
+ * chapter from the film (Cell biology, where the film is Plant physiology), so
+ * the page never shows the same receipt twice.
  *
  * Everything else here is a claim. This one shows a real Biology 12 checklist
- * and the levels a spoken recall lands on, so a visitor can recognise their own
- * Tuesday night — "I said the word, I just didn't say what it meant" is the
- * feeling the product exists for. The four levels are drawn by CoverageView
- * itself (its legend covers them), so the explainer list it used to carry is
- * gone and only the punchline remains.
+ * and the levels a spoken recall lands on — "I said the word, I just didn't say
+ * what it meant" is the feeling the product exists for. The four levels are
+ * drawn by CoverageView itself (its legend covers them).
  *
  * Biology 12 on purpose. We do not claim Mathematics or Physics (a spoken
  * explanation cannot show that someone can calculate), so the page stays on
@@ -644,20 +598,20 @@ function DiagnosisSection() {
   // spoken recall actually landed on. Kept as data, not JSX, so it renders
   // through the same component the study screen uses.
   const mastery: Record<string, MasteryLevel> = {
-    [t("demo-c-1")]: 3,
-    [t("demo-c-2")]: 3,
-    [t("demo-c-3")]: 1,
-    [t("demo-c-4")]: 2,
-    [t("demo-c-5")]: 0,
+    [t("demo-card-c-1")]: 3,
+    [t("demo-card-c-2")]: 3,
+    [t("demo-card-c-3")]: 1,
+    [t("demo-card-c-4")]: 2,
+    [t("demo-card-c-5")]: 0,
   };
   const meta: Record<string, ConceptMeta> = {
-    [t("demo-c-1")]: { weight: 5, isMisconception: false },
-    [t("demo-c-2")]: { weight: 3, isMisconception: false },
-    [t("demo-c-3")]: { weight: 4, isMisconception: false },
-    [t("demo-c-4")]: { weight: 2, isMisconception: false },
-    [t("demo-c-5")]: { weight: 4, isMisconception: false },
+    [t("demo-card-c-1")]: { weight: 5, isMisconception: false },
+    [t("demo-card-c-2")]: { weight: 3, isMisconception: false },
+    [t("demo-card-c-3")]: { weight: 4, isMisconception: false },
+    [t("demo-card-c-4")]: { weight: 2, isMisconception: false },
+    [t("demo-card-c-5")]: { weight: 4, isMisconception: false },
   };
-  const name = (i: 1 | 2 | 3 | 4 | 5) => t(`demo-c-${i}` as MessageKey);
+  const name = (i: 1 | 2 | 3 | 4 | 5) => t(`demo-card-c-${i}` as MessageKey);
 
   return (
     <section className="mt-16" aria-labelledby="diagnosis-title">
@@ -680,9 +634,14 @@ function DiagnosisSection() {
 
         <div className="grid gap-5">
           <div className="surface p-5 sm:p-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="k-label">{t("diag-unit")}</p>
-              <p className="font-medium text-muted-foreground text-xs">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="k-label">{t("demo-card-unit")}</p>
+                <h3 className="mt-1 truncate font-display font-semibold text-lg tracking-tight">
+                  {t("demo-card-chapter")}
+                </h3>
+              </div>
+              <p className="shrink-0 font-medium text-muted-foreground text-xs">
                 {t("diag-one-minute")}
               </p>
             </div>

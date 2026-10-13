@@ -501,7 +501,6 @@ export const en = {
   "voice-agent-dashboard": "Take me back to my chapters",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "For every Ethiopian student",
   "diag-eyebrow": "What it actually sees",
   "diag-title": "Not a score. A list of exactly what to fix.",
   "diag-sub":
@@ -524,7 +523,18 @@ export const en = {
   "demo-card-c-5": "How organelles stay in their compartments",
   "hero-h1": "It looks familiar. Can you explain it?",
   "hero-cta": "Start with one round — no account",
-  "hero-micro": "3 minutes · free · no email or password",
+  "hero-proof": "Past papers ask if you're right. Kiftet asks why.",
+  "hero-chip-free": "Free to start",
+  "hero-chip-account": "No account needed",
+  "hero-chip-phone": "Works on any phone",
+  "hero-chip-audio": "Your audio isn't stored",
+  "hero-film-prompt": "Say what you remember about photosynthesis.",
+  "hero-film-said":
+    "Photosynthesis uses sunlight and chlorophyll to turn carbon dioxide into glucose — and it produces water and oxygen.",
+  "hero-film-tally": "{known} of {total} fully explained",
+  "hero-film-miss":
+    "You said it makes water. It uses water — the reversal almost everyone gets wrong.",
+  "hero-film-replay": "Replay",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "Ready to use it for real?",
@@ -820,8 +830,6 @@ export const en = {
   "hero-line":
     "However much you remember, you're welcome here. Explain a chapter out loud and Kiftet shows the ideas to learn next — and the shortest way to learn them.",
   "example-label": "Example",
-  "demo-ring-aria": "Try a live demo",
-  "demo-ring-hint": "Tap the ring to try it",
   "continue-where": "Continue where you left off",
   "continue-where-text":
     "Your last study round is still open. Pick the loop back up where you stopped.",
@@ -1332,7 +1340,6 @@ export const am: Record<MessageKey, string> = {
   "voice-agent-dashboard": "ወደ ዳሽባርድ መልስኝ",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "ለሁሉም ኢትዮጵያ ተማሪ",
   "diag-eyebrow": "በእውነት የሚያየው",
   "diag-title": "ውጤት አይደለም። በትክክል የሚስተካከል ዝርዝር።",
   "diag-sub": "አንድ ደቂቃ ተናገር — የተውካቸውንና የተሳሳትካቸውን ሀሳቦች ተመልከት።",
@@ -1354,7 +1361,17 @@ export const am: Record<MessageKey, string> = {
   "demo-card-c-5": "አካላቶች በምትሎቻቸው የሚቆዩበት መንገድ",
   "hero-h1": "የሚታወቅ ይመስላል። ግን ማስረዳት ትችላለህ?",
   "hero-cta": "በአንድ ዙር ጀምር — መለያ ሳያስፈልግ",
-  "hero-micro": "3 ደቂቃ · ነፃ · ኢሜይልም ሆነ የይለፍ ቃል የለም",
+  "hero-proof": "የድሮ ፈተና ጥያቄዎች ትክክል መሆንህን ይጠይቃሉ። ክፍተት ግን «ለምን?» ይጠይቃል።",
+  "hero-chip-free": "ለመጀመር ነፃ",
+  "hero-chip-account": "መለያ አያስፈልግም",
+  "hero-chip-phone": "በየትኛውም ስልክ ይሰራል",
+  "hero-chip-audio": "ድምጽህ አይቀመጥም",
+  "hero-film-prompt": "ስለ ፎቶሲንቴሲስ የምታስታውሰውን ተናገር።",
+  "hero-film-said":
+    "ፎቶሲንቴሲስ ብርሃንና ክሎሮፊልን ተጠቅሞ ካርቦን ዳይኦክሳይድን ወደ ግሉኮስ ይለውጣል — ውሃና ኦክስጅንም ያመነጫል።",
+  "hero-film-tally": "{total} ውስጥ {known} ሙሉ ለሙሉ ተብራርቷል",
+  "hero-film-miss": "ውሃ ያመነጫል ብለሃል። ግን ውሃን ይጠቀማል — ብዙዎች የሚሳሳቱበት ተቃራኒው።",
+  "hero-film-replay": "እንደገና ተመልከት",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
   "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
@@ -1619,8 +1636,6 @@ export const am: Record<MessageKey, string> = {
   "hero-line":
     "የምታስታውሰው ቢያንስ ቢበዛ፣ እንኳን ደህና መጣህ። ምዕራፍ ጮክ ብለህ አስረዳ፣ ኪፍተትም ቀጥሎ የምትማራቸውን ሀሳቦችና የአጭሩን መንገድ ያሳይሃል።",
   "example-label": "ምሳሌ",
-  "demo-ring-aria": "የቀጥታ ማሳያ ሞክር",
-  "demo-ring-hint": "ለመሞከር ቀለበቱን ንካ",
   "continue-where": "ያቋረጥከበት ቀጥል",
   "continue-where-text": "ያለፈው የጥናት ዙርህ አሁንም ክፍት ነው። የቆምክበትን ቀጥል።",
   "start-first-chapter": "የመጀመሪያ ምዕራፍህን ጀምር",
