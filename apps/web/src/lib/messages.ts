@@ -501,26 +501,15 @@ export const en = {
   "voice-agent-dashboard": "Take me back to my chapters",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "A smart study roadmap for Ethiopian students",
+  "hero-eyebrow": "For the Ethiopian national exam",
   "diag-eyebrow": "What it actually sees",
   "diag-title": "Not a score. A list of exactly what to fix.",
   "diag-sub":
-    "You speak for a minute about a chapter. Kiftet checks each idea on the syllabus against what you actually said — and marks the difference between not mentioning something and mentioning it wrongly. That difference is the whole product.",
+    "Speak for a minute — see which ideas you left out and which you got wrong.",
   "diag-unit": "Biology 12 · Plant physiology",
   "diag-one-minute": "1 minute of speech",
-  "diag-l3": "3 — you can answer this",
-  "diag-l1": "1 — you mentioned it, but didn't say what it means",
-  "diag-l2": "2 — you said it the wrong way",
-  "diag-l0": "0 — not mentioned yet",
-  "diag-t3": "It landed. Leave it alone and spend your night somewhere else.",
-  "diag-t1":
-    "This is the good news hiding in plain sight. You remember it exists; one clear sentence finishes it.",
-  "diag-t2":
-    "Re-reading will not fix this one. It has to be unlearned and put back the right way.",
-  "diag-t0":
-    "Fair enough — nobody covers everything. This is what the short lesson is for.",
   "diag-punchline":
-    "Two of those need one sentence from you. One needs correcting, not re-reading. That's a very different night from “revise the whole chapter” — and it's the difference between 6 weeks of hoping and 6 days of knowing.",
+    "Two need one sentence. One needs correcting, not re-reading. That's a very different night from “revise the whole chapter.”",
   "demo-c-1": "Photosynthesis",
   "demo-c-2": "Chlorophyll and absorbed light",
   "demo-c-3": "Respiration and photosynthesis",
@@ -533,9 +522,9 @@ export const en = {
   "demo-card-c-3": "Nucleus and control of the cell",
   "demo-card-c-4": "Ribosomes and protein synthesis",
   "demo-card-c-5": "How organelles stay in their compartments",
-  "hero-gap": "Close the gap.",
-  "hero-sub":
-    "Kiftet listens to what you remember out loud, works out which specific ideas you didn't really learn, and hands you the shortest plan for learning them — everything you already know is left off it. Not another question bank. A plan.",
+  "hero-h1": "It looks familiar. Can you explain it?",
+  "hero-cta": "Try it now — no account",
+  "hero-micro": "3 minutes · no email or password",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "Ready to use it for real?",
@@ -545,20 +534,6 @@ export const en = {
   "stat-absent":
     "Students weren't absent. They sat through the classes. What's missing isn't exposure — it's knowing, before the exam, which specific ideas didn't really stick.",
   "loop-title": "Four steps. One loop. Only your gaps.",
-  "loop-sub":
-    "The sequence is the whole product — say what you know, find what's missing, take the shortest route across it, prove it closed. Nothing in Kiftet exists outside it.",
-  "l-speak-title": "Say what you remember",
-  "l-speak-text":
-    "Pick a chapter and explain it out loud, no notes, no prompts. Speaking forces clarity — you know what you know, and what you don't.",
-  "l-diagnose-title": "See what's missing",
-  "l-diagnose-text":
-    "The ideas we check are compared against what you said. The ones you know stay, the missing ones show up — in a picture you can read at a glance.",
-  "l-relearn-title": "Get the shortest route",
-  "l-relearn-text":
-    "Only what didn't land makes it onto the plan. Everything you already know is left off, so what's left takes far less time than the whole chapter.",
-  "l-retest-title": "Prove you learned it",
-  "l-retest-text":
-    "Freshly worded questions on those same missing ideas, then a before/after score. You leave knowing what you learned and what's still missing.",
   "voice-title": "Voice isn't a feature. It's the mechanism.",
   "voice-1":
     "Explaining something out loud is how the underlying learning technique actually works. There's nowhere to hide off-screen — there's no option, no answer key, just what you can produce. That honesty is the diagnosis.",
@@ -621,6 +596,19 @@ export const en = {
   "demo-try": "Try a live demo",
   recalled: "recalled",
   "see-your-chapter": "See it on your own chapter",
+
+  // ── Differentiation + progressive disclosure ────────────────
+  // The aware visitor's three objections, one line each, and the labels for
+  // the tap-to-open rows that keep the rest of the page out of the way.
+  "diff-1": "Not a question bank — it tells you what to study.",
+  "diff-2": "Not a chatbot — it remembers you.",
+  "diff-3": "Not the textbook again — everything you know is left off.",
+  "more-title": "More, if you want it",
+  "more-voice": "Why voice?",
+  "more-byob": "Bring your own textbook",
+  "more-exam": "Made for the exam room",
+  "more-rates": "See the 4-year trend",
+  "more-faq": "All questions",
 
   // ── The questions a visitor actually asks ──────────────────
   // The landing page's job is to leave nothing unresolved between "that's
@@ -829,7 +817,8 @@ export const en = {
   "choose-theme": "Choose a theme",
 
   // ── First look (tier 1) ───────────────────────────────────────
-  "hero-line": "Say what you remember. See exactly what you missed.",
+  "hero-line":
+    "Kiftet hears you explain a chapter, then shows the ideas you can't — and the shortest way to learn them.",
   "example-label": "Example",
   "demo-ring-aria": "Try a live demo",
   "demo-ring-hint": "Tap the ring to try it",
@@ -1343,24 +1332,14 @@ export const am: Record<MessageKey, string> = {
   "voice-agent-dashboard": "ወደ ዳሽባርድ መልስኝ",
 
   // ── Home / landing page ──────────────────────────────────────
-  "hero-eyebrow": "ለኢትዮጵያ ተማሪዎች ብልህ የጥናት መመሪያ",
+  "hero-eyebrow": "ለኢትዮጵያ ብሔራዊ ፈተና",
   "diag-eyebrow": "በእውነት የሚያየው",
   "diag-title": "ውጤት አይደለም። በትክክል የሚስተካከል ዝርዝር።",
-  "diag-sub":
-    "ስለ አንድ ምዕራፍ አንድ ደቂቃ ይናገራለህ። ኪፍተት እያንዳንዱ ሃሳብ ከስምህ በእንዴት መናገርህ ጋር ያወዳዳል። ለምሳሌ በላም አላጠራህን ከበስተዋል በተለየ መለያ ይሰጣል። ይህ ልዩነትም የምርቱ ሁሉ ነው።",
+  "diag-sub": "አንድ ደቂቃ ተናገር — የተውካቸውንና የተሳሳትካቸውን ሀሳቦች ተመልከት።",
   "diag-unit": "ባዮሎጂ 12 · የእፍሎች አካሳሽ",
   "diag-one-minute": "የ1 ደቂቃ ድምጽ",
-  "diag-l3": "3 — ይህን መስሮች መልስ ይሰጣለህ",
-  "diag-l1": "1 — ጠቅሞሃል፣ ግን ምንስ ማለት አልገለጠህም",
-  "diag-l2": "2 — በተሳሳተኝ ገልጿል",
-  "diag-l0": "0 — ገና አልጠበቀም",
-  "diag-t3": "ተቀምጧል። በዚህ ላይ ጊዜ አታስፈልግ — ሌሊትህን በሌላ ቦታ አስቀምጥ።",
-  "diag-t1":
-    "ይህም በግልጽ የሚታይ ውስጥ የተቀመጠ ጥሩ ዜና ነው። ታስታውሻለህ፤ አንድ ግልጽ ዓረፍተኛ ማስረጃ ብቻ ያጠናቅቅዋል።",
-  "diag-t2": "ማንበብ እንደማይችልት ነው። መጀመሪያው መተዳሰር፣ ከዚያ ትክክል በማስገባት መሆን አለበት።",
-  "diag-t0": "በርቀት ነው — ሁሉም አይሸፍኑም። በጭማሪው የሚሰጠው ነገር ስለዚህ ነው።",
   "diag-punchline":
-    "ከሁለቱ አንዱ ከአንድ ዓረፍተኛ መልስ ይፈልጋል። አንዱ ደግሞ መርማር ሳይሆን ማስተካከል አለበት። ይህ ከጠንላ ምዕራፉን ማስረስ በተለየ የምሽት ነው — እና ከስድስት ሳምንት ተስጠር ከስድስት ቀን ማወቅ ጋር ያለው ልዩነትም ነው።",
+    "ሁለቱ አንድ ዓረፍተኛ ይፈልጋሉ። አንዱ መርማር ሳይሆን ማስተካከል አለበት። ይህ 'ሙሉውን ምዕራፍ አጥና' ከተባለ ሌሊት የተለየ ነው።",
   "demo-c-1": "ፎቶሲንቴሲስ",
   "demo-c-2": "ክሎሮፊል እና የተጠበሰ ብርሃን",
   "demo-c-3": "የትንታስ መተንበርና ፎቶሲንቴሲስ",
@@ -1373,9 +1352,9 @@ export const am: Record<MessageKey, string> = {
   "demo-card-c-3": "የመቅላት አገላቂና ማዕከል",
   "demo-card-c-4": "ሪቦሶሞችና የፕሮቴን ማስፈርጌት",
   "demo-card-c-5": "አካላቶች በምትሎቻቸው የሚቆዩበት መንገድ",
-  "hero-gap": "ክፍተቱን ዝጋ።",
-  "hero-sub":
-    "ኪፍተት ጮክ ብለህ የምታስታውሰውን ያዳምጣል፣ የትኞቹ ሀሳቦች እንዳልተረጋገጡ ያሰባል፣ እነዚያን መዝጋት የሚያስቸግረውን አጭር ፕላን ይሰጣል — የምታውቀው ሙሉ ነገር ከእሱ ውስጥ ይወጣል። ሌላ የጥያቄ ባንክ አይደለም። ፕላን ነው።",
+  "hero-h1": "የሚታወቅ ይመስላል። ግን ማስረዳት ትችላለህ?",
+  "hero-cta": "አሁን ሞክር — መለያ ሳያስፈልግ",
+  "hero-micro": "3 ደቂቃ · ኢሜይልም ሆነ የይለፍ ቃል የለም",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
   "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
@@ -1385,20 +1364,6 @@ export const am: Record<MessageKey, string> = {
   "stat-absent":
     "ተማሪዎቹ አልቀሩም። ትምህርታቸውን ተከታትለዋል። የጎደለው የትምህርት አጋጣሚ አይደለም — ከፈተናው በፊት የትኞቹ ሀሳቦች እንዳልተረጋገጡ ማወቅ ነው።",
   "loop-title": "አራት እርምጃዎች። አንድ ዑደት። የራስህ ክፍተቶች ብቻ።",
-  "loop-sub":
-    "ቅደም ተከተሉ ሙሉው ምርት ነው — የምታውቀውን ተናግር፣ የጎደለውን ማግኘት፣ የአጭሩን መንገድ መውሰድ፣ እንደተዘጋ መሆኑን ማስረግጥ። ከእሱ ውጭ በኪፍተት ውስጥ ምንም የለም።",
-  "l-speak-title": "ያስታወስከውን ተናገር",
-  "l-speak-text":
-    "ምዕራፍ ምረጥና ጮክ ብለህ አስረዳ፣ ያለ ማስታወሻ፣ ያለ ፍንጭ። መናገር ግልጽነትን ያስገድዳል — የምታውቀውን እና የማታውቀውን ታያለህ።",
-  "l-diagnose-title": "የጎደለውን ተመልከት",
-  "l-diagnose-text":
-    "የምንፈትሻቸው ሀሳቦች ከተናገርከው ጋር ይነጻጸራሉ። የተረጋገጡት ይቀራሉ፣ ክፍተቶቹም ይታያሉ — በአንድ እይታ የሚነበብ ምስል።",
-  "l-relearn-title": "የአጭሩን መንገድ አግኝት",
-  "l-relearn-text":
-    "ያልተረጋገጠው ብቻ ነው ወደ ፕላኑ የሚገባው። የምታውቀው ሙሉ ነገር ይወጣል — ስለዚህ የቀረው ሙሉውን ምዕራፍ የበለጠ አጭር ጊዜ ይወስዳል።",
-  "l-retest-title": "የተረጋገጠ መሆኑን አስረግጥ",
-  "l-retest-text":
-    "በእነዚያው ክፍተቶች ላይ በአዲስ አነጋገር የተፈጠሩ ጥያቄዎች፣ ከዚያም የበፊት/የበኋላ ውጤት። ምን እንደተዘጋ እና ምን አሁንም ክፍት እንደሆነ በግልጽ ተመልከተህ ትወጣለህ።",
   "voice-title": "ድምጽ ባህሪ አይደለም። ዘዴው ነው።",
   "voice-1":
     "የትምህርት ዘዴው በተጨባጭ የሚሰራው ጮክ ብለህ በማስረዳት ነው። ከስክሪኑ ውጭ የምትደበቅበት ቦታ የለም — አማራጭ የለም፣ የመልስ ቁልፍ የለም፣ የምትፈጥረው ብቻ ነው። ያ እውነተኝነት ምርመራው ነው።",
@@ -1457,6 +1422,17 @@ export const am: Record<MessageKey, string> = {
   "demo-try": "የቀጥታ ማሳያ ሞክር",
   recalled: "አስታውሷል",
   "see-your-chapter": "በራስህ ምዕራፍ ላይ ተመልከት",
+
+  // ── Differentiation + progressive disclosure ────────────────
+  "diff-1": "የጥያቄ ባንክ አይደለም — ምን ማጥናት እንዳለብህ ይነግርሃል።",
+  "diff-2": "ቻትቦት አይደለም — አንተን ያስታውሳል።",
+  "diff-3": "የተለመደ መጽሐፍ አይደለም — የምታውቀው ሁሉ ይቀራል።",
+  "more-title": "ተጨማሪ፣ ከፈለክ",
+  "more-voice": "ለምን ድምጽ?",
+  "more-byob": "የራስህን መጽሐፍ አምጣ",
+  "more-exam": "ለፈተናው ክፍል የተሰራ",
+  "more-rates": "የ4 ዓመት ሂደቱን ተመልከት",
+  "more-faq": "ሁሉም ጥያቄዎች",
 
   // ── The questions a visitor actually asks ──────────────────
   "faq-eyebrow": "ከመጠየቅ በፊት",
@@ -1640,7 +1616,8 @@ export const am: Record<MessageKey, string> = {
   "choose-theme": "ገምት ምረጥ",
 
   // ── First look (tier 1) ───────────────────────────────────────
-  "hero-line": "ያስታወስከውን ተናገር። ያመለጠህን በግልጽ አይ።",
+  "hero-line":
+    "ኪፍተት ምዕራፍ ስትገልጽ ያዳምጣል፣ ከዚያም የማትችላቸውን ሀሳቦችና እነሱን ለመማር የአጭሩን መንገድ ያሳያል።",
   "example-label": "ምሳሌ",
   "demo-ring-aria": "የቀጥታ ማሳያ ሞክር",
   "demo-ring-hint": "ለመሞከር ቀለበቱን ንካ",

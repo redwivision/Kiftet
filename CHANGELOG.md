@@ -7,6 +7,24 @@ commits are intentionally consolidated; the complete record is `git log`.
 Current implementation details live in [`docs/howItWorks/`](docs/howItWorks/README.md)
 and the [roadmap](docs/howItWorks/roadmap.md).
 
+## 2026-10-13
+
+- **Rebuild the landing page around the demo, not the copy.** The home page had
+  grown to thirteen stacked blocks, three competing asks (demo, waitlist,
+  account) and roughly 1,500 words before the first tap — the wrong shape for an
+  audience that does not read. It is now seven short blocks: a hero whose one
+  action is "try the demo, no account", a four-word how-it-works strip, the
+  single diagnosis receipt, the stakes stat, three one-line differentiators, a
+  top-five FAQ, and a closing CTA. Everything long (why voice, bring-your-own
+  textbook, exam-room notes, the four-year pass-rate trend, the remaining eleven
+  questions, and the waitlist form) moved into native tap-to-open `<details>`
+  rows, so nothing is lost but nothing is forced on the reader. The hero leads
+  with the product's central insight — "It looks familiar. Can you explain
+  it?" — and the standalone glowing demo section is gone because the hero *is*
+  the demo entry now. English copy rewritten and the Amharic corpus updated to
+  match; landing-only keys that died with the old sections were removed from
+  both scripts so the corpus stays honest.
+
 ## 2026-10-12
 
 - **22:42+03:00 — Separate demo explorers from real users, and let demos
