@@ -594,6 +594,47 @@
     padding-top: env(safe-area-inset-top);
   }
 
+  /* The mirror of safe-area-top, for the home-indicator strip under the
+     mobile tab bar and any other chrome pinned to the bottom edge. */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Touch foundation. Three small, whole-app decisions:
+     · no grey flash on tap — the app draws its own pressed states, and the
+       iOS/Android highlight just muddies them;
+     · `touch-action: manipulation` drops the legacy 300ms double-tap delay on
+       every control (pinch-zoom is untouched, so accessibility is intact);
+     · `text-size-adjust` stops mobile Safari inflating our type when the phone
+       is turned to landscape — the layout is already fluid. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Kill the rubber-band/pull-to-refresh on the document so an installed app
+       feels like an app, not a page. Inner scrollers opt back in with
+       overscroll-behavior: contain where they need their own momentum. */
+    overscroll-behavior-y: none;
+  }
+
+  a,
+  button,
+  [role="button"],
+  [role="tab"],
+  summary,
+  label {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (hover: none) {
+    a,
+    button,
+    [role="button"],
+    [role="tab"],
+    summary {
+      touch-action: manipulation;
+    }
+  }
+
   * {
     @apply border-border outline-ring/50;
   }

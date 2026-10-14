@@ -1,9 +1,11 @@
+import { cn } from "@kiftet/ui/lib/utils";
 import { BookOpen, House } from "lucide-react";
 import type { ComponentType } from "react";
 import { NavLink } from "react-router";
 
+import { useLanguage } from "@/components/language-provider";
+import { useIsAppRoute } from "@/lib/app-nav";
 import { BrandMark } from "./brand-mark";
-import { useLanguage } from "./language-provider";
 import { LanguageSwitcher } from "./language-switcher";
 import { OfflineBanner } from "./offline-banner";
 import { ThemeSwitcher } from "./theme-switcher";
@@ -49,6 +51,11 @@ const NAV = [
 
 export default function Header() {
   const { t } = useLanguage();
+  // In the study room the links and the theme/language controls live in the
+  // bottom bar and its sheet on phones, so the header sheds them below `sm`
+  // rather than showing two homes for the same destination. Off the app
+  // (landing, auth) nothing changes.
+  const isApp = useIsAppRoute();
 
   return (
     // bg-panel, not a literal: this used to be #0f1523, a blue-black from
@@ -65,7 +72,10 @@ export default function Header() {
           </NavLink>
           <nav
             aria-label={t("nav-primary")}
-            className="flex shrink items-center gap-0.5 sm:gap-1"
+            className={cn(
+              "flex shrink items-center gap-0.5 sm:gap-1",
+              isApp && "max-sm:hidden",
+            )}
           >
             {NAV.map(({ to, labelKey, Icon }) => (
               <NavLink
@@ -92,8 +102,12 @@ export default function Header() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <LanguageSwitcher />
-          <ThemeSwitcher />
+          <span className={cn(isApp && "max-sm:hidden")}>
+            <LanguageSwitcher />
+          </span>
+          <span className={cn(isApp && "max-sm:hidden")}>
+            <ThemeSwitcher />
+          </span>
           <UserMenu />
         </div>
       </div>

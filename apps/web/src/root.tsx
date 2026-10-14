@@ -1,4 +1,5 @@
 import { Toaster } from "@kiftet/ui/components/sonner";
+import { cn } from "@kiftet/ui/lib/utils";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
 import "./index.css";
@@ -7,8 +8,10 @@ import { ErrorScreen } from "./components/error-screen";
 import { FirstLoadIntro } from "./components/first-load-intro";
 import Header from "./components/header";
 import { LanguageProvider, useLanguage } from "./components/language-provider";
+import { MobileNav } from "./components/mobile-nav";
 import { NavigationProgress } from "./components/navigation-progress";
 import { ThemeProvider } from "./components/theme-provider";
+import { useIsAppRoute } from "./lib/app-nav";
 
 export const links: Route.LinksFunction = () => [
   // id so the study loop can swap the SVG icon's href as the student moves
@@ -121,10 +124,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <meta charSet="utf-8" />
         {/* viewport-fit=cover so the installed app can paint under the
-				    notch; without it the status bar overlaps the header. */}
+				    notch; without it the status bar overlaps the header.
+				    interactive-widget=resizes-content makes Android resize the
+				    layout (not just scroll it) when the keyboard opens, so a
+				    text answer in the study loop never hides behind the keys. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
         />
         <meta name="format-detection" content="telephone=no" />
         {/* iOS Home Screen: give the installed app the brand name and a
@@ -199,12 +205,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // The mobile tab bar lives in the study room only. On those routes the
+  // content is lifted clear of the fixed bar; everywhere else the chrome is
+  // unchanged.
+  const isApp = useIsAppRoute();
+
   return (
     <div className="flex min-h-dvh flex-col">
       <Header />
-      <div id="main-content" className="flex-1" tabIndex={-1}>
+      <div
+        id="main-content"
+        className={cn(
+          "flex-1",
+          isApp && "max-sm:pb-[calc(3.5rem_+_env(safe-area-inset-bottom))]",
+        )}
+        tabIndex={-1}
+      >
         <Outlet />
       </div>
+      {isApp && <MobileNav />}
     </div>
   );
 }

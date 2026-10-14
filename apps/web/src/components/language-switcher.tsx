@@ -11,7 +11,7 @@ import { cn } from "@kiftet/ui/lib/utils";
 import { Check, Languages } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
 
-const OPTIONS = [
+export const OPTIONS = [
   { value: "en", label: "English", script: "EN" },
   { value: "am", label: "አማርኛ", script: "አማ" },
 ] as const;

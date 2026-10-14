@@ -14,6 +14,10 @@ export const en = {
   tagline: "Close the gap",
   "nav-home": "Home",
   "nav-study": "Study",
+  "nav-books": "Books",
+  "nav-more": "More",
+  "settings-title": "Settings",
+  done: "Done",
   "select-language": "Select language",
 
   // ── Study loop steps (the four pills) ─────────────────────────
@@ -906,6 +910,10 @@ export const am: Record<MessageKey, string> = {
   tagline: "ክፍተቱን ዝጋ",
   "nav-home": "መነሻ",
   "nav-study": "ጥናት",
+  "nav-books": "መጽሐፍት",
+  "nav-more": "ተጨማሪ",
+  "settings-title": "ቅንብሮች",
+  done: "እሺ",
   "select-language": "ቋንቋ ምረጥ",
 
   // ── Study loop steps (the four pills) ─────────────────────────

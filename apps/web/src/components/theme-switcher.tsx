@@ -14,7 +14,7 @@ import { useEffect } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { useTheme } from "@/components/theme-provider";
 
-const THEMES = [
+export const THEMES = [
   {
     value: "dark",
     label: "Ink",
