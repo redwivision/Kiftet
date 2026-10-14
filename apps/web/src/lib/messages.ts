@@ -365,6 +365,8 @@ export const en = {
   "toc-empty": "No contents were found in this book.",
   "toc-fallback-guessed":
     "We couldn't find this book's contents page, so this list is guessed from the page headings.",
+  "toc-fallback-unreadable":
+    "We found this book's contents on page {page}, but couldn't read it reliably, so the list below is guessed from the page headings. To set the chapters yourself, open the Pages tab.",
   "toc-fallback-refused":
     "The AI reader did not return a chapter list: {reason} The list below is therefore guessed from the page headings.",
   "hierarchy-report-label": "What we read from this book",
@@ -1238,6 +1240,8 @@ export const am: Record<MessageKey, string> = {
   "toc-empty": "በዚህ መጽሐፍ ውስጥ ይዘት አልተገኘም።",
   "toc-fallback-guessed":
     "የመጽሐፉን የይዘት ገጽ ማግኘት አልቻልንም፤ ስለዚህ ይህ ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው።",
+  "toc-fallback-unreadable":
+    "የመጽሐፉን የይዘት ገጽ በገጽ {page} ላይ አግኝተናል፣ ነገር ግን በአስተማማኝ ሁኔታ ማንበብ አልቻልንም፤ ስለዚህ ከታች ያለው ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው። ምዕራፎቹን እራስዎ ለማስተካከል የገጾች ትር ይክፈቱ።",
   "toc-fallback-refused":
     "የ AI አንባቢው የምዕራፍ ዝርዝር አልመለሰም፡ {reason} ስለዚህ ከታች ያለው ዝርዝር በግምት ከገጾቹ ራስጌዎች የተሰራ ነው።",
   "hierarchy-report-label": "ከዚህ መጽሐፍ የተነበበው",

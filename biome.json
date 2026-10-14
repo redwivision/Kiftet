@@ -22,6 +22,7 @@
       "!**/.react-router",
       "!**/routeTree.gen.ts",
       "!**/src/env.ts",
+      "!**/src/lib/__fixtures__/toc-corpus.ts",
       "!**/src-tauri",
       "!**/.nuxt",
       "!bts.jsonc",

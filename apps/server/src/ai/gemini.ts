@@ -302,6 +302,15 @@ export type AiService = {
    */
   parseContents(pages: ContentsPage[]): Promise<ContentsParse>;
   /**
+   * Read a table of contents from a *rendering* of its page.
+   *
+   * The last rung of the ladder, for the book whose page text will not come
+   * out at all: the client draws the contents page to an image on the device
+   * and sends it here. Gemini-only — the text-only provider cannot see it —
+   * so an image read is refused, not degraded, when that key is absent.
+   */
+  parseImageContents(image: ContentsImage): Promise<ContentsParse>;
+  /**
    * Name a textbook from its first pages. The companion to [parseContents]:
    * a cover leads with Government of Ethiopia banner text and the title page
    * lists writers and editors, so the one line that names the book needs an
@@ -1175,12 +1184,16 @@ export function buildAttemptOrder(
 export function buildProviderAttempts(
   gemini: boolean,
   groq: boolean,
+  vision = false,
 ): Array<{ provider: AiProvider; model: string }> {
   const attempts: Array<{ provider: AiProvider; model: string }> = [];
   if (gemini)
     for (const model of buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS))
       attempts.push({ provider: "gemini", model });
-  if (groq)
+  // Groq's only models are text-only, so a vision call must not consider it —
+  // admitting the attempt would spend a request to receive a prompt the model
+  // cannot see.
+  if (groq && !vision)
     for (const model of buildAttemptOrder(GROQ_MODELS, GROQ_MAX_ATTEMPTS))
       attempts.push({ provider: "groq", model });
   return attempts;
@@ -1192,11 +1205,24 @@ export function buildProviderAttempts(
  * be tested without a real key or a real provider — see
  * __overrideProviderForTests.
  */
+/** A page image to read directly. Vision is Gemini-only: Groq's models are
+ *  text-only, so a vision call never considers it. */
+export type ContentsImage = { mimeType: string; dataBase64: string };
+
+type AiCallOptions = {
+  /** A JSON Schema describing the reply, enforced by the provider. */
+  schema?: Record<string, unknown>;
+  /** Ask for plain text — a transcription — instead of JSON. */
+  text?: boolean;
+  /** Read this page image alongside the prompt. */
+  image?: ContentsImage;
+};
+
 type ProviderGenerate = (
   model: string,
   systemPrompt: string,
   userInput: string,
-  options: { schema?: Record<string, unknown>; text?: boolean },
+  options: AiCallOptions,
 ) => Promise<string>;
 
 // Function declarations are hoisted, so these may reference functions defined
@@ -1224,11 +1250,7 @@ export function __overrideProviderForTests(
 async function ask(
   systemPrompt: string,
   userInput: string,
-  options: {
-    /** A JSON Schema describing the reply, enforced by the provider. */
-    schema?: Record<string, unknown>;
-    /** Ask for plain text — a transcription — instead of JSON. */
-    text?: boolean;
+  options: AiCallOptions & {
     /** Per-operation cap, still bounded by the shared AI retry budget. */
     timeoutMs?: number;
   } = {},
@@ -1243,7 +1265,11 @@ async function ask(
   // route instead of a misleading "AI degraded" fallback.
   let lastBusy: unknown;
 
-  const attempts = buildProviderAttempts(isAiAvailable(), isGroqAvailable());
+  const attempts = buildProviderAttempts(
+    isAiAvailable(),
+    isGroqAvailable(),
+    Boolean(options.image),
+  );
   // Unreachable in practice — every caller guards on `anyAiAvailable` before
   // calling `ask` — but the ladder must not silently accept an empty order.
   if (attempts.length === 0) throw new Error("No AI provider configured");
@@ -1351,17 +1377,26 @@ async function geminiGenerate(
   model: string,
   systemPrompt: string,
   userInput: string,
-  options: {
-    schema?: Record<string, unknown>;
-    text?: boolean;
-  },
+  options: AiCallOptions,
 ): Promise<string> {
   const response = await genAI.models.generateContent({
     model,
     contents: [
       {
         role: "user",
-        parts: [{ text: `${systemPrompt}\n\n---\n${userInput}` }],
+        parts: [
+          { text: `${systemPrompt}\n\n---\n${userInput}` },
+          ...(options.image
+            ? [
+                {
+                  inlineData: {
+                    mimeType: options.image.mimeType,
+                    data: options.image.dataBase64,
+                  },
+                },
+              ]
+            : []),
+        ],
       },
     ],
     config: options.schema
@@ -1400,11 +1435,12 @@ async function groqGenerate(
   model: string,
   systemPrompt: string,
   userInput: string,
-  options: {
-    schema?: Record<string, unknown>;
-    text?: boolean;
-  },
+  options: AiCallOptions,
 ): Promise<string> {
+  // Groq has no vision models. `buildProviderAttempts` never routes an image
+  // here, so reaching this with one means the ladder was bypassed; failing
+  // loudly beats sending a blind prompt and returning a confident fiction.
+  if (options.image) throw new Error("Groq does not support image input");
   const wantsJson = !options.text;
   const response = await fetch(GROQ_ENDPOINT, {
     method: "POST",
@@ -1679,6 +1715,33 @@ const TRANSCRIBE_SYSTEM =
   "that is not a listed contents entry. " +
   "If these pages hold no table of contents, output nothing at all. " +
   "No JSON, no commentary, no words of your own.";
+
+/**
+ * The same transcription task, but from a photograph of the page.
+ *
+ * This rung exists for the book whose words will not extract and whose image
+ * OCR is unusable — a two-column contents, a decorative font, a scan so noisy
+ * the on-device reader returns fragments. The model is looking at the page, so
+ * it can read what the text layer never held. The instruction is otherwise
+ * identical to the text reader's, deliberately: the same client parser reads
+ * the answer, so the answer must have the same one-entry-per-line shape, with
+ * the printed page number at the end of each line.
+ */
+const TRANSCRIBE_IMAGE_SYSTEM =
+  "You are shown an image of a page from a textbook — often its table of contents. " +
+  "Transcribe its contents entries: output ONLY the entries, one per line, in book order. " +
+  "Each line is one entry exactly as the page prints it: the entry's words, then a space, " +
+  'then its page number — for example: "Unit 1: The Horn of Africa 17". ' +
+  "Read across columns and down them in reading order, and keep every title verbatim, " +
+  "in whatever script the book is written in. Keep the numbering the book uses " +
+  '("Unit 3", "UNIT TWO", "3.2"). Leave out dot leaders, running headers, page numbers ' +
+  "standing alone, and anything that is not a listed contents entry. " +
+  "If the image holds no table of contents, output nothing at all. " +
+  "No JSON, no commentary, no words of your own.";
+
+// A vision read carries an image and is slower than a text call; give it room
+// inside the shared budget without letting one page hold the whole request.
+const IMAGE_READ_TIMEOUT_MS = 20_000;
 
 // Bet 4 / phase 10, slice C: generated content follows the app's language
 // pref. Concept names are DATA (they come from the chapter's own checklist,
@@ -2061,6 +2124,30 @@ export const ai: AiService = {
       return { text: raw.trim().slice(0, 20_000) };
     } catch (error) {
       return degraded("parseContents", error, () => none);
+    }
+  },
+
+  async parseImageContents(image: ContentsImage): Promise<ContentsParse> {
+    const none: ContentsParse = { text: "" };
+    // A vision read needs Gemini specifically; Groq cannot see the image. Say
+    // so plainly rather than degrade, so the screen can offer the Pages tab
+    // instead of pretending the book was unreadable.
+    if (!isAiAvailable()) {
+      return {
+        text: "",
+        refused:
+          "The AI image reader is not configured on this server, so it was never asked.",
+      };
+    }
+    try {
+      const raw = await ask(
+        TRANSCRIBE_IMAGE_SYSTEM,
+        "Transcribe the table of contents shown in this image, one entry per line.",
+        { text: true, image, timeoutMs: IMAGE_READ_TIMEOUT_MS },
+      );
+      return { text: raw.trim().slice(0, 20_000) };
+    } catch (error) {
+      return degraded("parseImageContents", error, () => none);
     }
   },
 

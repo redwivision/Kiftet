@@ -19,6 +19,7 @@ import {
   ai,
   aiTelemetrySnapshot,
   buildStudyPlan,
+  type ContentsImage,
   focusScore,
   type GuideSection,
   gapAnalysisFrom,
@@ -635,6 +636,40 @@ router.post("/textbooks/contents", async (req, res) => {
   if (!allowAiRequest(req)) return aiBudgetError(res, req);
   try {
     return ok(res, await ai.parseContents(parsed.data.pages));
+  } catch (error) {
+    if (isAiBusy(error)) return aiBudgetError(res, req);
+    throw error;
+  }
+});
+
+// A rendered contents page, sent only as the very last rung: the text layer
+// would not come out and the on-device OCR was unusable. The client draws the
+// page to an image on the device, so this stays the same privacy promise as
+// the text read — the bytes are of the page, never the file. The ~4MB base64
+// cap is roughly a 300 DPI page, past which the payload itself is the problem.
+const contentsImageSchema = z.object({
+  image: z.object({
+    mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+    dataBase64: z.string().min(1).max(6_000_000),
+  }),
+});
+
+/**
+ * Read a textbook's table of contents from a picture of its page.
+ *
+ * The last rung, reached only after the text layer, the deterministic parse
+ * and the text reader have all failed. Gemini-only: the text-only provider is
+ * never tried, and a deployment without that key answers `refused` so the
+ * screen offers the Pages tab rather than blaming the book.
+ */
+router.post("/textbooks/contents-image", async (req, res) => {
+  const parsed = contentsImageSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  try {
+    const image: ContentsImage = parsed.data.image;
+    return ok(res, await ai.parseImageContents(image));
   } catch (error) {
     if (isAiBusy(error)) return aiBudgetError(res, req);
     throw error;

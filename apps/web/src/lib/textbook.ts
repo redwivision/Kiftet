@@ -8,21 +8,181 @@ import {
 } from "./ocr";
 import { ocrBookKey } from "./ocr-cache";
 import {
+  chapterListSignature,
   chaptersFromToc,
+  contentsFromPages,
   isSummaryOrReview,
   looksLikeTocPage,
   normalizeTocLine,
   parseToc,
   TOC_MAX_PAGES,
-  TOC_MIN_ENTRIES_PER_PAGE,
   TOC_SEARCH_PAGES,
-  TOC_TEXT_PAGES,
   type TocChapter,
   type TocEntry,
   titleLooksReal,
 } from "./toc";
 
 type ExtractedItem = { str?: string; hasEOL?: boolean };
+
+/**
+ * A pdfjs text item with the geometry we need to rebuild lines.
+ *
+ * `transform` is the pdfjs six-tuple `[a, b, c, d, e, f]`, where `e` is the x
+ * origin and `f` the y baseline; `width` is the shipped advance. Both are
+ * optional because the naive path above still works without them.
+ */
+type PdfTextItem = {
+  str?: string;
+  hasEOL?: boolean;
+  transform?: number[];
+  width?: number;
+};
+
+type PositionedRun = { text: string; x: number; y: number; w: number };
+
+const ANCHOR_HAS_LETTER_RE = /[A-Za-z\u1200-\u137f]/;
+
+function positionedRuns(items: readonly PdfTextItem[]): PositionedRun[] {
+  const runs: PositionedRun[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || !("str" in item)) continue;
+    const text = item.str ?? "";
+    const transform = item.transform;
+    if (!text || !transform || transform.length < 6) continue;
+    runs.push({
+      text,
+      x: transform[4],
+      y: transform[5],
+      w: item.width ?? 0,
+    });
+  }
+  return runs;
+}
+
+/**
+ * The x of a vertical gutter that splits this page into two readable columns,
+ * or null for a single-column page.
+ *
+ * A right-aligned column of page numbers looks exactly like a gutter, so the
+ * test refuses a split whose right side is *only* numbers: a real second column
+ * of a table of contents carries titles, not folios. That guard is the whole
+ * reason this is safe to run on every page.
+ */
+function twoColumnGutter(runs: readonly PositionedRun[]): number | null {
+  if (runs.length < 6) return null;
+  const left = Math.min(...runs.map((r) => r.x));
+  const right = Math.max(...runs.map((r) => r.x + r.w));
+  const span = right - left;
+  if (span <= 0) return null;
+  const midLo = left + span * 0.35;
+  const midHi = left + span * 0.65;
+  const spanning = runs
+    .map((r) => [r.x, r.x + r.w] as [number, number])
+    .filter(([a, b]) => b > midLo && a < midHi)
+    .sort((p, q) => p[0] - q[0]);
+  let cursor = midLo;
+  let bestGap = 0;
+  let gutter = -1;
+  for (const [a, b] of spanning) {
+    if (b <= midLo) continue;
+    if (a > cursor) {
+      const gap = a - cursor;
+      if (gap > bestGap) {
+        bestGap = gap;
+        gutter = (cursor + a) / 2;
+      }
+    }
+    cursor = Math.max(cursor, b);
+    if (cursor >= midHi) break;
+  }
+  if (cursor < midHi) {
+    const gap = midHi - cursor;
+    if (gap > bestGap) {
+      bestGap = gap;
+      gutter = (cursor + midHi) / 2;
+    }
+  }
+  if (gutter < 0 || bestGap < span * 0.03) return null;
+  const leftSide = runs.filter((r) => r.x + r.w <= gutter);
+  const rightSide = runs.filter((r) => r.x >= gutter);
+  if (leftSide.length < 3 || rightSide.length < 3) return null;
+  // A column of bare page numbers is a right-aligned folio, not a column.
+  if (!rightSide.some((r) => ANCHOR_HAS_LETTER_RE.test(r.text))) return null;
+  if (!leftSide.some((r) => ANCHOR_HAS_LETTER_RE.test(r.text))) return null;
+  return gutter;
+}
+
+function joinLineRuns(runs: readonly PositionedRun[]): string {
+  const sorted = [...runs].sort((a, b) => a.x - b.x);
+  let out = "";
+  let prevEnd: number | null = null;
+  for (const run of sorted) {
+    if (prevEnd !== null) {
+      const gap = run.x - prevEnd;
+      const charWidth =
+        run.w > 0 && run.text.length > 0 ? run.w / run.text.length : 3;
+      if (
+        gap > Math.max(1, charWidth * 0.3) &&
+        !out.endsWith(" ") &&
+        !run.text.startsWith(" ")
+      ) {
+        out += " ";
+      }
+    }
+    out += run.text;
+    prevEnd = run.x + run.w;
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
+function columnLines(runs: readonly PositionedRun[]): string[] {
+  const sorted = [...runs].sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines: string[] = [];
+  let current: PositionedRun[] = [];
+  let currentY: number | null = null;
+  for (const run of sorted) {
+    if (currentY === null || Math.abs(run.y - currentY) <= 2.5) {
+      current.push(run);
+      if (currentY === null) currentY = run.y;
+      continue;
+    }
+    const line = joinLineRuns(current);
+    if (line) lines.push(line);
+    current = [run];
+    currentY = run.y;
+  }
+  const last = joinLineRuns(current);
+  if (last) lines.push(last);
+  return lines;
+}
+
+/**
+ * Rebuild a page's lines from item geometry rather than content-stream order.
+ *
+ * The naive reader trusts the order pdfjs hands items back, which is the order
+ * the PDF draws them. Most books draw top-to-bottom, so that is right. A book
+ * that draws a two-column contents column-by-column *or* row-by-row will
+ * scramble — "Unit 1  Unit 3  Introduction  Genetics" — and no amount of line
+ * heuristics recovers it, because the damage is already done by the time a line
+ * is a string. This rebuilds from x/y so both layouts read correctly: cluster
+ * by baseline, sort left-to-right within a line, and when a gutter splits the
+ * page, read the left column top-to-bottom before the right.
+ *
+ * Exported because column detection is a judgement worth pinning in a test.
+ */
+export function reconstructPageLines(items: readonly PdfTextItem[]): string {
+  const runs = positionedRuns(items);
+  if (!runs.length) return "";
+  const gutter = twoColumnGutter(runs);
+  if (gutter === null) return columnLines(runs).join("\n");
+  const left: PositionedRun[] = [];
+  const right: PositionedRun[] = [];
+  for (const run of runs) {
+    const center = run.x + run.w / 2;
+    (center < gutter ? left : right).push(run);
+  }
+  return [...columnLines(left), ...columnLines(right)].join("\n");
+}
 
 // The units we cut and hand to AI are *chunks* — one TOC section at a time,
 // never the whole book. A chunk is derived from the PDF's own table of
@@ -914,6 +1074,7 @@ async function openPdf(file: File): Promise<{
   doc: PDFDocumentProxy;
   close: () => Promise<void>;
   pages: string[];
+  geometryPages: string[];
   outline: OutlineEntry[];
   audit: PageTextAudit;
 }> {
@@ -928,6 +1089,11 @@ async function openPdf(file: File): Promise<{
   const doc = await loadingTask.promise;
 
   const pages: string[] = [];
+  // The same pages rebuilt from item geometry, kept alongside so a book whose
+  // contents is laid out in two columns — which scrambles the naive read — can
+  // be re-read without paying for a second pass over the PDF. Built eagerly
+  // because the cost is one join per page, and the alternative is a re-open.
+  const geometryPages: string[] = [];
   for (let i = 1; i <= doc.numPages; i += 1) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
@@ -947,6 +1113,11 @@ async function openPdf(file: File): Promise<{
     // Drop undecodable glyphs per page, so a page that is half headers and
     // half control codes does not poison the chunk it lands in.
     pages.push(stripUndecodableGlyphs(lines.join("\n")).trim());
+    geometryPages.push(
+      stripUndecodableGlyphs(
+        reconstructPageLines(content.items as PdfTextItem[]),
+      ).trim(),
+    );
   }
 
   const outline = await readOutline(doc);
@@ -954,10 +1125,66 @@ async function openPdf(file: File): Promise<{
   return {
     doc,
     pages,
+    geometryPages,
     outline,
     audit: auditPageText(pages),
     close: () => loadingTask.destroy(),
   };
+}
+
+/**
+ * Render one PDF page to a JPEG a vision reader can transcribe.
+ *
+ * The last rung of the ladder needs a picture of the contents page, and this
+ * is where it is made: on the device, from the file the student already
+ * picked, so the same privacy promise the whole import makes holds — the bytes
+ * of one page travel, never the book. The render is scaled to a sensible width
+ * and JPEG-encoded, because a raw 300 DPI PNG is several megabytes and the
+ * vision model reads a contents page perfectly well at web resolution.
+ *
+ * Returns null rather than throwing when there is no DOM canvas (a test, a
+ * worker) or the page will not render: the caller treats "no image" exactly
+ * like "no reading".
+ */
+export async function renderPageImage(
+  file: File,
+  pageIndex: number,
+  options: { maxWidth?: number; quality?: number } = {},
+): Promise<ContentsImage | null> {
+  const maxWidth = options.maxWidth ?? 1400;
+  const quality = options.quality ?? 0.82;
+  try {
+    const pdf = await getPdfLib();
+    const loadingTask = pdf.getDocument({
+      data: new Uint8Array(await file.arrayBuffer()),
+    });
+    const doc = await loadingTask.promise;
+    try {
+      if (pageIndex < 0 || pageIndex >= doc.numPages) return null;
+      const page = await doc.getPage(pageIndex + 1);
+      const unscaled = page.getViewport({ scale: 1 });
+      const scale = Math.min(3, Math.max(1, maxWidth / unscaled.width));
+      const viewport = page.getViewport({ scale });
+      if (typeof document === "undefined") return null;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.floor(viewport.width));
+      canvas.height = Math.max(1, Math.floor(viewport.height));
+      const context = canvas.getContext("2d");
+      if (!context) return null;
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      canvas.width = 0;
+      canvas.height = 0;
+      const comma = dataUrl.indexOf(",");
+      if (comma < 0) return null;
+      return { mimeType: "image/jpeg", dataBase64: dataUrl.slice(comma + 1) };
+    } finally {
+      await loadingTask.destroy();
+    }
+  } catch (error) {
+    console.warn("[textbook] could not render a page for the AI reader", error);
+    return null;
+  }
 }
 
 type PageSegment = { title: string; start: number; end: number };
@@ -999,16 +1226,24 @@ function chunkByOutline(
  * Exported because the level this picks is a judgement worth pinning — see the
  * test for the book whose first unit opens on page 0.
  */
-export function chaptersFromOutline(
-  pages: string[],
+/**
+ * The outline entries that begin a chapter, deduped by page, or null when the
+ * tree is too shallow to trust.
+ *
+ * Shared by both outline readers below so the readable path and the OCR path
+ * cut the book at exactly the same places — a book should not get one structure
+ * when its text extracts and a different one when it does not.
+ */
+function outlineCuts(
   outline: OutlineEntry[],
-): ImportChunk[] | null {
+  pageCount: number,
+): { cuts: OutlineEntry[]; valid: OutlineEntry[] } | null {
   const valid = outline
     // `>= 0`, not `> 0`: a book whose first unit opens on its own first page
     // puts that unit at index 0, and dropping it leaves one top-level entry —
     // one too few to trust the top level, so the whole hierarchy collapses onto
     // the second level and the units disappear from the tree.
-    .filter((entry) => entry.pageIndex >= 0 && entry.pageIndex < pages.length)
+    .filter((entry) => entry.pageIndex >= 0 && entry.pageIndex < pageCount)
     .sort((a, b) => a.pageIndex - b.pageIndex);
   const topLevel = valid.filter((entry) => !entry.path.includes(" · "));
   let chapters = topLevel.length >= 2 ? topLevel : [];
@@ -1022,7 +1257,70 @@ export function chaptersFromOutline(
     (entry, index) =>
       index === 0 || entry.pageIndex !== chapters[index - 1]?.pageIndex,
   );
-  if (cuts.length < 2) return null;
+  return cuts.length >= 2 ? { cuts, valid } : null;
+}
+
+/**
+ * Chapters from a PDF's own bookmarks, needing no readable body text.
+ *
+ * The OCR path's counterpart to `chaptersFromOutline`: the same chapter ranges
+ * and topics, taken only from the outline's page indices. A book that scanned
+ * badly can still carry a perfect bookmark tree, and those page numbers are
+ * exact — better than anything read off a broken text layer or a heading scan —
+ * so they are used before either. Returns the `contents`-shaped list the OCR
+ * chunk builder wants; the bodies are recognized later, via the reader.
+ */
+export function chaptersFromOutlineRanges(
+  pages: string[],
+  outline: OutlineEntry[],
+):
+  | {
+      title: string;
+      start: number;
+      end: number;
+      topics: TopicEntry[];
+    }[]
+  | null {
+  const found = outlineCuts(outline, pages.length);
+  if (!found) return null;
+  const { cuts, valid } = found;
+  return cuts.map((entry, index) => {
+    const start = entry.pageIndex;
+    const end = Math.min(
+      cuts[index + 1]?.pageIndex ?? pages.length,
+      pages.length,
+    );
+    const prefix = `${entry.path} · `;
+    return {
+      title: entry.title.trim(),
+      start,
+      end,
+      topics: valid
+        .filter(
+          (candidate) =>
+            candidate.path.startsWith(prefix) &&
+            candidate.pageIndex >= start &&
+            candidate.pageIndex < end &&
+            // A unit's summary and review sections are back matter, not study
+            // material — the PDF's own outline lists them like any topic.
+            !isSummaryOrReview(candidate.title),
+        )
+        .map((candidate) => ({
+          path: candidate.path.slice(prefix.length),
+          title: candidate.title,
+          page: candidate.pageIndex,
+        })),
+    };
+  });
+}
+
+export function chaptersFromOutline(
+  pages: string[],
+  outline: OutlineEntry[],
+): ImportChunk[] | null {
+  const found = outlineCuts(outline, pages.length);
+  if (!found) return null;
+  const { cuts, valid } = found;
 
   const chunks = cuts.flatMap((entry, index) => {
     const start = entry.pageIndex;
@@ -1153,47 +1451,10 @@ function cleanHeading(heading: string): string {
   return trimmed;
 }
 
-/**
- * The book's own contents, read from the text layer.
- *
- * A book with no bookmarks is not a book without a contents page — most
- * textbooks print one, and when the text extracts it can simply be read, with
- * no OCR and no waiting. This is the cheapest possible source of the real
- * hierarchy: the book stating its own units, topics and page numbers, verbatim.
- */
-function readTextContents(pages: string[]): {
-  tocStart: number;
-  text: string;
-  pagesRead: number;
-  chapters: TocChapter[];
-} | null {
-  const tocStart = pages.findIndex(
-    (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
-  );
-  if (tocStart < 0) return null;
-
-  // Page at a time, and stop where the contents stops. This book's contents run
-  // to two pages; the third is the first page of Unit 1, which repeats its own
-  // title and number and would otherwise be read as a ninth unit — a duplicate
-  // of the first, with the book's real Unit 1 sitting above it.
-  let text = "";
-  let chapters: TocChapter[] = [];
-  let pagesRead = 0;
-  const limit = Math.min(tocStart + TOC_TEXT_PAGES, pages.length);
-  for (let page = tocStart; page < limit; page += 1) {
-    const grown = chaptersFromToc(parseToc(`${text}\n${pages[page]}`));
-    if (
-      chapters.length > 0 &&
-      grown.length - chapters.length < TOC_MIN_ENTRIES_PER_PAGE
-    ) {
-      break;
-    }
-    text += `\n${pages[page]}`;
-    chapters = grown;
-    pagesRead += 1;
-  }
-  return chapters.length > 0 ? { tocStart, text, chapters, pagesRead } : null;
-}
+// The text-layer contents walk lives in `toc.ts` as `contentsFromPages`, beside
+// the parser it drives. It is pure — page strings in, chapters out — so the
+// golden-corpus test can exercise the exact logic the app runs without opening
+// a PDF or standing up OCR.
 
 /**
  * The last page of the front matter: the cover and the book's own contents.
@@ -1343,12 +1604,25 @@ async function readContentsPages(
     );
     pagesRead += 1;
     if (pageResult) recognized.push(pageResult);
-    const grown = parseToc(joinOcrPages([pageResult]));
-    // One thin page mid-contents — a blank verso, a fold — should not be read as
-    // the end of it, so only stop once the walk has found something to lose.
-    if (chapters.length > 0 && grown.length < TOC_MIN_ENTRIES_PER_PAGE) break;
-    text += `\n${pageResult?.text ?? ""}`;
-    chapters = chaptersFromToc(parseToc(text));
+    const pageText = pageResult?.text ?? "";
+    // The same rule the text-layer walk uses: a page joins the contents only
+    // while it still looks like one. Counting entries per page — and stopping
+    // once a page held fewer than three — cut a genuine last contents page off
+    // whenever it listed only one or two units, dropping them without a word.
+    if (page > start && !looksLikeTocPage(pageText)) break;
+    const candidate = `${text}\n${pageText}`;
+    const grown = chaptersFromToc(parseToc(candidate));
+    // A page that looks like contents yet adds nothing new ends the walk, so a
+    // stray blank verso cannot pull the rest of the front matter in.
+    if (
+      page > start &&
+      chapters.length > 0 &&
+      chapterListSignature(grown) === chapterListSignature(chapters)
+    ) {
+      break;
+    }
+    text = candidate;
+    chapters = grown;
   }
   return { chapters, text, pagesRead, recognized };
 }
@@ -1372,7 +1646,7 @@ export function tocPageOffset(
   segments: PageSegment[],
 ): number | null {
   const pairs = Math.min(chapters.length, segments.length);
-  if (pairs < 2) return null;
+  if (pairs < 1) return null;
   const tally = new Map<number, number>();
   for (let i = 0; i < pairs; i += 1) {
     const offset = segments[i].start - chapters[i].page;
@@ -1387,10 +1661,10 @@ export function tocPageOffset(
       bestCount = count;
     }
   }
-  // One coincidence is not a pattern. Two agreeing pairs is the floor, and the
-  // winner must hold more of them than any rival.
-  if (best === null || bestCount < 2) return null;
-  return best;
+  if (best === null) return null;
+  if (bestCount >= 2) return best;
+  if (pairs === 1) return best;
+  return null;
 }
 
 /**
@@ -1518,6 +1792,24 @@ export type ContentsTranscript = {
  */
 export type ContentsReader = (
   probe: TocProbe,
+) => Promise<ContentsTranscript | null>;
+
+/**
+ * A rendered page image a vision reader can transcribe.
+ *
+ * `dataBase64` is the raw base64 payload with no data-URL prefix; `mimeType`
+ * names the encoding. The image is drawn on the device and never the file, so
+ * the same privacy promise the text read makes holds here too.
+ */
+export type ContentsImage = { mimeType: string; dataBase64: string };
+
+/**
+ * Reads a contents out of a page image. Injected for the same reason as
+ * [ContentsReader]: a plan built in a test must be the plan a student gets,
+ * with no network in it.
+ */
+export type ContentsImageReader = (
+  image: ContentsImage,
 ) => Promise<ContentsTranscript | null>;
 
 /**
@@ -1686,9 +1978,50 @@ function looseTranscriptChapters(text: string): TocChapter[] {
  * Keeps Ethiopic letters, which have no case but do have punctuation the
  * comparison should not care about.
  */
+/**
+ * Small number words as digits, so "Unit Two: Plants" in a running header
+ * matches "Unit 2: Plants" in the contents — a book that numbers one way in one
+ * place and essays it in another is extremely common, and without this the
+ * offset cross-check throws away a perfectly good pairing. Includes Afaan
+ * Oromoo, because the books are set in three languages.
+ */
+const ANCHOR_NUMBER_WORDS: Record<string, string> = {
+  one: "1",
+  two: "2",
+  three: "3",
+  four: "4",
+  five: "5",
+  six: "6",
+  seven: "7",
+  eight: "8",
+  nine: "9",
+  ten: "10",
+  eleven: "11",
+  twelve: "12",
+  thirteen: "13",
+  fourteen: "14",
+  fifteen: "15",
+  sixteen: "16",
+  seventeen: "17",
+  eighteen: "18",
+  nineteen: "19",
+  twenty: "20",
+  tokko: "1",
+  lama: "2",
+  sadii: "3",
+  afur: "4",
+  shan: "5",
+  "ja'a": "6",
+  torba: "7",
+  saddet: "8",
+  sagal: "9",
+  kudhan: "10",
+};
+
 function normalizeAnchor(text: string): string {
   return text
     .toLowerCase()
+    .replace(/[a-z']+/g, (word) => ANCHOR_NUMBER_WORDS[word] ?? word)
     .replace(/[^0-9a-z\u1200-\u137f]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
@@ -1714,6 +2047,27 @@ function headingAnchorWeight(title: string, line: string): 0 | 1 | 2 {
     return 2;
   }
   if (HEADING_RE.test(line) && normLine.includes(normTitle)) return 1;
+  // A title the book prints once and a header that names it in different words
+  // — an OCR misread word, an omitted article, a swapped synonym — still shares
+  // most of its words. Judge by coverage of the title's own distinctive tokens
+  // (short connective words are excluded, since they appear on every page), and
+  // only when the line is not wildly longer than the title, so a body sentence
+  // that happens to contain the words cannot outrank a real header.
+  const titleTokens = normTitle.split(" ").filter((t) => t.length >= 5);
+  if (titleTokens.length >= 2) {
+    const lineTokens = new Set(normLine.split(" "));
+    const hit = titleTokens.filter((t) => lineTokens.has(t)).length;
+    const coverage = hit / titleTokens.length;
+    // A header is about as long as the title it names; a body sentence that
+    // merely contains those words runs on. Bound the length so only the former
+    // can match, unless the line is unmistakably a heading.
+    const looksLikeHeading =
+      normLine.length <= normTitle.length * 1.6 || HEADING_RE.test(line);
+    if (looksLikeHeading) {
+      if (coverage === 1) return 2;
+      if (coverage >= 0.6) return 1;
+    }
+  }
   return 0;
 }
 
@@ -1838,60 +2192,150 @@ export async function transcribeModelContents(
     if (outcome) outcome.reason = reason;
     return null;
   };
-  const unplaceable =
-    "The AI reader's printed page numbers could not be matched to the pages of this book, so its reading was discarded.";
   if (!probe.pages.length) {
     return refuse("There was no opening text to send to the AI reader.");
   }
   try {
     const result = await readContents(probe);
-    if (!result) {
-      return refuse("The AI reader returned no answer.");
-    }
-    if (result.refused) return refuse(result.refused);
-    if (!result.text.trim()) {
-      return refuse("The AI reader found no contents in the opening pages.");
-    }
-    const parsed = transcriptChapters(result.text);
-    if (parsed.length < TOC_MODEL_MIN_UNITS) {
-      // Show what the reader was looking at: the next paste of this reason
-      // then carries the book's own contents format, which is the one thing
-      // that tells us which line shape needs reading.
-      const firstLine = result.text
-        .split("\n")
-        .map((line) => line.trim())
-        .find(Boolean);
-      return refuse(
-        "The AI reader found fewer than two units in these pages, which is not a contents." +
-          (firstLine ? ` It began: "${firstLine.slice(0, 60)}".` : ""),
-      );
-    }
-    const offset = offsetByTitle(parsed, pages);
-    if (offset === null) {
-      // Name the unit that could not be placed: the next report of this reason
-      // then says whether the book is missing the title entirely or prints it
-      // in a shape the matcher does not know.
-      const first = parsed[0];
-      return refuse(
-        unplaceable +
-          (first
-            ? ` It read "${first.title}" from printed page ${first.page}, and no page of the book names it.`
-            : ""),
-      );
-    }
-    const placed = chaptersFromContents(parsed, offset, pageCount);
-    if (!placed) return refuse(unplaceable);
-    return {
-      units: parsed.map((chapter) => ({
-        number: String(chapter.unit),
-        title: chapter.title,
-        page: chapter.page,
-      })),
-      chapters: placed,
-    };
+    return placeTranscript(
+      result,
+      pages,
+      pageCount,
+      "the opening pages",
+      outcome,
+    );
   } catch (error) {
     console.warn(
       "[textbook] model contents read failed; using detected headings",
+      error,
+    );
+    return refuse(
+      error instanceof Error && error.message
+        ? error.message
+        : "The AI reader could not be reached.",
+    );
+  }
+}
+
+/**
+ * The placed chapters a reader produced, in the shape `planImport` consumes.
+ * Shared by the text and image readers because both end the same way: parse
+ * the transcript with the client's own reader, then measure where the printed
+ * numbers land among the book's pages.
+ */
+type PlacedContents = {
+  units: { number: string; title: string; page: number }[];
+  chapters: {
+    title: string;
+    start: number;
+    end: number;
+    topics: TopicEntry[];
+  }[];
+};
+
+/**
+ * Turn a reader's transcript into placed chapters, or refuse it in words.
+ *
+ * Every way this can fail ends in null rather than a throw, and writes the
+ * reason onto `outcome` when one was supplied — the screen then says the list
+ * below is a guess and why the better answer never arrived. `subject` names
+ * what the model was looking at ("the opening pages" / "the contents image"),
+ * so the refusal reads truthfully for whichever rung produced it.
+ */
+function placeTranscript(
+  result: ContentsTranscript | null,
+  pages: string[],
+  pageCount: number,
+  subject: string,
+  outcome?: ModelReadOutcome,
+): PlacedContents | null {
+  const refuse = (reason: string): null => {
+    if (outcome) outcome.reason = reason;
+    return null;
+  };
+  const unplaceable =
+    "The AI reader's printed page numbers could not be matched to the pages of this book, so its reading was discarded.";
+  if (!result) {
+    return refuse("The AI reader returned no answer.");
+  }
+  if (result.refused) return refuse(result.refused);
+  if (!result.text.trim()) {
+    return refuse(`The AI reader found no contents in ${subject}.`);
+  }
+  const parsed = transcriptChapters(result.text);
+  if (parsed.length < TOC_MODEL_MIN_UNITS) {
+    // Show what the reader was looking at: the next paste of this reason then
+    // carries the book's own contents format, which is the one thing that
+    // tells us which line shape needs reading.
+    const firstLine = result.text
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean);
+    return refuse(
+      `The AI reader found fewer than two units in ${subject}, which is not a contents.` +
+        (firstLine ? ` It began: "${firstLine.slice(0, 60)}".` : ""),
+    );
+  }
+  const offset = offsetByTitle(parsed, pages);
+  if (offset === null) {
+    // Name the unit that could not be placed: the next report of this reason
+    // then says whether the book is missing the title entirely or prints it in
+    // a shape the matcher does not know.
+    const first = parsed[0];
+    return refuse(
+      unplaceable +
+        (first
+          ? ` It read "${first.title}" from printed page ${first.page}, and no page of the book names it.`
+          : ""),
+    );
+  }
+  const placed = chaptersFromContents(parsed, offset, pageCount);
+  if (!placed) return refuse(unplaceable);
+  return {
+    units: parsed.map((chapter) => ({
+      number: String(chapter.unit),
+      title: chapter.title,
+      page: chapter.page,
+    })),
+    chapters: placed,
+  };
+}
+
+/**
+ * The image rung of the ladder: render the contents page, ask the vision
+ * reader to transcribe it, and place it exactly as the text reader's answer is
+ * placed.
+ *
+ * A different input, the same contract: best-effort, reason-carrying, never a
+ * throw. Kept separate from [transcribeModelContents] only because the reader
+ * takes an image rather than a text probe; the whole back half is shared.
+ */
+export async function transcribeImageContents(
+  readImage: ContentsImageReader,
+  image: ContentsImage | null,
+  pages: string[],
+  pageCount: number,
+  outcome?: ModelReadOutcome,
+): Promise<PlacedContents | null> {
+  const refuse = (reason: string): null => {
+    if (outcome) outcome.reason = reason;
+    return null;
+  };
+  if (!image) {
+    return refuse("There was no page image to send to the AI reader.");
+  }
+  try {
+    const result = await readImage(image);
+    return placeTranscript(
+      result,
+      pages,
+      pageCount,
+      "the contents image",
+      outcome,
+    );
+  } catch (error) {
+    console.warn(
+      "[textbook] model image contents read failed; using detected headings",
       error,
     );
     return refuse(
@@ -2131,6 +2575,8 @@ export async function planImport(
   source: ImportSource,
   language = "en",
   readContents?: ContentsReader,
+  readImage?: ContentsImageReader,
+  renderImage?: (pageIndex: number) => Promise<ContentsImage | null>,
 ): Promise<ImportPlan> {
   // Filled in as the work proceeds and handed back with the plan, so a reading
   // that looks wrong on screen can be told apart from a display of a good
@@ -2168,7 +2614,18 @@ export async function planImport(
     };
   }
 
-  const { doc, pages, outline, audit, close } = await openPdf(source.file);
+  const {
+    doc,
+    pages: naivePages,
+    geometryPages,
+    outline,
+    audit,
+    close,
+  } = await openPdf(source.file);
+  // Geometry-rebuilt pages are only swapped in when the naive read cannot see
+  // a contents at all; every other path keeps the byte-for-byte text the
+  // pipeline has always used.
+  let pages = naivePages;
   report.pageCount = pages.length;
   report.outlineEntries = outline.length;
   let open = true;
@@ -2192,7 +2649,18 @@ export async function planImport(
         // No bookmarks. A book that still has a readable text layer states its
         // own structure outright on its contents page, and reading that is free
         // and instant — strictly better than guessing chapters out of headings.
-        const found = readTextContents(pages);
+        let found = contentsFromPages(pages);
+        if (!found && geometryPages.join("\n") !== pages.join("\n")) {
+          // The naive read found no contents. A two-column contents page is the
+          // usual reason: it scrambles into "Unit 1  Unit 3  Introduction
+          // Genetics". Re-read from geometry, and only adopt it if it is what
+          // finally sees a contents — never as a general replacement.
+          const geometric = contentsFromPages(geometryPages);
+          if (geometric) {
+            pages = geometryPages;
+            found = geometric;
+          }
+        }
         report.contentsPage = found ? found.tocStart : null;
         // Where each unit actually starts, which is what turns the printed page
         // numbers on the contents into page indices. Tolerant of a running
@@ -2242,6 +2710,42 @@ export async function planImport(
             outcome,
           );
           report.modelReason = outcome.reason;
+          if (model) {
+            built = model.chapters;
+            usedModel = true;
+            report.modelRead = "used";
+            report.modelReason = null;
+            report.modelUnits = model.units.map((unit) => ({
+              number: unit.number,
+              title: unit.title,
+              page: unit.page,
+            }));
+          }
+        }
+
+        // The last rung, fired only when a contents page was actually seen: a
+        // page the book states its structure on, which the text parse and the
+        // text reader both failed to read, is exactly the page worth one vision
+        // call. No detected contents page means no well-defined image to send,
+        // so the heading scan stands without spending anything.
+        if (
+          !built &&
+          readImage &&
+          renderImage &&
+          report.contentsPage !== null
+        ) {
+          const outcome: ModelReadOutcome = { reason: null };
+          const image = await renderImage(report.contentsPage).catch(
+            () => null,
+          );
+          const model = await transcribeImageContents(
+            readImage,
+            image,
+            pages,
+            pages.length,
+            outcome,
+          );
+          report.modelReason = outcome.reason ?? report.modelReason;
           if (model) {
             built = model.chapters;
             usedModel = true;
@@ -2320,6 +2824,12 @@ export async function planImport(
     // the only ones that state the structure outright, so they are read before
     // anything else — two or three pages, a few seconds, against the ~16
     // minutes the whole file would take.
+    // A bookmarked book that scanned badly still states its structure in the
+    // PDF's own bookmark tree. Those page indices are exact, so they are read
+    // before the broken text layer or a heading scan is trusted — and reading
+    // them costs nothing, which also spares the contents pages their OCR.
+    const outlineChapters =
+      outline.length >= 2 ? chaptersFromOutlineRanges(pages, outline) : null;
     let contents:
       | {
           title: string;
@@ -2327,7 +2837,7 @@ export async function planImport(
           end: number;
           topics: TopicEntry[];
         }[]
-      | null = null;
+      | null = outlineChapters;
     const tocStart = pages.findIndex(
       (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
     );
@@ -2335,7 +2845,7 @@ export async function planImport(
     // The pages the contents walk recognized. Kept so a model read afterwards
     // can use text the OCR already paid for instead of recognizing again.
     let walkRecognized: OcrPageResult[] = [];
-    if (tocStart >= 0) {
+    if (!contents && tocStart >= 0) {
       try {
         // Read the contents one page at a time and stop at the first page that
         // is not one. The book's contents run to two pages; the third is the
@@ -2447,6 +2957,34 @@ export async function planImport(
       }
     }
 
+    // The text reader could not read the contents either. Fall to the image
+    // rung, but only when a contents page was actually seen: the render targets
+    // that page, so a book that never named one has no page to send. A success
+    // here is placed against the book's own running headers in `pages`, which
+    // is the only text this book reliably has.
+    if (!contents && readImage && renderImage && report.contentsPage !== null) {
+      const outcome: ModelReadOutcome = { reason: null };
+      const image = await renderImage(report.contentsPage).catch(() => null);
+      const model = await transcribeImageContents(
+        readImage,
+        image,
+        pages,
+        pages.length,
+        outcome,
+      );
+      report.modelRead = model ? "used" : "refused";
+      report.modelReason = outcome.reason ?? report.modelReason;
+      if (model) {
+        usedModel = true;
+        report.modelUnits = model.units.map((unit) => ({
+          number: unit.number,
+          title: unit.title,
+          page: unit.page,
+        }));
+        contents = model.chapters;
+      }
+    }
+
     const chunks = uniqueTitles(
       contents
         ? contents.map((c) => ({
@@ -2465,9 +3003,11 @@ export async function planImport(
     );
     report.source = usedModel
       ? "model-contents"
-      : contents
-        ? "ocr-contents"
-        : "ocr-headings";
+      : outlineChapters
+        ? "pdf-outline"
+        : contents
+          ? "ocr-contents"
+          : "ocr-headings";
     report.tree = flatTree(importTocTree(chunks));
     logHierarchy(report);
 

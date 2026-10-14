@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   chaptersFromToc,
+  contentsFromPages,
   isSummaryOrReview,
   looksLikeTocPage,
   parseToc,
@@ -231,4 +232,96 @@ test("a real chapter that mentions review or summary is left alone", () => {
   ]) {
     expect(isSummaryOrReview(title)).toBe(false);
   }
+});
+
+// ─── Universality ───────────────────────────────────────────────────────
+//
+// "Works on every textbook" means the parser must not depend on the house
+// style of the handful of books it was written against. These are the shapes
+// other books actually use: leaderless contents, bare numeric chapters, dashes
+// for leaders, word numbers, and contents that continue for many pages.
+
+test("a leaderless contents page is still recognised by its shape", () => {
+  // No English word, no dot leaders — just numbered lines that each end in a
+  // page number. A book whose leaders did not extract still has this shape.
+  const page = [
+    "Kapitel 1 Einführung 1",
+    "1.1 Grundlagen 3",
+    "1.2 Methoden 7",
+    "Kapitel 2 Zellen 12",
+    "2.1 Membranen 13",
+  ].join("\n");
+  expect(looksLikeTocPage(page)).toBe(true);
+});
+
+test("a bare-numbered chapter line is a unit when a unit word leads it", () => {
+  const found = parseToc(
+    [
+      "Unit 1 Plants 17",
+      "1.1 Leaves 18",
+      "Unit 2 Animals 40",
+      "2.1 Fish 41",
+    ].join("\n"),
+  );
+  expect(found.map((e) => e.kind)).toEqual([
+    "unit",
+    "section",
+    "unit",
+    "section",
+  ]);
+  expect(found[0]).toMatchObject({ unit: 1, title: "Plants", page: 17 });
+});
+
+test("dashes, ellipses and middle dots all count as leaders", () => {
+  const found = parseToc(
+    [
+      "Chapter 1 — Introduction ———— 1",
+      "1.1 Some topic ......... 2",
+      "1.2 Another topic ······ 3",
+    ].join("\n"),
+  );
+  expect(found.map((e) => e.kind)).toEqual(["unit", "section", "section"]);
+  expect(found[0]).toMatchObject({ unit: 1, title: "Introduction", page: 1 });
+  expect(found[1]).toMatchObject({ title: "Some topic", page: 2 });
+  expect(found[2]).toMatchObject({ title: "Another topic", page: 3 });
+});
+
+test("no leader glyph survives into a title", () => {
+  const found = parseToc("Unit 1: Cells ————— 1\n1.1 The cell ………… 2");
+  for (const entry of found) {
+    expect(/[—…·_�]/.test(entry.title)).toBe(false);
+  }
+});
+
+test("an Afaan Oromoo contents page is read", () => {
+  const oromo = [
+    "Qabiyyee",
+    "Kutaa 1: Seensa Saayinsii 1",
+    "1.1 Yaada Saayinsii 3",
+    "1.2 Tooftaa Saayinsii 7",
+    "Kutaa 2: Lubbuu 12",
+    "2.1 Biqiltuu 13",
+  ].join("\n");
+  const found = chaptersFromToc(parseToc(oromo));
+  expect(found.map((c) => [c.unit, c.title])).toEqual([
+    [1, "Seensa Saayinsii"],
+    [2, "Lubbuu"],
+  ]);
+  expect(found[0].topics).toHaveLength(2);
+});
+
+test("a contents that spans many pages is not cut short by a thin one", () => {
+  // Page 1 lists four units, then two later pages list one unit each. A rule
+  // that stopped once a page added fewer than three units would drop those
+  // tails; the walk follows the shape, not the count.
+  const pages = [
+    "Contents",
+    "Unit 1 Introduction 1\n1.1 Basics 2\nUnit 2 Cells 3\n2.1 Membranes 4\nUnit 3 Genetics 5\n3.1 DNA 6\nUnit 4 Ecology 7\n4.1 Food webs 8",
+    "Unit 5 Evolution 9\n5.1 Natural selection 10",
+    "Unit 6 Physiology 11\n6.1 The heart 12",
+    "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy.",
+  ];
+  const read = contentsFromPages(pages);
+  expect(read?.chapters.map((c) => c.unit)).toEqual([1, 2, 3, 4, 5, 6]);
+  expect(read?.pagesRead).toBe(4);
 });

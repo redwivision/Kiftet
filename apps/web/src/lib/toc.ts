@@ -68,11 +68,11 @@ const SECTION_RE = new RegExp(
  * them.
  */
 const UNIT_WORD =
-  "unit|chapter|lesson|part|module|topic|section|boqonnaa|ምዕራፍ|ክፍል|ትምህርት";
+  "unit|chapter|lesson|part|module|topic|section|boqonnaa|kutaa|barnoota|cutubaa|barruu|seensa|ምዕራፍ|ክፍል|ትምህርት";
 /** A unit's own number: an integer, a dotted integer ("2.1"), or a roman numeral. */
 const UNIT_NUM = String.raw`\d{1,3}(?:\s*\.\s*\d+)*|[IVXLCDM]{1,7}`;
 const UNIT_RE = new RegExp(
-  String.raw`^(?:${UNIT_WORD})\s+(${UNIT_NUM})\s*[:.-]?\s*(.+?)\s+(\d{1,3})$`,
+  String.raw`^(?:${UNIT_WORD})\s+(${UNIT_NUM})\s*[:.\-\u2013\u2014]?\s*(.+?)\s+(\d{1,3})$`,
   "i",
 );
 const STARTS_LIKE_ENTRY_RE = new RegExp(String.raw`^${NUMBER_SOURCE}\s+\S`);
@@ -160,6 +160,8 @@ export function isSummaryOrReview(title: string): boolean {
   const bare = title
     .trim()
     .replace(/^unit\s+/i, "")
+    .replace(/^part\s+/i, "")
+    .replace(/^chapter\s+/i, "")
     .replace(/^\d+(?:\.\d+)*[.)]?\s*/, "")
     .trim()
     .toLowerCase();
@@ -177,12 +179,18 @@ function endsWithPageNumber(line: string): boolean {
   return /\d{1,3}\s*$/.test(line);
 }
 
-function takeEntry(line: string, into: TocEntry[]): boolean {
-  // A leader that lands immediately before the page number survives the
-  // run-collapsing above, because on its own it is not a run — leaving it as a
-  // stray glyph welded to the end of the title ("Behaviour �").
-  const tidy = (title: string) => title.trim().replace(/[\s.·…_�]+$/, "");
+// Bare chapter/section lines need no special case: `UNIT_RE`'s separator is
+// optional, so "Unit 1 Plants 17" already parses, and `SECTION_RE` already
+// reads "1 Introduction 5". What they need is a title that reads as a title,
+// which is what `tidyTitle` guarantees.
+function tidyTitle(title: string): string {
+  return title
+    .trim()
+    .replace(/[\s.·…_�\u00a0\t]+$/, "")
+    .trim();
+}
 
+function takeEntry(line: string, into: TocEntry[]): boolean {
   const unit = line.match(UNIT_RE);
   if (unit) {
     if (!titleLooksReal(unit[2])) return false;
@@ -191,7 +199,7 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
     into.push({
       kind: "unit",
       unit: number,
-      title: tidy(unit[2]),
+      title: tidyTitle(unit[2]),
       page: Number(unit[3]),
     });
     return true;
@@ -208,7 +216,7 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
     into.push({
       kind: "section",
       path,
-      title: tidy(section[2]),
+      title: tidyTitle(section[2]),
       page: Number(section[3]),
     });
     return true;
@@ -230,13 +238,19 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
  * numbering — "1.2" and the trailing "1.2." are both one dot each — and removing
  * those would merge a section's number into its title.
  */
-const LEADER_RUN = /(?:\s*[.·…_�]\s*){2,}/g;
+const LEADER_RUN =
+  /(?:\s*[.\u00b7\u2022\u2026\u2013\u2014\u2015\u00a0\u2002\u2003\u2009\u002d\u2212\u2010\u2011\u2012\u2060_�\u00ad\t]\s*){2,}/g;
 
 /** One contents line, with its leaders collapsed and its spacing normalized.
  *  Exported: the transcript reader in `textbook.ts` normalizes its lines the
  *  same way before reading them loosely. */
 export function normalizeTocLine(line: string): string {
-  return line.replace(/\s+/g, " ").replace(LEADER_RUN, " ").trim();
+  // Collapse all forms of dotted/ruled leaders; collapse multiple spaces and tabs.
+  return line
+    .replace(/[\u00a0\t]+/g, " ")
+    .replace(LEADER_RUN, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -318,6 +332,19 @@ export function chaptersFromToc(entries: TocEntry[]): TocChapter[] {
 const LEADER_TEST = /(?:\s*[.·…_�]\s*){2,}/;
 
 /**
+ * How a book announces its contents, in every language it might use.
+ *
+ * The obvious tell is the word "contents" — but that is English on a page that
+ * may be set in Amharic or Afaan Oromoo, and such a page can carry its
+ * structure perfectly while never saying an English word. "ይዘት" (content),
+ * "ዝርዝር" (list), "ማውጫ" (index) and the Afaan Oromoo "qabiyyee"/"tarreeffama"
+ * are the headings those books actually print, so they are matched directly
+ * rather than left to the shape test alone.
+ */
+const CONTENTS_HEADING_RE =
+  /\b(?:table\s+of\s+contents|contents)\b|ይዘት|ዝርዝር|ማውጫ|qabiyyee|tarreeffama/i;
+
+/**
  * Does this page look like the start of a contents section?
  *
  * The obvious tell is the word "contents" — but that is an English word on a
@@ -329,20 +356,37 @@ const LEADER_TEST = /(?:\s*[.·…_�]\s*){2,}/;
  * lines that end in a page number, most of them joined to their title by a run
  * of dots. Requiring the dots as well as the numbers is what keeps a page of
  * exercises — numbered, and ending in numbers — from being read as contents.
+ *
+ * A third shape covers the book whose leaders did not extract at all: many
+ * *numbered* lines — "1.1 Something" — that each end in a page number. An
+ * exercise page is numbered but ends in prose, so it still fails; the count
+ * floor is what keeps a stray heading from passing as a contents.
  */
 export function looksLikeTocPage(text: string): boolean {
-  if (/\b(table\s+of\s+contents|contents)\b/i.test(text.slice(0, 400))) {
+  if (CONTENTS_HEADING_RE.test(text.slice(0, 400))) {
     return true;
   }
+  const lines = text.split("\n").slice(0, 80);
   let withPage = 0;
   let withLeader = 0;
-  for (const raw of text.split("\n").slice(0, 60)) {
+  let numberedWithPage = 0;
+  for (const raw of lines) {
     const line = raw.trim();
     if (!endsWithPageNumber(line)) continue;
     withPage += 1;
     if (LEADER_TEST.test(line)) withLeader += 1;
+    if (STARTS_LIKE_ENTRY_RE.test(line) || UNIT_STARTS_RE.test(line)) {
+      numberedWithPage += 1;
+    }
   }
-  return withPage >= TOC_MIN_ENTRIES_PER_PAGE && withLeader >= 2;
+  // If the page is mostly a list of entries that each end in a page number,
+  // it's almost certainly a TOC — even if leaders were stripped.
+  const structuralScore = withPage / Math.max(1, lines.length) + withLeader / 5;
+  if (structuralScore >= 0.6) return true;
+  if (withPage >= TOC_MIN_ENTRIES_PER_PAGE && withLeader >= 2) return true;
+  if (withPage >= TOC_MIN_ENTRIES_PER_PAGE + 2 && numberedWithPage >= 3)
+    return true;
+  return false;
 }
 
 /**
@@ -380,3 +424,79 @@ export const TOC_TEXT_PAGES = 4;
  * entries the way a contents line does, which is what this measures.
  */
 export const TOC_MIN_ENTRIES_PER_PAGE = 3;
+
+/** What reading a book's contents pages came to. */
+export type ContentsRead = {
+  /** Index of the page that announced the contents. */
+  tocStart: number;
+  /** The pages as they were read, joined — kept for the diagnostics report. */
+  text: string;
+  /** How many pages were read before the walk stopped. */
+  pagesRead: number;
+  /** Units and topics as the contents stated them, or empty if none parsed. */
+  chapters: TocChapter[];
+};
+
+/**
+ * A cheap identity of a chapter list, answering "did this page add anything?".
+ * Counts and start pages, never titles: a page that only rewords a heading has
+ * added nothing the walk needs. Exported so the OCR contents walk in
+ * `textbook.ts` can stop on the same question the text-layer walk asks.
+ */
+export function chapterListSignature(chapters: TocChapter[]): string {
+  return chapters
+    .map((c) => `${c.unit}.${c.page}:${c.topics.length}`)
+    .join("|");
+}
+
+/**
+ * Read a book's contents straight off its page text layer.
+ *
+ * The whole walk: find the page that announces a contents, then keep reading
+ * while the pages still look like one, re-parsing the growing blob each time so
+ * a unit's topics that continue onto the next page stay attached to it. Free
+ * and instant, because a text layer costs nothing to read.
+ *
+ * The stop rule is a per-page contents *test*, not a count of the units a page
+ * added. That distinction is the whole fix for the Grade 10 Citizenship book:
+ * its contents run to three pages and the third lists only two units, so a
+ * "stop once a page adds fewer than three units" rule cut its last two units
+ * off silently — the tree looked complete and was not. Here the third page
+ * still looks like contents, so it is read, and the first *body* page (which
+ * does not look like contents) is what ends the walk.
+ *
+ * Returns null when no contents page was found or none of them parsed, which is
+ * the caller's cue to try the heading scan or the model.
+ */
+export function contentsFromPages(pages: string[]): ContentsRead | null {
+  const tocStart = pages.findIndex(
+    (text, i) => i < TOC_SEARCH_PAGES && looksLikeTocPage(text),
+  );
+  if (tocStart < 0) return null;
+
+  let text = "";
+  let chapters: TocChapter[] = [];
+  let pagesRead = 0;
+  const limit = Math.min(tocStart + TOC_TEXT_PAGES, pages.length);
+  for (let page = tocStart; page < limit; page += 1) {
+    // Every page after the announcing one must still look like contents. A body
+    // page that merely repeats "Unit 1" as a running header does not, so it is
+    // not read — and cannot be mistaken for a ninth unit.
+    if (page > tocStart && !looksLikeTocPage(pages[page])) break;
+    const grown = chaptersFromToc(parseToc(`${text}\n${pages[page]}`));
+    // A page that looks like contents but yields nothing new — a blank verso
+    // that kept a leader line — ends the walk too, so one stray page cannot
+    // turn the walk into a scan of the front matter.
+    if (
+      page > tocStart &&
+      chapters.length > 0 &&
+      chapterListSignature(grown) === chapterListSignature(chapters)
+    ) {
+      break;
+    }
+    text += `\n${pages[page]}`;
+    chapters = grown;
+    pagesRead += 1;
+  }
+  return chapters.length > 0 ? { tocStart, text, chapters, pagesRead } : null;
+}

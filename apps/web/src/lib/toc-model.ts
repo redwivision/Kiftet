@@ -1,5 +1,9 @@
 import { api, apiError } from "./api";
-import type { ContentsReader, ContentsTranscript } from "./textbook";
+import type {
+  ContentsImageReader,
+  ContentsReader,
+  ContentsTranscript,
+} from "./textbook";
 
 /**
  * Transcribe a textbook's own table of contents with the model.
@@ -53,6 +57,84 @@ export const readContentsWithModel: ContentsReader = async (probe) => {
     return { text: "", refused: apiError(error) };
   }
 };
+
+/**
+ * Read a contents from a rendering of its page — the last rung of the ladder.
+ *
+ * The same best-effort contract as [readContentsWithModel], and the same
+ * answer shape, so the caller parses the transcript with the identical reader.
+ * A failure is an *answer* carrying `refused`, never a throw: the import must
+ * not break because the model was busy, the deployment has no vision key, or
+ * the student is offline.
+ */
+export const readContentsFromImage: ContentsImageReader = async (image) => {
+  const key = imageKey(image);
+  const cached = imageReadCache.get(key);
+  if (cached) return cached;
+  const result = await requestImageContents(image);
+  // Only a real reading is cached. A refusal is often "busy, try again", and
+  // caching it would rob the retry.
+  if (result.refused === undefined && result.text.trim()) {
+    imageReadCache.set(key, result);
+  }
+  return result;
+};
+
+// Session-scoped, so a re-plan or a resume of the same book does not pay for
+// the same page twice. Keyed by a cheap hash of the bytes, because the same
+// page renders identically and re-sending it is pure waste on a free tier.
+const imageReadCache = new Map<string, ContentsTranscript>();
+const IMAGE_CACHE_MAX = 24;
+
+function imageKey(image: { mimeType: string; dataBase64: string }): string {
+  const data = image.dataBase64;
+  let hash = 2166136261;
+  // A sampled FNV-1a: enough to separate pages, cheap enough to run on every
+  // request, and stable for identical bytes.
+  for (let i = 0; i < data.length; i += 97) {
+    hash ^= data.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${image.mimeType}:${data.length}:${(hash >>> 0).toString(36)}`;
+}
+
+async function requestImageContents(image: {
+  mimeType: string;
+  dataBase64: string;
+}): Promise<ContentsTranscript> {
+  try {
+    const data = await api<unknown>("/textbooks/contents-image", {
+      method: "POST",
+      body: JSON.stringify({ image }),
+    });
+    if (!data || typeof data !== "object") {
+      return {
+        text: "",
+        refused: "The AI reader sent back something we could not read.",
+      };
+    }
+    const candidate = data as Partial<ContentsTranscript>;
+    if (typeof candidate.text !== "string") {
+      return {
+        text: "",
+        refused: "The AI reader sent back something we could not read.",
+      };
+    }
+    const refused =
+      typeof candidate.refused === "string" && candidate.refused.trim()
+        ? candidate.refused
+        : undefined;
+    if (imageReadCache.size >= IMAGE_CACHE_MAX) {
+      const oldest = imageReadCache.keys().next().value;
+      if (oldest !== undefined) imageReadCache.delete(oldest);
+    }
+    return refused
+      ? { text: candidate.text, refused }
+      : { text: candidate.text };
+  } catch (error) {
+    return { text: "", refused: apiError(error) };
+  }
+}
 
 /**
  * Name a textbook from its first pages, the way a cover is meant to be read.

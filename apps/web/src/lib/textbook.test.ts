@@ -3,6 +3,7 @@ import {
   auditPageText,
   chaptersFromContents,
   chaptersFromOutline,
+  chaptersFromOutlineRanges,
   contentsProbe,
   guessTitleFromText,
   type ImportChunk,
@@ -20,6 +21,7 @@ import {
   pageRangesFromToc,
   pageRangeTree,
   planChunks,
+  reconstructPageLines,
   segmentsForOcrBook,
   splitTocNumber,
   stripUndecodableGlyphs,
@@ -30,10 +32,12 @@ import {
   textLayerReader,
   tocJobs,
   tocPageOffset,
+  transcribeImageContents,
   transcribeModelContents,
   visibleChapterTitle,
   withPartSplits,
 } from "./textbook";
+import type { TocChapter } from "./toc";
 
 // A page of prose, close to what the extractor pulls off a real textbook.
 function prosePage(words: number, seed = 0): string {
@@ -639,6 +643,38 @@ test("a unit that opens on the book's first page keeps its place at the top", ()
   ]);
   const tree = importTocTree(chunks ?? []);
   expect(tree.map((n) => n.title)).toEqual(["Unit 1: Cells", "Unit 2: Plants"]);
+});
+
+test("the outline builds the same structure without a readable body", () => {
+  // The OCR path: the text layer is broken, so every page is gibberish, yet the
+  // bookmarks are perfect. The ranges — and the topics under each unit — must
+  // come out the same as the readable path's, because they come from the same
+  // page indices; only the bodies differ (and those are recognized later).
+  const pages = Array.from({ length: 12 }, () => "b\uFFFDdy");
+  const outline = [
+    { title: "Unit 1: Cells", path: "Unit 1: Cells", pageIndex: 0 },
+    {
+      title: "1.1 Cell structure",
+      path: "Unit 1: Cells · 1.1 Cell structure",
+      pageIndex: 1,
+    },
+    { title: "Unit 2: Plants", path: "Unit 2: Plants", pageIndex: 9 },
+    {
+      title: "2.2 Summary",
+      path: "Unit 2: Plants · 2.2 Summary",
+      pageIndex: 10,
+    },
+  ];
+  const ranges = chaptersFromOutlineRanges(pages, outline);
+  expect(ranges?.map((c) => [c.title, c.start, c.end])).toEqual([
+    ["Unit 1: Cells", 0, 9],
+    ["Unit 2: Plants", 9, 12],
+  ]);
+  expect(ranges?.[0].topics.map((t) => t.title)).toEqual([
+    "1.1 Cell structure",
+  ]);
+  // Back matter is dropped here too, exactly as on the readable path.
+  expect(ranges?.[1].topics).toEqual([]);
 });
 
 test("a scanned book with no headings at all yields nothing to segment", () => {
@@ -1361,6 +1397,78 @@ describe("transcribeModelContents", () => {
   });
 });
 
+describe("transcribeImageContents", () => {
+  const image = { mimeType: "image/jpeg", dataBase64: "AAAA" };
+  const pages = Array.from({ length: 30 }, (_, i) =>
+    i === 5
+      ? `Unit 1: Cells\n${prosePage(60, i)}`
+      : i === 14
+        ? `Unit 2: Plants\n${prosePage(60, i)}`
+        : prosePage(60, i),
+  );
+  const transcript = "Unit 1: Cells .... 3\nUnit 2: Plants .... 12";
+
+  test("places a placed reading exactly as the text reader would", async () => {
+    const out = await transcribeImageContents(
+      async () => ({ text: transcript }),
+      image,
+      pages,
+      30,
+    );
+    expect(out?.units).toEqual([
+      { number: "1", title: "Cells", page: 3 },
+      { number: "2", title: "Plants", page: 12 },
+    ]);
+    expect(out?.chapters.map((c) => [c.start, c.end])).toEqual([
+      [5, 14],
+      [14, 30],
+    ]);
+  });
+
+  test("no image means no call and no spend", async () => {
+    let called = false;
+    const out = await transcribeImageContents(
+      async () => {
+        called = true;
+        return { text: transcript };
+      },
+      null,
+      pages,
+      30,
+    );
+    expect(out).toBeNull();
+    expect(called).toBe(false);
+  });
+
+  test("a refusal carries its reason to the outcome", async () => {
+    const outcome: ModelReadOutcome = { reason: null };
+    const out = await transcribeImageContents(
+      async () => ({ text: "", refused: "No vision key on this server." }),
+      image,
+      pages,
+      30,
+      outcome,
+    );
+    expect(out).toBeNull();
+    expect(outcome.reason).toBe("No vision key on this server.");
+  });
+
+  test("a reader that throws falls back rather than failing the import", async () => {
+    const outcome: ModelReadOutcome = { reason: null };
+    const out = await transcribeImageContents(
+      async () => {
+        throw new Error("vision reader down");
+      },
+      image,
+      pages,
+      30,
+      outcome,
+    );
+    expect(out).toBeNull();
+    expect(outcome.reason).toBe("vision reader down");
+  });
+});
+
 describe("guessTitleFromText", () => {
   test("reads a cover-page title as the guess", () => {
     expect(guessTitleFromText("CHEMISTRY\nStudent Textbook\nGrade 10\n")).toBe(
@@ -1415,5 +1523,104 @@ describe("guessTitleFromText", () => {
         "Student Textbook\nMinistry of Education\nBiology\nGrade 10\n",
       ),
     ).toBe("Biology");
+  });
+});
+
+describe("reconstructPageLines", () => {
+  // pdfjs hands these back as [a, b, c, d, x, y]; only x/y/width matter here.
+  const run = (str: string, x: number, y: number, w = str.length * 6) => ({
+    str,
+    transform: [1, 0, 0, 1, x, y],
+    width: w,
+  });
+
+  test("a single-column page reads top to bottom, left to right", () => {
+    const text = reconstructPageLines([
+      run("Introduction", 50, 100),
+      run("Unit 1", 10, 100),
+      run("1", 260, 100),
+      run("Basics", 30, 80),
+      run("1.1", 10, 80),
+      run("2", 260, 80),
+    ]);
+    expect(text.split("\n")).toEqual(["Unit 1 Introduction 1", "1.1 Basics 2"]);
+  });
+
+  test("a two-column page reads the left column before the right", () => {
+    // Left column: units 1 and 2. Right column: units 3 and 4. Read by rows
+    // (the content-stream order a naive reader would trust) this interleaves.
+    const text = reconstructPageLines([
+      run("Unit 3 Genetics", 320, 100),
+      run("Unit 1 Introduction", 10, 100),
+      run("Unit 2 Cells", 10, 80),
+      run("5", 440, 100, 5),
+      run("Unit 4 Ecology", 320, 80),
+      run("1", 160, 100, 5),
+      run("7", 440, 80, 5),
+      run("3", 160, 80, 5),
+    ]);
+    expect(text.split("\n")).toEqual([
+      "Unit 1 Introduction 1",
+      "Unit 2 Cells 3",
+      "Unit 3 Genetics 5",
+      "Unit 4 Ecology 7",
+    ]);
+  });
+
+  test("right-aligned page numbers are not mistaken for a column", () => {
+    // The folios sit far to the right, leaving a wide gutter — but the right
+    // side has no words, so this stays a single column.
+    const text = reconstructPageLines([
+      run("Unit 1 Introduction", 10, 100),
+      run("Unit 2 Cells", 10, 80),
+      run("Unit 3 Genetics", 10, 60),
+      run("1", 300, 100, 5),
+      run("3", 300, 80, 5),
+      run("5", 300, 60, 5),
+    ]);
+    expect(text.split("\n")).toEqual([
+      "Unit 1 Introduction 1",
+      "Unit 2 Cells 3",
+      "Unit 3 Genetics 5",
+    ]);
+  });
+
+  test("empty input yields an empty page, not a throw", () => {
+    expect(reconstructPageLines([])).toBe("");
+    expect(reconstructPageLines([{ str: "x" }])).toBe("");
+  });
+});
+
+describe("offsetByTitle fuzzy anchoring", () => {
+  const chapter = (unit: number, title: string, page: number): TocChapter => ({
+    unit,
+    title,
+    page,
+    topics: [],
+  });
+
+  test("a reordered header still places the chapter", () => {
+    // The contents lists "Cell Division And Growth"; the running header prints
+    // the same words in a different order. Exact matching sees nothing; the
+    // token-coverage fallback recognises the whole title.
+    const pages = Array.from({ length: 20 }, (_, i) =>
+      i === 7 ? "Growth And Cell Division\n23" : prosePage(60, i),
+    );
+    expect(
+      offsetByTitle([chapter(1, "Cell Division And Growth", 7)], pages),
+    ).toBe(0);
+  });
+
+  test("a prose sentence that contains the words does not place a chapter", () => {
+    // Every word of the title appears, but inside a running sentence — that is
+    // a mention, not the book naming its own chapter.
+    const pages = Array.from({ length: 20 }, (_, i) =>
+      i === 7
+        ? "Cell division and growth is important to every living organism on earth."
+        : prosePage(60, i),
+    );
+    expect(
+      offsetByTitle([chapter(1, "Cell Division And Growth", 7)], pages),
+    ).toBeNull();
   });
 });

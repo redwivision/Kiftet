@@ -35,13 +35,18 @@ import {
   pageRangeTree,
   planImport,
   readFrontPages,
+  renderPageImage,
   type TocJob,
   tocJobs,
   topicLabel,
   visibleChapterTitle,
   withPartSplits,
 } from "@/lib/textbook";
-import { readContentsWithModel, readTitleWithModel } from "@/lib/toc-model";
+import {
+  readContentsFromImage,
+  readContentsWithModel,
+  readTitleWithModel,
+} from "@/lib/toc-model";
 import type { Route } from "./+types/textbooks";
 
 export function meta(_args: Route.MetaArgs) {
@@ -294,6 +299,10 @@ export default function Textbooks() {
           : { kind: "text", name: "pasted", text: pastedText },
         language,
         readContentsWithModel,
+        mode === "pdf" && pdfFile ? readContentsFromImage : undefined,
+        mode === "pdf" && pdfFile
+          ? (pageIndex) => renderPageImage(pdfFile, pageIndex)
+          : undefined,
       );
       if (!result.chunks.length) throw new Error(t("nothing-to-import"));
       // A second plan replaces the first reader, so close the old one rather
@@ -405,6 +414,8 @@ export default function Textbooks() {
               { kind: "pdf", name: file.name, file },
               book.language,
               readContentsWithModel,
+              readContentsFromImage,
+              (pageIndex) => renderPageImage(file, pageIndex),
             )
           : await planImport({
               kind: "text",
@@ -453,6 +464,8 @@ export default function Textbooks() {
         { kind: "pdf", name: file.name, file },
         book.language,
         readContentsWithModel,
+        readContentsFromImage,
+        (pageIndex) => renderPageImage(file, pageIndex),
       );
       applyPlan(
         result,
@@ -1204,13 +1217,29 @@ function AddTextbook({
         {report &&
           (report.source === "pdf-text-layer" ||
             report.source === "ocr-headings") && (
-            <p className="mt-4 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
-              {report.modelRead === "refused"
-                ? t("toc-fallback-refused", {
-                    reason: report.modelReason ?? "",
-                  })
-                : t("toc-fallback-guessed")}
-            </p>
+            <div className="mt-4 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
+              <p>
+                {report.contentsPage !== null
+                  ? t("toc-fallback-unreadable", {
+                      page: report.contentsPage + 1,
+                    })
+                  : report.modelRead === "refused"
+                    ? t("toc-fallback-refused", {
+                        reason: report.modelReason ?? "",
+                      })
+                    : t("toc-fallback-guessed")}
+              </p>
+              {report.contentsPage !== null && report.contentsText ? (
+                <details className="mt-2">
+                  <summary className="cursor-pointer">
+                    {t("hierarchy-report-contents")}
+                  </summary>
+                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-background/40 p-2 text-[0.7rem] text-muted-foreground">
+                    {report.contentsText}
+                  </pre>
+                </details>
+              ) : null}
+            </div>
           )}
 
         {importing && total > 0 && (

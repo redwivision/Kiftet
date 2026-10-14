@@ -113,4 +113,16 @@ describe("buildProviderAttempts", () => {
   test("neither provider configured yields nothing to try", () => {
     expect(buildProviderAttempts(false, false)).toEqual([]);
   });
+
+  test("a vision call never lists the text-only provider", () => {
+    // Groq's models cannot see an image, so admitting one would spend a
+    // request on a prompt it reads blind. Vision keeps Gemini's ladder and
+    // nothing else.
+    const list = buildProviderAttempts(true, true, true);
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((a) => a.provider === "gemini")).toBe(true);
+    // Without Gemini configured a vision call has nowhere to go, which is the
+    // honest answer — the route refuses rather than sending a blind prompt.
+    expect(buildProviderAttempts(false, true, true)).toEqual([]);
+  });
 });
