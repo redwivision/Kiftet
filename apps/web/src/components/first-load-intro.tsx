@@ -2,6 +2,7 @@ import { cn } from "@kiftet/ui/lib/utils";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { useLanguage } from "@/components/language-provider";
+import { signalIntroDone } from "@/lib/intro-done";
 
 /**
  * The first load, told in one breath.
@@ -31,7 +32,12 @@ export function FirstLoadIntro() {
       /* private mode — it will simply play again next load, which is fine. */
     }
     const leave = setTimeout(() => setLeaving(true), 1500);
-    const done = setTimeout(() => root.removeAttribute("data-intro"), 1850);
+    const done = setTimeout(() => {
+      root.removeAttribute("data-intro");
+      // Release the hero film only once the overlay is fully gone, so its
+      // opening beat never plays behind the veil.
+      signalIntroDone();
+    }, 1850);
     return () => {
       clearTimeout(leave);
       clearTimeout(done);

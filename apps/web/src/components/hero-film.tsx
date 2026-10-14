@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { ConceptRing, MasteryRing } from "@/components/mastery-ring";
 import type { MasteryLevel } from "@/components/study-provider";
+import { onIntroDone } from "@/lib/intro-done";
 import { type ConceptMeta, weightedMastery } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
+import { useOnScreen } from "@/lib/on-screen";
 
 /**
  * The hero's one bold moment: the product, performing.
@@ -24,7 +26,12 @@ import type { MessageKey } from "@/lib/messages";
  * Tuesday night, an aware one watches the one thing no past-paper app does.
  * It is a single pass and collapses to the final frame under
  * `prefers-reduced-motion` — the same contract the rest of the page's reveals
- * already keep. A replay control lets anyone watch it again.
+ * already keep.
+ *
+ * It waits for two things before it plays: the first-load intro to finish (so
+ * its opening never races the overlay) and the film to actually be on screen
+ * (so a phone visitor who scrolls to it gets the whole thing from frame one,
+ * not the tail end). A replay control lets anyone watch it again.
  */
 
 /* The 288° arc — the ring with a 72° segment missing. Same geometry as
@@ -73,8 +80,19 @@ export function HeroFilm({ className }: { className?: string }) {
   const [reduce, setReduce] = useState(false);
   const [run, setRun] = useState(0);
 
+  // The film plays only once it is both past the intro and on screen. Waiting
+  // on the intro keeps its opening from playing under the overlay; waiting on
+  // the viewport means a phone visitor who scrolls to it still sees frame one.
+  const stage = useOnScreen<HTMLDivElement>();
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!stage.shown) return;
+    return onIntroDone(() => setArmed(true));
+  }, [stage.shown]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: run is the replay trigger — bumping it must restart the timeline
   useEffect(() => {
+    if (!armed) return;
     const prefersReduced =
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
@@ -93,7 +111,7 @@ export function HeroFilm({ className }: { className?: string }) {
       setTimeout(() => setPhase(FINAL), 3900),
     ];
     return () => timers.forEach(clearTimeout);
-  }, [run]);
+  }, [armed, run]);
 
   const d = reduce ? 0 : 0.55;
   // The score has appeared and the diagnosis is on screen; the ring can morph.
@@ -150,7 +168,7 @@ export function HeroFilm({ className }: { className?: string }) {
   }, [phase, reduce, diagnosedPct, improvedPct, scoreMv]);
 
   return (
-    <div className={cn("surface overflow-hidden", className)}>
+    <div ref={stage.ref} className={cn("surface overflow-hidden", className)}>
       <div className="flex items-center justify-between gap-3 border-border/60 border-b px-6 py-3.5 dark:border-white/10">
         <p className="k-label">{t("diag-unit")}</p>
         <span className="rounded-full border border-border/70 px-2.5 py-0.5 font-medium text-[0.72rem] text-muted-foreground dark:border-white/15">
