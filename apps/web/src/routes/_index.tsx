@@ -321,8 +321,11 @@ export default function Home() {
 
         {/* The product, performing: the open ring hears an answer and turns it
             into a diagnosis of exactly what the student cannot explain. */}
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-4">
           <HeroFilm className="w-full max-w-md" />
+          <p className="max-w-md text-balance text-center text-muted-foreground text-sm leading-6">
+            {t("hero-film-caption")}
+          </p>
         </div>
       </section>
 

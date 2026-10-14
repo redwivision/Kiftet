@@ -1,6 +1,6 @@
 import { cn } from "@kiftet/ui/lib/utils";
 import { Mic } from "lucide-react";
-import { motion } from "motion/react";
+import { animate, motion, useMotionValue } from "motion/react";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { ConceptRing, MasteryRing } from "@/components/mastery-ring";
@@ -15,7 +15,10 @@ import type { MessageKey } from "@/lib/messages";
  * itself, listens (a waveform rides the gap), a real labelled example answer
  * resolves, and the ring spills that answer into a diagnosis: five concepts,
  * two the student explained solidly, one half-known, one stated wrong the
- * classic way, one left open. The ring then settles into the score.
+ * classic way, one left open. The ring settles into the score — and then the
+ * second half of the promise: one round of the loop closes the heaviest gaps
+ * and the score climbs. Diagnosis is only half the story; the film shows the
+ * fix too, so the payoff is legible to someone who never scrolls.
  *
  * It is choreography, not a claim: an unaware visitor recognises their own
  * Tuesday night, an aware one watches the one thing no past-paper app does.
@@ -43,8 +46,14 @@ const CONCEPTS: readonly {
   { key: "demo-c-5", level: 0, weight: 4 },
 ];
 
+/* The same checklist after one round of the loop: the stated-wrong belief has
+   been corrected and the open idea learned, while the half-known one still
+   needs its sentence. The score the film lands on has to be reachable by a real
+   student in one sitting, so it is progress, not perfection. */
+const IMPROVED: readonly MasteryLevel[] = [3, 3, 1, 3, 3];
+
 /* The last beat everything has settled on. */
-const FINAL = 4;
+const FINAL = 5;
 
 const FILL: Record<number, number> = { 0: 0, 1: 45, 2: 100, 3: 100 };
 
@@ -78,15 +87,19 @@ export function HeroFilm({ className }: { className?: string }) {
     setPhase(0);
     const timers = [
       setTimeout(() => setPhase(1), 150),
-      setTimeout(() => setPhase(2), 1100),
-      setTimeout(() => setPhase(3), 2000),
-      setTimeout(() => setPhase(FINAL), 2900),
+      setTimeout(() => setPhase(2), 1000),
+      setTimeout(() => setPhase(3), 1800),
+      setTimeout(() => setPhase(4), 2600),
+      setTimeout(() => setPhase(FINAL), 3900),
     ];
     return () => timers.forEach(clearTimeout);
   }, [run]);
 
   const d = reduce ? 0 : 0.55;
+  // The score has appeared and the diagnosis is on screen; the ring can morph.
   const done = phase >= 4;
+  // One round of the loop has closed the heaviest gaps and the score has climbed.
+  const closed = phase >= 5;
 
   const names = CONCEPTS.map((c) => t(c.key));
   const mastery: Record<string, MasteryLevel> = {};
@@ -96,7 +109,45 @@ export function HeroFilm({ className }: { className?: string }) {
     mastery[name] = c.level;
     meta[name] = { weight: c.weight, isMisconception: c.level === 2 };
   }
-  const pct = Math.round(weightedMastery(mastery, meta, names) * 100);
+  const diagnosedPct = Math.round(weightedMastery(mastery, meta, names) * 100);
+
+  const improvedMastery: Record<string, MasteryLevel> = {};
+  CONCEPTS.forEach((c, i) => {
+    improvedMastery[t(c.key)] = IMPROVED[i] ?? c.level;
+  });
+  // A corrected belief is no longer a misconception, so it rejoins the total.
+  const improvedMeta: Record<string, ConceptMeta> = {};
+  for (const c of CONCEPTS) {
+    improvedMeta[t(c.key)] = { weight: c.weight, isMisconception: false };
+  }
+  const improvedPct = Math.round(
+    weightedMastery(improvedMastery, improvedMeta, names) * 100,
+  );
+
+  // The number counts up as the ring fills, so the climb reads as one motion
+  // rather than a jump from the diagnosis to the result.
+  const scoreMv = useMotionValue(0);
+  const [shownPct, setShownPct] = useState(0);
+  useEffect(() => {
+    const unsubscribe = scoreMv.on("change", (v) => setShownPct(Math.round(v)));
+    return unsubscribe;
+  }, [scoreMv]);
+  useEffect(() => {
+    if (phase < 4) {
+      scoreMv.set(0);
+      return;
+    }
+    const target = phase >= 5 ? improvedPct : diagnosedPct;
+    if (reduce) {
+      scoreMv.set(target);
+      return;
+    }
+    const controls = animate(scoreMv, target, {
+      duration: 0.7,
+      ease: "easeOut",
+    });
+    return () => controls.stop();
+  }, [phase, reduce, diagnosedPct, improvedPct, scoreMv]);
 
   return (
     <div className={cn("surface overflow-hidden", className)}>
@@ -145,7 +196,10 @@ export function HeroFilm({ className }: { className?: string }) {
               animate={{ opacity: done ? 1 : 0 }}
               transition={{ duration: 0.4, delay: done && !reduce ? 0.1 : 0 }}
             >
-              <MasteryRing percent={done ? pct : 0} size={208} />
+              <MasteryRing
+                percent={done ? (closed ? improvedPct : diagnosedPct) : 0}
+                size={208}
+              />
             </motion.div>
           </div>
 
@@ -171,7 +225,7 @@ export function HeroFilm({ className }: { className?: string }) {
             animate={{ opacity: done ? 1 : 0 }}
             transition={{ duration: 0.4, delay: done && !reduce ? 0.1 : 0 }}
           >
-            {pct}
+            {shownPct}
             <span className="text-muted-foreground text-xl">%</span>
           </motion.p>
 
@@ -275,6 +329,18 @@ export function HeroFilm({ className }: { className?: string }) {
           transition={{ duration: 0.4 }}
         >
           {t("hero-film-miss")}
+        </motion.p>
+
+        {/* The payoff: one round later the gaps are closing and the number
+            climbs. Diagnosis is only half the promise — this is the other half,
+            shown rather than claimed. */}
+        <motion.p
+          className="mt-3 font-medium text-gold text-sm leading-6"
+          initial={false}
+          animate={{ opacity: phase >= 5 ? 1 : 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          {t("hero-film-improved")}
         </motion.p>
       </div>
 

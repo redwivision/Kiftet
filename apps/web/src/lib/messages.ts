@@ -551,6 +551,9 @@ export const en = {
   "hero-film-miss":
     "You said it makes water. It uses water — the reversal almost everyone gets wrong.",
   "hero-film-replay": "Replay",
+  "hero-film-improved": "One round of the loop — and that gap is closing.",
+  "hero-film-caption":
+    "One minute of speaking, and you can see exactly what's missing.",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "Ready to use it for real?",
@@ -1404,6 +1407,8 @@ export const am: Record<MessageKey, string> = {
   "hero-film-tally": "{total} ውስጥ {known} ሙሉ ለሙሉ ተብራርቷል",
   "hero-film-miss": "ውሃ ያመነጫል ብለሃል። ግን ውሃን ይጠቀማል — ብዙዎች የሚሳሳቱበት ተቃራኒው።",
   "hero-film-replay": "እንደገና ተመልከት",
+  "hero-film-improved": "አንድ ዙር ዑደት በኋላ — ያ ክፍተት እየተዘጋ ነው።",
+  "hero-film-caption": "የአንድ ደቂቃ ንግግር፣ እና የጎደለውን በትክክል ማየት ትችላለህ።",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
   "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
