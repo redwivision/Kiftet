@@ -30,8 +30,8 @@ export function FirstLoadIntro() {
     } catch {
       /* private mode — it will simply play again next load, which is fine. */
     }
-    const leave = setTimeout(() => setLeaving(true), 1000);
-    const done = setTimeout(() => root.removeAttribute("data-intro"), 1360);
+    const leave = setTimeout(() => setLeaving(true), 1500);
+    const done = setTimeout(() => root.removeAttribute("data-intro"), 1850);
     return () => {
       clearTimeout(leave);
       clearTimeout(done);
@@ -47,13 +47,36 @@ export function FirstLoadIntro() {
         leaving && "intro-leave",
       )}
     >
-      <BrandMark size={84} className="text-gold" closing />
-      <div>
-        <p className="font-display font-semibold text-2xl tracking-tight">
+      <div className="relative grid size-24 place-items-center">
+        <BrandMark size={84} className="text-gold" closing />
+        {/* A short burst of voice while the ring "listens" — the one thing the
+            product does, drawn in a breath. */}
+        <div className="absolute flex h-6 items-center gap-[3px]">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <span
+              key={i}
+              className="w-[3px] animate-hero-wave rounded-full bg-gold/60"
+              style={{
+                height: `${8 + ((i * 5) % 14)}px`,
+                animationDelay: `${(i % 5) * 120}ms`,
+                transformOrigin: "center",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <p
+          className="animate-fade-up font-display font-semibold text-2xl tracking-tight"
+          style={{ animationDelay: "0.35s" }}
+        >
           Kiftet
         </p>
-        <p className="mt-1.5 text-muted-foreground text-sm">
-          {t("intro-tagline")}
+        <p
+          className="animate-fade-up text-muted-foreground text-sm"
+          style={{ animationDelay: "0.8s" }}
+        >
+          {t("intro-line")}
         </p>
       </div>
     </div>

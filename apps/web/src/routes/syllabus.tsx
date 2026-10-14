@@ -243,12 +243,9 @@ export default function Syllabus() {
       )}
 
       {!catalog && !error && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {[0, 1].map((i) => (
-            <Skeleton
-              key={i}
-              className="h-40 w-full rounded-3xl bg-muted/60 dark:bg-white/[0.05]"
-            />
+            <UnitCardSkeleton key={i} />
           ))}
         </div>
       )}
@@ -279,12 +276,9 @@ export default function Syllabus() {
           )}
 
           {loading && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {[0, 1, 2].map((i) => (
-                <Skeleton
-                  key={i}
-                  className="h-40 w-full rounded-3xl bg-muted/60 dark:bg-white/[0.05]"
-                />
+                <UnitCardSkeleton key={i} />
               ))}
             </div>
           )}
@@ -349,6 +343,44 @@ export default function Syllabus() {
         </>
       )}
     </main>
+  );
+}
+
+/** The unit list's loading state. It mirrors the real card — header, ring on
+ *  the right, and its chapter rows — so the wait reads as the syllabus
+ *  arriving rather than a wall of grey boxes. */
+function UnitCardSkeleton() {
+  return (
+    <div className="surface overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-border/60 border-b p-5">
+        <div className="w-full space-y-2.5">
+          <Skeleton className="h-3 w-20 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+          <Skeleton className="h-6 w-1/2 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
+          <Skeleton className="h-4 w-2/3 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <MasteryRing percent={0} size={44} />
+          <div className="space-y-1.5">
+            <Skeleton className="h-4 w-20 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+            <Skeleton className="h-3 w-12 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+          </div>
+        </div>
+      </div>
+      <ul className="divide-y divide-border/50">
+        {[0, 1, 2].map((i) => (
+          <li
+            key={i}
+            className="flex flex-wrap items-center justify-between gap-3 p-4"
+          >
+            <div className="w-2/3 space-y-2">
+              <Skeleton className="h-4 w-3/4 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
+              <Skeleton className="h-3 w-1/2 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+            </div>
+            <Skeleton className="h-8 w-24 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

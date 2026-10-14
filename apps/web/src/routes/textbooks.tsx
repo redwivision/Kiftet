@@ -697,14 +697,11 @@ export default function Textbooks() {
       )}
 
       {textbooks === null && !loadError && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <section className="mb-10 space-y-4">
           {[0, 1].map((i) => (
-            <Skeleton
-              key={i}
-              className="h-40 w-full rounded-3xl bg-muted/60 dark:bg-white/[0.05]"
-            />
+            <BookCardSkeleton key={i} />
           ))}
-        </div>
+        </section>
       )}
 
       {textbooks && textbooks.length > 0 && (
@@ -898,6 +895,31 @@ export default function Textbooks() {
         }}
       />
     </main>
+  );
+}
+
+/** The library's loading state. It mirrors the real book card — subject
+ *  label, title, chapter-count pill, then the first rows of its contents — so
+ *  the wait reads as the shelf arriving rather than a grey box. */
+function BookCardSkeleton() {
+  return (
+    <div className="surface p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="w-full space-y-2.5">
+          <Skeleton className="h-3 w-20 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+          <Skeleton className="h-6 w-1/2 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
+        </div>
+        <Skeleton className="h-7 w-28 shrink-0 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+      </div>
+      <div className="mt-5 space-y-2.5">
+        {[0, 1].map((i) => (
+          <Skeleton
+            key={i}
+            className="h-4 w-2/3 rounded-lg bg-muted/60 dark:bg-white/[0.05]"
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

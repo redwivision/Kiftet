@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { InkSettling } from "@/components/ink-settling";
 import { useLanguage } from "@/components/language-provider";
 import { VoiceRing } from "@/components/voice-ring";
 import { useVoiceSession } from "@/hooks/use-voice-session";
@@ -67,8 +68,8 @@ export default function VoiceTest() {
       </div>
 
       {!ready ? (
-        <div className="grid min-h-40 place-items-center text-muted-foreground text-sm">
-          {t("loading")}
+        <div className="grid min-h-40 place-items-center">
+          <InkSettling />
         </div>
       ) : !voice.isSupported ? (
         <div className="rounded-lg border border-rust/50 bg-rust/10 px-4 py-3 text-manuscript/85 text-sm">
