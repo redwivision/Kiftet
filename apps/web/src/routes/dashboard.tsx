@@ -452,10 +452,11 @@ export default function Dashboard() {
       {chapters === null && !error && (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton
-              key={i}
-              className="h-44 w-full rounded-3xl bg-muted/60 dark:bg-white/[0.05]"
-            />
+            // The first card carries the view-transition name on its ring: when
+            // the demo launches from the landing page the hero ring needs a
+            // destination to morph into, and this is the ring that is on screen
+            // the instant this route paints.
+            <ChapterCardSkeleton key={i} morph={i === 0} />
           ))}
         </div>
       )}
@@ -534,6 +535,32 @@ export default function Dashboard() {
         </ul>
       )}
     </main>
+  );
+}
+
+/** The chapters grid's loading state. It mirrors the real card's shape — and
+ *  its top-right ring is the landing hero's morph destination — so the wait
+ *  reads as the room arriving rather than a wall of grey boxes. */
+function ChapterCardSkeleton({ morph = false }: { morph?: boolean }) {
+  return (
+    <div className="w-full rounded-3xl border border-border/70 bg-panel/80 p-6 backdrop-blur-sm dark:border-white/10">
+      <div className="flex items-start justify-between gap-3">
+        <div className="w-full space-y-2.5">
+          <Skeleton className="h-3 w-24 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+          <Skeleton className="h-6 w-3/4 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
+        </div>
+        <span className="flex shrink-0 items-center gap-2">
+          <MasteryRing
+            percent={0}
+            size={30}
+            className={morph ? "[view-transition-name:kiftet-ring]" : undefined}
+          />
+          <Skeleton className="h-7 w-20 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+        </span>
+      </div>
+      <Skeleton className="mt-4 h-4 w-1/2 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
+      <Skeleton className="mt-5 h-3 w-2/3 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
+    </div>
   );
 }
 

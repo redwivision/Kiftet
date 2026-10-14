@@ -4,6 +4,7 @@ import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 import "./index.css";
 import type { Route } from "./+types/root";
 import { ErrorScreen } from "./components/error-screen";
+import { FirstLoadIntro } from "./components/first-load-intro";
 import Header from "./components/header";
 import { LanguageProvider, useLanguage } from "./components/language-provider";
 import { NavigationProgress } from "./components/navigation-progress";
@@ -147,6 +148,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             __html: `(function(){try{var l=localStorage.getItem("kiftet-language");document.documentElement.lang=l==="am"?"am":"en";}catch(e){document.documentElement.lang="en";}})()`,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            // The first-load intro is decided before first paint: stamp
+            // `data-intro` only for a fresh session on a device that hasn't
+            // asked for reduced motion, so the CSS overlay is already up in the
+            // server-rendered markup and never flashes in over a painted page.
+            __html: `(function(){try{if(sessionStorage.getItem("kiftet-intro"))return;if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;document.documentElement.setAttribute("data-intro","");}catch(e){}})()`,
+          }}
+        />
         <Meta />
         <Links />
       </head>
@@ -176,6 +186,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <LanguageProvider>
             <NavigationProgress />
             <SkipLink />
+            <FirstLoadIntro />
             {children}
             <Toaster />
             <ScrollRestoration />

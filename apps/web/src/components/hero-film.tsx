@@ -77,10 +77,10 @@ export function HeroFilm({ className }: { className?: string }) {
     }
     setPhase(0);
     const timers = [
-      setTimeout(() => setPhase(1), 250),
-      setTimeout(() => setPhase(2), 1300),
-      setTimeout(() => setPhase(3), 2400),
-      setTimeout(() => setPhase(FINAL), 3500),
+      setTimeout(() => setPhase(1), 150),
+      setTimeout(() => setPhase(2), 1100),
+      setTimeout(() => setPhase(3), 2000),
+      setTimeout(() => setPhase(FINAL), 2900),
     ];
     return () => timers.forEach(clearTimeout);
   }, [run]);
@@ -198,16 +198,13 @@ export function HeroFilm({ className }: { className?: string }) {
           </div>
         </div>
 
-        {/* The prompt, then the answer the student actually gave */}
+        {/* The prompt leads — it is on screen before the ring starts, so the
+            animation always has a question to answer rather than playing into
+            a void. The student's answer follows it. */}
         <div className="mt-4 min-h-[3.75rem] text-center">
-          <motion.p
-            className="text-muted-foreground text-sm"
-            initial={false}
-            animate={{ opacity: phase >= 1 ? 1 : 0 }}
-            transition={{ duration: 0.3 }}
-          >
+          <p className="text-muted-foreground text-sm">
             {t("hero-film-prompt")}
-          </motion.p>
+          </p>
           <motion.p
             className="mt-1.5 text-foreground text-sm leading-6"
             initial={false}

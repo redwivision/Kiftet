@@ -762,6 +762,21 @@
     }
   }
 
+  /* The first-load intro overlay. Hidden by default; the inline script in
+     root.tsx stamps `data-intro` on <html> before first paint for a fresh
+     session (and never under reduced motion), so the server-rendered overlay
+     is already up instead of flashing in over a painted page. */
+  [data-intro-overlay] {
+    display: none;
+    transition: opacity 360ms ease-out;
+  }
+  html[data-intro] [data-intro-overlay] {
+    display: flex;
+  }
+  [data-intro-overlay].intro-leave {
+    opacity: 0;
+  }
+
   ::selection {
     background: rgba(32, 29, 24, 0.22);
     color: #1b1a16;
