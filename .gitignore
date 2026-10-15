@@ -63,3 +63,4 @@ docs/*.pdf
 .cache
 tmp
 temp
+/session-ses_ec52.md
