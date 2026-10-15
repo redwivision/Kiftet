@@ -183,11 +183,16 @@ function endsWithPageNumber(line: string): boolean {
 // optional, so "Unit 1 Plants 17" already parses, and `SECTION_RE` already
 // reads "1 Introduction 5". What they need is a title that reads as a title,
 // which is what `tidyTitle` guarantees.
+//
+// A single leader glyph is not collapsed by `LEADER_RUN` (which needs two, so
+// it never eats the one dot of "1.2"), and a single one can survive on either
+// edge of a title: "Unit 2 – GENETICS – 20" leaves a trailing en dash, and
+// "Unit 1 · Matter · 1" leaves a leading middle dot. Neither belongs to the
+// title, so both edges are trimmed of decoration here.
+const TITLE_EDGE_DECOR =
+  /^[\s.·\u2022…_�\u00a0\t\u2013\u2014\u2015\u2212\u2010\u2011\u2012\u2060\u00ad-]+|[\s.·\u2022…_�\u00a0\t\u2013\u2014\u2015\u2212\u2010\u2011\u2012\u2060\u00ad-]+$/g;
 function tidyTitle(title: string): string {
-  return title
-    .trim()
-    .replace(/[\s.·…_�\u00a0\t]+$/, "")
-    .trim();
+  return title.replace(TITLE_EDGE_DECOR, "").trim();
 }
 
 function takeEntry(line: string, into: TocEntry[]): boolean {
@@ -299,13 +304,33 @@ export function parseToc(text: string): TocEntry[] {
  * Group entries into one chapter per unit, each carrying its topics.
  *
  * Entries are assigned to the most recent unit rather than to the leading
- * digit of their number, so a book that renumbers per unit still groups the way
- * a reader would expect.
+ * digit of their number, so a book that renumbers per unit still groups the
+ * way a reader would expect.
+ *
+ * A book that never names a unit — its contents read "1 Introduction 1",
+ * "2 Cells 9" — still has chapters: the top-level number is the chapter. When,
+ * and only when, the contents names no unit at all, a depth-1 number is read as
+ * one, so a book that does say "Unit 1" is never renumbered by a stray section
+ * that happened to parse.
  */
 export function chaptersFromToc(entries: TocEntry[]): TocChapter[] {
+  const named = entries.some((entry) => entry.kind === "unit");
+  const grouped = named
+    ? entries
+    : entries.map(
+        (entry): TocEntry =>
+          entry.kind === "section" && entry.path.length === 1
+            ? {
+                kind: "unit",
+                unit: Number(entry.path[0]),
+                title: entry.title,
+                page: entry.page,
+              }
+            : entry,
+      );
   const chapters: TocChapter[] = [];
   let current: TocChapter | null = null;
-  for (const entry of entries) {
+  for (const entry of grouped) {
     if (entry.kind === "unit") {
       current = {
         unit: entry.unit,
@@ -345,6 +370,18 @@ const CONTENTS_HEADING_RE =
   /\b(?:table\s+of\s+contents|contents)\b|ይዘት|ዝርዝር|ማውጫ|qabiyyee|tarreeffama/i;
 
 /**
+ * How a book opens a page that is *not* a contents, in the words that matter.
+ *
+ * These are the words a review or exercises page leads with, and it is the
+ * leading word that tells the two apart: both are lists of numbered lines that
+ * end in numbers, but only the contents is joined by leaders. Some books drop
+ * the leaders ("1. What is matter? 5" parses as a dotted entry), so the shape
+ * test is not enough on its own and this is the tie-breaker.
+ */
+const NON_CONTENTS_HEADING_RE =
+  /^(?:exercises?|review(?:\s+questions)?|revision|activities|questions|test\s+yourself|self[-\s]?assessment|check\s+your\s+understanding)\b/i;
+
+/**
  * Does this page look like the start of a contents section?
  *
  * The obvious tell is the word "contents" — but that is an English word on a
@@ -365,6 +402,22 @@ const CONTENTS_HEADING_RE =
 export function looksLikeTocPage(text: string): boolean {
   if (CONTENTS_HEADING_RE.test(text.slice(0, 400))) {
     return true;
+  }
+  // A page that opens with the back-matter vocabulary is an exercises or review
+  // page, not a contents: its lines are numbered and end in numbers — "1. What
+  // is matter? 5" — so the shape test alone would read it as contents and pull
+  // its questions into the tree. The heading word is what separates the two.
+  //
+  // Only a *bare* heading counts: a contents page may open straight onto an
+  // entry called "Review Questions ... 5", and that line ends in a page number,
+  // so it is left to the shape test rather than refused by its first word.
+  const firstLine = text.split("\n").find((line) => line.trim() !== "");
+  if (
+    firstLine &&
+    !endsWithPageNumber(firstLine.trim()) &&
+    NON_CONTENTS_HEADING_RE.test(firstLine.trim())
+  ) {
+    return false;
   }
   const lines = text.split("\n").slice(0, 80);
   let withPage = 0;
