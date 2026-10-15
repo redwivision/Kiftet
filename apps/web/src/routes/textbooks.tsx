@@ -9,13 +9,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ConceptGraph } from "@/components/concept-graph";
+import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { HierarchyReport } from "@/components/hierarchy-report";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
 import { TocPicker } from "@/components/toc-picker";
-import { api, apiError } from "@/lib/api";
+import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { getDemoUser } from "@/lib/demo";
+import { clearDemoUser, getDemoUser } from "@/lib/demo";
 import { getLocalTextbookSource, saveLocalTextbookSource } from "@/lib/store";
 import {
   fileSizeError,
@@ -130,6 +131,7 @@ export default function Textbooks() {
   const { t } = useLanguage();
   const [textbooks, setTextbooks] = useState<LibraryTextbook[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [demoExpired, setDemoExpired] = useState(false);
 
   const [bookTitle, setBookTitle] = useState("");
   const [subject, setSubject] = useState("");
@@ -158,11 +160,24 @@ export default function Textbooks() {
   const [report, setReport] = useState<ImportDiagnostics | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OcrProgressView>(null);
 
+  const reportApiError = useCallback(
+    (err: unknown, setMessage: Dispatch<SetStateAction<string | null>>) => {
+      if (err instanceof ApiError && err.demoExpired) {
+        clearDemoUser();
+        setDemoExpired(true);
+        setMessage(null);
+        return;
+      }
+      setMessage(apiError(err));
+    },
+    [],
+  );
+
   const fetchLibrary = useCallback(() => {
     api<LibraryTextbook[]>("/textbooks")
       .then(setTextbooks)
-      .catch((err) => setLoadError(apiError(err)));
-  }, []);
+      .catch((err) => reportApiError(err, setLoadError));
+  }, [reportApiError]);
 
   useEffect(() => {
     if (!sessionPending && !auth && !getDemoUser()) {
@@ -310,7 +325,7 @@ export default function Textbooks() {
       await readerRef.current?.close();
       applyPlan(result, existingChapters);
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err, setError);
       setStep("form");
     }
   };
@@ -371,7 +386,7 @@ export default function Textbooks() {
       fetchLibrary();
       toast.success(t("textbook-saved"));
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err, setError);
     }
   };
 
@@ -436,7 +451,7 @@ export default function Textbooks() {
         pageRangesFromToc(book.toc ?? [], offsetForPageOneAt(oneAt)),
       );
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err, setError);
       setStep("form");
     }
   };
@@ -480,7 +495,7 @@ export default function Textbooks() {
         pageRangesFromToc(book.toc ?? [], offsetForPageOneAt(oneAt)),
       );
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err, setError);
       setStep("form");
     }
   };
@@ -576,7 +591,12 @@ export default function Textbooks() {
       setNodeState(nodeId, "done");
     } catch (err) {
       setNodeState(nodeId, "error");
-      throw apiError(err);
+      if (err instanceof ApiError && err.demoExpired) {
+        clearDemoUser();
+        setDemoExpired(true);
+        setError(null);
+      }
+      throw err;
     }
   };
 
@@ -587,12 +607,21 @@ export default function Textbooks() {
       (job) => nodeStages.find((s) => s.id === job.nodeId)?.state !== "skip",
     );
     let failed = 0;
+    let expired = false;
     for (const job of jobs) {
       try {
         await importJob(job);
-      } catch {
+      } catch (err) {
         failed += 1;
+        if (err instanceof ApiError && err.demoExpired) {
+          expired = true;
+          break;
+        }
       }
+    }
+    if (expired) {
+      setStep("review");
+      return;
     }
     fetchLibrary();
     if (failed === 0) {
@@ -666,7 +695,11 @@ export default function Textbooks() {
       );
       navigate(`/study/${sessionId}`, { replace: true });
     } catch (err) {
-      toast.error(apiError(err));
+      if (err instanceof ApiError && err.demoExpired) {
+        reportApiError(err, setError);
+      } else {
+        toast.error(apiError(err));
+      }
     }
   };
 
@@ -682,6 +715,14 @@ export default function Textbooks() {
   const progress = pendingJobs.filter((job) => settled(job.nodeId)).length;
   const total = pendingJobs.length;
 
+  if (demoExpired) {
+    return (
+      <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+        <DemoExpiredNotice />
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
       <header className="mb-8 max-w-2xl space-y-2">
@@ -694,7 +735,7 @@ export default function Textbooks() {
         </p>
       </header>
 
-      {loadError && !textbooks && (
+      {loadError && !textbooks ? (
         <div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
           <p className="font-medium text-rust">{t("room-unreachable")}</p>
           <p className="mt-1 text-muted-foreground">{loadError}</p>
@@ -707,7 +748,7 @@ export default function Textbooks() {
             {t("retry")}
           </Button>
         </div>
-      )}
+      ) : null}
 
       {textbooks === null && !loadError && (
         <section className="mb-10 space-y-4">

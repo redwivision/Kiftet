@@ -3,6 +3,7 @@ import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ConceptGraph } from "@/components/concept-graph";
+import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
 import type { ChapterInfo } from "@/components/study-provider";
@@ -106,6 +107,7 @@ export default function Dashboard() {
   const [reviewError, setReviewError] = useState(false);
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoExpired, setDemoExpired] = useState(false);
   const [budget, setBudget] = useState<AiBudget | null>(null);
   const [misconceptions, setMisconceptions] = useState<MisconceptionMap | null>(
     null,
@@ -200,6 +202,14 @@ export default function Dashboard() {
         if (!cancelled && map.rows.length > 0) setMisconceptions(map);
       })
       .catch(async (err) => {
+        if (err instanceof ApiError && err.demoExpired) {
+          clearDemoUser();
+          if (!cancelled) {
+            setDemoExpired(true);
+            setError(null);
+          }
+          return;
+        }
         if (!cancelled && err instanceof ApiError && err.status === 0) {
           const cached: CachedChapter[] | null = await getCachedChapters();
           if (!cancelled && cached?.length) {
@@ -267,6 +277,13 @@ export default function Dashboard() {
       );
       navigate(`/study/${sessionId}`, { replace: true });
     } catch (err) {
+      if (err instanceof ApiError && err.demoExpired) {
+        clearDemoUser();
+        setDemoExpired(true);
+        setError(null);
+        setStarting(null);
+        return;
+      }
       setError(apiError(err));
       setStarting(null);
     }
@@ -274,6 +291,14 @@ export default function Dashboard() {
 
   const openRound = history.find((h) => h.status === "in_progress");
   const neverStudied = history.length === 0;
+
+  if (demoExpired) {
+    return (
+      <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+        <DemoExpiredNotice />
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -434,7 +459,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {error && (
+      {error ? (
         <div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
           <p className="font-medium text-rust">{t("room-unreachable")}</p>
           <p className="mt-1 text-muted-foreground">{error}</p>
@@ -447,7 +472,7 @@ export default function Dashboard() {
             {t("retry")}
           </Button>
         </div>
-      )}
+      ) : null}
 
       {chapters === null && !error && (
         <div className="grid gap-4 md:grid-cols-2">

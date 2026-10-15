@@ -29,11 +29,20 @@ export const healthUrl = () => `${serverRoot}/health`;
 // before they render "not found".
 export class ApiError extends Error {
   readonly status: number;
+  /**
+   * True when the server refused a request with 401 while this browser was
+   * carrying a demo id — i.e. the demo room has been cleared (they expire after
+   * a day) and the cached id no longer resolves. The caller shows the "demo
+   * ended" prompt instead of the generic "session expired" one, because there is
+   * no account to sign back into.
+   */
+  readonly demoExpired: boolean;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, demoExpired = false) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.demoExpired = demoExpired;
   }
 }
 
@@ -115,7 +124,11 @@ export async function api<T = unknown>(
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const message = body.error ?? statusMessage(res.status);
-      throw new ApiError(res.status, message);
+      throw new ApiError(
+        res.status,
+        message,
+        res.status === 401 && demoUser !== null,
+      );
     }
     return res.json() as Promise<T>;
   } catch (error) {

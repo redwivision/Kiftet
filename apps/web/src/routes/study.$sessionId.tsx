@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { BrandMark, GapClosingMark } from "@/components/brand-mark";
+import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { CoverageView } from "@/components/gap-list";
 import { GuideView } from "@/components/guide-view";
 import { InkSettling } from "@/components/ink-settling";
@@ -245,6 +246,14 @@ function StudyScreen({
   // is a dropped voice session, and the loop's rhythm breaks with it.
   useWakeLock(state.phase === "recall" || state.phase === "lesson");
 
+  if (state.demoExpired) {
+    return (
+      <main className="mx-auto w-full max-w-md px-4 py-24">
+        <DemoExpiredNotice />
+      </main>
+    );
+  }
+
   if (state.chapterLoading) {
     return (
       <main className="mx-auto grid w-full max-w-md content-center justify-items-center gap-4 px-6 py-24 text-muted-foreground">
@@ -322,7 +331,9 @@ function StudyScreen({
             </div>
           )}
 
-          {state.error && (
+          {state.demoExpired ? (
+            <DemoExpiredNotice />
+          ) : state.error ? (
             <div className="mb-5 rounded-2xl border border-rust/40 bg-rust/10 px-4 py-3 text-sm">
               <p className="mb-1 font-medium text-rust">
                 {t("something-went-wrong")}
@@ -337,7 +348,7 @@ function StudyScreen({
                 </Button>
               </div>
             </div>
-          )}
+          ) : null}
 
           <div className="animate-fade-in" key={state.phase}>
             {state.phase === "recall" && (

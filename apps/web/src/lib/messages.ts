@@ -244,6 +244,11 @@ export const en = {
     "Counted from all students here, with no names. A mistake shows up only after {threshold} or more students make it. It's always a group count — never one person's answers.",
   "unit-of": "· Unit {n}",
   "room-unreachable": "Couldn't load your chapters",
+  "demo-expired-title": "Your demo has ended",
+  "demo-expired-text":
+    "Demo rooms clear after a day, so this one is gone. Start a fresh demo to begin again; progress from the old room won't carry over.",
+  "demo-restart": "Start a new demo",
+  "demo-start-error": "Couldn't start a new demo. Please try again.",
   "offline-saved": "Offline — saved chapters",
   "offline-saved-text":
     "This list came from your phone. To start new work you need a connection — anything you already finished stays saved.",
@@ -1123,6 +1128,11 @@ export const am: Record<MessageKey, string> = {
     "እዚህ ባሉ ተማሪዎች ሁሉ ላይ ማንነት የማይገለጽ ነው። የተሳሳተ አረዳድ የሚታየው {threshold} ወይም ከዚያ በላይ ተማሪዎች ሲደርሱበት ብቻ ነው — ሁልጊዜም የጥቅል ነው፣ የግል ፈጽሞ አይደለም።",
   "unit-of": "· ክፍል {n}",
   "room-unreachable": "የጥናት ክፍሉን መድረስ አልተቻለም",
+  "demo-expired-title": "ማሳያው አልቋል",
+  "demo-expired-text":
+    "የማሳያ ክፍሎች ከአንድ ቀን በኋላ ይሰረዛሉ፣ ስለዚህ ይህ አልቋል። እንደገና ለመጀመር አዲስ ማሳያ ይጀምሩ፤ ከቀድሞው ክፍል የተደረገ እድገት አይቀጥልም።",
+  "demo-restart": "አዲስ ማሳያ ጀምር",
+  "demo-start-error": "አዲስ ማሳያ መጀመር አልተቻለም። እባክዎ እንደገና ይሞክሩ።",
   "offline-saved": "ከመስመር ውጭ — የተቀመጡ ምዕራፎች",
   "offline-saved-text":
     "ይህ ዝርዝር ከዚህ ስልክ ተጭኗል። አዲስ ሥራ ለመጀመር ግንኙነት ያስፈልጋል — ቀድሞ የተገመገመው ሁሉ ተቀምጦ ይቀራል።",

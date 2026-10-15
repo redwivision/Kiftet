@@ -10,6 +10,7 @@ import {
 import { useLanguage } from "@/components/language-provider";
 import { useOnline } from "@/hooks/use-online";
 import { ApiError, api, apiError } from "@/lib/api";
+import { clearDemoUser } from "@/lib/demo";
 import { enqueueOutbox, flushOutbox, hasQueuedForSession } from "@/lib/outbox";
 import {
   type ChecklistRow,
@@ -151,6 +152,7 @@ export type StudyState = {
   attempts: number;
   busy: boolean;
   error: string | null;
+  demoExpired: boolean;
   notice: string | null;
   // One submission is parked in the outbox awaiting a connection. The study
   // UI shows this state honestly — never a score — until a reconnect syncs
@@ -163,7 +165,7 @@ export type StudyAction =
   | { type: "LOAD_OK"; chapter: ChapterInfo }
   | { type: "LOAD_NOT_FOUND" }
   | { type: "BUSY"; busy: boolean }
-  | { type: "ERROR"; message: string | null }
+  | { type: "ERROR"; message: string | null; demoExpired?: boolean }
   | { type: "NOTICE"; message: string | null }
   | { type: "RECALL"; gaps: Gaps }
   | { type: "RECALL_FULL"; gaps: Gaps }
@@ -214,6 +216,7 @@ function initialState(_sessionId: string): StudyState {
     attempts: 0,
     busy: false,
     error: null,
+    demoExpired: false,
     notice: null,
     queued: null,
   };
@@ -288,7 +291,11 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
     case "BUSY":
       return { ...state, busy: action.busy };
     case "ERROR":
-      return { ...state, error: action.message };
+      return {
+        ...state,
+        error: action.message,
+        demoExpired: action.demoExpired ?? false,
+      };
     case "NOTICE":
       return { ...state, notice: action.message };
     case "RECALL":
@@ -452,6 +459,16 @@ export function StudyProvider({
   // they were written in.
   const { t, lang } = useLanguage();
 
+  const reportError = useCallback((err: unknown) => {
+    const demoExpired = err instanceof ApiError && err.demoExpired;
+    if (demoExpired) clearDemoUser();
+    dispatch({
+      type: "ERROR",
+      message: apiError(err),
+      demoExpired,
+    });
+  }, []);
+
   const run = useCallback(
     async (op: () => Promise<void>, onReplay?: () => Promise<void>) => {
       replayRef.current = onReplay ?? op;
@@ -460,12 +477,12 @@ export function StudyProvider({
       try {
         await op();
       } catch (err) {
-        dispatch({ type: "ERROR", message: apiError(err) });
+        reportError(err);
       } finally {
         dispatch({ type: "BUSY", busy: false });
       }
     },
-    [],
+    [reportError],
   );
 
   // loadSession (below, after fetchResult) opens the session, caches the
@@ -808,11 +825,11 @@ export function StudyProvider({
           if (err instanceof ApiError && err.status === 0) {
             offlineHitRef.current = true;
           }
-          dispatch({ type: "ERROR", message: apiError(err) });
+          reportError(err);
         }
       }
     })();
-  }, [sessionId, fetchResult, t]);
+  }, [sessionId, fetchResult, reportError, t]);
 
   const loadTokenRef = useRef(0);
 
@@ -846,20 +863,18 @@ export function StudyProvider({
     dispatch({ type: "ERROR", message: null });
     dispatch({ type: "BUSY", busy: true });
     return replay()
-      .catch((err: unknown) =>
-        dispatch({ type: "ERROR", message: apiError(err) }),
-      )
+      .catch((err: unknown) => reportError(err))
       .finally(() => dispatch({ type: "BUSY", busy: false }));
-  }, []);
+  }, [reportError]);
 
   const completeSession = useCallback(async () => {
     try {
       await api(`/sessions/${sessionId}/complete`, { method: "POST" });
     } catch (err) {
-      dispatch({ type: "ERROR", message: apiError(err) });
+      reportError(err);
       throw err;
     }
-  }, [sessionId]);
+  }, [reportError, sessionId]);
 
   const setNotice = useCallback(
     (message: string | null) => dispatch({ type: "NOTICE", message }),

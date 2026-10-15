@@ -1,12 +1,13 @@
 import { Button } from "@kiftet/ui/components/button";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
-import { api, apiError } from "@/lib/api";
+import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-import { getDemoUser } from "@/lib/demo";
+import { clearDemoUser, getDemoUser } from "@/lib/demo";
 import type { Route } from "./+types/syllabus";
 
 export function meta(_args: Route.MetaArgs) {
@@ -76,7 +77,18 @@ export default function Syllabus() {
   const [starting, setStarting] = useState<string | null>(null);
   const [savingUnit, setSavingUnit] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoExpired, setDemoExpired] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const reportApiError = useCallback((err: unknown) => {
+    if (err instanceof ApiError && err.demoExpired) {
+      clearDemoUser();
+      setDemoExpired(true);
+      setError(null);
+      return;
+    }
+    setError(apiError(err));
+  }, []);
 
   useEffect(() => {
     if (!sessionPending && !session && !getDemoUser()) {
@@ -104,14 +116,14 @@ export default function Syllabus() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(apiError(err));
+          reportApiError(err);
           setLoading(false);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [navigate, session, sessionPending]);
+  }, [navigate, reportApiError, session, sessionPending]);
 
   const current = useMemo(
     () =>
@@ -131,7 +143,7 @@ export default function Syllabus() {
       );
       setDetail(detail);
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err);
     } finally {
       setLoading(false);
     }
@@ -150,7 +162,7 @@ export default function Syllabus() {
       );
       navigate(`/study/${sessionId}`, { replace: true });
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err);
       setStarting(null);
     }
   };
@@ -172,11 +184,19 @@ export default function Syllabus() {
         setDetail(fresh);
       }
     } catch (err) {
-      setError(apiError(err));
+      reportApiError(err);
     } finally {
       setSavingUnit(null);
     }
   };
+
+  if (demoExpired) {
+    return (
+      <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+        <DemoExpiredNotice />
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -221,7 +241,7 @@ export default function Syllabus() {
         )}
       </header>
 
-      {error && (
+      {error ? (
         <div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
           <p className="font-medium text-rust">{t("syllabus-error")}</p>
           <p className="mt-1 text-muted-foreground">{error}</p>
@@ -234,7 +254,7 @@ export default function Syllabus() {
             {t("retry")}
           </Button>
         </div>
-      )}
+      ) : null}
 
       {notice && !error && (
         <p className="inner-surface mb-8 border border-sage/30 p-3 text-sage text-sm">

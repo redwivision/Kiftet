@@ -51,3 +51,17 @@ export async function startDemo(): Promise<string> {
   setDemoUser(userId);
   return userId;
 }
+
+/**
+ * Throw away a demo room that no longer exists and mint a fresh one.
+ *
+ * A demo identity expires after a day (the server janitor collects it), but the
+ * browser keeps the id in localStorage and `startDemo` would hand it straight
+ * back — so a visitor whose room expired was stuck on 401 with no way out. The
+ * "demo ended" prompt calls this: it clears the dead id first, so `startDemo`
+ * mints a new room instead of returning the corpse.
+ */
+export async function restartDemo(): Promise<string> {
+  clearDemoUser();
+  return startDemo();
+}
