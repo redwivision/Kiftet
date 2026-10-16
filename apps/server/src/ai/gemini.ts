@@ -6,12 +6,20 @@ import {
   admitAiCall,
   isAiBusy,
 } from "./admission";
+import { fallbackObjectives } from "./objectives";
 import {
   READING_WORDS_PER_MINUTE,
   STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
   STUDY_PLAN_MAX_STEPS,
 } from "./plan-config";
+import {
+  type CognitiveLevel,
+  fallbackLevels,
+  isCognitiveLevel,
+  LEVEL_DIRECTIVE,
+  type QuestionKind,
+} from "./questions";
 import { getFamily, getPhaseDirectives } from "./subject-strategy";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
@@ -75,6 +83,28 @@ export type ConceptChecklistItem = {
   conceptText: string;
   isMisconception: boolean;
   weight: number;
+};
+
+/** One of the book's own stated learning objectives for a chapter. */
+export type ObjectiveItem = {
+  objectiveText: string;
+  /** Deterministic anchor into the chapter's raw text, when one could be
+   *  found. Computed, never asked of the model. */
+  sourceOffset?: number;
+  sourceQuote?: string;
+};
+
+/** What one read of a chapter yields: the concept checklist and the book's own
+ *  stated objectives. They are extracted together because both are paid for by
+ *  the same model call — the free tier is per *project*, so a chapter read
+ *  costs one request whether it returns one list or two. */
+export type ChapterExtraction = {
+  concepts: ConceptChecklistItem[];
+  objectives: ObjectiveItem[];
+  /** True when this read came from the deterministic fallback rather than the
+   *  model, so objectives built from guesswork are stored `estimated` and the
+   *  UI can say their wording is ours. */
+  estimated: boolean;
 };
 
 /** The script/register generated student-facing text should be written in.
@@ -216,10 +246,27 @@ export type Guide = {
   estimated: boolean;
 };
 
-export type RetestQuestion = {
+/**
+ * One generated question, from either writer (recall or retest).
+ *
+ * `level` is the cognitive level the writer tagged it with — the shared
+ * standard (knowledge / comprehension / application / critical_thinking /
+ * compare_contrast). `targetConcept` is the exact conceptText the answer is
+ * graded against, and `targetObjective` the book objective it serves, both
+ * reconciled against stored rows by the route rather than trusted. `beyondText`
+ * marks a retest question that deliberately asks the student to reason about a
+ * scenario the chapter does not cover — the exam-readiness half of the retest.
+ */
+export type GeneratedQuestion = {
   question: string;
+  level: CognitiveLevel;
   targetConcept?: string;
+  targetObjective?: string;
+  beyondText?: boolean;
 };
+
+/** Back-compat alias: a retest question is just a generated one. */
+export type RetestQuestion = GeneratedQuestion;
 
 /**
  * One opening page of the book, keyed by its PDF page index (0-based).
@@ -259,7 +306,16 @@ export type TitleParse = {
 };
 
 export type AiService = {
-  extractConcepts(rawText: string): Promise<ConceptChecklistItem[]>;
+  /**
+   * Read a chapter once: its concept checklist AND the learning objectives the
+   * book states for it. One call, not two — the Gemini free tier is per
+   * project, so a second pass over the same text would double the cost of the
+   * most quota-sensitive path in the app for no new information.
+   *
+   * Objectives are absent, not fabricated, when the book states none: the
+   * combined prompt is told to return an empty list rather than invent them.
+   */
+  extractChapter(rawText: string): Promise<ChapterExtraction>;
   gradeRecall(
     transcript: string,
     concepts: ConceptChecklistItem[],
@@ -295,13 +351,32 @@ export type AiService = {
     language?: ContentLanguage,
     options?: { skipAi?: boolean; subject?: string },
   ): Promise<GuideSection>;
+  /**
+   * Diagnostic questions for *targeted* recall: they exist to expose gaps and
+   * wrong beliefs, so they lean on explanation and reasoning, not memorised
+   * facts. Deliberately a different pattern from the retest.
+   */
+  generateRecallQuestions(
+    gaps: GapAnalysis,
+    concepts: ConceptChecklistItem[],
+    objectives: string[],
+    language?: ContentLanguage,
+    options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
+  ): Promise<GeneratedQuestion[]>;
+  /**
+   * Exam-readiness questions: standardized across the five cognitive levels,
+   * never easy, carrying fine detail and at least one beyond-the-textbook
+   * critical-thinking scenario. Aimed at the failed objectives, failed
+   * concepts, and the lowest mastery levels. Not a diagnostic and not the same
+   * shape as a recall question.
+   */
   generateRetestQuestions(
     gaps: GapAnalysis,
     concepts: ConceptChecklistItem[],
-    recallText?: string,
+    objectives: string[],
     language?: ContentLanguage,
     options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
-  ): Promise<RetestQuestion[]>;
+  ): Promise<GeneratedQuestion[]>;
   /**
    * Read a textbook's table of contents out of its opening pages.
    *
@@ -620,16 +695,35 @@ function fallbackLesson(
   return `Let’s close your gaps. Today we focus on ${body}. Listen closely: ${targets[0]}, in plain words — it is simply this: keep the definition clear, use the example, and say it back out loud. Now explain it to me your way.`;
 }
 
+/**
+ * The deterministic questions, when no model answers. They cannot judge
+ * cognitive level or invent a beyond-textbook scenario, so they do not pretend
+ * to: each asks the student to explain a named idea, and the level is assigned
+ * by the shared ladder so the set still spreads instead of repeating one shape.
+ * Retest keeps its distinguishing rule by marking nothing beyond-text (a
+ * deterministic writer has no basis for a novel scenario), and recall keeps its
+ * diagnostic shape.
+ */
 function fallbackQuestions(
   gaps: GapAnalysis,
+  kind: QuestionKind,
   language: ContentLanguage = "en",
-): RetestQuestion[] {
-  const targets = [...gaps.missing, ...gaps.misconceptions].slice(0, 3);
-  return targets.map((t) => ({
+): GeneratedQuestion[] {
+  const targets = [...gaps.missing, ...gaps.misconceptions].slice(
+    0,
+    kind === "retest" ? 5 : 6,
+  );
+  const levels = fallbackLevels(kind, targets.length);
+  return targets.map((t, i) => ({
     question:
       language === "am"
-        ? `“${t}”ን በራስህ ቃላት ግለጽ — ጓደኛ እንደሆነ።`
-        : `Explain “${t}” in your own words, as if explaining it to a friend.`,
+        ? kind === "retest"
+          ? `“${t}”ን በጥልቀት አብራራ፣ ግን በአንተ ቃላት።`
+          : `“${t}”ን በራስህ ቃላት ገልጽ — ጓደኛ እንደሆነ።`
+        : kind === "retest"
+          ? `Explain “${t}” in full and precise detail, using your own words.`
+          : `Explain “${t}” in your own words, as if explaining it to a friend.`,
+    level: levels[i] ?? "comprehension",
     targetConcept: t,
   }));
 }
@@ -1535,6 +1629,66 @@ function extractItems(raw: string): ConceptChecklistItem[] | null {
   return items.length ? items.slice(0, 12) : null;
 }
 
+/** The most objectives a single chapter may carry, matching the DB-facing cap
+ *  used by the deterministic extractor. */
+const MAX_OBJECTIVES = 15;
+
+/**
+ * Read the `objectives` array out of an extraction reply and anchor each one.
+ *
+ * Objectives are optional — a chapter that states none returns an empty list,
+ * which is a valid answer, not a malformed one. So this never returns null:
+ * anything unusable collapses to "no objectives", the honest reading of a book
+ * that simply did not list them. The anchor is computed from the chapter text,
+ * never taken from the model, for the same reason guide anchors are.
+ */
+function extractObjectiveItems(
+  raw: string,
+  chapterText: string,
+): ObjectiveItem[] {
+  const data = parseJson<{ objectives?: unknown[] }>(raw);
+  if (!data || !Array.isArray(data.objectives)) return [];
+  const out: ObjectiveItem[] = [];
+  const seen = new Set<string>();
+  for (const entry of data.objectives) {
+    const text =
+      typeof entry === "string"
+        ? entry
+        : typeof entry === "object" &&
+            entry !== null &&
+            typeof (entry as { objectiveText?: unknown }).objectiveText ===
+              "string"
+          ? (entry as { objectiveText: string }).objectiveText
+          : "";
+    const objectiveText = text.trim();
+    if (!objectiveText) continue;
+    const key = objectiveText.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const anchor = sourceAnchor(objectiveText, chapterText);
+    out.push({
+      objectiveText,
+      sourceOffset: anchor?.offset,
+      sourceQuote: anchor?.quote,
+    });
+    if (out.length >= MAX_OBJECTIVES) break;
+  }
+  return out;
+}
+
+/** The deterministic half of `extractChapter`: concepts from sentences, the
+ *  book's stated objectives from its own objectives heading. */
+function fallbackExtraction(rawText: string): ChapterExtraction {
+  return {
+    concepts: fallbackExtract(rawText),
+    objectives: fallbackObjectives(rawText).map((o) => ({
+      objectiveText: o.objectiveText,
+      sourceOffset: o.offset,
+    })),
+    estimated: true,
+  };
+}
+
 function parseGaps(
   raw: string,
   concepts: ConceptChecklistItem[],
@@ -1666,11 +1820,15 @@ export function focusScore(
 }
 
 const EXTRACT_SYSTEM =
-  "Extract the core concepts someone must understand to master this chapter. " +
+  "Extract the core concepts someone must understand to master this chapter, and transcribe the chapter's OWN stated learning objectives when it lists them. " +
   "Return STRICT JSON, no prose, in this exact shape: " +
-  '{"items":[{"conceptText":"short self-contained phrase (5-15 words, as the student would say it)","weight":1-5,"isMisconception":false}]}. ' +
+  '{"items":[{"conceptText":"short self-contained phrase (5-15 words, as the student would say it)","weight":1-5,"isMisconception":false}],' +
+  '"objectives":[{"objectiveText":"one objective, as the book states it, as an imperative such as Describe... / Explain... / Calculate..."}]}. ' +
   "Include common student MISCONCEPTIONS as separate items (isMisconception true, phrased as the WRONG belief). " +
-  "Return 5-10 items, only what is actually in the text.";
+  "Return 5-10 concept items, only what is actually in the text. " +
+  "For objectives: copy ONLY the objectives the chapter itself states (under a heading like Objectives, Learning Outcomes, or Competencies). " +
+  "Do not invent objectives, and do not turn concepts into objectives: if the chapter states none, return an empty objectives array. " +
+  "Return at most 15 objectives.";
 
 const GRADE_SYSTEM =
   "You judge how well a student's spoken recall covers the concept checklist. " +
@@ -1704,15 +1862,35 @@ const SECTION_SYSTEM =
   "including students who have no gap here at all. Explain the concept; do not coach a specific person. " +
   "- Do not invent facts, page numbers, or examples that are not in the text below.";
 
+// Diagnostic questions for *targeted* recall. Their job is to expose gaps, so
+// they are deliberately NOT exam questions and NOT the retest's shape: they
+// probe one weak idea at a time with explanation and reasoning, and their
+// results feed the same gap analysis the free-recall path feeds.
+const RECALL_QUESTION_SYSTEM =
+  "Write short spoken diagnostic questions that reveal whether a student really understands each weak idea. " +
+  "This is a DIAGNOSTIC, not an exam: the point is to surface gaps and wrong beliefs, so prefer asking the student to explain and reason over asking them to recall a memorised fact. " +
+  "Write one question per weak idea (missing or misconception item), and set targetConcept to that item's exact conceptText (bare, never the [MISCONCEPTION] marker) so the answer is graded only against that idea. " +
+  "For a misconception, ask a question whose correct answer would contradict the wrong belief, so holding the belief shows. " +
+  LEVEL_DIRECTIVE +
+  " " +
+  'Return STRICT JSON: {"questions":[{"question":"...","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<exact weak-idea conceptText>"}]}.';
+
+// Exam-readiness questions for the retest. Written to a national-exam standard
+// and deliberately a different pattern from a recall question: these must be
+// hard, detailed, spread across all five cognitive levels, and include at least
+// one scenario the textbook does not cover.
 const RETEST_SYSTEM =
-  "Write 2-3 short spoken check questions that re-test exactly the missing/misconception items in the GapAnalysis. " +
-  "Each question must ask the student to speak aloud an explanation, definition, or worked example — not pick an option. " +
-  "Each question targets exactly ONE gap item: set targetConcept to the exact conceptText of that item " +
-  "(bare conceptText, never the [MISCONCEPTION] marker), so the answer is graded only against that idea. " +
-  "If the student's own recall is provided, mirror their wording — reuse the terms, framing, and examples they actually used " +
-  "so each question reads as a direct follow-up to what they said, not a canned quiz. Never quote their recall back as a statement, " +
-  "and never treat a wrong belief they stated as correct; only echo their phrasing. " +
-  'Return STRICT JSON: {"questions":[{"question":"...","targetConcept":"<one exact gap conceptText>"}]}.';
+  "Write questions that prove a student is bulletproof on this chapter — exam-standard, and NEVER easy. " +
+  "These are held to a national-exam standard and are a DIFFERENT pattern from a study check: do not simply ask the student to restate a definition. " +
+  "Target every failed objective and every failed concept, probing the lowest mastery levels hardest. " +
+  LEVEL_DIRECTIVE +
+  " Two rules make a question exam-ready: " +
+  "(1) Demand precise detail — exact terms, values, steps, conditions, or examples — never a vague prompt. " +
+  "(2) At least one question must go BEYOND the textbook: describe a novel scenario the chapter never covers and ask the student to reason it out using the chapter's ideas. Set beyondText true on exactly those questions. " +
+  "Each question must ask the student to speak an explanation, definition, worked example, or reasoned judgement — never to pick an option or answer yes/no. " +
+  "For questions that test a checklist idea, set targetConcept to that idea's exact conceptText (bare, never the [MISCONCEPTION] marker); for a beyond-textbook question you may also set targetObjective to the objective it serves. " +
+  "Write 3-5 questions. " +
+  'Return STRICT JSON: {"questions":[{"question":"...","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<exact conceptText or omit>","targetObjective":"<objective text or omit>","beyondText":false}]}.';
 
 /**
  * Transcribe the contents; do not interpret them.
@@ -1784,40 +1962,47 @@ function outputInstruction(language: ContentLanguage): string {
   return language === "am" ? AMHARIC_OUTPUT : "";
 }
 
-// The retest user prompt. When the student's own recall is available it is
-// appended so the writer can mirror their wording. Exported so the
-// recall-echo behaviour is directly testable without a live model.
-export function retestUserPrompt(
+// The user prompt handed to either question writer: the diagnosis, the
+// checklist to grade against, and — for both families — the book's own stated
+// objectives, so a question can hold the student to the author's contract and
+// not only to the concept list. Exported so the writer inputs are testable
+// without a live model.
+export function questionUserPrompt(
   gaps: GapAnalysis,
-  recallText?: string,
+  concepts: ConceptChecklistItem[],
+  objectives: string[],
 ): string {
-  const recall = recallText?.trim();
-  const base = `GAP ANALYSIS:\n${gapsSummary(gaps)}`;
-  return recall
-    ? `${base}\n\nSTUDENT'S OWN RECALL (mirror their wording):\n${recall.slice(0, 8000)}`
-    : base;
+  const objectiveBlock = objectives.length
+    ? `\n\nSTATED OBJECTIVES (the book's own contract; target these too):\n${objectives
+        .map((o) => `- ${o}`)
+        .join("\n")}`
+    : "";
+  return `GAP ANALYSIS:\n${gapsSummary(gaps)}\n\nCONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}${objectiveBlock}`;
 }
 
-// Pull a question list out of the model reply, carrying each question's target
-// concept when the model converged on one (it is validated against the stored
-// checklist by the route, never trusted blindly).
-function extractQuestions(raw: string): RetestQuestion[] | null {
+// Pull a question list out of the model reply. The level is validated against
+// the shared taxonomy (an unknown one falls back to comprehension, the honest
+// "explain it" reading), and the target concept/objective are carried through
+// for the route to reconcile against stored rows — never trusted blindly.
+function extractQuestions(raw: string, limit = 5): GeneratedQuestion[] | null {
   const data = parseJson<{ questions?: unknown[] }>(raw);
   if (!data || !Array.isArray(data.questions)) return null;
-  const out: RetestQuestion[] = [];
+  const out: GeneratedQuestion[] = [];
   for (const q of data.questions) {
     if (typeof q !== "object" || q === null) continue;
     const record = q as Record<string, unknown>;
     const question = record.question;
     if (typeof question !== "string" || !question.trim()) continue;
+    const str = (v: unknown) =>
+      typeof v === "string" && v.trim() ? v.trim() : undefined;
     out.push({
       question: question.trim(),
-      targetConcept:
-        typeof record.targetConcept === "string" && record.targetConcept.trim()
-          ? record.targetConcept.trim()
-          : undefined,
+      level: isCognitiveLevel(record.level) ? record.level : "comprehension",
+      targetConcept: str(record.targetConcept),
+      targetObjective: str(record.targetObjective),
+      beyondText: record.beyondText === true,
     });
-    if (out.length >= 3) break;
+    if (out.length >= limit) break;
   }
   return out.length ? out : null;
 }
@@ -1899,17 +2084,26 @@ function degraded<T>(operation: string, error: unknown, fallback: () => T): T {
 }
 
 export const ai: AiService = {
-  async extractConcepts(rawText: string): Promise<ConceptChecklistItem[]> {
-    const fallback = () => fallbackExtract(rawText);
+  async extractChapter(rawText: string): Promise<ChapterExtraction> {
+    const fallback = () => fallbackExtraction(rawText);
     if (!anyAiAvailable()) return fallback();
     try {
       const raw = await ask(
         EXTRACT_SYSTEM,
         `CHAPTER TEXT:\n${rawText.slice(0, 24000)}`,
       );
-      return extractItems(raw) ?? malformed("extractConcepts", fallback);
+      const concepts = extractItems(raw);
+      // A reply that yields no usable concepts is malformed; the whole read
+      // falls back together, so concepts and objectives come from one source
+      // rather than a model/concept split that would look half-trusted.
+      if (!concepts) return malformed("extractChapter", fallback);
+      return {
+        concepts,
+        objectives: extractObjectiveItems(raw, rawText),
+        estimated: false,
+      };
     } catch (error) {
-      return degraded("extractConcepts", error, fallback);
+      return degraded("extractChapter", error, fallback);
     }
   },
 
@@ -1928,8 +2122,7 @@ export const ai: AiService = {
     try {
       const family = subject ? getFamily(subject) : "other";
       const dirs = getPhaseDirectives(family, "recall");
-      const sysExtra =
-        dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
+      const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
         GRADE_SYSTEM + sysExtra,
         `CONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}\n\nSTUDENT RECALL:\n${transcript}`,
@@ -1954,8 +2147,7 @@ export const ai: AiService = {
     try {
       const family = options.subject ? getFamily(options.subject) : "other";
       const dirs = getPhaseDirectives(family, "lesson");
-      const sysExtra =
-        dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
+      const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
         LESSON_SYSTEM + sysExtra + outputInstruction(language),
         `GAP ANALYSIS:\n${gapsSummary(gaps)}`,
@@ -2021,8 +2213,7 @@ export const ai: AiService = {
     };
     const family = options.subject ? getFamily(options.subject) : "other";
     const dirs = getPhaseDirectives(family, "plan");
-    const sysExtra =
-      dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
+    const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
     const system =
       "For each numbered study-plan step, write ONE short orienting line (at most 18 words) telling the student why this step is here FOR THEM. " +
       "Base it only on the concept, the failure mode, and the student's own words when given — never introduce a fact, example, number, or claim the anchor does not already state. " +
@@ -2121,26 +2312,52 @@ export const ai: AiService = {
     }
   },
 
-  async generateRetestQuestions(
+  async generateRecallQuestions(
     gaps: GapAnalysis,
-    _concepts: ConceptChecklistItem[],
-    recallText = "",
+    concepts: ConceptChecklistItem[],
+    objectives: string[],
     language: ContentLanguage = "en",
     options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
-  ): Promise<RetestQuestion[]> {
-    const fallback = () => fallbackQuestions(gaps, language);
+  ): Promise<GeneratedQuestion[]> {
+    const fallback = () => fallbackQuestions(gaps, "recall", language);
     if (!anyAiAvailable()) return fallback();
     try {
       const family = options.subject ? getFamily(options.subject) : "other";
       const dirs = getPhaseDirectives(family, "retest");
-      const sysExtra =
-        dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
+      const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
-        RETEST_SYSTEM + sysExtra + outputInstruction(language),
-        retestUserPrompt(gaps, recallText),
+        RECALL_QUESTION_SYSTEM + sysExtra + outputInstruction(language),
+        questionUserPrompt(gaps, concepts, objectives),
       );
       return (
-        extractQuestions(raw) ?? malformed("generateRetestQuestions", fallback)
+        extractQuestions(raw, 6) ??
+        malformed("generateRecallQuestions", fallback)
+      );
+    } catch (error) {
+      return degraded("generateRecallQuestions", error, fallback);
+    }
+  },
+
+  async generateRetestQuestions(
+    gaps: GapAnalysis,
+    concepts: ConceptChecklistItem[],
+    objectives: string[],
+    language: ContentLanguage = "en",
+    options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
+  ): Promise<GeneratedQuestion[]> {
+    const fallback = () => fallbackQuestions(gaps, "retest", language);
+    if (!anyAiAvailable()) return fallback();
+    try {
+      const family = options.subject ? getFamily(options.subject) : "other";
+      const dirs = getPhaseDirectives(family, "retest");
+      const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
+      const raw = await ask(
+        RETEST_SYSTEM + sysExtra + outputInstruction(language),
+        questionUserPrompt(gaps, concepts, objectives),
+      );
+      return (
+        extractQuestions(raw, 5) ??
+        malformed("generateRetestQuestions", fallback)
       );
     } catch (error) {
       return degraded("generateRetestQuestions", error, fallback);

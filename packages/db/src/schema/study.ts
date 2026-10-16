@@ -124,6 +124,42 @@ export const conceptNode = pgTable(
 );
 
 /**
+ * One of a chapter's stated learning objectives — "describe photosynthesis",
+ * "explain the role of chlorophyll".
+ *
+ * Distinct from `conceptNode`: a concept is *what the chapter is about*, an
+ * objective is *what the book says the student must be able to do* with it.
+ * The book writes objectives itself when it lists them ("Learning outcomes",
+ * "By the end of this unit you will be able to…"), so they are the author's
+ * own contract for the chapter rather than an inference — which is exactly
+ * what targeted questions and the retest should hold the student to.
+ *
+ * `sourceOffset` / `sourceQuote` anchor the objective back into
+ * `chapter.rawText` for the same reason guide anchors exist: the guide hands
+ * the student *out* to their own book, and an objective without a location is
+ * a claim we cannot show them the source of. `estimated` marks objectives
+ * built by the deterministic extractor rather than read by the model.
+ */
+export const chapterObjective = pgTable(
+  "chapter_objective",
+  {
+    id: text("id").primaryKey(),
+    chapterId: text("chapter_id")
+      .notNull()
+      .references(() => chapter.id, { onDelete: "cascade" }),
+    objectiveText: text("objective_text").notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    sourceOffset: integer("source_offset"),
+    sourceQuote: text("source_quote"),
+    estimated: boolean("estimated").default(false).notNull(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [index("chapter_objective_chapterId_idx").on(table.chapterId)],
+);
+
+/**
  * One concept's guide section, generated once per (chapter, concept,
  * language) and shared by every student.
  *
@@ -206,6 +242,23 @@ export const planContent = pgTable(
   ],
 );
 
+/**
+ * A generated check/retest question as stored on a session. `focus` is the
+ * canonical concept(s) the answer is graded against; `level` is the shared
+ * cognitive level (knowledge / comprehension / application / critical_thinking
+ * / compare_contrast), kept as a loose string here so the db package need not
+ * depend on the server's taxonomy. `beyondText` marks a retest question that
+ * asks the student to reason about a scenario the chapter does not cover.
+ * Older rows predate these fields, so all of them are optional.
+ */
+export type StoredQuestion = {
+  question: string;
+  focus: string[];
+  level?: string;
+  targetObjective?: string;
+  beyondText?: boolean;
+};
+
 export const studySession = pgTable(
   "study_session",
   {
@@ -218,9 +271,19 @@ export const studySession = pgTable(
       .notNull()
       .$defaultFn(() => new Date()),
     completedAt: timestamp("completed_at"),
-    retestQuestions: jsonb("retest_questions").$type<
-      { question: string; focus: string[] }[] | null
-    >(),
+    /**
+     * How the student chose to recall at the start of the session:
+     *  - "blurting": free spoken recall only (the original behaviour)
+     *  - "targeted": skip free recall, answer diagnostic questions
+     *  - "both": free recall first, then the targeted questions
+     * Null on rows that predate the feature; treated as "blurting".
+     */
+    recallMode: text("recall_mode", {
+      enum: ["blurting", "targeted", "both"],
+    }).default("blurting"),
+    recallQuestions: jsonb("recall_questions").$type<StoredQuestion[] | null>(),
+    recallIndex: integer("recall_index").default(0).notNull(),
+    retestQuestions: jsonb("retest_questions").$type<StoredQuestion[] | null>(),
     retestIndex: integer("retest_index").default(0).notNull(),
     status: text("status", { enum: ["in_progress", "completed"] })
       .default("in_progress")
@@ -310,7 +373,18 @@ export const chapterRelations = relations(chapter, ({ one, many }) => ({
     references: [syllabusUnit.id],
   }),
   concepts: many(conceptNode),
+  objectives: many(chapterObjective),
 }));
+
+export const chapterObjectiveRelations = relations(
+  chapterObjective,
+  ({ one }) => ({
+    chapter: one(chapter, {
+      fields: [chapterObjective.chapterId],
+      references: [chapter.id],
+    }),
+  }),
+);
 
 export const conceptNodeRelations = relations(conceptNode, ({ one }) => ({
   chapter: one(chapter, {

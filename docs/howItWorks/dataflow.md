@@ -332,37 +332,72 @@ notification.
 
 ### 5.7 Retest — "prove you learned it"
 
-The retest has two parts: generating questions, then grading each answer. One
-design goal matters above all: **each question is graded alone against exactly
-one concept**, so getting one right can't secretly help the others.
+The retest has two parts: generating questions, then grading each answer. Two
+design goals matter above all: **each question is graded alone against exactly
+one focus** (so getting one right can't secretly help the others), and the
+questions are an **exam-readiness check, not a re-quiz** — never easy, tagged
+with a cognitive level, and carrying at least one scenario beyond the textbook.
 
 **Part A — Generate the questions:**
 
 ```mermaid
 flowchart LR
-  A["1 · POST /retest<br/>{ missing, misconceptions }"] --> B["2 · Gemini writes<br/>2–3 spoken-check questions"]
-  B --> C["3 · reconcile each focus tag<br/>against the stored checklist"]
-  C --> D["4 · each question returns<br/>with its focus subset"]
+  A["1 · POST /retest<br/>{ missing, misconceptions }"] --> B["2 · Gemini writes exam-level<br/>questions across 5 levels"]
+  B --> C["3 · reconcile each focus tag<br/>against the stored concepts + objectives"]
+  C --> D["4 · spread questions by focus<br/>each returns with its focus subset"]
 ```
 
-> **Trace:** ask for questions → Gemini writes them → tags are verified →
-> canonical focus returned. (Case/whitespace tolerant; an unverifiable tag
-> falls back to the gap list — a question never grades against a made-up idea.)
+> **Trace:** ask for questions → Gemini writes them at exam level → tags are
+> verified against the real concepts *and* the chapter's stated objectives →
+> canonical focus returned. (Case/whitespace tolerant; an unverifiable
+> `targetConcept` falls back to the question's `targetObjective`, then to the
+> gap list — a question never grades against a made-up idea.)
 
 ```
-Sending:   { missing: [...], misconceptions: [...] }
-Receiving: { questions: [ { question: "...", focus: ["..."] }, ... ] }
+Sending:   { missing: [...], misconceptions: [...], objectives: [...] }
+Receiving: { questions: [ { question: "...", level: "application",
+                            focus: ["..."], beyondText?: true }, ... ] }
 ```
 
-> **Echoes the student, not a canned quiz:** the question writer also receives
-> the student's own recall for this session (the latest `recall` attempt, read
-> server-side) and is instructed to mirror its wording — terms, framing, and
-> examples — so each question reads like a follow-up to what they actually
-> said. The chapter's subject is also passed, injecting family-specific
-> directives (e.g. Mathematics → "new problem, require step explanation;
-> include spot-the-error variant"; CS/ICT → "predict output with trace; debug
-> and explain the fix"). The prompt never restates a wrong belief they voiced as
-> if it were correct. (`retestUserPrompt` in `apps/server/src/ai/gemini.ts`.)
+> **Exam-readiness, not a mirror.** Earlier the retest echoed the student's own
+> recall wording; that made it a quiz on their phrasing and collapsed the
+> before/after delta, so it was reversed (decision #19). The writer now receives
+> the gap list *and* the chapter's stated objectives, and is told the questions
+> must never be easy, must include fine detail, must climb all five cognitive
+> levels (`knowledge` → `compare_contrast`, from
+> `apps/server/src/ai/questions.ts`), and must include at least one `beyondText`
+> scenario the chapter doesn't cover. The chapter's subject is still passed,
+> injecting family-specific directives. (`RETEST_SYSTEM` / `questionUserPrompt`
+> in `apps/server/src/ai/gemini.ts`.)
+
+### 5.7b Recall modes — blurting, targeted, or both
+
+The student picks how they want to remember **before** anything is generated;
+`study_session.recall_mode` persists the choice so a reload keeps the same loop.
+
+- **Blurting** — the original free spoken recall (§5.4). No questions.
+- **Targeted** — skip free recall and answer *diagnostic* questions over the
+  whole chapter (all concepts + objectives), because with no prior signal the
+  honest thing to diagnose is everything.
+- **Both** — blur first, then quiz the gaps that surfaced.
+
+Targeted questions come from a different writer, `generateRecallQuestions`,
+which is built to **expose gaps and wrong beliefs**, not to grade at exam
+standard. Each answer is stored as a `recall` attempt, so both modes feed the
+same gap analysis:
+
+```mermaid
+flowchart LR
+  A["1 · POST /recall-questions<br/>{ scope: 'chapter' | 'gaps' }"] --> B["2 · diagnostic questions<br/>tagged with a level"]
+  B --> C["3 · POST /recall-questions/answer<br/>{ transcript, focus, attemptId }"]
+  C --> D["4 · mergeRecallGaps unions<br/>every attempt so far"]
+  D --> E["5 · GET /recall-gaps<br/>one merged analysis"]
+```
+
+> The session's *before* score is the **mean of every recall attempt**, exactly
+> as the retest's *after* is the mean of its answers — so the delta stays one
+> comparable number whichever mode was chosen. (`mergeRecallGaps`,
+> `spreadByFocus`, `focusSubset` in `apps/server/src/routes/study.ts`.)
 
 **Part B — Answer each question:**
 
@@ -389,7 +424,7 @@ Receiving: { score: 100, gaps: { covered, missing, misconceptions, score } }
 
 ```mermaid
 flowchart LR
-  A["1 · GET /result"] --> B["2 · before = recall score<br/>after = avg of every<br/>retest answer"]
+  A["1 · GET /result"] --> B["2 · before = mean of recall attempts<br/>after = avg of every<br/>retest answer"]
   B --> C["3 · delta = after − before<br/>+ live durationMs"]
   C --> D{"4 · which outcome?"}
   D -->|"delta > 0"| E["Improved — done ✓"]
@@ -530,7 +565,8 @@ adds four more tables (`user`, `session`, `account`, `verification`) — see [th
 
 What each action writes:
 
-- **Chapter ingest** → `textbook` (1) + `chapter` (1) + `concept_node` (5–12)
+- **Chapter ingest** → `textbook` (1) + `chapter` (1) + `concept_node` (5–12) +
+  `chapter_objective` (0–15, when the book states objectives)
 - **Start session** → `study_session` (1)
 - **Recall** → `attempt` (1, stage `"recall"`)
 - **Retest answer** → `attempt` (1, stage `"retest"`)
@@ -543,12 +579,16 @@ What each action writes:
 ### 5.14 AI prompts — what gets sent to Gemini
 
 Every AI call follows the same shape: one system prompt plus the student's
-data, sent as a single message with `temperature: 0.4` and JSON output. Six
+data, sent as a single message with `temperature: 0.4` and JSON output. Seven
 different things get asked:
 
 1. **EXTRACT** (chapter ingest) — "Pull the core concepts + common
-   misconceptions from this chapter" → `{items: [{conceptText, weight,
-   isMisconception}]}`.
+   misconceptions from this chapter, and transcribe the learning objectives the
+   book itself states" → `{items: [{conceptText, weight, isMisconception}],
+   objectives: [{objectiveText}]}`. One call returns both, because the free
+   tier is per *project*: a chapter read costs one request whether it yields one
+   list or two. A chapter that states no objectives returns an empty array, not
+   invented ones.
 2. **GRADE** (recall + retest) — "Judge how well the student's explanation
    covers the checklist" → `{covered: [], missing: [], misconceptions: [],
    score}`. The chapter's subject is passed so family-specific directives
@@ -556,15 +596,24 @@ different things get asked:
 3. **LESSON** (microlesson) — "Write a short, pronunciation-friendly lesson
    that fixes exactly these gaps" → `{text}`. Also receives the subject and
    injects family directives.
-4. **RETEST** (retest questions) — "Write 2–3 spoken-check questions that
-   re-test the missing concepts; tag each with the targetConcept it tests;
-   if the student's own recall is provided, mirror its wording" →
-   `{questions: [{question, targetConcept}]}`. Subject + family directives
-   included.
-5. **FOCUS** (per-question verdict) — a deterministic helper, not a prompt: a
+4. **RECALL QUESTIONS** (targeted / both modes) — a *diagnostic* writer
+   (`generateRecallQuestions`): "Ask questions that expose this student's gaps
+   and wrong beliefs" → `{questions: [{question, level, targetConcept,
+   targetObjective}]}`. Leans on explanation and reasoning; never framed as an
+   exam. One shared taxonomy (`apps/server/src/ai/questions.ts`) tags every
+   question with a cognitive level.
+5. **RETEST** (exam-readiness) — a *separate* writer (`generateRetestQuestions`):
+   "Write questions that prove a student is bulletproof" → `{questions:
+   [{question, level, targetConcept, targetObjective, beyondText}]}`. Must never
+   be easy, must include fine detail, must climb all five cognitive levels, and
+   must include at least one `beyondText` scenario. Receives the chapter's
+   stated objectives so it can hold the student to the author's own contract.
+   This reversed the old behaviour where the retest echoed the student's recall
+   wording.
+6. **FOCUS** (per-question verdict) — a deterministic helper, not a prompt: a
    misconception counts as handled when *not* restated; a real concept counts
    when covered. Applied to the question's focus subset only.
-6. **WHY-FIRST** (plan orienting lines) — one batched call writes a short
+7. **WHY-FIRST** (plan orienting lines) — one batched call writes a short
    "why this step is yours" line per plan step, from concept + failure mode +
    student's own words. Subject + family directives included.
 
@@ -575,8 +624,8 @@ out-of-range, non-numeric, or keyed to something not on the checklist is
 dropped — a sloppy response degrades to the older list-based behaviour rather
 than throwing. And every prompt has a fallback: if Gemini fails or the key is a
 placeholder, deterministic heuristics take over (token matching for grading,
-sentence splitting for concepts, templates for lessons/questions), flagged
-with `estimated: true`.
+sentence splitting for concepts, an objectives-heading scan for learning
+objectives, templates for lessons/questions), flagged with `estimated: true`.
 
 **Subject-family directives.** `apps/server/src/ai/subject-strategy.ts` defines
 `SubjectFamily` (11 values: mathematics, physics, chemistry, biology,
@@ -601,12 +650,17 @@ that works:
 | `POST /api/auth/*` | Sign-in / sign-up / session | no | yes (auth tables) |
 | `GET /api/chapters` | Dashboard | no | no |
 | `GET /api/chapters/:id/concepts` | (view only) | no | no |
+| `GET /api/chapters/:id/objectives` | (view only) | no | no |
 | `POST /api/chapters/ingest` | Admin / seed | yes | yes |
 | `POST /api/sessions/start` | Dashboard | no | yes |
 | `GET /api/sessions` | Dashboard (history) | no | no |
 | `GET /api/sessions/:id` | StudyProvider | no | no |
 | `POST /api/sessions/:id/recall` | StudyProvider | yes | yes |
 | `POST /api/sessions/:id/microlesson` | StudyProvider | yes | no |
+| `POST /api/sessions/:id/recall-questions` | StudyProvider (targeted/both) | yes | yes |
+| `POST /api/sessions/:id/recall-questions/answer` | StudyProvider | yes | yes |
+| `GET /api/sessions/:id/recall-gaps` | StudyProvider | no | no |
+| `PATCH /api/sessions/:id/recall-mode` | StudyProvider | no | yes (update) |
 | `POST /api/sessions/:id/retest` | StudyProvider | yes | no |
 | `POST /api/sessions/:id/retest/answer` | StudyProvider | yes | yes |
 | `GET /api/sessions/:id/result` | StudyProvider | no | no |

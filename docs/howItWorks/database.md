@@ -7,17 +7,18 @@ A database's design is basically: *what facts do we need to remember, and how do
 they relate?* Kiftet has **fifteen tables** in two families: the eleven **study-domain**
 tables (the product) and the four **auth tables** (who is signed in).
 
-### 6.1 The study domain (11 tables)
+### 6.1 The study domain (12 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
 | `textbook` | A real school textbook (e.g. Physics) that a **user owns**, including its saved table of contents before any chapters are imported | `ownerId` → user, `title`, `subject`, `language`, `sourceName`, `sourceSize`, `toc` (nested JSON outline) |
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
+| `chapter_objective` | One learning objective the *book itself* states for a chapter | `chapterId`, `objectiveText`, `sortOrder`, `sourceOffset`/`sourceQuote` (anchor into `rawText`), `estimated` (found by the deterministic scan, not the model) |
 | `guide_section` | Cached guide content for one chapter concept and language | `chapterId`, `conceptText`, `language`, structured guide content and source anchor; unique `(chapterId, conceptText, language)` |
 | `plan_content` | **Unused since v1.** Grounded per-step content cache from the pre-roadmap plan | `chapterId`, `conceptText`, `stepType`, `language`, `planVersion`; unique across all five fields |
 | `plan_step_check` | **Unused since v1.** The v0 plan's per-concept check (the plan is a roadmap now, not a quiz) | `sessionId`, `conceptText`, `responseText`; unique `(sessionId, conceptText)` |
-| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `retestQuestions` (JSON), `retestIndex` |
+| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `recallMode` (`blurting`/`targeted`/`both`), `recallQuestions` (JSON) + `recallIndex`, `retestQuestions` (JSON) + `retestIndex` |
 | `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (mastery map, derived lists, optional matched evidence and estimate flag), `score` (int 0–100) |
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
@@ -71,13 +72,14 @@ accounts, textbooks, chapters, study sessions, and attempts.
 
 ```
 textbook 1 ──── n chapter 1 ──── n concept_node
-     │                   │
+     │                   │  └─── n chapter_objective
      └─── owner ── n     └─── n study_session 1 ──── n attempt
      user 1 ──── n session
      user 1 ──── n account
 ```
 
-- One textbook has many chapters; one chapter has many concepts.
+- One textbook has many chapters; one chapter has many concepts (and, when it
+  states them, many learning objectives).
 - One chapter can appear in many study sessions; one session has one recall
   attempt and one score per retest answer.
 - One user owns many textbooks and can have many open sessions.
@@ -127,5 +129,15 @@ the tables are the same names.)
 | `0001_living_firebrand` | Bet 1: `syllabus` + `syllabus_unit`, `chapter.unit_id` |
 | `0002_outstanding_firedrake` | Bet 2: `misconception_hit` |
 | `0003_white_otto_octavius` | Bet 1: `syllabus.source_note` (provenance behind `source`) |
+| `0004_quiet_heron` | Phase 12: `syllabus_unit.periods` + `periods_source` (official period allocation, nullable by design) |
+| `0005_keen_lantern` | Phase 11 step 3b: `guide_section` (cached per chapter/concept/language, source anchor) |
+| `0006_long_siren` | Phase 6: `textbook.source_name`, `source_size`, `toc` (saved outline) |
+| `0007_freezing_tiger_shark` | `waitlist_signup` table (phone, activation token, promise snapshot, testimonial) |
+| `0008_slimy_ego` | `waitlist_signup.channel_verified_at`; re-index eligibility |
+| `0009_stormy_the_call` | `waitlist_signup.testimonial_sent_at` |
+| `0010_grounded_study_plan` | `plan_content` (versioned base-content cache) + `plan_step_check` |
+| `0011_glamorous_bulldozer` | `user.kind` (`student`/`demo`) so demo identities can be swept |
+| `0012_milky_sugar_man` | `chapter_objective` — the book's own stated learning objectives, source-anchored |
+| `0013_special_salo` | `study_session.recall_mode` (`blurting`/`targeted`/`both`), `recall_questions` (JSON), `recall_index` |
 
 ---

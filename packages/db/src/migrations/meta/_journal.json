@@ -85,6 +85,20 @@
       "when": 1791833703900,
       "tag": "0011_glamorous_bulldozer",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792165691141,
+      "tag": "0012_milky_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792169828552,
+      "tag": "0013_special_salo",
+      "breakpoints": true
     }
   ]
 }

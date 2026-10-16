@@ -22,7 +22,13 @@ import {
   getCachedStudyPlan,
 } from "@/lib/store";
 
-export type Phase = "recall" | "gaps" | "lesson" | "retest" | "result";
+export type Phase =
+  | "recall"
+  | "targeted"
+  | "gaps"
+  | "lesson"
+  | "retest"
+  | "result";
 
 export type ChapterInfo = {
   id: string;
@@ -33,6 +39,19 @@ export type ChapterInfo = {
 };
 
 export type MasteryLevel = 0 | 1 | 2 | 3;
+
+/** The five-level cognitive standard a question is tagged with, mirrored from
+ *  the server so the UI can label it. Kept as a loose string union on purpose:
+ *  a question missing a level (an older cached one) still renders. */
+export type CognitiveLevel =
+  | "knowledge"
+  | "comprehension"
+  | "application"
+  | "critical_thinking"
+  | "compare_contrast";
+
+/** How the student chose to recall before the session's recall began. */
+export type RecallMode = "blurting" | "targeted" | "both";
 
 export type Gaps = {
   covered: string[];
@@ -116,6 +135,13 @@ export type SessionResult = {
 export type SessionQuestion = {
   question: string;
   focus: string[];
+  /** The cognitive level the writer tagged this question with. Absent on
+   *  questions cached before levels existed. */
+  level?: CognitiveLevel;
+  /** A retest question that asks the student to reason beyond the textbook. */
+  beyondText?: boolean;
+  /** The book objective the question serves, when it serves one. */
+  targetObjective?: string;
 };
 
 export type AnswerRecord = {
@@ -131,7 +157,12 @@ export type StudyState = {
   chapter: ChapterInfo | null;
   chapterLoading: boolean;
   sessionNotFound: boolean;
+  /** How the student chose to recall (chosen upfront, before recall starts). */
+  recallMode: RecallMode;
   gaps: Gaps | null;
+  /** The running merged gap analysis from targeted-recall answers, held until
+   *  the student moves on to the gaps view. */
+  recallGaps: Gaps | null;
   allCovered: boolean;
   lessonText: string | null;
   lessonLoading: boolean;
@@ -147,6 +178,10 @@ export type StudyState = {
   questions: SessionQuestion[];
   currentQuestion: number;
   answered: AnswerRecord[];
+  /** Which family the shared question UI is showing: a diagnostic recall set or
+   *  the exam-readiness retest. Drives where an answer is submitted and what
+   *  happens when the set is finished. */
+  questionStage: "recall" | "retest";
   result: SessionResult | null;
   resultLoading: boolean;
   attempts: number;
@@ -157,7 +192,11 @@ export type StudyState = {
   // One submission is parked in the outbox awaiting a connection. The study
   // UI shows this state honestly — never a score — until a reconnect syncs
   // it and the session reloads to its graded position.
-  queued: { kind: "recall" } | { kind: "answer"; questionIndex: number } | null;
+  queued:
+    | { kind: "recall" }
+    | { kind: "answer"; questionIndex: number }
+    | { kind: "recall-answer"; questionIndex: number }
+    | null;
 };
 
 export type StudyAction =
@@ -169,6 +208,15 @@ export type StudyAction =
   | { type: "NOTICE"; message: string | null }
   | { type: "RECALL"; gaps: Gaps }
   | { type: "RECALL_FULL"; gaps: Gaps }
+  | { type: "SET_RECALL_MODE"; mode: RecallMode }
+  | { type: "RECALL_QUESTIONS"; questions: SessionQuestion[] }
+  | {
+      type: "RESTORE_TARGETED";
+      questions: SessionQuestion[];
+      answered: AnswerRecord[];
+      gaps: Gaps | null;
+    }
+  | { type: "RECALL_ANSWER"; record: AnswerRecord; gaps: Gaps }
   | { type: "LESSON"; text: string }
   | { type: "GUIDE"; guide: GuideSection[]; estimated: boolean }
   | { type: "PLAN"; plan: StudyPlan }
@@ -200,7 +248,9 @@ function initialState(_sessionId: string): StudyState {
     chapter: null,
     chapterLoading: true,
     sessionNotFound: false,
+    recallMode: "blurting",
     gaps: null,
+    recallGaps: null,
     allCovered: false,
     lessonText: null,
     lessonLoading: false,
@@ -211,6 +261,7 @@ function initialState(_sessionId: string): StudyState {
     questions: [],
     currentQuestion: 0,
     answered: [],
+    questionStage: "retest",
     result: null,
     resultLoading: false,
     attempts: 0,
@@ -244,6 +295,40 @@ function attemptGaps(raw: unknown): Gaps {
     missing: stringList(raw),
     misconceptions: [],
     score: 0,
+  };
+}
+
+const COGNITIVE_LEVELS = [
+  "knowledge",
+  "comprehension",
+  "application",
+  "critical_thinking",
+  "compare_contrast",
+] as const;
+
+function asCognitiveLevel(value: unknown): CognitiveLevel | undefined {
+  return typeof value === "string" &&
+    (COGNITIVE_LEVELS as readonly string[]).includes(value)
+    ? (value as CognitiveLevel)
+    : undefined;
+}
+
+/** Normalise a server question (level arrives as a plain string) into the
+ *  client shape, dropping an unrecognised level rather than mislabelling it. */
+export function toSessionQuestion(q: {
+  question: string;
+  focus: string[];
+  level?: unknown;
+  beyondText?: unknown;
+  targetObjective?: unknown;
+}): SessionQuestion {
+  return {
+    question: q.question,
+    focus: q.focus,
+    level: asCognitiveLevel(q.level),
+    beyondText: q.beyondText === true ? true : undefined,
+    targetObjective:
+      typeof q.targetObjective === "string" ? q.targetObjective : undefined,
   };
 }
 
@@ -303,10 +388,12 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         ...state,
         phase: "gaps",
         gaps: action.gaps,
+        recallGaps: null,
         lessonText: null,
         plan: null,
         questions: [],
         answered: [],
+        questionStage: "retest",
         result: null,
         error: null,
         notice: null,
@@ -324,6 +411,44 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
           after: null,
           delta: null,
         },
+        error: null,
+        notice: null,
+        queued: null,
+      };
+    case "SET_RECALL_MODE":
+      return { ...state, recallMode: action.mode };
+    case "RECALL_QUESTIONS":
+      return {
+        ...state,
+        phase: "targeted",
+        questionStage: "recall",
+        questions: action.questions,
+        currentQuestion: 0,
+        answered: [],
+        recallGaps: null,
+        error: null,
+        notice: null,
+        queued: null,
+      };
+    case "RESTORE_TARGETED":
+      return {
+        ...state,
+        phase: "targeted",
+        questionStage: "recall",
+        questions: action.questions,
+        currentQuestion: action.answered.length,
+        answered: action.answered,
+        recallGaps: action.gaps,
+        error: null,
+        notice: null,
+        queued: null,
+      };
+    case "RECALL_ANSWER":
+      return {
+        ...state,
+        answered: [...state.answered, action.record],
+        currentQuestion: state.currentQuestion + 1,
+        recallGaps: action.gaps,
         error: null,
         notice: null,
         queued: null,
@@ -349,6 +474,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
       return {
         ...state,
         phase: "retest",
+        questionStage: "retest",
         questions: action.questions,
         currentQuestion: 0,
         answered: [],
@@ -360,6 +486,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
       return {
         ...state,
         phase: "retest",
+        questionStage: "retest",
         questions: action.questions,
         currentQuestion: action.answered.length,
         answered: action.answered,
@@ -396,12 +523,14 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         ...state,
         phase: "recall",
         gaps: null,
+        recallGaps: null,
         allCovered: false,
         lessonText: null,
         plan: null,
         questions: [],
         currentQuestion: 0,
         answered: [],
+        questionStage: "retest",
         result: null,
         error: null,
         notice: null,
@@ -420,6 +549,10 @@ interface StudyContextValue {
   state: StudyState;
   beginRecall: () => void;
   viewGaps: () => void;
+  setRecallMode: (mode: RecallMode) => void;
+  startRecallQuestions: (scope: "gaps" | "chapter") => Promise<void>;
+  submitRecallAnswer: (text: string) => Promise<void>;
+  viewTargetedGaps: () => void;
   submitRecall: (text: string) => Promise<void>;
   fetchLesson: (budgetMinutes?: 10 | 20 | 40) => Promise<void>;
   goLesson: () => void;
@@ -540,6 +673,123 @@ export function StudyProvider({
     [run, sessionId, t],
   );
 
+  const setRecallMode = useCallback(
+    (mode: RecallMode) => {
+      dispatch({ type: "SET_RECALL_MODE", mode });
+      // Persist best-effort: a failed write must not block the choice, it only
+      // means a reload falls back to the previous mode.
+      void api(`/sessions/${sessionId}/recall-mode`, {
+        method: "PATCH",
+        body: JSON.stringify({ recallMode: mode }),
+      }).catch(() => {});
+    },
+    [sessionId],
+  );
+
+  const startRecallQuestions = useCallback(
+    (scope: "gaps" | "chapter") => {
+      const gaps = stateRef.current.gaps;
+      const body = {
+        scope,
+        missing: scope === "gaps" ? (gaps?.missing ?? []) : [],
+        misconceptions: scope === "gaps" ? (gaps?.misconceptions ?? []) : [],
+        language: lang,
+      };
+      return run(
+        () =>
+          api<{ questions: SessionQuestion[] }>(
+            `/sessions/${sessionId}/recall-questions`,
+            { method: "POST", body: JSON.stringify(body) },
+          ).then(({ questions }) =>
+            dispatch({
+              type: "RECALL_QUESTIONS",
+              questions: questions.map(toSessionQuestion),
+            }),
+          ),
+        undefined,
+      );
+    },
+    [run, sessionId, lang],
+  );
+
+  const submitRecallAnswer = useCallback(
+    (text: string) => {
+      const { questions, currentQuestion } = stateRef.current;
+      const question = questions[currentQuestion];
+      if (!question) return Promise.resolve();
+      if (submittingRef.current) return Promise.resolve();
+      submittingRef.current = true;
+      const attemptId = crypto.randomUUID();
+      return run(
+        () =>
+          api<{ score: number; gaps: Gaps; merged: Gaps }>(
+            `/sessions/${sessionId}/recall-questions/answer`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                transcriptText: text,
+                questionIndex: currentQuestion,
+                attemptId,
+              }),
+            },
+          )
+            .then(({ score, gaps: answerGaps, merged }) =>
+              dispatch({
+                type: "RECALL_ANSWER",
+                record: {
+                  question: question.question,
+                  answer: text,
+                  correct: score >= 50,
+                  score,
+                  gaps: answerGaps,
+                },
+                gaps: merged,
+              }),
+            )
+            .catch((err: unknown) => {
+              if (err instanceof ApiError && err.status === 0) {
+                offlineHitRef.current = true;
+                void enqueueOutbox({
+                  id: attemptId,
+                  kind: "recall-answer",
+                  sessionId,
+                  attemptId,
+                  payload: {
+                    transcriptText: text,
+                    questionIndex: currentQuestion,
+                  },
+                  createdAt: Date.now(),
+                });
+                dispatch({
+                  type: "QUEUED",
+                  queued: {
+                    kind: "recall-answer",
+                    questionIndex: currentQuestion,
+                  },
+                });
+                dispatch({ type: "NOTICE", message: t("queued-answer") });
+                return;
+              }
+              throw err;
+            }),
+        undefined,
+      ).finally(() => {
+        submittingRef.current = false;
+      });
+    },
+    [run, sessionId, t],
+  );
+
+  const viewTargetedGaps = useCallback(() => {
+    const gaps = stateRef.current.recallGaps;
+    if (!gaps) return;
+    if (gaps.missing.length === 0 && gaps.misconceptions.length === 0) {
+      dispatch({ type: "RECALL_FULL", gaps });
+    } else {
+      dispatch({ type: "RECALL", gaps });
+    }
+  }, []);
+
   const fetchLesson = useCallback(
     (budgetMinutes: 10 | 20 | 40 = 20) => {
       const gaps = stateRef.current.gaps;
@@ -609,10 +859,7 @@ export function StudyProvider({
           }),
         })
           .then(({ questions }) => {
-            const normalized = questions.map((q) => ({
-              question: q.question,
-              focus: q.focus,
-            }));
+            const normalized = questions.map(toSessionQuestion);
             // Bet 3: keep the questions on the phone — a student who loses
             // the connection mid-retest can still answer them, and the
             // answers queue in the outbox to be graded on reconnect.
@@ -743,6 +990,9 @@ export function StudyProvider({
           chapterId: string;
           status: string;
           attempts: SessionAttemptRow[];
+          recallMode?: RecallMode;
+          recallQuestions: SessionQuestion[] | null;
+          recallIndex: number;
           retestQuestions: SessionQuestion[] | null;
           retestIndex: number;
         }>(`/sessions/${sessionId}`);
@@ -765,6 +1015,9 @@ export function StudyProvider({
           return;
         }
         dispatch({ type: "LOAD_OK", chapter });
+        if (session.recallMode) {
+          dispatch({ type: "SET_RECALL_MODE", mode: session.recallMode });
+        }
         // Pre-cache this chapter's checklist for offline study. Non-fatal:
         // the gaps view re-fetches and caches it too.
         void api<ChecklistRow[]>(`/chapters/${chapter.id}/concepts`)
@@ -773,6 +1026,57 @@ export function StudyProvider({
 
         const recalls = session.attempts.filter((a) => a.stage === "recall");
         const retests = session.attempts.filter((a) => a.stage === "retest");
+        const targetedInProgress =
+          session.recallMode &&
+          session.recallMode !== "blurting" &&
+          session.status === "in_progress" &&
+          !!session.recallQuestions?.length &&
+          session.recallIndex > 0;
+
+        if (targetedInProgress) {
+          const questions = session.recallQuestions ?? [];
+          const restored = recalls
+            .slice(0, session.recallIndex)
+            .map((attempt, index) => ({
+              question: questions[index]?.question ?? t("previously-answered"),
+              answer: attempt.transcriptText ?? "",
+              correct: (attempt.score ?? 0) >= 50,
+              score: attempt.score ?? 0,
+              gaps: attemptGaps(attempt.gapsIdentified),
+            }));
+          if (token !== loadTokenRef.current) return;
+          if (session.recallIndex < questions.length) {
+            dispatch({
+              type: "RESTORE_TARGETED",
+              questions,
+              answered: restored,
+              gaps: null,
+            });
+          } else {
+            // All questions answered: jump straight to the merged gaps.
+            try {
+              const merged = await api<Gaps>(
+                `/sessions/${sessionId}/recall-gaps`,
+              );
+              if (token !== loadTokenRef.current) return;
+              if (merged.missing.length || merged.misconceptions.length) {
+                dispatch({ type: "RECALL", gaps: merged });
+              } else {
+                dispatch({ type: "RECALL_FULL", gaps: merged });
+              }
+            } catch {
+              if (token !== loadTokenRef.current) return;
+              dispatch({
+                type: "RESTORE_TARGETED",
+                questions,
+                answered: restored,
+                gaps: null,
+              });
+            }
+          }
+          return;
+        }
+
         if (
           retests.length &&
           session.status === "in_progress" &&
@@ -903,6 +1207,10 @@ export function StudyProvider({
         state,
         beginRecall,
         viewGaps,
+        setRecallMode,
+        startRecallQuestions,
+        submitRecallAnswer,
+        viewTargetedGaps,
         submitRecall,
         fetchLesson,
         goLesson,

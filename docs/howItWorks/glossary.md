@@ -51,10 +51,36 @@
 - **Concept checklist** — the list of ideas a chapter must cover, extracted at
   ingest. It is the yardstick for every grade, and the key a mastery map is
   stored against.
+- **Learning objective** — one outcome the book *itself* states for a chapter
+  ("describe photosynthesis", "balance a chemical equation"), read out of a list
+  under a heading like Objectives or Learning Outcomes. Distinct from a
+  concept: the bonus a chapter is about vs. what the book says the student must
+  be able to do with it. Stored in `chapter_objective`, anchored to the text,
+  and `estimated` when found by the deterministic heading scan rather than the
+  model.
 - **Guide section** — one concept's study content: `what` (the idea), `why`
   (why it matters), `recall` (the say-it-back prompt). Generated once per
   `(chapter, concept, language)` and shared by every student; the *order* of the
   sections is per-student.
+- **Cognitive level** — the taxonomy every question is tagged with, shared by
+  recall and retest (`apps/server/src/ai/questions.ts`): `knowledge`,
+  `comprehension`, `application`, `critical_thinking`, `compare_contrast`. A
+  question set is expected to spread across the levels, and none of them is ever
+  easy. An unrecognised level from the model degrades to `comprehension`, never
+  a mislabel.
+- **Recall mode** — how a student chooses to remember, stored on
+  `study_session.recall_mode`: `blurting` (free spoken recall, the original
+  loop), `targeted` (skip free recall, answer diagnostic questions over the
+  whole chapter), or `both` (blur, then quiz the gaps). Chosen upfront and
+  persisted so a reload keeps the same flow.
+- **Targeted recall question** — a *diagnostic* question (writer:
+  `generateRecallQuestions`) whose job is to expose gaps and wrong beliefs, not
+  to grade at exam standard. Its answers are stored as `recall` attempts and
+  merge into the same gap analysis the blurting path produces.
+- **Beyond-textbook question** — a retest question (`beyondText: true`) that
+  describes a scenario the chapter does not cover and asks the student to reason
+  it out using the chapter's ideas. Part of what makes the retest a full
+  exam-readiness check rather than a re-quiz.
 - **Triage order** — the study order the guide uses, computed from a mastery map
   with no AI call: `2` (wrong) first, then `1` (raised, not explained), then `0`
   (untouched) by weight, then `3` (already solid) last as a confirmation. Wrong

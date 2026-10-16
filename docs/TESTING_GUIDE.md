@@ -186,8 +186,8 @@ the time by moving to `gemini-3.6-flash`, which is itself now capacity-limited
 model, and why it changed* below for the measured split. Verified end-to-end
 over HTTP: recall grades semantically (covered/missing/misconceptions/score),
 micro-lessons are genuine spoken lessons with analogies, retest questions are
-targeted spoken prompts, and `extractConcepts` returns weighted concepts +
-misconceptions.
+targeted spoken prompts, and `extractChapter` returns weighted concepts +
+misconceptions plus the chapter's own stated objectives.
 
 ### How I tested
 
@@ -196,7 +196,8 @@ misconceptions.
   bodies (extract, grade, lesson, retest) plus a deterministic fallback chain —
   the app never hard-fails whether a key is present or not.
 - **The missing ingest gap is fixed:** `/chapters/ingest` now calls
-  `ai.extractConcepts` and persists concept rows to `concept_node`. Without this,
+  `ai.extractChapter` and persists concept rows to `concept_node` (and the
+  book's stated learning objectives to `chapter_objective`). Without this,
   all downstream endpoints (`/recall`, `/microlesson`, `/retest`) were grading
   against an empty list — a latent bug that surfaced during Phase 2 planning.
 - Full smoke-test of the entire API flow without a Gemini key (fallback path):
@@ -253,7 +254,9 @@ deterministic floor:
    ```
 
    Every call should return a JSON object with data. The `conceptsExtracted`
-   field on ingest should be ≥1; the `gaps.score` on recall should be 0–1.
+   field on ingest should be ≥1 (and `objectivesExtracted` ≥0 — 0 is correct
+   for a chapter that states no learning objectives); the `gaps.score` on
+   recall should be 0–1.
 
 **With a real Gemini key (AI path):**
 

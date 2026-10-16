@@ -24,13 +24,15 @@ import { useLanguage } from "@/components/language-provider";
 import { MasteryRing, SegmentedRing } from "@/components/mastery-ring";
 import { ShortcutHint } from "@/components/shortcut-hint";
 import {
+  type AnswerRecord,
+  type CognitiveLevel,
   type Gaps,
+  type RecallMode,
   type StudyPlan,
   StudyProvider,
   useStudy,
 } from "@/components/study-provider";
 import { VoiceRing } from "@/components/voice-ring";
-import { getRecallHint, getRetestHint } from "@/lib/subject-strategy";
 import { useVoiceSession } from "@/hooks/use-voice-session";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -50,6 +52,7 @@ import {
   cacheChecklist,
   getCachedChecklist,
 } from "@/lib/store";
+import { getRecallHint, getRetestHint } from "@/lib/subject-strategy";
 import { useLoopTabChrome } from "@/lib/tab-chrome";
 import { visibleChapterTitle } from "@/lib/textbook";
 import {
@@ -355,6 +358,9 @@ function StudyScreen({
             {state.phase === "recall" && (
               <RecallPhase demo={demo} voiceAllowed={voiceAllowed} />
             )}
+            {state.phase === "targeted" && (
+              <TargetedRecallPhase voiceAllowed={voiceAllowed} />
+            )}
             {state.phase === "gaps" && (
               <GapsPhase startHereConcept={state.plan?.steps[0]?.concept} />
             )}
@@ -391,10 +397,12 @@ function SessionHeader({
   phase: string;
 }) {
   const { t } = useLanguage();
+  // "targeted" is a recall of its own kind, so it keeps the recall step lit.
+  const stepPhase = phase === "targeted" ? "recall" : phase;
   const current =
     phase === "result"
       ? STEPS.length
-      : Math.max(1, STEPS.findIndex((s) => s.phase === phase) + 1);
+      : Math.max(1, STEPS.findIndex((s) => s.phase === stepPhase) + 1);
 
   return (
     <header className="border-border/60 border-b px-4 pt-5 pb-5 sm:px-6 sm:pt-6 dark:border-white/10">
@@ -871,6 +879,185 @@ function QueuedPanel({ text }: { text: string }) {
   );
 }
 
+// The shared cognitive standard the server tags each question with, rendered
+// as a small label so the student can see what kind of thinking is asked for.
+const LEVEL_KEYS: Record<CognitiveLevel, MessageKey> = {
+  knowledge: "level-knowledge",
+  comprehension: "level-comprehension",
+  application: "level-application",
+  critical_thinking: "level-critical-thinking",
+  compare_contrast: "level-compare-contrast",
+};
+
+function LevelBadge({
+  level,
+  beyondText,
+}: {
+  level?: CognitiveLevel;
+  beyondText?: boolean;
+}) {
+  const { t } = useLanguage();
+  if (!level && !beyondText) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {level && (
+        <span className="rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 font-medium text-[0.72rem] text-gold">
+          {t(LEVEL_KEYS[level])}
+        </span>
+      )}
+      {beyondText && (
+        <span className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.72rem] text-sage">
+          {t("beyond-textbook")}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// The per-question feedback list, shared by the retest and targeted recall so
+// both families read the same way: what was asked, what the student said, and
+// which ideas are still open.
+function AnswerResults({ answered }: { answered: AnswerRecord[] }) {
+  const { t } = useLanguage();
+  return (
+    <ul className="space-y-2">
+      {answered.map((a, i) => (
+        <li
+          key={i}
+          className={cn(
+            "inner-surface flex items-start gap-3 px-4 py-3",
+            a.correct ? "dark:border-sage/25" : "dark:border-rust/30",
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full",
+              a.correct ? "bg-sage/15 text-sage" : "bg-rust/15 text-rust",
+            )}
+          >
+            {a.correct ? (
+              <Check className="size-3" />
+            ) : (
+              <X className="size-3" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-[0.78rem] text-muted-foreground">
+              {t("question-i", { n: i + 1 })} ·{" "}
+              {a.correct ? t("right") : t("still-open")}
+            </p>
+            <p className="mt-0.5 text-foreground/85 text-sm leading-6">
+              {a.question}
+            </p>
+            <p className="mt-2 text-foreground/70 text-xs leading-5">
+              <span className="font-medium text-muted-foreground">
+                {t("you-said")}{" "}
+              </span>
+              {a.answer || t("recorded-by-voice")}
+            </p>
+            {(a.gaps.missing.length > 0 ||
+              a.gaps.misconceptions.length > 0) && (
+              <p className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="font-medium text-[0.78rem] text-muted-foreground">
+                  {t("still-open")}
+                </span>
+                {[...a.gaps.missing, ...a.gaps.misconceptions].map(
+                  (concept, gi) => (
+                    <span
+                      key={`${gi}-${concept}`}
+                      className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.78rem] text-rust"
+                    >
+                      {concept}
+                    </span>
+                  ),
+                )}
+              </p>
+            )}
+            {a.gaps.covered.length > 0 && (
+              <p className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="font-medium text-[0.78rem] text-muted-foreground">
+                  {t("landed")}
+                </span>
+                {a.gaps.covered.map((concept, gi) => (
+                  <span
+                    key={`${gi}-${concept}`}
+                    className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.78rem] text-sage"
+                  >
+                    {concept}
+                  </span>
+                ))}
+              </p>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// The upfront choice: how the student wants to remember. Kept as a small radio
+// group so the loop's shape is the student's call, and persisted so a reload
+// keeps the same flow.
+function RecallModeChooser({
+  value,
+  onChange,
+}: {
+  value: RecallMode;
+  onChange: (mode: RecallMode) => void;
+}) {
+  const { t } = useLanguage();
+  const options: { mode: RecallMode; label: MessageKey; desc: MessageKey }[] = [
+    {
+      mode: "blurting",
+      label: "recall-mode-blurting",
+      desc: "recall-mode-blurting-desc",
+    },
+    {
+      mode: "targeted",
+      label: "recall-mode-targeted",
+      desc: "recall-mode-targeted-desc",
+    },
+    { mode: "both", label: "recall-mode-both", desc: "recall-mode-both-desc" },
+  ];
+  return (
+    <fieldset className="space-y-2">
+      <legend className="k-label mb-2 block">{t("recall-mode-label")}</legend>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {options.map((o) => {
+          const active = value === o.mode;
+          return (
+            <button
+              key={o.mode}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(o.mode)}
+              className={cn(
+                "rounded-2xl border px-3 py-2.5 text-left transition-colors duration-200",
+                active
+                  ? "border-gold/40 bg-gold/10"
+                  : "border-border/60 hover:bg-muted/40 dark:border-white/10",
+              )}
+            >
+              <span
+                className={cn(
+                  "block font-medium text-sm",
+                  active ? "text-gold" : "text-foreground",
+                )}
+              >
+                {t(o.label)}
+              </span>
+              <span className="mt-0.5 block text-muted-foreground text-xs leading-5">
+                {t(o.desc)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 function RecallPhase({
   demo,
   voiceAllowed,
@@ -878,7 +1065,8 @@ function RecallPhase({
   demo: boolean;
   voiceAllowed: boolean;
 }) {
-  const { state, submitRecall } = useStudy();
+  const { state, submitRecall, setRecallMode, startRecallQuestions } =
+    useStudy();
   const { t } = useLanguage();
   // Stable so VoiceCapture's capture effects can depend on it honestly instead
   // of re-running on every render of an inline arrow.
@@ -897,42 +1085,63 @@ function RecallPhase({
   }
 
   const subjectHint = getRecallHint(state.chapter?.subject ?? "");
+  const targeted = state.recallMode === "targeted";
   return (
     <div className="space-y-6">
       <PhaseHeading title={t("recall-title")} text={t("recall-text")} />
+      <RecallModeChooser value={state.recallMode} onChange={setRecallMode} />
       {subjectHint && (
         <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
-          <p className="text-muted-foreground text-xs leading-5">{subjectHint}</p>
+          <p className="text-muted-foreground text-xs leading-5">
+            {subjectHint}
+          </p>
         </div>
       )}
-      <VoiceCapture
-        submit={submitText}
-        voiceAllowed={voiceAllowed}
-        busy={state.busy}
-      />
-      {!demo && <FirstRunHint />}
-      {demo && (
-        <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
-          <p className="text-muted-foreground text-xs leading-5">
-            {t("plan-demo-sample-note")}
+      {targeted ? (
+        <div className="inner-surface space-y-4 p-5">
+          <p className="text-foreground/85 text-sm leading-6">
+            {t("recall-mode-targeted-desc")}
           </p>
           <Button
-            className="mt-2.5"
-            variant="outline"
-            size="sm"
+            className="w-full justify-center"
             disabled={state.busy}
-            onClick={() => void submitRecall(DEMO_SAMPLE_RECALL)}
+            onClick={() => void startRecallQuestions("chapter")}
           >
-            {state.busy ? t("preparing") : t("plan-demo-sample")}
+            {state.busy ? t("grading") : t("targeted-start")}
           </Button>
         </div>
+      ) : (
+        <>
+          <VoiceCapture
+            submit={submitText}
+            voiceAllowed={voiceAllowed}
+            busy={state.busy}
+          />
+          {!demo && <FirstRunHint />}
+          {demo && (
+            <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
+              <p className="text-muted-foreground text-xs leading-5">
+                {t("plan-demo-sample-note")}
+              </p>
+              <Button
+                className="mt-2.5"
+                variant="outline"
+                size="sm"
+                disabled={state.busy}
+                onClick={() => void submitRecall(DEMO_SAMPLE_RECALL)}
+              >
+                {state.busy ? t("preparing") : t("plan-demo-sample")}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
 
 function GapsPhase({ startHereConcept }: { startHereConcept?: string }) {
-  const { state, fetchLesson, startRetest } = useStudy();
+  const { state, fetchLesson, startRetest, startRecallQuestions } = useStudy();
   const { t } = useLanguage();
   const [budgetMinutes, setBudgetMinutes] = useState<10 | 20 | 40>(() => {
     if (typeof window === "undefined") return 20;
@@ -1046,6 +1255,16 @@ function GapsPhase({ startHereConcept }: { startHereConcept?: string }) {
         >
           {state.busy ? t("preparing") : t("see-study-plan")}
         </Button>
+        {state.recallMode === "both" && (
+          <Button
+            variant="outline"
+            className="w-full justify-center"
+            disabled={state.busy}
+            onClick={() => void startRecallQuestions("gaps")}
+          >
+            {t("gaps-quiz-these")}
+          </Button>
+        )}
         <button
           type="button"
           className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
@@ -1521,7 +1740,9 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
       />
       {!done && retestHint && (
         <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
-          <p className="text-muted-foreground text-xs leading-5">{retestHint}</p>
+          <p className="text-muted-foreground text-xs leading-5">
+            {retestHint}
+          </p>
         </div>
       )}
       {lang === "am" && !done && (
@@ -1551,13 +1772,21 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
 
       {!done ? (
         <div className="inner-surface p-5">
-          {questions[currentQuestion]?.focus?.length ? (
-            <p className="mb-2 font-medium text-[0.78rem] text-muted-foreground">
-              {t("retest-checking", {
-                focus: questions[currentQuestion].focus.join(", "),
-              })}
-            </p>
-          ) : null}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            {questions[currentQuestion]?.focus?.length ? (
+              <p className="font-medium text-[0.78rem] text-muted-foreground">
+                {t("retest-checking", {
+                  focus: questions[currentQuestion].focus.join(", "),
+                })}
+              </p>
+            ) : (
+              <span />
+            )}
+            <LevelBadge
+              level={questions[currentQuestion]?.level}
+              beyondText={questions[currentQuestion]?.beyondText}
+            />
+          </div>
           <p className="font-display font-medium text-foreground text-lg leading-7 tracking-[-0.01em] sm:text-xl">
             {questions[currentQuestion]?.question ?? ""}
           </p>
@@ -1577,89 +1806,103 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {answered.length > 0 && (
-            <ul className="space-y-2">
-              {answered.map((a, i) => (
-                <li
-                  key={i}
-                  className={cn(
-                    "inner-surface flex items-start gap-3 px-4 py-3",
-                    a.correct ? "dark:border-sage/25" : "dark:border-rust/30",
-                  )}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full",
-                      a.correct
-                        ? "bg-sage/15 text-sage"
-                        : "bg-rust/15 text-rust",
-                    )}
-                  >
-                    {a.correct ? (
-                      <Check className="size-3" />
-                    ) : (
-                      <X className="size-3" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-[0.78rem] text-muted-foreground">
-                      {t("question-i", { n: i + 1 })} ·{" "}
-                      {a.correct ? t("right") : t("still-open")}
-                    </p>
-                    <p className="mt-0.5 text-foreground/85 text-sm leading-6">
-                      {a.question}
-                    </p>
-                    <p className="mt-2 text-foreground/70 text-xs leading-5">
-                      <span className="font-medium text-muted-foreground">
-                        {t("you-said")}{" "}
-                      </span>
-                      {a.answer || t("recorded-by-voice")}
-                    </p>
-                    {(a.gaps.missing.length > 0 ||
-                      a.gaps.misconceptions.length > 0) && (
-                      <p className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <span className="font-medium text-[0.78rem] text-muted-foreground">
-                          {t("still-open")}
-                        </span>
-                        {[...a.gaps.missing, ...a.gaps.misconceptions].map(
-                          (concept, gi) => (
-                            <span
-                              key={`${gi}-${concept}`}
-                              className="rounded-full border border-rust/40 bg-rust/10 px-2 py-0.5 font-medium text-[0.78rem] text-rust"
-                            >
-                              {concept}
-                            </span>
-                          ),
-                        )}
-                      </p>
-                    )}
-                    {a.gaps.covered.length > 0 && (
-                      <p className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <span className="font-medium text-[0.78rem] text-muted-foreground">
-                          {t("landed")}
-                        </span>
-                        {a.gaps.covered.map((concept, gi) => (
-                          <span
-                            key={`${gi}-${concept}`}
-                            className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 font-medium text-[0.78rem] text-sage"
-                          >
-                            {concept}
-                          </span>
-                        ))}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <AnswerResults answered={answered} />
           <Button
             className="w-full justify-center"
             disabled={state.busy}
             onClick={() => void fetchResult()}
           >
             {state.busy ? t("grading") : t("see-result")}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Targeted recall: the diagnostic question family, shown when the student
+// chose "targeted" (whole chapter) or "both" (the gaps). It reuses the same
+// answer UI as the retest, but the questions are diagnostic and the set ends
+// at the student's starting picture, not a grade.
+function TargetedRecallPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
+  const { state, submitRecallAnswer, viewTargetedGaps } = useStudy();
+  const { t } = useLanguage();
+  const { questions, currentQuestion, answered } = state;
+  const done = currentQuestion >= questions.length;
+  const submitText = useCallback(
+    (text: string) => submitRecallAnswer(text),
+    [submitRecallAnswer],
+  );
+
+  return (
+    <div className="space-y-6">
+      <PhaseHeading
+        title={t("targeted-title")}
+        text={done ? t("targeted-done-text") : t("targeted-text")}
+      />
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="k-label">
+          {done
+            ? t("all-answered")
+            : t("question-of", {
+                a: currentQuestion + 1,
+                b: questions.length,
+              })}
+        </p>
+        <SegmentedRing
+          size={40}
+          states={questions.map((_q, i) => {
+            const a = answered[i];
+            if (a) return a.correct ? "correct" : "wrong";
+            return i === currentQuestion ? "current" : "pending";
+          })}
+        />
+      </div>
+
+      {!done ? (
+        <div className="inner-surface p-5">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            {questions[currentQuestion]?.focus?.length ? (
+              <p className="font-medium text-[0.78rem] text-muted-foreground">
+                {t("targeted-checking", {
+                  focus: questions[currentQuestion].focus.join(", "),
+                })}
+              </p>
+            ) : (
+              <span />
+            )}
+            <LevelBadge
+              level={questions[currentQuestion]?.level}
+              beyondText={questions[currentQuestion]?.beyondText}
+            />
+          </div>
+          <p className="font-display font-medium text-foreground text-lg leading-7 tracking-[-0.01em] sm:text-xl">
+            {questions[currentQuestion]?.question ?? ""}
+          </p>
+          <div className="mt-5 border-border/60 border-t pt-5 dark:border-white/10">
+            {state.queued?.kind === "recall-answer" &&
+            state.queued.questionIndex === currentQuestion ? (
+              <QueuedPanel text={t("queued-answer")} />
+            ) : (
+              <VoiceCapture
+                submit={submitText}
+                voiceAllowed={voiceAllowed}
+                busy={state.busy}
+                placeholder={t("type-answer-out-loud")}
+              />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <AnswerResults answered={answered} />
+          <Button
+            className="w-full justify-center"
+            disabled={state.busy}
+            onClick={viewTargetedGaps}
+          >
+            {t("see-your-gaps")}
           </Button>
         </div>
       )}

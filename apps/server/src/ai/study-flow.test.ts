@@ -35,12 +35,15 @@ beforeEach(() => {
         misconceptions: correct ? [] : [CONCEPT.conceptText],
       });
     }
-    if (system.includes("Write 2-3 short spoken check questions")) {
+    if (
+      system.includes("Write questions that prove a student is bulletproof")
+    ) {
       return JSON.stringify({
         questions: [
           {
             question:
               "What does the membrane let through, and what does it block?",
+            level: "application",
             targetConcept: CONCEPT.conceptText,
           },
         ],
@@ -83,9 +86,10 @@ describe("recall-to-retest study flow", () => {
     const retestQuestions = await ai.generateRetestQuestions(
       diagnosis,
       [CONCEPT],
-      WRONG_RECALL,
+      [],
     );
     expect(retestQuestions[0]?.targetConcept).toBe(CONCEPT.conceptText);
+    expect(retestQuestions[0]?.level).toBe("application");
 
     const retest = await ai.gradeRecall(CORRECT_RECALL, [CONCEPT]);
     expect(focusScore(retest, [CONCEPT])).toBe(1);

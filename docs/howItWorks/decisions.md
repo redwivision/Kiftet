@@ -177,3 +177,42 @@
     server's copy is canonical and the client's is only for two hint strings)
     so `RecallPhase` and `RetestPhase` can show subject-specific guidance at
     zero server cost.
+18. **Concepts and objectives are one call, not two.** A chapter's learning
+    objectives (the book's own stated outcomes) and its concept checklist are
+    now read by a single `extractChapter` prompt, because the Gemini free tier
+    is per *project*: a second pass over the same text would double the cost of
+    the most quota-sensitive path in the app for no new information. When the
+    book states no objectives, the model is told to return an empty list rather
+    than invent them, and the deterministic fallback
+    (`apps/server/src/ai/objectives.ts`) scans for an objectives heading instead
+    of calling the model at all. Objectives exist because they are the author's
+    own contract for the chapter — the honest yardstick for targeted questions
+    and the retest, distinct from the concept checklist the diagnosis is built
+    on.
+
+19. **Recall and retest are different instruments, so they are different
+    writers.** Both families tag every question with one of five shared
+    cognitive levels — knowledge, comprehension, application, critical
+    thinking, compare and contrast (`apps/server/src/ai/questions.ts`) — but the
+    prompts are deliberately not the same shape. Recall questions are
+    *diagnostic*: they exist to expose gaps and wrong beliefs, so they lean on
+    explanation and reasoning, and their answers feed the same gap analysis the
+    free-blurting path feeds. Retest questions are *exam-readiness*: they must
+    never be easy, must carry precise detail, climb all five levels, and include
+    at least one scenario beyond the textbook (`beyondText`). This reverses the
+    earlier "retest mirrors the student's own wording" behaviour: mirroring makes
+    the retest a quiz on their phrasing, not a measure of what they learned, and
+    it collapses the before/after delta. Both writers are handed the chapter's
+    stated objectives (decision 18) so a retest can hold the student to the
+    author's contract, not only the extracted checklist.
+
+20. **The recall mode is chosen upfront and the loop reshapes around it.**
+    `study_session.recall_mode` stores one of `blurting`, `targeted`, or `both`.
+    Blurting is the original free spoken recall. Targeted skips free recall and
+    answers diagnostic questions covering the whole chapter (concepts +
+    objectives), because with no prior signal the honest thing to diagnose is
+    everything. Both blurs first, then quizzes the gaps that surfaced. In
+    targeted mode each answer is stored as a `recall` attempt and the session's
+    *before* score is the mean of those attempts, exactly as the retest's
+    *after* is the mean of its answers — so the delta stays one comparable
+    number whichever mode the student chose.

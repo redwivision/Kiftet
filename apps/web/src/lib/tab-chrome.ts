@@ -15,6 +15,7 @@ import { type Language, type MessageKey, t as translate } from "@/lib/messages";
 
 const PHASE_TITLE: Record<Phase, MessageKey> = {
   recall: "tab-recall",
+  targeted: "tab-recall",
   gaps: "tab-gaps",
   lesson: "tab-lesson",
   retest: "tab-retest",
@@ -26,6 +27,7 @@ const PHASE_TITLE: Record<Phase, MessageKey> = {
 // fully shut so the result reads as the gap closed.
 const PHASE_PROGRESS: Record<Phase, number> = {
   recall: 0.25,
+  targeted: 0.3,
   gaps: 0.5,
   lesson: 0.75,
   retest: 0.9,

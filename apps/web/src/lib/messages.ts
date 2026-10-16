@@ -910,6 +910,34 @@ export const en = {
   // text baked into the shared image, and it names no topic, score, or person.
   "share-card": "Share this",
   "share-card-caption": "One gap, closed.",
+
+  // ── Recall mode + targeted recall (phase 2) ───────────────────
+  // The student chooses how to recall before recall starts. "Targeted" runs
+  // diagnostic questions; "both" blurs first, then quizzes the gaps.
+  "recall-mode-label": "How do you want to remember?",
+  "recall-mode-blurting": "Blurt it out",
+  "recall-mode-blurting-desc":
+    "Speak or type everything you remember, freely — misses and all.",
+  "recall-mode-targeted": "Answer questions",
+  "recall-mode-targeted-desc":
+    "Skip free recall. Answer a few diagnostic questions instead.",
+  "recall-mode-both": "Both",
+  "recall-mode-both-desc":
+    "Blurt it out first, then answer questions on what you missed.",
+  "targeted-title": "A few questions",
+  "targeted-text":
+    "These find out what you really understand. Answer out loud, in your own words, and say as much as you can.",
+  "targeted-start": "Start the questions",
+  "targeted-checking": "On: {focus}",
+  "targeted-done-text": "That's the whole set. Your picture is ready.",
+  "see-your-gaps": "See your picture",
+  "gaps-quiz-these": "Quiz me on these",
+  "beyond-textbook": "Beyond the textbook",
+  "level-knowledge": "Recall",
+  "level-comprehension": "Explain",
+  "level-application": "Apply",
+  "level-critical-thinking": "Think it through",
+  "level-compare-contrast": "Compare",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1729,6 +1757,29 @@ export const am: Record<MessageKey, string> = {
   "shortcut-pause-label": "ለማቆም",
   "share-card": "ይህን አጋራ",
   "share-card-caption": "አንድ ክፍተት ተሞላ።",
+
+  // ── Recall mode + targeted recall (phase 2) ───────────────────
+  "recall-mode-label": "እንዴት ማስታወስ ትፈልጋለህ?",
+  "recall-mode-blurting": "ብቻ ተናገር",
+  "recall-mode-blurting-desc": "የምታስታውሰውን ሁሉ በነጻነት ተናገር ወይም ጻፍ — የጎደለውን ጨምሮ።",
+  "recall-mode-targeted": "ጥያቄዎችን መልስ",
+  "recall-mode-targeted-desc": "ነጻ ማስታወስን ዝለል። በምትፈትሹ ጥቂት ጥያቄዎች መልስ።",
+  "recall-mode-both": "ሁለቱም",
+  "recall-mode-both-desc": "መጀመሪያ ተናገር፣ ከዚያ በጎደለህ ላይ ጥያቄዎችን መልስ።",
+  "targeted-title": "ጥቂት ጥያቄዎች",
+  "targeted-text":
+    "እነዚህ በእውነት የተረዳኸውን ያሳያሉ። በራስህ ቃላት ጮክ ብለህ መልስ፣ የቻልከውን ያህል ተናገር።",
+  "targeted-start": "ጥያቄዎቹን ጀምር",
+  "targeted-checking": "ላይ: {focus}",
+  "targeted-done-text": "ስብስቡ አለቀ። ስዕልህ ዝግጁ ነው።",
+  "see-your-gaps": "ስዕልህን ተመልከት",
+  "gaps-quiz-these": "በእነዚህ ፈትኸኝ",
+  "beyond-textbook": "ከመጽሐፉ ባለፈ",
+  "level-knowledge": "ማስታወስ",
+  "level-comprehension": "ማብራራት",
+  "level-application": "መተግበር",
+  "level-critical-thinking": "ማሰብ",
+  "level-compare-contrast": "ማወዳደር",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

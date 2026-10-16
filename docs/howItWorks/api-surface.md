@@ -10,14 +10,19 @@ All routes live behind `/api`:
 | `POST /api/chapters/ingest` | Store a textbook chapter; optional `topics` seed the checklist from the book's contents | 0 (skeleton) |
 | `GET /api/chapters` | List all chapters | 0 |
 | `GET /api/chapters/:id/concepts` | View a chapter's concept checklist | 0 |
-| `POST /api/sessions/start` | Begin a study session on a chapter | 0 |
+| `GET /api/chapters/:id/objectives` | View the learning objectives the book itself states for a chapter (empty when it states none) | 0 |
+| `POST /api/sessions/start` | Begin a study session on a chapter (optional `recallMode`: `blurting` (default) / `targeted` / `both`) | 0 |
+| `PATCH /api/sessions/:id/recall-mode` | Persist the student's recall-mode choice so a reload restores the flow | 0 |
 | `GET /api/sessions/:id` | Session details + its attempts | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/recall-questions` | Get diagnostic recall questions (`scope`: `gaps` or `chapter`) | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/recall-questions/answer` | Answer one recall question → per-question gaps + merged gaps | 0/2 (AI in 2) |
+| `GET /api/sessions/:id/recall-gaps` | The merged gap analysis from every recall attempt so far | 0 |
 | `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/plan` | Build the gap roadmap from diagnosed mastery and a 10/20/40 minute budget (deterministic; one batched call for the *why* lines) | 12 |
 | `GET /api/review-due` | Concepts whose latest mastery check is at least two days old | 12 |
 | `GET /api/chapters/:id/guide` | The ordered guide sections for this student (cached per chapter) | 0/11 (AI only on a cache miss) |
-| `POST /api/sessions/:id/retest` | Get new, differently-phrased questions for the gaps | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/retest` | Get exam-readiness questions (5 cognitive levels, detail, one beyond-textbook) for the gaps + objectives | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/retest/answer` | Submit retest answers → updated score | 0/2 (AI in 2) |
 | `GET /api/sessions/:id/result` | The before/after coverage delta | 0 |
 | `POST /api/sessions/:id/complete` | Mark the session finished | 0 |
@@ -51,7 +56,10 @@ the chapter's numbered contents entries (for example
 `["2.3 Structure and function of plant parts", "2.3.1 The internal structure of a leaf"]`).
 When provided, they seed the checklist in book order; the model can add
 distinct concepts and misconceptions from the chapter prose. The response
-includes `seededFromContents` to indicate whether TOC topics were supplied.
+includes `seededFromContents` to indicate whether TOC topics were supplied, and
+`objectivesExtracted` — the number of the chapter's own learning objectives
+stored in `chapter_objective` (0 when the book states none). Extraction is one
+model call returning both concepts and objectives.
 
 **The gaps payload.** `POST /recall` and `POST /retest/answer` return the same
 shape, and `mastery` is the part that matters:

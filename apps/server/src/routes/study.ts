@@ -1,9 +1,11 @@
 import {
   attempt,
   chapter,
+  chapterObjective,
   conceptNode,
   guideSection,
   misconceptionHit,
+  type StoredQuestion,
   studySession,
   syllabusUnit,
   type TextbookTocNode,
@@ -21,6 +23,7 @@ import {
   buildStudyPlan,
   type ContentsImage,
   focusScore,
+  type GeneratedQuestion,
   type GuideSection,
   gapAnalysisFrom,
   levelOf,
@@ -240,6 +243,135 @@ async function chapterConcepts(chapterId: string) {
     .from(conceptNode)
     .where(eq(conceptNode.chapterId, chapterId))
     .orderBy(conceptNode.sortOrder);
+}
+
+/** The chapter's stated learning objectives, in the book's own order. Fed to
+ *  both question writers so a retest can hold the student to the author's
+ *  contract, not only to the extracted concept list. */
+async function chapterObjectiveText(chapterId: string): Promise<string[]> {
+  const rows = await db()
+    .select({ objectiveText: chapterObjective.objectiveText })
+    .from(chapterObjective)
+    .where(eq(chapterObjective.chapterId, chapterId))
+    .orderBy(chapterObjective.sortOrder);
+  return rows.map((r) => r.objectiveText);
+}
+
+const byName = (value: string) => value.trim().toLowerCase();
+
+/**
+ * The concept rows a question is graded against, given its `focus` strings.
+ * Focus is matched against the stored checklist tolerantly (case/whitespace);
+ * a focus that has no stored counterpart (e.g. a beyond-textbook question's
+ * objective, or a freshly graded misconception) is synthesized so the answer
+ * can still be graded against that idea alone.
+ */
+async function focusSubset(chapterId: string, focus: string[]) {
+  const allConcepts = await chapterConcepts(chapterId);
+  const graded = allConcepts.filter((c) =>
+    focus.some((f) => byName(f) === byName(c.conceptText)),
+  );
+  const gradedNames = new Set(graded.map((c) => byName(c.conceptText)));
+  const extras = focus
+    .filter((f) => !gradedNames.has(byName(f)))
+    .map((f) => ({
+      id: crypto.randomUUID(),
+      chapterId,
+      conceptText: f,
+      isMisconception: false,
+      weight: 1,
+      sortOrder: 0,
+      createdAt: new Date(),
+    }));
+  return [...graded, ...extras];
+}
+
+/**
+ * Merge every "recall" attempt on a session into ONE gap analysis. In blurting
+ * mode there is a single attempt, so this is that attempt; in targeted mode
+ * each answered question contributes the levels for its own concept, and the
+ * union is what the plan/lesson/retest run on. Levels from any attempt win for
+ * the concepts that attempt judged; the lists are de-duplicated and the score
+ * is the mean of the per-attempt scores.
+ */
+async function mergeRecallGaps(sessionId: string): Promise<{
+  covered: string[];
+  missing: string[];
+  misconceptions: string[];
+  mastery: MasteryMap;
+  score: number;
+  estimated: boolean;
+}> {
+  const rows = await db()
+    .select({
+      score: attempt.score,
+      gapsIdentified: attempt.gapsIdentified,
+    })
+    .from(attempt)
+    .where(and(eq(attempt.sessionId, sessionId), eq(attempt.stage, "recall")))
+    .orderBy(attempt.createdAt);
+
+  const mastery: MasteryMap = {};
+  const covered = new Set<string>();
+  const missing = new Set<string>();
+  const misconceptions = new Set<string>();
+  const scores: number[] = [];
+  let estimated = false;
+
+  for (const row of rows) {
+    const raw = row.gapsIdentified;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const g = raw as Record<string, unknown>;
+      if (g.mastery && typeof g.mastery === "object") {
+        for (const [concept, level] of Object.entries(
+          g.mastery as Record<string, number>,
+        )) {
+          mastery[concept] = level as MasteryLevel;
+        }
+      }
+      for (const key of ["covered", "missing", "misconceptions"] as const) {
+        const list = g[key];
+        if (!Array.isArray(list)) continue;
+        for (const item of list) {
+          if (typeof item !== "string") continue;
+          if (key === "covered") covered.add(item);
+          else if (key === "missing") missing.add(item);
+          else misconceptions.add(item);
+        }
+      }
+      if (g.estimated === true) estimated = true;
+    }
+    if (typeof row.score === "number") scores.push(row.score);
+  }
+
+  // A concept is "covered" if it was judged correct; drop it from missing. The
+  // lists are derived from mastery where available so they cannot contradict.
+  for (const [concept, level] of Object.entries(mastery)) {
+    if (level === 3) {
+      covered.add(concept);
+      missing.delete(concept);
+      misconceptions.delete(concept);
+    } else if (level === 2) {
+      misconceptions.add(concept);
+      covered.delete(concept);
+    } else {
+      missing.add(concept);
+      covered.delete(concept);
+    }
+  }
+  for (const concept of covered) missing.delete(concept);
+
+  const score = scores.length
+    ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
+    : 0;
+  return {
+    covered: [...covered],
+    missing: [...missing],
+    misconceptions: [...misconceptions],
+    mastery,
+    score,
+    estimated,
+  };
 }
 
 /** A chapter the caller actually owns. The guide is generated content, so
@@ -475,6 +607,7 @@ router.post("/chapters/ingest", async (req, res) => {
       textbookId,
       chapterId: existingChapter.id,
       conceptsExtracted: 0,
+      objectivesExtracted: 0,
       reused: true,
     });
   }
@@ -489,12 +622,12 @@ router.post("/chapters/ingest", async (req, res) => {
     rawText,
   });
 
-  const extracted = await ai.extractConcepts(rawText);
+  const extraction = await ai.extractChapter(rawText);
   // A chapter read from a contents page carries the author's own structure;
   // the model is still asked, because it finds misconceptions and detail the
   // contents left out, but it no longer decides what the chapter contains or
   // what order it goes in.
-  const concepts = mergeConcepts(topics, extracted);
+  const concepts = mergeConcepts(topics, extraction.concepts);
   if (concepts.length) {
     await db()
       .insert(conceptNode)
@@ -510,12 +643,34 @@ router.post("/chapters/ingest", async (req, res) => {
       );
   }
 
+  // The book's own stated objectives, when it lists them. Read in the same
+  // call as the concepts (see `extractChapter`); kept as their own rows so
+  // targeted questions and the retest can hold the student to the book's
+  // contract rather than to the concept checklist alone.
+  const objectives = extraction.objectives;
+  if (objectives.length) {
+    await db()
+      .insert(chapterObjective)
+      .values(
+        objectives.map((o, i) => ({
+          id: crypto.randomUUID(),
+          chapterId,
+          objectiveText: o.objectiveText,
+          sortOrder: i,
+          sourceOffset: o.sourceOffset ?? null,
+          sourceQuote: o.sourceQuote ?? null,
+          estimated: extraction.estimated,
+        })),
+      );
+  }
+
   ok(
     res,
     {
       textbookId,
       chapterId,
       conceptsExtracted: concepts.length,
+      objectivesExtracted: objectives.length,
       // Worth showing: it tells the student the checklist came from the book.
       seededFromContents: (topics?.length ?? 0) > 0,
       reused: false,
@@ -738,6 +893,33 @@ router.get("/chapters/:id/concepts", async (req, res) => {
   ok(res, rows);
 });
 
+// The chapter's own stated learning objectives, in book order. Empty for a
+// chapter that does not list any — which is an answer, not a failure.
+router.get("/chapters/:id/objectives", async (req, res) => {
+  const owner = ownerId(req);
+  const rows = await db()
+    .select({
+      id: chapterObjective.id,
+      objectiveText: chapterObjective.objectiveText,
+      sortOrder: chapterObjective.sortOrder,
+      sourceOffset: chapterObjective.sourceOffset,
+      sourceQuote: chapterObjective.sourceQuote,
+      estimated: chapterObjective.estimated,
+    })
+    .from(chapterObjective)
+    .innerJoin(chapter, eq(chapterObjective.chapterId, chapter.id))
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(
+      and(
+        eq(chapterObjective.chapterId, req.params.id),
+        eq(textbook.ownerId, owner),
+      ),
+    )
+    .orderBy(chapterObjective.sortOrder);
+
+  ok(res, rows);
+});
+
 // ────────────────────────────────────────────────────────────────
 // Study sessions
 // ────────────────────────────────────────────────────────────────
@@ -746,6 +928,9 @@ const startSessionSchema = z.object({
   chapterId: z
     .string({ message: "Choose a chapter to start." })
     .min(1, "Choose a chapter to start."),
+  /** How the student wants to recall. Chosen before recall begins; defaults to
+   *  free blurting, which is the behaviour every existing client expects. */
+  recallMode: z.enum(["blurting", "targeted", "both"]).default("blurting"),
 });
 
 router.post("/sessions/start", async (req, res) => {
@@ -753,7 +938,7 @@ router.post("/sessions/start", async (req, res) => {
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
   const sessionId = crypto.randomUUID();
-  const { chapterId } = parsed.data;
+  const { chapterId, recallMode } = parsed.data;
   const userId = ownerId(req);
   const chapterExists = await db()
     .select({ id: chapter.id })
@@ -769,6 +954,7 @@ router.post("/sessions/start", async (req, res) => {
       id: sessionId,
       chapterId,
       userId: userId ?? null,
+      recallMode,
     });
 
   ok(res, { sessionId }, 201);
@@ -811,16 +997,26 @@ async function resultSummary(
     .where(eq(attempt.sessionId, sessionId))
     .orderBy(attempt.createdAt);
 
-  const recallAttempt = attemptsRows.find(
-    (a) => a.stage === "recall" && a.score !== null,
-  );
+  const recallScores = attemptsRows
+    .filter(
+      (a): a is { stage: "recall"; score: number } =>
+        a.stage === "recall" && a.score !== null,
+    )
+    .map((a) => a.score);
   const retestScores = attemptsRows
     .filter(
       (a): a is { stage: "retest"; score: number } =>
         a.stage === "retest" && a.score !== null,
     )
     .map((a) => a.score);
-  const before = recallAttempt?.score ?? null;
+  // "Before" is the mean of the recall attempts: exactly one in blurting mode,
+  // and one per answered diagnostic in targeted mode — the same averaging the
+  // "after" side already does for the retest.
+  const before = recallScores.length
+    ? Math.round(
+        recallScores.reduce((sum, s) => sum + s, 0) / recallScores.length,
+      )
+    : null;
   const after = retestScores.length
     ? Math.round(
         retestScores.reduce((sum, s) => sum + s, 0) / retestScores.length,
@@ -1538,6 +1734,72 @@ const retestSchema = z.object({
   language: z.enum(["en", "am"]).optional(),
 });
 
+/**
+ * Reconcile a writer's questions against the stored chapter. The model's
+ * targetConcept/targetObjective are matched tolerantly (case/whitespace) to the
+ * canonical rows — never trusted as-is. A question with no verifiable target
+ * falls back to its target objective (when it is a beyond-textbook question),
+ * then to the gap list in order, so every question can still be graded against
+ * something real. `level` and `beyondText` are carried through for the UI.
+ */
+function reconcileQuestions(
+  questions: GeneratedQuestion[],
+  concepts: { conceptText: string }[],
+  objectives: string[],
+  gapItems: string[],
+): StoredQuestion[] {
+  const canonicalGapItems = gapItems.map((gap) => {
+    const hit = concepts.find((c) => byName(c.conceptText) === byName(gap));
+    return hit ? hit.conceptText : gap;
+  });
+  const objectiveByText = new Map(objectives.map((o) => [byName(o), o]));
+  return questions.map((q, i) => {
+    let target: string | null = null;
+    if (q.targetConcept) {
+      const canonical = concepts.find(
+        (c) => byName(c.conceptText) === byName(q.targetConcept as string),
+      );
+      if (canonical) target = canonical.conceptText;
+    }
+    const targetObjective = q.targetObjective
+      ? (objectiveByText.get(byName(q.targetObjective)) ??
+        q.targetObjective.trim())
+      : undefined;
+    if (!target && q.beyondText && targetObjective) target = targetObjective;
+    if (!target && canonicalGapItems.length) {
+      const fallback = canonicalGapItems[i % canonicalGapItems.length];
+      if (fallback) target = fallback;
+    }
+    return {
+      question: q.question,
+      focus: target ? [target] : [],
+      level: q.level,
+      targetObjective,
+      beyondText: q.beyondText ? true : undefined,
+    };
+  });
+}
+
+/** Interleave questions so consecutive ones do not share a target idea. */
+function spreadByFocus(questions: StoredQuestion[]): StoredQuestion[] {
+  const byFocus = new Map<string, StoredQuestion[]>();
+  for (const question of questions) {
+    const key = question.focus[0] ?? "";
+    const group = byFocus.get(key) ?? [];
+    group.push(question);
+    byFocus.set(key, group);
+  }
+  if (byFocus.size <= 1) return questions;
+  const spread: StoredQuestion[] = [];
+  while ([...byFocus.values()].some((group) => group.length > 0)) {
+    for (const group of byFocus.values()) {
+      const next = group.shift();
+      if (next) spread.push(next);
+    }
+  }
+  return spread;
+}
+
 router.post("/sessions/:id/retest", async (req, res) => {
   if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = retestSchema.safeParse(req.body);
@@ -1556,69 +1818,22 @@ router.post("/sessions/:id/retest", async (req, res) => {
     concepts,
   );
 
-  // Echo the student's own recall: hand the question writer their latest
-  // spoken/written recall for this session so it mirrors how they phrased
-  // things, instead of sounding like a canned quiz.
-  const recallRows = await db()
-    .select({ transcriptText: attempt.transcriptText })
-    .from(attempt)
-    .where(
-      and(eq(attempt.sessionId, req.params.id), eq(attempt.stage, "recall")),
-    )
-    .orderBy(desc(attempt.createdAt))
-    .limit(1);
-
+  const objectives = await chapterObjectiveText(chapterId);
   const retestSubject = await chapterSubject(chapterId);
   const questions = await ai.generateRetestQuestions(
     gapAnalysis,
     concepts,
-    recallRows[0]?.transcriptText ?? undefined,
+    objectives,
     parsed.data.language,
     { subject: retestSubject },
   );
 
-  // Each question is pinned to exactly one gap item so the answer can be
-  // graded against that idea alone. The model's targetConcept is reconciled
-  // against the stored checklist; anything unverifiable falls back to the
-  // gap list in order.
-  const gapItems = [...parsed.data.missing, ...parsed.data.misconceptions];
-  const byName = (value: string) => value.trim().toLowerCase();
-  // Reconcile the gap strings against the stored checklist so the focus a
-  // question gets is the canonical conceptText (case/whitespace tolerant).
-  const canonicalGapItems = gapItems.map((gap) => {
-    const hit = concepts.find((c) => byName(c.conceptText) === byName(gap));
-    return hit ? hit.conceptText : gap;
-  });
-  const withFocus = questions.map((q, i) => {
-    let target: string | null = null;
-    if (q.targetConcept) {
-      const wanted = q.targetConcept;
-      const canonical = concepts.find(
-        (c) => byName(c.conceptText) === byName(wanted),
-      );
-      if (canonical) target = canonical.conceptText;
-    }
-    if (!target && canonicalGapItems.length) {
-      const fallback = canonicalGapItems[i % canonicalGapItems.length];
-      if (fallback) target = fallback;
-    }
-    return { question: q.question, focus: target ? [target] : [] };
-  });
-  const byFocus = new Map<string, typeof withFocus>();
-  for (const question of withFocus) {
-    const key = question.focus[0] ?? "";
-    const group = byFocus.get(key) ?? [];
-    group.push(question);
-    byFocus.set(key, group);
-  }
-  const spreadQuestions: typeof withFocus = [];
-  while ([...byFocus.values()].some((group) => group.length > 0)) {
-    for (const group of byFocus.values()) {
-      const next = group.shift();
-      if (next) spreadQuestions.push(next);
-    }
-  }
-  const orderedQuestions = byFocus.size > 1 ? spreadQuestions : withFocus;
+  const orderedQuestions = spreadByFocus(
+    reconcileQuestions(questions, concepts, objectives, [
+      ...parsed.data.missing,
+      ...parsed.data.misconceptions,
+    ]),
+  );
 
   await db()
     .update(studySession)
@@ -1631,6 +1846,189 @@ router.post("/sessions/:id/retest", async (req, res) => {
     );
 
   ok(res, { questions: orderedQuestions });
+});
+
+/**
+ * Targeted recall: unlike the retest, these questions are diagnostic — they
+ * exist to expose gaps and feed the same gap analysis the free-recall path
+ * feeds, and the writer is told to keep them a different (non-exam) shape.
+ *
+ * Two scopes:
+ *  - "gaps"    (default): probe the items the student already missed (used by
+ *              "both" mode, after blurting surfaces the gaps).
+ *  - "chapter": the student skipped free recall, so there is nothing to
+ *              diagnose yet — cover the WHOLE chapter (every concept marked
+ *              unaddressed, plus the stated objectives).
+ */
+const recallQuestionsSchema = z.object({
+  scope: z.enum(["gaps", "chapter"]).default("gaps"),
+  missing: z.array(z.string().trim().min(1).max(500)).max(50).default([]),
+  misconceptions: z
+    .array(z.string().trim().min(1).max(500))
+    .max(50)
+    .default([]),
+  language: z.enum(["en", "am"]).optional(),
+});
+
+router.post("/sessions/:id/recall-questions", async (req, res) => {
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  const parsed = recallQuestionsSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Session not found", 404);
+
+  const concepts = await chapterConcepts(chapterId);
+  const wholeChapter = parsed.data.scope === "chapter";
+  const gapAnalysis = gapAnalysisFrom(
+    wholeChapter
+      ? { missing: concepts.map((c) => c.conceptText), misconceptions: [] }
+      : {
+          missing: parsed.data.missing,
+          misconceptions: parsed.data.misconceptions,
+        },
+    concepts,
+  );
+
+  const objectives = await chapterObjectiveText(chapterId);
+  const subject = await chapterSubject(chapterId);
+  const questions = await ai.generateRecallQuestions(
+    gapAnalysis,
+    concepts,
+    objectives,
+    parsed.data.language,
+    { subject },
+  );
+
+  const orderedQuestions = spreadByFocus(
+    reconcileQuestions(
+      questions,
+      concepts,
+      objectives,
+      wholeChapter
+        ? concepts.map((c) => c.conceptText)
+        : [...parsed.data.missing, ...parsed.data.misconceptions],
+    ),
+  );
+
+  await db()
+    .update(studySession)
+    .set({ recallQuestions: orderedQuestions, recallIndex: 0 })
+    .where(
+      and(
+        eq(studySession.id, req.params.id),
+        eq(studySession.userId, ownerId(req)),
+      ),
+    );
+
+  ok(res, { questions: orderedQuestions });
+});
+
+/**
+ * Answer one targeted-recall question. The answer is graded against the
+ * question's own focus (same idea-alone rule as the retest), stored as a
+ * "recall" attempt so it counts toward the session's *before* score, and then
+ * every recall attempt so far is merged into the single gap analysis the rest
+ * of the loop runs on.
+ */
+const recallAnswerSchema = z.object({
+  transcriptText: z
+    .string({ message: "Say a little something so we can grade your answer." })
+    .trim()
+    .min(1, "Say a little something so we can grade your answer.")
+    .max(20_000, "That answer is too long — try again in shorter chunks."),
+  questionIndex: z
+    .number({ message: "That question can't be found." })
+    .int()
+    .min(0, "That question can't be found."),
+  attemptId: z.string().optional(),
+});
+
+router.post("/sessions/:id/recall-questions/answer", async (req, res) => {
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  const parsed = recallAnswerSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Session not found", 404);
+
+  const session = await findSession(req.params.id, ownerId(req));
+  const question = session?.recallQuestions?.[parsed.data.questionIndex];
+  if (!session || !question) return err(res, "Question not found", 400);
+  if (parsed.data.questionIndex !== session.recallIndex) {
+    return err(res, "That question is out of order", 409);
+  }
+
+  const subject = await chapterSubject(chapterId);
+  const subset = await focusSubset(chapterId, question.focus);
+  if (!subset.length) return err(res, "No concepts matched that question", 400);
+
+  const single = await ai.gradeRecall(
+    parsed.data.transcriptText,
+    subset,
+    subject,
+  );
+  const score = Math.round(focusScore(single, subset) * 100);
+
+  const inserted = await insertAttemptOnce({
+    id: parsed.data.attemptId,
+    sessionId: req.params.id,
+    stage: "recall",
+    transcriptText: parsed.data.transcriptText,
+    gapsIdentified: {
+      covered: single.covered,
+      missing: single.missing,
+      misconceptions: single.misconceptions,
+      mastery: single.mastery,
+      evidence: single.evidence ?? {},
+      estimated: single.estimated,
+    },
+    score,
+  });
+  if (inserted) {
+    await db()
+      .update(studySession)
+      .set({ recallIndex: (session.recallIndex ?? 0) + 1 })
+      .where(
+        and(
+          eq(studySession.id, req.params.id),
+          eq(studySession.userId, ownerId(req)),
+        ),
+      );
+  }
+
+  const merged = await mergeRecallGaps(req.params.id);
+  ok(res, { score, gaps: single, merged });
+});
+
+/** Persist the student's recall-mode choice so a reload restores the same flow. */
+const recallModeSchema = z.object({
+  recallMode: z.enum(["blurting", "targeted", "both"]),
+});
+
+router.patch("/sessions/:id/recall-mode", async (req, res) => {
+  const parsed = recallModeSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+  const updated = await db()
+    .update(studySession)
+    .set({ recallMode: parsed.data.recallMode })
+    .where(
+      and(
+        eq(studySession.id, req.params.id),
+        eq(studySession.userId, ownerId(req)),
+      ),
+    )
+    .returning({ id: studySession.id });
+  if (!updated.length) return err(res, "Session not found", 404);
+  ok(res, { recallMode: parsed.data.recallMode });
+});
+
+/** The merged gap analysis from every recall attempt so far, so a reloaded
+ *  targeted-recall session can jump straight to its gaps. */
+router.get("/sessions/:id/recall-gaps", async (req, res) => {
+  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Session not found", 404);
+  ok(res, await mergeRecallGaps(req.params.id));
 });
 
 const answerSchema = z.object({
@@ -1660,31 +2058,15 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
   if (parsed.data.questionIndex !== session.retestIndex) {
     return err(res, "That retest question is out of order", 409);
   }
-  const allConcepts = await chapterConcepts(chapterId);
-  const focus = question.focus;
-  const byName = (value: string) => value.trim().toLowerCase();
-  // Match focus against the stored checklist tolerantly; a focus string that
-  // has no stored counterpart (e.g. a freshly graded misconception text) is
-  // synthesized so the question can still be graded against that idea alone.
-  const graded = allConcepts.filter((c) =>
-    focus.some((f) => byName(f) === byName(c.conceptText)),
-  );
-  const gradedNames = new Set(graded.map((c) => byName(c.conceptText)));
-  const extras = focus
-    .filter((f) => !gradedNames.has(byName(f)))
-    .map((f) => ({
-      id: crypto.randomUUID(),
-      chapterId,
-      conceptText: f,
-      isMisconception: false,
-      weight: 1,
-      sortOrder: 0,
-      createdAt: new Date(),
-    }));
-  const subset = [...graded, ...extras];
+  const subject = await chapterSubject(chapterId);
+  const subset = await focusSubset(chapterId, question.focus);
   if (!subset.length) return err(res, "No concepts matched that question", 400);
 
-  const gaps = await ai.gradeRecall(parsed.data.transcriptText, subset);
+  const gaps = await ai.gradeRecall(
+    parsed.data.transcriptText,
+    subset,
+    subject,
+  );
   // For a single question, a misconception counts as handled when the student
   // does NOT restate the wrong belief; real concepts count when covered. This
   // is the per-question verdict the UI's "right/still open" actually means.
