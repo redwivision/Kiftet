@@ -17,9 +17,15 @@ import {
   type CognitiveLevel,
   fallbackLevels,
   isCognitiveLevel,
+  isRecallFormat,
+  judgeClosedAnswer,
   LEVEL_DIRECTIVE,
   type QuestionKind,
+  RECALL_SET_SIZE,
+  type RecallFormat,
+  recallFormatCounts,
 } from "./questions";
+import type { SubjectFamily } from "./subject-strategy";
 import { getFamily, getPhaseDirectives } from "./subject-strategy";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
@@ -263,6 +269,17 @@ export type GeneratedQuestion = {
   targetConcept?: string;
   targetObjective?: string;
   beyondText?: boolean;
+  /**
+   * Recall only: how the student answers. Multiple choice and fill-in-the-blank
+   * are graded deterministically (`answer` below); short answer is spoken and
+   * graded by the model, as recall has always been. Retest leaves this unset and
+   * stays free-form.
+   */
+  format?: RecallFormat;
+  /** Recall multiple choice only: the choices, the answer among them. */
+  options?: string[];
+  /** Recall closed formats only: the expected answer, never sent to the client. */
+  answer?: string;
 };
 
 /** Back-compat alias: a retest question is just a generated one. */
@@ -725,6 +742,10 @@ function fallbackQuestions(
           : `Explain “${t}” in your own words, as if explaining it to a friend.`,
     level: levels[i] ?? "comprehension",
     targetConcept: t,
+    // A deterministic writer has no basis for plausible distractors or a single
+    // missing word, so recall falls back to the spoken shape it can honestly
+    // produce. Retest stays free-form and carries no format at all.
+    format: kind === "recall" ? "short_answer" : undefined,
   }));
 }
 
@@ -1867,13 +1888,31 @@ const SECTION_SYSTEM =
 // probe one weak idea at a time with explanation and reasoning, and their
 // results feed the same gap analysis the free-recall path feeds.
 const RECALL_QUESTION_SYSTEM =
-  "Write short spoken diagnostic questions that reveal whether a student really understands each weak idea. " +
+  "Write short diagnostic questions that reveal whether a student really understands each weak idea. " +
   "This is a DIAGNOSTIC, not an exam: the point is to surface gaps and wrong beliefs, so prefer asking the student to explain and reason over asking them to recall a memorised fact. " +
   "Write one question per weak idea (missing or misconception item), and set targetConcept to that item's exact conceptText (bare, never the [MISCONCEPTION] marker) so the answer is graded only against that idea. " +
   "For a misconception, ask a question whose correct answer would contradict the wrong belief, so holding the belief shows. " +
   LEVEL_DIRECTIVE +
-  " " +
-  'Return STRICT JSON: {"questions":[{"question":"...","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<exact weak-idea conceptText>"}]}.';
+  " ";
+
+/**
+ * The format mix for a recall set, as a deterministic instruction. The numbers
+ * come from `recallFormatCounts` — the same source the parser and the fallback
+ * trust — so the writer, the validator, and the no-model path agree on one
+ * shape rather than three guesses. Subjects where a missing word is the natural
+ * probe get more fill-in-the-blank; everything else is mostly multiple choice.
+ */
+export function recallFormatDirective(family: SubjectFamily): string {
+  const counts = recallFormatCounts(RECALL_SET_SIZE, family);
+  return (
+    `Every question has a "format". Write exactly ${RECALL_SET_SIZE} questions in this mix: ` +
+    `${counts.multiple_choice} "multiple_choice", ${counts.fill_blank} "fill_blank", ${counts.short_answer} "short_answer". ` +
+    "- multiple_choice: offer four options, exactly one of which is correct and the others plausible but wrong; set answer to the EXACT text of the correct option, copied from options. " +
+    "- fill_blank: the question contains one blank written as ____ whose missing word or short phrase IS the answer; set answer to that word or phrase (a couple of words at most). " +
+    "- short_answer: a spoken question with no options and no answer; the student explains in their own words. " +
+    'Return STRICT JSON: {"questions":[{"format":"multiple_choice|fill_blank|short_answer","question":"...","options":["...","...","...","..."],"answer":"<the correct option for multiple_choice, or the missing word for fill_blank>","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<exact weak-idea conceptText>"}]}. '
+  );
+}
 
 // Exam-readiness questions for the retest. Written to a national-exam standard
 // and deliberately a different pattern from a recall question: these must be
@@ -1995,12 +2034,51 @@ function extractQuestions(raw: string, limit = 5): GeneratedQuestion[] | null {
     if (typeof question !== "string" || !question.trim()) continue;
     const str = (v: unknown) =>
       typeof v === "string" && v.trim() ? v.trim() : undefined;
+    // Format is recall's business. A closed format is only trusted when it is
+    // answerable: multiple choice needs two-plus options and an answer that
+    // really is one of them, fill-in-the-blank needs the missing word. Anything
+    // missing or inconsistent degrades to a spoken short answer rather than
+    // shipping a question that cannot be graded.
+    let format: RecallFormat | undefined = isRecallFormat(record.format)
+      ? record.format
+      : undefined;
+    let options = Array.isArray(record.options)
+      ? record.options
+          .filter((o): o is string => typeof o === "string" && !!o.trim())
+          .map((o) => o.trim())
+      : undefined;
+    let answer = str(record.answer);
+    if (format === "multiple_choice") {
+      if (
+        !options ||
+        options.length < 2 ||
+        !answer ||
+        !options.some((o) => judgeClosedAnswer(o, answer as string))
+      ) {
+        format = "short_answer";
+        options = undefined;
+        answer = undefined;
+      }
+    } else if (format === "fill_blank") {
+      if (!answer) {
+        format = "short_answer";
+        options = undefined;
+      } else {
+        options = undefined;
+      }
+    } else if (format === "short_answer") {
+      options = undefined;
+      answer = undefined;
+    }
     out.push({
       question: question.trim(),
       level: isCognitiveLevel(record.level) ? record.level : "comprehension",
       targetConcept: str(record.targetConcept),
       targetObjective: str(record.targetObjective),
       beyondText: record.beyondText === true,
+      format,
+      options,
+      answer,
     });
     if (out.length >= limit) break;
   }
@@ -2326,11 +2404,14 @@ export const ai: AiService = {
       const dirs = getPhaseDirectives(family, "retest");
       const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
-        RECALL_QUESTION_SYSTEM + sysExtra + outputInstruction(language),
+        RECALL_QUESTION_SYSTEM +
+          recallFormatDirective(family) +
+          sysExtra +
+          outputInstruction(language),
         questionUserPrompt(gaps, concepts, objectives),
       );
       return (
-        extractQuestions(raw, 6) ??
+        extractQuestions(raw, RECALL_SET_SIZE) ??
         malformed("generateRecallQuestions", fallback)
       );
     } catch (error) {

@@ -938,6 +938,10 @@ export const en = {
   "level-application": "Apply",
   "level-critical-thinking": "Think it through",
   "level-compare-contrast": "Compare",
+  // ── Targeted recall formats ──────────────────────────────────
+  "targeted-mcq-instruction": "Tap the best answer.",
+  "targeted-fill-blank-instruction": "Type the missing word or phrase.",
+  "targeted-short-instruction": "Say or type your answer in your own words.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1780,6 +1784,10 @@ export const am: Record<MessageKey, string> = {
   "level-application": "መተግበር",
   "level-critical-thinking": "ማሰብ",
   "level-compare-contrast": "ማወዳደር",
+  // ── Targeted recall formats ──────────────────────────────────
+  "targeted-mcq-instruction": "ተገቢውን መልስ ምረጥ።",
+  "targeted-fill-blank-instruction": "የጎደለውን ቃል ወይም ሐረግ ጻፍ።",
+  "targeted-short-instruction": "መልስህን በራስህ ቃላት ተናገር ወይም ጻፍ።",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {

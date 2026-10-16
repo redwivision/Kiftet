@@ -193,7 +193,12 @@ const STEPS = [
 
 export default function StudyRoute({ params }: Route.ComponentProps) {
   const { data: session, isPending } = authClient.useSession();
-  if (isPending) {
+  // Only the *first* session resolution may show the gate. A background refresh
+  // (a BroadcastChannel event, a rare refetch) must not unmount the study loop
+  // and replay its loader — the loop owns its own loading state.
+  const openedRef = useRef(false);
+  if (!isPending) openedRef.current = true;
+  if (isPending && !openedRef.current) {
     return (
       <main className="mx-auto grid min-h-64 place-items-center px-6 py-24 text-muted-foreground">
         <InkSettling />

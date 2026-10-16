@@ -37,6 +37,7 @@ import {
   STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
 } from "../ai/plan-config";
+import { judgeClosedAnswer } from "../ai/questions";
 import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -1776,6 +1777,9 @@ function reconcileQuestions(
       level: q.level,
       targetObjective,
       beyondText: q.beyondText ? true : undefined,
+      format: q.format,
+      options: q.options,
+      answer: q.answer,
     };
   });
 }
@@ -1963,11 +1967,30 @@ router.post("/sessions/:id/recall-questions/answer", async (req, res) => {
   const subset = await focusSubset(chapterId, question.focus);
   if (!subset.length) return err(res, "No concepts matched that question", 400);
 
-  const single = await ai.gradeRecall(
-    parsed.data.transcriptText,
-    subset,
-    subject,
-  );
+  let single: Awaited<ReturnType<typeof ai.gradeRecall>>;
+  const fmt = question.format;
+  if (fmt === "multiple_choice" || fmt === "fill_blank") {
+    const expected = question.answer ?? "";
+    const correct = judgeClosedAnswer(expected, parsed.data.transcriptText);
+    if (correct) {
+      const covered = question.focus.slice();
+      const missing: string[] = [];
+      const misconceptions: string[] = [];
+      const mastery: Record<string, number> = {};
+      for (const f of question.focus) mastery[f] = 3;
+      single = gapAnalysisFrom({ covered, missing, misconceptions }, subset);
+    } else {
+      const covered: string[] = [];
+      const missing = question.focus.slice();
+      const misconceptions: string[] = [];
+      single = gapAnalysisFrom({ covered, missing, misconceptions }, subset);
+    }
+    // Do not call allowAiRequest-consumed budget for closed grading; also
+    // ensure we didn't rely on AI. Nothing to call here — closed paths are
+    // free of AI.
+  } else {
+    single = await ai.gradeRecall(parsed.data.transcriptText, subset, subject);
+  }
   const score = Math.round(focusScore(single, subset) * 100);
 
   const inserted = await insertAttemptOnce({

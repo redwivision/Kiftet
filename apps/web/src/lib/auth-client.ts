@@ -41,4 +41,12 @@ export const authClient = createAuthClient({
   // better-auth derives its route-matching base from this URL's path, so the
   // public auth path must equal the server-side mount (/api/auth everywhere)
   baseURL: new URL("/api/auth", getServerUrl()).toString(),
+  // better-auth refetches the session whenever the tab/window becomes visible
+  // again, and flips the atom's `isPending` back to true while it does so. On a
+  // spot with no signed-in user (the demo room), that re-mounts the study route
+  // and replays its startup loader every time a student switches windows or tabs
+  // and comes back — a loading screen in the middle of a study loop. Freshness
+  // is already handled: cross-tab sign-out arrives over the auth
+  // BroadcastChannel, and every real API call resolves the session server-side.
+  sessionOptions: { refetchOnWindowFocus: false },
 });

@@ -142,6 +142,11 @@ export type SessionQuestion = {
   beyondText?: boolean;
   /** The book objective the question serves, when it serves one. */
   targetObjective?: string;
+  /** Format for recall questions; absent for retest and older cached rows. */
+  format?: "multiple_choice" | "fill_blank" | "short_answer";
+  /** Options for multiple choice recall questions. */
+  options?: string[];
+  // answer is never sent to the client; server-side only.
 };
 
 export type AnswerRecord = {
@@ -321,7 +326,20 @@ export function toSessionQuestion(q: {
   level?: unknown;
   beyondText?: unknown;
   targetObjective?: unknown;
+  format?: unknown;
+  options?: unknown;
 }): SessionQuestion {
+  const options = Array.isArray(q.options)
+    ? q.options.filter(
+        (o): o is string => typeof o === "string" && o.length > 0,
+      )
+    : undefined;
+  const format =
+    q.format === "multiple_choice" ||
+    q.format === "fill_blank" ||
+    q.format === "short_answer"
+      ? q.format
+      : undefined;
   return {
     question: q.question,
     focus: q.focus,
@@ -329,6 +347,8 @@ export function toSessionQuestion(q: {
     beyondText: q.beyondText === true ? true : undefined,
     targetObjective:
       typeof q.targetObjective === "string" ? q.targetObjective : undefined,
+    ...(format ? { format } : {}),
+    ...(options && options.length ? { options } : {}),
   };
 }
 

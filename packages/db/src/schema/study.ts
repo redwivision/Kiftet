@@ -257,6 +257,15 @@ export type StoredQuestion = {
   level?: string;
   targetObjective?: string;
   beyondText?: boolean;
+  /**
+   * Recall only: how the student answers. `options` are the multiple-choice
+   * choices and `answer` the text they must match for a closed question; both
+   * stay server-side (the client never receives `answer`). Absent on retest and
+   * on older rows, which are treated as spoken short answers.
+   */
+  format?: string;
+  options?: string[];
+  answer?: string;
 };
 
 export const studySession = pgTable(
