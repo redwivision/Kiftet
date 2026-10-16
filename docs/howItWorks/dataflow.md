@@ -171,6 +171,13 @@ Receiving: { gaps: { mastery: {...}, covered: [...], missing: [...], misconcepti
 
 A few things worth knowing:
 
+- **Subject-family-aware grading:** the chapter's `subject` is looked up and
+  passed to `gradeRecall`, which injects family-specific directives into the
+  system prompt (e.g. Mathematics → "focus on method/reasoning steps, not just
+  the answer"; CS/ICT → "trace control flow; don't penalize syntax"; English →
+  "assess usage in context"). Defined once in
+  `apps/server/src/ai/subject-strategy.ts` and mirrored for client hints in
+  `apps/web/src/lib/subject-strategy.ts`.
 - **What's graded:** every concept gets a **level** — `0` not addressed, `1`
   raised but not explained, `2` explained wrong, `3` explained correctly — in
   `gaps.mastery`. The `covered` / `missing` / `misconceptions` lists you see are
@@ -306,10 +313,12 @@ into a YouTube or Google search link. The server never invents a URL.
 
 Only the one-line *why this is yours* is generated: a single batched provider
 call (`generatePlanWhyFirst`) writes one short orienting line per step from the
-concept, failure mode, and the student's own words. If the model is unavailable
-the line falls back to the deterministic diagnosis ("Not in your recall — start
-here."), and `estimated` marks when any line fell back. The plan is the same
-for a given diagnosis and budget regardless.
+concept, failure mode, and the student's own words. The chapter's subject is
+passed so the prompt carries family-specific directives (from
+`subject-strategy.ts`). If the model is unavailable the line falls back to the
+deterministic diagnosis ("Not in your recall — start here."), and `estimated`
+marks when any line fell back. The plan is the same for a given diagnosis and
+budget regardless.
 
 Progress is a **tick-through checklist**, not an attempt: cards mark done for the
 session (`sessionStorage`), and `plan-progress` shows *n of m done*. The old
@@ -349,8 +358,11 @@ Receiving: { questions: [ { question: "...", focus: ["..."] }, ... ] }
 > the student's own recall for this session (the latest `recall` attempt, read
 > server-side) and is instructed to mirror its wording — terms, framing, and
 > examples — so each question reads like a follow-up to what they actually
-> said. The prompt never restates a wrong belief they voiced as if it were
-> correct. (`retestUserPrompt` in `apps/server/src/ai/gemini.ts`.)
+> said. The chapter's subject is also passed, injecting family-specific
+> directives (e.g. Mathematics → "new problem, require step explanation;
+> include spot-the-error variant"; CS/ICT → "predict output with trace; debug
+> and explain the fix"). The prompt never restates a wrong belief they voiced as
+> if it were correct. (`retestUserPrompt` in `apps/server/src/ai/gemini.ts`.)
 
 **Part B — Answer each question:**
 
@@ -531,7 +543,7 @@ What each action writes:
 ### 5.14 AI prompts — what gets sent to Gemini
 
 Every AI call follows the same shape: one system prompt plus the student's
-data, sent as a single message with `temperature: 0.4` and JSON output. Five
+data, sent as a single message with `temperature: 0.4` and JSON output. Six
 different things get asked:
 
 1. **EXTRACT** (chapter ingest) — "Pull the core concepts + common
@@ -539,16 +551,22 @@ different things get asked:
    isMisconception}]}`.
 2. **GRADE** (recall + retest) — "Judge how well the student's explanation
    covers the checklist" → `{covered: [], missing: [], misconceptions: [],
-   score}`.
+   score}`. The chapter's subject is passed so family-specific directives
+   (from `subject-strategy.ts`) are injected into the system prompt.
 3. **LESSON** (microlesson) — "Write a short, pronunciation-friendly lesson
-   that fixes exactly these gaps" → `{text}`.
+   that fixes exactly these gaps" → `{text}`. Also receives the subject and
+   injects family directives.
 4. **RETEST** (retest questions) — "Write 2–3 spoken-check questions that
    re-test the missing concepts; tag each with the targetConcept it tests;
    if the student's own recall is provided, mirror its wording" →
-   `{questions: [{question, targetConcept}]}`.
+   `{questions: [{question, targetConcept}]}`. Subject + family directives
+   included.
 5. **FOCUS** (per-question verdict) — a deterministic helper, not a prompt: a
    misconception counts as handled when *not* restated; a real concept counts
    when covered. Applied to the question's focus subset only.
+6. **WHY-FIRST** (plan orienting lines) — one batched call writes a short
+   "why this step is yours" line per plan step, from concept + failure mode +
+   student's own words. Subject + family directives included.
 
 Grading never trusts the AI's own number: the model returns per-concept
 *levels* and nothing else, and the score is recomputed deterministically
@@ -559,6 +577,16 @@ than throwing. And every prompt has a fallback: if Gemini fails or the key is a
 placeholder, deterministic heuristics take over (token matching for grading,
 sentence splitting for concepts, templates for lessons/questions), flagged
 with `estimated: true`.
+
+**Subject-family directives.** `apps/server/src/ai/subject-strategy.ts` defines
+`SubjectFamily` (11 values: mathematics, physics, chemistry, biology,
+english_languages, history_social, geography, economics_business, cs_ict,
+general_science, other) and `getPhaseDirectives(family, phase)` which returns
+terse system-prompt bullets and client-hint strings per phase. The chapter's
+`subject` is resolved via `chapterSubject(chapterId)` in `study.ts` and passed
+into `gradeRecall`, `generateMicroLesson`, `generatePlanWhyFirst`,
+`generateGuideSection`, and `generateRetestQuestions`. A mirrored client copy
+(`apps/web/src/lib/subject-strategy.ts`) powers the recall/retest phase hints.
 
 ---
 

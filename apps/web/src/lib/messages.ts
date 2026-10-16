@@ -426,6 +426,8 @@ export const en = {
   "subject-economics": "Economics",
   "subject-general-science": "General Science",
   "subject-information-technology": "Information Technology",
+  "subject-english": "English",
+  "subject-cs": "Computer Science / ICT",
   "subject-custom": "Something else",
   "subject-custom-note":
     "You can still add a subject that isn't listed — it just won't match a prepared study plan.",
@@ -1306,6 +1308,8 @@ export const am: Record<MessageKey, string> = {
   "subject-economics": "ኢኮኖሚክስ",
   "subject-general-science": "አጠቃላይ ሳይንስ",
   "subject-information-technology": "የኢንፎርሜሽን ቴክኖሎጂ",
+  "subject-english": "እንግሊዝኛ",
+  "subject-cs": "የኮምፒውተር ሳይንስ / ኢ.ሲ.ቲ",
   "subject-custom": "ሌላ ዓይነት",
   "subject-custom-note":
     "ከዝርዝሩ ውጭ ያለ ትምህርት መጨመር ይቻላል — ነገር ግን የተዘጋጀ የጥናት እቅድ አይኖረውም።",

@@ -12,6 +12,7 @@ import {
   STUDY_PLAN_DEFAULT_BUDGET,
   STUDY_PLAN_MAX_STEPS,
 } from "./plan-config";
+import { getFamily, getPhaseDirectives } from "./subject-strategy";
 
 const genAI = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
@@ -176,6 +177,12 @@ export type PlanArchetype =
   | "LANGUAGE"
   | "GENERIC";
 
+export type SubjectFamilyContext = {
+  subject: string;
+  family: import("./subject-strategy").SubjectFamily;
+  archetype: PlanArchetype;
+};
+
 /**
  * One concept's guide section — the unit the whole phase is built on.
  *
@@ -256,11 +263,13 @@ export type AiService = {
   gradeRecall(
     transcript: string,
     concepts: ConceptChecklistItem[],
+    subject?: string,
   ): Promise<GapAnalysis>;
   generateMicroLesson(
     gaps: GapAnalysis,
     concepts: ConceptChecklistItem[],
     language?: ContentLanguage,
+    options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
   ): Promise<MicroLesson>;
   /**
    * One "why this step is yours" line per plan step, in ONE provider call —
@@ -274,7 +283,7 @@ export type AiService = {
     chapterText: string,
     requests: PlanWhyRequest[],
     language?: ContentLanguage,
-    options?: { skipAi?: boolean; timeoutMs?: number },
+    options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
   ): Promise<Map<string, string>>;
   /**
    * Explain one concept. Student-independent by construction — it is not given
@@ -284,13 +293,14 @@ export type AiService = {
     conceptText: string,
     chapterText: string,
     language?: ContentLanguage,
-    options?: { skipAi?: boolean },
+    options?: { skipAi?: boolean; subject?: string },
   ): Promise<GuideSection>;
   generateRetestQuestions(
     gaps: GapAnalysis,
     concepts: ConceptChecklistItem[],
     recallText?: string,
     language?: ContentLanguage,
+    options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
   ): Promise<RetestQuestion[]>;
   /**
    * Read a textbook's table of contents out of its opening pages.
@@ -721,34 +731,52 @@ export function readingMinutes(text: string): number {
   return Math.max(1, Math.round(words / READING_WORDS_PER_MINUTE));
 }
 
+export function getSubjectContext(
+  subject: string,
+  conceptText = "",
+): SubjectFamilyContext {
+  const normalized = (subject || "").trim().toLowerCase();
+  let archetype: PlanArchetype = "GENERIC";
+  const family = getFamily(subject);
+  if (normalized.includes("civics")) archetype = "PRINCIPLE";
+  else if (family === "biology") archetype = "PROCESS";
+  else if (family === "chemistry") {
+    if (
+      /(stoichiometr|moles?|equations?|concentration|calculat|formulae?|chemical formula)/i.test(
+        conceptText,
+      )
+    )
+      archetype = "GENERIC";
+    else archetype = "PROCESS";
+  } else if (family === "history_social") archetype = "CAUSAL";
+  else if (family === "geography") archetype = "PLACE_SYSTEM";
+  else if (family === "economics_business") archetype = "PRINCIPLE";
+  else if (family === "english_languages") archetype = "LANGUAGE";
+  else if (family === "physics") archetype = "GENERIC";
+  else if (family === "cs_ict") archetype = "GENERIC";
+  else if (family === "mathematics") archetype = "GENERIC";
+  else if (family === "general_science") archetype = "GENERIC";
+  else {
+    if (normalized === "history") archetype = "CAUSAL";
+    if (normalized === "geography") archetype = "PLACE_SYSTEM";
+    if (normalized.includes("civics")) archetype = "PRINCIPLE";
+    if (
+      normalized === "english" ||
+      normalized.includes("language") ||
+      normalized.includes("mother tongue")
+    )
+      archetype = "LANGUAGE";
+    if (normalized === "biology") archetype = "PROCESS";
+    if (normalized === "chemistry") archetype = "PROCESS";
+  }
+  return { subject, family, archetype };
+}
+
 export function planArchetype(
   subject: string,
   conceptText = "",
 ): PlanArchetype {
-  const normalized = subject.trim().toLowerCase();
-  if (normalized === "biology") return "PROCESS";
-  if (normalized === "chemistry") {
-    // The syllabus boundary excludes computational Chemistry; keep those
-    // checks generic rather than implying spoken recall proves calculation.
-    if (
-      /\b(stoichiometr|moles?|equations?|concentration|calculat|formulae?|chemical formula)\b/i.test(
-        conceptText,
-      )
-    )
-      return "GENERIC";
-    return "PROCESS";
-  }
-  if (normalized === "history") return "CAUSAL";
-  if (normalized === "geography") return "PLACE_SYSTEM";
-  if (normalized === "civics" || normalized.includes("civics"))
-    return "PRINCIPLE";
-  if (
-    normalized === "english" ||
-    normalized.includes("language") ||
-    normalized.includes("mother tongue")
-  )
-    return "LANGUAGE";
-  return "GENERIC";
+  return getSubjectContext(subject, conceptText).archetype;
 }
 
 export function buildStudyPlan(
@@ -1888,6 +1916,7 @@ export const ai: AiService = {
   async gradeRecall(
     transcript: string,
     concepts: ConceptChecklistItem[],
+    subject?: string,
   ): Promise<GapAnalysis> {
     const fallback = () =>
       withRecallEvidence(
@@ -1897,8 +1926,12 @@ export const ai: AiService = {
       );
     if (!anyAiAvailable()) return fallback();
     try {
+      const family = subject ? getFamily(subject) : "other";
+      const dirs = getPhaseDirectives(family, "recall");
+      const sysExtra =
+        dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
-        GRADE_SYSTEM,
+        GRADE_SYSTEM + sysExtra,
         `CONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}\n\nSTUDENT RECALL:\n${transcript}`,
       );
       const parsed = parseGaps(raw, concepts);
@@ -1914,12 +1947,17 @@ export const ai: AiService = {
     gaps: GapAnalysis,
     _concepts: ConceptChecklistItem[],
     language: ContentLanguage = "en",
+    options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
   ): Promise<MicroLesson> {
     const fallback = () => ({ text: fallbackLesson(gaps, language) });
     if (!anyAiAvailable()) return fallback();
     try {
+      const family = options.subject ? getFamily(options.subject) : "other";
+      const dirs = getPhaseDirectives(family, "lesson");
+      const sysExtra =
+        dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
-        LESSON_SYSTEM + outputInstruction(language),
+        LESSON_SYSTEM + sysExtra + outputInstruction(language),
         `GAP ANALYSIS:\n${gapsSummary(gaps)}`,
       );
       const data = parseJson<Partial<MicroLesson>>(raw);
@@ -1945,7 +1983,7 @@ export const ai: AiService = {
     chapterText: string,
     requests: PlanWhyRequest[],
     language: ContentLanguage = "en",
-    options: { skipAi?: boolean; timeoutMs?: number } = {},
+    options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
   ): Promise<Map<string, string>> {
     const fallback = () => new Map<string, string>();
     if (options.skipAi || !anyAiAvailable() || requests.length === 0)
@@ -1981,12 +2019,17 @@ export const ai: AiService = {
       required: ["steps"],
       additionalProperties: false,
     };
+    const family = options.subject ? getFamily(options.subject) : "other";
+    const dirs = getPhaseDirectives(family, "plan");
+    const sysExtra =
+      dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
     const system =
       "For each numbered study-plan step, write ONE short orienting line (at most 18 words) telling the student why this step is here FOR THEM. " +
       "Base it only on the concept, the failure mode, and the student's own words when given — never introduce a fact, example, number, or claim the anchor does not already state. " +
       "Do not greet, do not ask a question, and do not quote the passage. " +
       "Index entries must match the numbers in the request; reply with all of them. " +
       'Return strict JSON: {"steps":[{"index":1,"why":"..."}]}.' +
+      sysExtra +
       outputInstruction(language);
     const user =
       `CHAPTER TEXT (context only, do not quote):\n${chapterText.slice(0, 12000)}\n\n` +
@@ -2042,7 +2085,7 @@ export const ai: AiService = {
     // back — a student asking for a chapter should get a chapter — but no
     // provider call is made, so a cold guide cannot quietly spend ten requests
     // behind one click.
-    options: { skipAi?: boolean } = {},
+    options: { skipAi?: boolean; subject?: string } = {},
   ): Promise<GuideSection> {
     // The anchor is computed, not generated: a model asked for a location in
     // the text invents one, and an invented page number is worse than none.
@@ -2081,14 +2124,19 @@ export const ai: AiService = {
   async generateRetestQuestions(
     gaps: GapAnalysis,
     _concepts: ConceptChecklistItem[],
-    recallText?: string,
+    recallText = "",
     language: ContentLanguage = "en",
+    options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
   ): Promise<RetestQuestion[]> {
     const fallback = () => fallbackQuestions(gaps, language);
     if (!anyAiAvailable()) return fallback();
     try {
+      const family = options.subject ? getFamily(options.subject) : "other";
+      const dirs = getPhaseDirectives(family, "retest");
+      const sysExtra =
+        dirs.system && dirs.system.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
-        RETEST_SYSTEM + outputInstruction(language),
+        RETEST_SYSTEM + sysExtra + outputInstruction(language),
         retestUserPrompt(gaps, recallText),
       );
       return (

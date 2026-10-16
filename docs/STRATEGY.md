@@ -114,26 +114,40 @@ and starving the thing that actually compounds.
 
 ## 3. The subject boundary
 
-**We assess conceptual subjects well and computational subjects not at all, and
-we say so out loud.**
+**Subject handling is now family-aware, not a binary boundary.**
 
-Kiftet measures **spoken, explanatory recall.** That is a valid instrument for
-Biology, History, Geography, Civics, and language subjects, and an **invalid**
-one for Mathematics, Physics, and Chemistry — where understanding is
-procedural, speech mangles notation, and "I explained it well" is worthless as
-evidence of "I can do the problem." We would be handing students a false green
-light on a skill they don't have, which is *worse* than not offering the subject.
+Every subject maps to a **family** (`mathematics`, `physics`, `chemistry`,
+`biology`, `english_languages`, `history_social`, `geography`,
+`economics_business`, `cs_ict`, `general_science`, `other`) via
+`getFamily(subject)` — defined once in `apps/server/src/ai/subject-strategy.ts`
+(server) and mirrored in `apps/web/src/lib/subject-strategy.ts` (client hints).
+The family drives **phase directives** injected into every AI prompt:
+`getPhaseDirectives(family, phase)` returns terse bullets for `recall`, `plan`,
+`lesson`, and `retest` (e.g. Mathematics → "focus on method/reasoning steps,
+not just the answer"; CS/ICT → "trace control flow, don't penalize syntax";
+English/Languages → "assess usage in context, not just definition").
 
-**So we do not claim computational subjects until the instrument genuinely
-changes** — typed/symbolic input, method-aware step grading, numeric tolerance.
-The analysis, and why deferring is also the growth strategy, is
-[`SYLLABUS.md`](SYLLABUS.md) §5.
+**What this means for the subject boundary:** computational subjects
+(Mathematics, Physics, Chemistry) are now **supported with a Beta label** — the
+subject-strategy layer makes the loop *fit* them (method-aware grading,
+step-by-step plan directives, trace-based retest questions) but the instrument
+is still spoken-explanatory recall, which is a legitimate limitation for pure
+computation. Beta is an honest signal, not a wall: these subjects are fully
+importable and studyable; the label tells the student the loop fits them
+loosely for now. **Non-beta** subjects (Biology, Geography, History/Civics,
+Economics, General Science, Information Technology, and newly added
+**English** and **Computer Science/ICT**) get the same family-aware treatment
+without the caveat.
 
-**Marketing consequence, and it's a strict rule: never say "all subjects."** A
-specific, defensible claim beats a broad false one, and the expansion to
-computational subjects should be a *surprise*, not a broken promise we shipped
-against. This is also why the boundary is written down — so nobody quietly
-"fixes" it by adding Math to the demo because it looked empty without it.
+**Marketing guardrail (unchanged in spirit, refined in letter):** never claim
+"all subjects" *equally well*. Say "Biology, History, Geography, Civics,
+English, IT — and Math/Physics/Chemistry in Beta." The Beta label is the honest
+hedge; the family directives are why those subjects work at all.
+
+**Still not claimed:** pure procedural/numeric assessment (typed/symbolic input,
+method-aware step grading with numeric tolerance, formula evaluation). Those
+await a genuine instrument change, documented in [`SYLLABUS.md`](SYLLABUS.md)
+§5.
 
 ---
 
@@ -248,6 +262,15 @@ the **verified** Biology 12 unit list (six units, MoE New-Curriculum 2023
 textbook, ISBN 978-99990-0-011-6), provenance in `sourceNote`, `GET /syllabus`,
 chapter→unit mapping, and the `/syllabus` browse UI. One human instructor pass
 remains on the go-live checklist.
+
+**Subject-strategy layer (Phase 1.5, landed 2026-10-16).** `subject-strategy.ts`
+defines the family taxonomy and phase directives; `gemini.ts` threads the
+chapter's subject into every AI entrypoint (`gradeRecall`,
+`generateMicroLesson`, `generatePlanWhyFirst`, `generateGuideSection`,
+`generateRetestQuestions`) so prompts are family-aware. The web picker adds
+**English** and **Computer Science / ICT** (both non-beta); `RecallPhase` and
+`RetestPhase` show subject-specific hints. Beta set (Physics/Chem/Math)
+unchanged.
 
 ### 2. Misconception hunting + the national map
 

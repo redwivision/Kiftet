@@ -56,13 +56,19 @@ of the syllabus can't you actually answer* — and its full design is in
 [`SYLLABUS.md`](SYLLABUS.md).
 
 **Scope — subject boundary (a commitment, not a delay).** Kiftet assesses
-**conceptual** subjects well (Biology, History, Geography, Civics, languages)
-and **computational** subjects not at all yet (Mathematics, Physics, Chemistry).
-The instrument is spoken explanatory recall; for calculation-heavy subjects
-that's the wrong instrument — speech mangles notation and "I explained it" is
-not evidence of "I can compute it." We don't claim those subjects until the
-assessment is method- and symbol-aware. See [`STRATEGY.md`](STRATEGY.md) §3 and
-[`SYLLABUS.md`](SYLLABUS.md) §5 for the reasoning and the path to change it.
+**conceptual** subjects well (Biology, History, Geography, Civics, English,
+languages) and **computational** subjects with an honest **Beta** label
+(Mathematics, Physics, Chemistry). The instrument is spoken explanatory recall;
+for calculation-heavy subjects that's a partial instrument — speech mangles
+notation and "I explained it" is not evidence of "I can compute it." The
+**subject-strategy layer** (`apps/server/src/ai/subject-strategy.ts`) maps every
+subject to a family and injects family-specific directives into every AI prompt
+(method-aware grading for math, usage-in-context for languages, control-flow
+tracing for CS/ICT), so the loop *fits* each subject — but the Beta label stays
+until the assessment is genuinely method- and symbol-aware. English and
+Computer Science / ICT are supported as non-beta. See
+[`STRATEGY.md`](STRATEGY.md) §3 and [`SYLLABUS.md`](SYLLABUS.md) §5 for the
+reasoning and the path to change it.
 
 ## 5. Feature scope
 

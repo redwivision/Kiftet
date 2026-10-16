@@ -1141,6 +1141,8 @@ function AddTextbook({
     t("subject-economics"),
     t("subject-general-science"),
     t("subject-information-technology"),
+    t("subject-english"),
+    t("subject-cs"),
   ];
   const betaSubjects = new Set([
     t("subject-physics"),

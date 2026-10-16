@@ -134,4 +134,7 @@ health and telemetry routes; see the API reference and
 - The syllabus has one seeded Biology 12 structure. Official unit-period
   figures remain unset until transcribed from an authoritative source.
 - Spoken explanatory recall is not a validated assessment method for
-  computation-heavy subjects; the product does not claim those subjects.
+  computation-heavy subjects; those subjects (Mathematics, Physics, Chemistry)
+  are supported with an honest Beta label and family-aware prompting
+  (`subject-strategy.ts`), but the instrument remains a limitation until it is
+  genuinely method- and symbol-aware.

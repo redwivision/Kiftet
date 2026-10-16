@@ -148,6 +148,17 @@ function ownerId(req: Request): string {
   return id;
 }
 
+async function chapterSubject(chapterId: string): Promise<string | undefined> {
+  const row = await db()
+    .select({ subject: textbook.subject })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(eq(chapter.id, chapterId))
+    .limit(1)
+    .then((r) => r[0]);
+  return row?.subject || undefined;
+}
+
 function ok<T>(res: Response, data: T, status = 200) {
   res.status(status).json(data);
 }
@@ -1111,8 +1122,13 @@ router.post("/sessions/:id/recall", async (req, res) => {
   if (!chapterId) return err(res, "Session not found", 404);
 
   const concepts = await chapterConcepts(chapterId);
+  const subjectForRecall = await chapterSubject(chapterId);
 
-  const gaps = await ai.gradeRecall(parsed.data.transcriptText, concepts);
+  const gaps = await ai.gradeRecall(
+    parsed.data.transcriptText,
+    concepts,
+    subjectForRecall,
+  );
   const score = Math.round(gaps.score * 100);
 
   await insertAttemptOnce({
@@ -1175,10 +1191,12 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
     concepts,
   );
 
+  const subject = await chapterSubject(chapterId);
   const lesson = await ai.generateMicroLesson(
     gapAnalysis,
     concepts,
     parsed.data.language,
+    { subject },
   );
   ok(res, lesson);
 });
@@ -1303,7 +1321,7 @@ router.post("/sessions/:id/plan", async (req, res) => {
           excerpt: step.anchor.excerpt,
         })),
         language,
-        { skipAi, timeoutMs },
+        { skipAi, timeoutMs, subject: chapterRow.subject },
       );
     } catch (error) {
       if (!isAiBusy(error)) throw error;
@@ -1396,6 +1414,7 @@ router.get("/chapters/:id/guide", async (req, res) => {
     .where(eq(chapter.id, chapterId))
     .limit(1);
   const rawText = row?.rawText ?? "";
+  const chapterSubjectCache = await chapterSubject(chapterId);
 
   const mastery = readMasteryParam(req.query.mastery);
   const cache = await cachedSections(chapterId, language);
@@ -1425,7 +1444,7 @@ router.get("/chapters/:id/guide", async (req, res) => {
       concept.conceptText,
       rawText,
       language,
-      { skipAi },
+      { skipAi, subject: chapterSubjectCache },
     );
     if (!skipAi) {
       await storeSection(chapterId, concept.conceptText, language, section);
@@ -1549,11 +1568,13 @@ router.post("/sessions/:id/retest", async (req, res) => {
     .orderBy(desc(attempt.createdAt))
     .limit(1);
 
+  const retestSubject = await chapterSubject(chapterId);
   const questions = await ai.generateRetestQuestions(
     gapAnalysis,
     concepts,
     recallRows[0]?.transcriptText ?? undefined,
     parsed.data.language,
+    { subject: retestSubject },
   );
 
   // Each question is pinned to exactly one gap item so the answer can be

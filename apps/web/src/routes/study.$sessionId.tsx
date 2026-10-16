@@ -30,6 +30,7 @@ import {
   useStudy,
 } from "@/components/study-provider";
 import { VoiceRing } from "@/components/voice-ring";
+import { getRecallHint, getRetestHint } from "@/lib/subject-strategy";
 import { useVoiceSession } from "@/hooks/use-voice-session";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -895,9 +896,15 @@ function RecallPhase({
     );
   }
 
+  const subjectHint = getRecallHint(state.chapter?.subject ?? "");
   return (
     <div className="space-y-6">
       <PhaseHeading title={t("recall-title")} text={t("recall-text")} />
+      {subjectHint && (
+        <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
+          <p className="text-muted-foreground text-xs leading-5">{subjectHint}</p>
+        </div>
+      )}
       <VoiceCapture
         submit={submitText}
         voiceAllowed={voiceAllowed}
@@ -1505,12 +1512,18 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
     [submitAnswer],
   );
 
+  const retestHint = getRetestHint(state.chapter?.subject ?? "");
   return (
     <div className="space-y-6">
       <PhaseHeading
         title={t("retest-title")}
         text={done ? t("retest-done-text") : t("retest-text")}
       />
+      {!done && retestHint && (
+        <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
+          <p className="text-muted-foreground text-xs leading-5">{retestHint}</p>
+        </div>
+      )}
       {lang === "am" && !done && (
         <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
           {t("fluency-am")}

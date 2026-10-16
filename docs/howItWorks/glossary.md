@@ -65,3 +65,24 @@
 - **Student-independent content** — content that depends on the chapter and the
   language but not on who is asking. This is the property that makes a cached
   guide possible: the second student on a chapter generates nothing.
+- **Subject family** — the coarse classification a subject maps to via
+  `getFamily(subject)`: `mathematics`, `physics`, `chemistry`, `biology`,
+  `english_languages`, `history_social`, `geography`, `economics_business`,
+  `cs_ict`, `general_science`, or `other`. Defined once in
+  `apps/server/src/ai/subject-strategy.ts` (server) and mirrored in
+  `apps/web/src/lib/subject-strategy.ts` (client hints). The family drives which
+  AI-prompt directives apply, not the subject string itself.
+- **Phase directives** — terse system-prompt bullets returned by
+  `getPhaseDirectives(family, phase)` for a given subject family and study phase
+  (`recall`, `plan`/`lesson`, `retest`). They tell the model what to emphasize
+  (e.g. Mathematics → "focus on method/reasoning steps"; CS/ICT → "trace
+  control flow; don't penalize syntax"; English → "assess usage in context").
+  Injected into the system prompt of `gradeRecall`, `generateMicroLesson`,
+  `generatePlanWhyFirst`, `generateGuideSection`, and
+  `generateRetestQuestions`.
+- **Plan archetype** — a coarse label (`PROCESS`, `CAUSAL`, `PLACE_SYSTEM`,
+  `PRINCIPLE`, `LANGUAGE`, `GENERIC`) derived from the subject family (plus a
+  concept-text check for chemistry computation). It shapes the deterministic
+  search-query suffix on plan cards. `getSubjectContext(subject, concept)` in
+  `apps/server/src/ai/gemini.ts` returns it; `planArchetype` is the thin wrapper
+  kept for existing callers.

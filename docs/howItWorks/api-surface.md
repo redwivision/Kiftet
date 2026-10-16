@@ -34,6 +34,17 @@ Additional routes added for Phase 6 (textbook library + demo quotas):
 In Phase 0, the AI-graded endpoints returned **empty placeholders** (empty gaps,
 empty questions). The brains are live since Phase 2.
 
+**Subject-family awareness (server-side, not an API contract change).** Every
+AI-graded route (`/recall`, `/microlesson`, `/plan`, `/chapters/:id/guide`,
+`/retest`) now resolves the chapter's `subject` internally (via
+`chapterSubject(chapterId)` in `study.ts`) and passes it into the AI layer so
+the system prompt carries family-specific directives (from
+`apps/server/src/ai/subject-strategy.ts`). This is invisible to the client —
+no request or response field changed — but it means grading, lessons, plan
+orienting lines, and retest questions are now tailored to the subject family
+(e.g. method-aware for Mathematics, usage-in-context for English, control-flow
+tracing for CS/ICT).
+
 **Textbook ingest.** `POST /chapters/ingest` requires `textbookTitle`,
 `subject`, `language`, `title` and `rawText`. `topics` is optional and accepts
 the chapter's numbered contents entries (for example

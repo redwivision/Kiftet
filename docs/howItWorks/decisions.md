@@ -159,3 +159,21 @@
     us, so waiting it out spends the student's 24s budget to no end. The
     measured ceiling underneath all of it is 5 requests/minute on the free tier,
     which is why the shared cache is load-bearing rather than an optimisation.
+
+17. **Subjects are families, not a binary boundary.** The old model was a
+    client-only Beta label on three subjects (Math/Physics/Chemistry) with no
+    behavioural difference. The new model maps every subject to a `SubjectFamily`
+    (11 values) via `getFamily(subject)` in
+    `apps/server/src/ai/subject-strategy.ts`, and the family drives
+    `getPhaseDirectives(family, phase)` — terse bullets injected into the
+    system prompt of `gradeRecall`, `generateMicroLesson`,
+    `generatePlanWhyFirst`, `generateGuideSection`, and
+    `generateRetestQuestions`. This makes the loop *fit* each subject (method
+    awareness for math, usage-in-context for languages, control-flow tracing for
+    CS) without pretending the instrument changed. Beta remains an honest label
+    for the three computational subjects, not a wall; non-beta subjects gain
+    the same directives without the caveat. The web client mirrors the family
+    detection (small duplication, deliberately not a shared package — the
+    server's copy is canonical and the client's is only for two hint strings)
+    so `RecallPhase` and `RetestPhase` can show subject-specific guidance at
+    zero server cost.

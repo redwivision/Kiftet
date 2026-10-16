@@ -158,43 +158,53 @@ because it is what lets us say "start here" instead of "here are 40 concepts."
 
 ---
 
-## 5. The subject boundary — what we are deliberately not claiming
+## 5. The subject boundary — what we are deliberately not claiming fully
 
 **This is a design decision, not a gap. Write it down so nobody "fixes" it by
 accident.**
 
 Kiftet's assessment instrument is **spoken, explanatory recall.** The student
 speaks, we transcribe, and we grade whether the explanation *covers* the
-concept. That is a valid instrument for a genuinely conceptual subject, and an
-**invalid** one for a computational subject.
+concept. That is a valid instrument for a genuinely conceptual subject, and a
+**partial** one for a computational subject — which is why computational
+subjects ship with an honest **Beta** label, not a wall and not a false claim.
 
-| Works well today | Doesn't work today — and why |
+| Works well today (non-beta) | Works with an honest Beta label |
 |---|---|
-| Biology (esp. 12) | **Mathematics** — recall ≠ procedure |
-| History, Geography | **Physics** — vectors, motion, circuits |
-| Civics & Ethical Education | **Chemistry** — stoichiometry, equations, moles |
+| Biology (esp. 12) | **Mathematics** — method-aware directives, but recall ≠ procedure |
+| History, Geography | **Physics** — conceptual directives, but vectors/motion/circuits are lossy in speech |
+| Civics & Ethical Education | **Chemistry** — mechanism-aware directives, but stoichiometry/equations/moles are lossy |
 | English, and language subjects | Anything where *the answer is a number* |
+| Computer Science / ICT (new) | |
 
-Three distinct reasons, and they compound:
+The **subject-strategy layer** (`apps/server/src/ai/subject-strategy.ts`) maps
+every subject to a family and injects family-specific directives into every AI
+prompt — method/reasoning emphasis for Mathematics, usage-in-context for
+English, control-flow tracing for CS/ICT — so the loop *fits* each subject.
+This makes Beta subjects genuinely studyable and gradeable at the conceptual
+level, while the label honestly signals that the instrument is still partial
+for pure computation. Three distinct reasons the label stays, and they compound:
 
-1. **Wrong competence measured.** "Explain the cell membrane" is a fair proxy
-   for understanding. "Explain Newton's second law" is a fair proxy for
-   *nothing* about whether a student can resolve a vector problem. Spoken
-   recall proves *description*, not *competence* — and the exam tests
-   competence. We'd be handing students a green light on a skill they don't
-   have.
+1. **Wrong competence measured for pure procedure.** "Explain the cell
+   membrane" is a fair proxy for understanding. "Explain Newton's second law"
+   is a fair proxy for *some* understanding but not for *nothing* about whether
+   a student can resolve a vector problem — the directives help (ask for the
+   method, trace the steps) but a spoken explanation still proves *description*
+   better than *competence*. The exam tests competence.
 2. **Speech is lossy for notation.** Voice capture degrades exactly where
    computational subjects live: superscripts, subscripts, fractions, matrices,
    integrals, chemical formulae, units. A spoken "two x squared plus three x"
-   round-trips ambiguously. We'd be grading transcription noise.
+   round-trips ambiguously. The subject directives mitigate this (focus on
+   reasoning over symbolic manipulation) but cannot eliminate it.
 3. **A wrong grade is worse than no grade.** A student told they're solid in
    Chemistry because they described it well, then failing the exam, is
-   *actively harmed* — and they'd blame us. The honest failure (we don't assess
-   this) is strictly better than the confident wrong one.
+   *actively harmed* — and they'd blame us. The Beta label is the honest
+   hedge: we assess the conceptual layer and say so.
 
-**Therefore: we do not claim computational subjects until the instrument
-changes.** No "we'll get to it" marketing, no quietly shipping a worse
-experience for Math because the model technically accepts input.
+**Therefore: computational subjects are supported with Beta, and the Beta label
+stays until the instrument is genuinely method- and symbol-aware.** No "we'll
+get to it" marketing, no quietly shipping a worse experience for Math because
+the model technically accepts input.
 
 ### What a real solution would require (for later, not now)
 
@@ -249,10 +259,13 @@ asset.
 3. **Geography / History / Civics 9–12.** Concept-first subjects where our
    instrument is already a good fit, and where the unit structure is
    text-centric enough to verify quickly.
-4. **Mathematics / Physics / Chemistry.** Blocked on the instrument work in §5,
-   not on data. Syllabus data for these *can* be added early (it makes the
-   subject list honest and the roadmap credible), but the assessment loop
-   stays off until the instrument is real.
+4. **Mathematics / Physics / Chemistry.** Syllabus data for these *can* be
+   added early (it makes the subject list honest and the roadmap credible).
+   These subjects are now supported in the app with an honest **Beta** label
+   and family-aware prompting (`subject-strategy.ts`), so the conceptual layer
+   is studyable and gradeable today. The Beta label stays until the instrument
+   is genuinely method- and symbol-aware (§5) — syllabus data is not blocked on
+   that, but the full assessment claim is.
 
 **How to build each one honestly:**
 
@@ -304,8 +317,10 @@ built on the syllabus, not on the guide.**
 
 ## 8. What this document is not
 
-Not scraped data yet, not multi-subject yet, and explicitly not a claim to
-assess computational subjects. The honest current state: **one verified
-subject, a proven expansion path, and a clear line around what we refuse to
-do.** Everything here is either verified, planned, or explicitly deferred —
+Not scraped data yet, not multi-subject yet, and explicitly not a full claim to
+assess computational subjects — those ship with an honest Beta label (§5). The
+honest current state: **one verified subject, a proven expansion path, Beta
+support for computational subjects via family-aware prompting, and a clear line
+around what we refuse to over-claim.** Everything here is either verified,
+planned, or explicitly deferred —
 nothing aspirational is written as if it's shipped.
