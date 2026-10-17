@@ -146,6 +146,40 @@ export function recallFormatPlan(
 }
 
 /**
+ * Reorder a recall set so its slow questions never bunch together. The model's
+ * format mix is only as good as its last instruction-following, and the parser
+ * can *downgrade* an unanswerable multiple choice into a spoken short answer —
+ * so a set can quietly collapse into two or three "explain…" in a row. This puts
+ * the closed questions back in front and spaces the short answers evenly among
+ * them, never two in a row, while preserving the closed questions' relative
+ * order (which `spreadByFocus` has already used to keep consecutive questions on
+ * different ideas).
+ *
+ * If the model produced more short answers than there is room to space without
+ * touching, we cannot invent options for them — so the surplus stays, trailing
+ * the set, but the gentle closed questions still open every run.
+ */
+export function enforceRecallMix<T extends { format?: string }>(
+  questions: readonly T[],
+): T[] {
+  const closed = questions.filter((q) => q.format !== "short_answer");
+  const shorts = questions.filter((q) => q.format === "short_answer");
+  if (shorts.length === 0) return [...questions];
+  // Spread the shorts across (shorts + 1) gaps between closed questions.
+  const per = Math.max(1, Math.floor(closed.length / (shorts.length + 1)));
+  const out: T[] = [];
+  let ci = 0;
+  for (let s = 0; s < shorts.length; s++) {
+    for (let k = 0; k < per && ci < closed.length; k++) {
+      out.push(closed[ci++] as T);
+    }
+    out.push(shorts[s] as T);
+  }
+  while (ci < closed.length) out.push(closed[ci++] as T);
+  return out;
+}
+
+/**
  * Whether a response to a *closed* recall question (multiple choice or
  * fill-in-the-blank) is correct. Both sides are compared case-, whitespace-,
  * and punctuation-insensitively, so "Osmosis." and " osmosis " agree. Open
@@ -172,23 +206,68 @@ export function isCognitiveLevel(value: unknown): value is CognitiveLevel {
 }
 
 /**
- * The shared instruction that makes every question standard. Concatenated onto
- * both writers' system prompts, so neither can quietly drop the taxonomy.
+ * The half of the standard both writers share: every question wears exactly one
+ * of the five levels. The *difficulty* half deliberately differs, because recall
+ * and retest are not the same test — see the two functions below.
  */
-export const LEVEL_DIRECTIVE =
+const LEVEL_DEFINITIONS =
   "Tag every question with exactly ONE cognitive level, and spread the set across all five so it measures more than memory: " +
   '"knowledge" (recall a fact, term, definition, or formula), ' +
   '"comprehension" (explain an idea in your own words), ' +
   '"application" (use the idea to work through a new case, problem, or example), ' +
   '"critical_thinking" (judge, predict, or reason about a scenario that needs the idea), ' +
-  '"compare_contrast" (tell two related ideas apart, or weigh their similarities and differences). ' +
-  "Never write a question that can be answered yes/no or with a single memorised word, and never write an easy question.";
+  '"compare_contrast" (tell two related ideas apart, or weigh their similarities and differences). ';
+
+/**
+ * Recall's difficulty standard: gentle on purpose. A student scanning for what
+ * they do and do not know should not have to fight an exam, so a clean factual
+ * prompt — a term, a definition, a word that fills a blank — is not only allowed,
+ * it is the backbone of the set. A little challenge (a "why", one new example) is
+ * welcome; stress is not. Deliberately does NOT forbid a single-word answer,
+ * because recall's fill-in-the-blank and multiple-choice formats answer in one.
+ */
+export function recallLevelDirective(): string {
+  return (
+    LEVEL_DEFINITIONS +
+    "Recall is a low-pressure CHECK, not an exam: an easy, quick question is exactly what you want. " +
+    "Make most questions knowledge-level — a term, a definition, or the word that fills a blank. Let at most a couple rise to comprehension or application (a single 'why', or one new example) so the set measures understanding as well as memory, without turning into a quiz the student dreads. " +
+    "Do not write pure yes/no prompts. A question the student answers by picking an option or filling one blank is ideal."
+  );
+}
+
+/**
+ * Retest's difficulty standard: exam-hard. This is the pass that proves the
+ * student is bulletproof, so vagueness and softness are the failures to avoid.
+ */
+export function retestLevelDirective(): string {
+  return (
+    LEVEL_DEFINITIONS +
+    "Never write a question that can be answered yes/no or with a single memorised word, and never write an easy question."
+  );
+}
+
+/**
+ * Whether a retest set is too soft for the job it exists to do. A retest is the
+ * exam-readiness proof, so a set that climbs fewer than three cognitive levels,
+ * or never leaves the textbook for a novel scenario, is a quality signal worth
+ * surfacing — logged, never silently passed. Pure and exported so the signal is
+ * testable without a live model.
+ */
+export function retestIsSoft(
+  questions: readonly { level?: CognitiveLevel; beyondText?: boolean }[],
+): boolean {
+  const levels = new Set(
+    questions.map((q) => q.level).filter((l): l is CognitiveLevel => !!l),
+  );
+  const hasBeyond = questions.some((q) => q.beyondText === true);
+  return questions.length > 0 && (levels.size < 3 || !hasBeyond);
+}
 
 /**
  * The levels a deterministic fallback question uses, cycled, so even the
  * no-model path produces a spread instead of three identical "explain it"
- * prompts. Recall leans diagnostic (comprehension/application); retest climbs
- * the full ladder.
+ * prompts. Recall stays gentle — mostly knowledge checks with the occasional
+ * comprehension — while retest climbs the full ladder.
  */
 export function fallbackLevels(
   kind: QuestionKind,
@@ -203,7 +282,7 @@ export function fallbackLevels(
           "critical_thinking",
           "compare_contrast",
         ]
-      : ["comprehension", "application", "compare_contrast"];
+      : ["knowledge", "knowledge", "comprehension"];
   return Array.from(
     { length: count },
     (_, i) => order[i % order.length] ?? "comprehension",

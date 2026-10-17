@@ -37,7 +37,7 @@ import {
   STUDY_PLAN_CONTENT_BUDGET_MS,
   STUDY_PLAN_DEFAULT_BUDGET,
 } from "../ai/plan-config";
-import { judgeClosedAnswer } from "../ai/questions";
+import { enforceRecallMix, judgeClosedAnswer } from "../ai/questions";
 import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -161,6 +161,19 @@ async function chapterSubject(chapterId: string): Promise<string | undefined> {
     .limit(1)
     .then((r) => r[0]);
   return row?.subject || undefined;
+}
+
+/** The chapter's raw text — handed to the recall writer only so its
+ *  deterministic, no-model fallback can ground closed questions in the book's
+ *  own sentences rather than inventing them. */
+async function chapterRawText(chapterId: string): Promise<string> {
+  const row = await db()
+    .select({ rawText: chapter.rawText })
+    .from(chapter)
+    .where(eq(chapter.id, chapterId))
+    .limit(1)
+    .then((r) => r[0]);
+  return row?.rawText ?? "";
 }
 
 function ok<T>(res: Response, data: T, status = 200) {
@@ -1896,22 +1909,28 @@ router.post("/sessions/:id/recall-questions", async (req, res) => {
 
   const objectives = await chapterObjectiveText(chapterId);
   const subject = await chapterSubject(chapterId);
+  const rawText = await chapterRawText(chapterId);
   const questions = await ai.generateRecallQuestions(
     gapAnalysis,
     concepts,
     objectives,
     parsed.data.language,
-    { subject },
+    { subject, chapterText: rawText },
   );
 
-  const orderedQuestions = spreadByFocus(
-    reconcileQuestions(
-      questions,
-      concepts,
-      objectives,
-      wholeChapter
-        ? concepts.map((c) => c.conceptText)
-        : [...parsed.data.missing, ...parsed.data.misconceptions],
+  // `spreadByFocus` keeps consecutive questions on different ideas; then
+  // `enforceRecallMix` spaces the spoken short answers among the closed ones so
+  // a run of downgraded "explain…" prompts can never bunch at the end.
+  const orderedQuestions = enforceRecallMix(
+    spreadByFocus(
+      reconcileQuestions(
+        questions,
+        concepts,
+        objectives,
+        wholeChapter
+          ? concepts.map((c) => c.conceptText)
+          : [...parsed.data.missing, ...parsed.data.misconceptions],
+      ),
     ),
   );
 

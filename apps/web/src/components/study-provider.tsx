@@ -348,7 +348,7 @@ export function toSessionQuestion(q: {
     targetObjective:
       typeof q.targetObjective === "string" ? q.targetObjective : undefined,
     ...(format ? { format } : {}),
-    ...(options && options.length ? { options } : {}),
+    ...(options?.length ? { options } : {}),
   };
 }
 

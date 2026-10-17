@@ -382,13 +382,16 @@ The student picks how they want to remember **before** anything is generated;
 - **Both** — blur first, then quiz the gaps that surfaced.
 
 Targeted questions come from a different writer, `generateRecallQuestions`,
-which is built to **expose gaps and wrong beliefs**, not to grade at exam
-standard. Each question carries a **format** — `multiple_choice`, `fill_blank`,
-or `short_answer` — in a deterministic 5/2/1 mix (3/4/1 for blank-heavy
-subjects). The closed formats (multiple choice, fill-in-the-blank) are graded by
-exact match against a server-side answer with **no AI call**; only `short_answer`
-reaches the model. Each answer is stored as a `recall` attempt, so both modes
-feed the same gap analysis:
+which is built to **expose gaps and wrong beliefs** — gently. Recall is a
+low-pressure check, not an exam, so its questions are short and mostly factual:
+an easy, quick question is the point, and the wrong options do the diagnosing.
+Each question carries a **format** — `multiple_choice`, `fill_blank`, or
+`short_answer` — in a deterministic 5/2/1 mix (3/4/1 for blank-heavy subjects),
+enforced by a provider JSON schema and re-spaced by `enforceRecallMix` so two
+spoken answers never sit in a row. The closed formats are graded by exact match
+against a server-side answer with **no AI call**; only `short_answer` reaches the
+model. Each answer is stored as a `recall` attempt, so both modes feed the same
+gap analysis:
 
 ```mermaid
 flowchart LR
@@ -605,15 +608,21 @@ different things get asked:
    that fixes exactly these gaps" → `{text}`. Also receives the subject and
    injects family directives.
 4. **RECALL QUESTIONS** (targeted / both modes) — a *diagnostic* writer
-   (`generateRecallQuestions`): "Ask questions that expose this student's gaps
-   and wrong beliefs" → `{questions: [{format, question, options, answer, level,
-   targetConcept, targetObjective}]}`. Leans on explanation and reasoning; never
-   framed as an exam. One shared taxonomy (`apps/server/src/ai/questions.ts`)
-   tags every question with a cognitive level, and the same file fixes the
-   **format** mix per set (5/2/1, or 3/4/1 for blank-heavy subjects): multiple
-   choice and fill-in-the-blank are graded by exact match with no model call,
-   short answer goes to the model. An unanswerable closed question is downgraded
-   to `short_answer` at parse time.
+   (`generateRecallQuestions`): "Ask short questions that reveal this student's
+   gaps and wrong beliefs" → `{questions: [{format, question, options, answer,
+   level, targetConcept, targetObjective}]}`. Low-pressure on purpose — mostly
+   factual taps and blanks, never framed as an exam (`recallLevelDirective`
+   differs from the retest's hard standard). One shared taxonomy
+   (`apps/server/src/ai/questions.ts`) tags every question with a cognitive
+   level, and the same file fixes the **format** mix per set (5/2/1, or 3/4/1
+   for blank-heavy subjects). The mix is enforced three ways: a provider JSON
+   schema guarantees `format` and its fields; `enforceRecallMix` re-spaces the
+   spoken answers so two never sit in a row; and the no-model fallback builds
+   closed questions from the chapter's own text (blank a concept out of a
+   sentence, other concepts as the wrong options). Grading: multiple choice and
+   fill-in-the-blank by exact match with no model call, short answer via the
+   model. An unanswerable closed question is downgraded to `short_answer` at
+   parse time.
 5. **RETEST** (exam-readiness) — a *separate* writer (`generateRetestQuestions`):
    "Write questions that prove a student is bulletproof" → `{questions:
    [{question, level, targetConcept, targetObjective, beyondText}]}`. Must never
@@ -621,7 +630,8 @@ different things get asked:
    must include at least one `beyondText` scenario. Receives the chapter's
    stated objectives so it can hold the student to the author's own contract.
    This reversed the old behaviour where the retest echoed the student's recall
-   wording.
+   wording. A set that comes back too soft (fewer than three levels, or no
+   beyond-text question) is counted and logged via `retestIsSoft`.
 6. **FOCUS** (per-question verdict) — a deterministic helper, not a prompt: a
    misconception counts as handled when *not* restated; a real concept counts
    when covered. Applied to the question's focus subset only.
@@ -638,6 +648,11 @@ than throwing. And every prompt has a fallback: if Gemini fails or the key is a
 placeholder, deterministic heuristics take over (token matching for grading,
 sentence splitting for concepts, an objectives-heading scan for learning
 objectives, templates for lessons/questions), flagged with `estimated: true`.
+The question fallback is not a stub: retest falls back to spoken explanations of
+the failed ideas, and recall rebuilds the closed format mix offline — it finds a
+chapter sentence naming a concept, blanks the concept out, and uses other
+chapter concepts as the wrong options — so an offline student still taps and
+types rather than only speaking.
 
 **Subject-family directives.** `apps/server/src/ai/subject-strategy.ts` defines
 `SubjectFamily` (11 values: mathematics, physics, chemistry, biology,

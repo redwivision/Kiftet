@@ -65,9 +65,11 @@
 - **Cognitive level** — the taxonomy every question is tagged with, shared by
   recall and retest (`apps/server/src/ai/questions.ts`): `knowledge`,
   `comprehension`, `application`, `critical_thinking`, `compare_contrast`. A
-  question set is expected to spread across the levels, and none of them is ever
-  easy. An unrecognised level from the model degrades to `comprehension`, never
-  a mislabel.
+  question set is expected to spread across the levels. The two writers take
+  different tails from it (`recallLevelDirective` vs `retestLevelDirective`):
+  recall is gentle on purpose — an easy, quick factual question is exactly right
+  — while a retest must never be easy. An unrecognised level from the model
+  degrades to `comprehension`, never a mislabel.
 - **Recall mode** — how a student chooses to remember, stored on
   `study_session.recall_mode`: `blurting` (free spoken recall, the original
   loop), `targeted` (skip free recall, answer diagnostic questions over the
@@ -81,9 +83,11 @@
   (`apps/server/src/ai/questions.ts`, `RecallFormat`): `multiple_choice` (tap one
   of four options), `fill_blank` (type the missing word), or `short_answer`
   (speak or type an explanation). A set holds a deterministic 5/2/1 mix (3/4/1
-  for blank-heavy subjects). Multiple choice and fill-in-the-blank are graded by
-  exact match server-side with no AI call; only `short_answer` reaches the
-  model. Retest has no format and stays free-form.
+  for blank-heavy subjects), enforced by a provider JSON schema and re-spaced by
+  `enforceRecallMix` so two spoken answers never sit in a row. Multiple choice
+  and fill-in-the-blank are graded by exact match server-side with no AI call;
+  only `short_answer` reaches the model. Retest has no format and stays
+  free-form.
 - **Beyond-textbook question** — a retest question (`beyondText: true`) that
   describes a scenario the chapter does not cover and asks the student to reason
   it out using the chapter's ideas. Part of what makes the retest a full

@@ -10,6 +10,7 @@ import {
 } from "./gemini";
 import {
   COGNITIVE_LEVELS,
+  enforceRecallMix,
   fallbackLevels,
   isCognitiveLevel,
   judgeClosedAnswer,
@@ -17,6 +18,7 @@ import {
   RECALL_SET_SIZE,
   recallFormatCounts,
   recallFormatPlan,
+  retestIsSoft,
 } from "./questions";
 
 const CONCEPT: ConceptChecklistItem = {
@@ -54,12 +56,14 @@ describe("the cognitive taxonomy", () => {
     expect(isCognitiveLevel(undefined)).toBe(false);
   });
 
-  test("fallbacks spread across levels: recall diagnostic, retest the full ladder", () => {
+  test("fallbacks spread across levels: recall gentle, retest the full ladder", () => {
+    // Recall is low-pressure: mostly knowledge checks, the odd comprehension.
     expect(fallbackLevels("recall", 3)).toEqual([
+      "knowledge",
+      "knowledge",
       "comprehension",
-      "application",
-      "compare_contrast",
     ]);
+    expect(fallbackLevels("recall", 6)[5]).toBe("comprehension");
     expect(fallbackLevels("retest", 5)).toEqual([...COGNITIVE_LEVELS]);
     expect(fallbackLevels("retest", 6)[5]).toBe("knowledge");
   });
@@ -280,7 +284,7 @@ describe("recall formats", () => {
     expect(questions[0]?.format).toBe("short_answer");
   });
 
-  test("with no model, recall falls back to spoken short answers", async () => {
+  test("with no model and no chapter text, recall falls back to spoken answers", async () => {
     __overrideProviderForTests("gemini", null);
     __overrideProviderForTests("groq", null);
     delete process.env.GEMINI_API_KEY;
@@ -291,6 +295,149 @@ describe("recall formats", () => {
     );
     expect(questions.length).toBeGreaterThan(0);
     for (const q of questions) expect(q.format).toBe("short_answer");
+  });
+
+  test("with no model, chapter text still yields a real closed mix offline", async () => {
+    __overrideProviderForTests("gemini", null);
+    __overrideProviderForTests("groq", null);
+    delete process.env.GEMINI_API_KEY;
+    const concepts: ConceptChecklistItem[] = [
+      {
+        conceptText: "Osmosis",
+        isMisconception: false,
+        weight: 3,
+      },
+      { conceptText: "Diffusion", isMisconception: false, weight: 2 },
+      { conceptText: "Active transport", isMisconception: false, weight: 2 },
+      { conceptText: "Turgor pressure", isMisconception: false, weight: 1 },
+    ];
+    const gaps = gapAnalysisFrom(
+      { missing: concepts.map((c) => c.conceptText), misconceptions: [] },
+      concepts,
+    );
+    const chapterText =
+      "Osmosis is the movement of water across a semi-permeable membrane. " +
+      "Diffusion is the movement of particles from high to low concentration. " +
+      "Active transport moves substances against a concentration gradient. " +
+      "Turgor pressure keeps a plant cell firm.";
+    const questions = await ai.generateRecallQuestions(
+      gaps,
+      concepts,
+      [],
+      "en",
+      { subject: "Biology", chapterText },
+    );
+    expect(questions.length).toBeGreaterThanOrEqual(4);
+    // The offline set is not a wall of spoken essays: it carries closed,
+    // deterministically gradable questions with options and answers.
+    const closed = questions.filter((q) => q.format === "multiple_choice");
+    expect(closed.length).toBeGreaterThan(0);
+    for (const q of closed) {
+      expect(q.options?.length ?? 0).toBeGreaterThanOrEqual(3);
+      expect(q.options).toContain(q.answer ?? "");
+    }
+    const blanks = questions.filter((q) => q.format === "fill_blank");
+    for (const q of blanks) {
+      expect(q.question).toContain("____");
+      expect(q.answer).toBeTruthy();
+    }
+  });
+
+  test("the recall writer is told easy is fine; the retest is told it never is", async () => {
+    const systems: string[] = [];
+    __overrideProviderForTests("gemini", async (_model, system) => {
+      systems.push(system);
+      return JSON.stringify({ questions: [] });
+    });
+    await ai.generateRecallQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
+    await ai.generateRetestQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
+    expect(systems[0]).toContain(
+      "an easy, quick question is exactly what you want",
+    );
+    expect(systems[0]).not.toContain("never write an easy question");
+    expect(systems[1]).toContain("never write an easy question");
+  });
+
+  test("both writers are handed a provider-enforced question schema", async () => {
+    const options: unknown[] = [];
+    __overrideProviderForTests(
+      "gemini",
+      async (_model, _system, _user, opts) => {
+        options.push(opts);
+        return JSON.stringify({ questions: [] });
+      },
+    );
+    await ai.generateRecallQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
+    await ai.generateRetestQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
+    const recallSchema = options[0] as { schema?: { required?: string[] } };
+    const retestSchema = options[1] as { schema?: { required?: string[] } };
+    expect(recallSchema.schema).toBeDefined();
+    expect(retestSchema.schema).toBeDefined();
+    // Recall requires a format on every question; retest has no formats.
+    expect(JSON.stringify(recallSchema.schema)).toContain("fill_blank");
+  });
+
+  test("enforceRecallMix never leaves two spoken short answers adjacent", () => {
+    const set = [
+      { format: "short_answer" as const, id: 1 },
+      { format: "short_answer" as const, id: 2 },
+      { format: "multiple_choice" as const, id: 3 },
+      { format: "fill_blank" as const, id: 4 },
+      { format: "multiple_choice" as const, id: 5 },
+      { format: "short_answer" as const, id: 6 },
+    ];
+    const mixed = enforceRecallMix(set);
+    expect(mixed).toHaveLength(set.length);
+    // Introspection order: same questions, closed ones first, shorts spaced.
+    expect(mixed[0]?.format).not.toBe("short_answer");
+    for (let i = 1; i < mixed.length; i++) {
+      expect(
+        mixed[i]?.format === "short_answer" &&
+          mixed[i - 1]?.format === "short_answer",
+      ).toBe(false);
+    }
+    // The closed questions keep their relative order.
+    const closedIds = mixed
+      .filter((q) => q.format !== "short_answer")
+      .map((q) => q.id);
+    expect(closedIds).toEqual([3, 4, 5]);
+  });
+
+  test("no short answers means the set is returned untouched", () => {
+    const set = [
+      { format: "multiple_choice" as const, id: 1 },
+      { format: "fill_blank" as const, id: 2 },
+    ];
+    expect(enforceRecallMix(set)).toEqual(set);
+  });
+
+  test("a soft retest is flagged: too few levels or no beyond-text", () => {
+    // Three levels, one beyond-text → the shape it should be.
+    expect(
+      retestIsSoft([
+        { level: "knowledge", beyondText: false },
+        { level: "application", beyondText: true },
+        { level: "compare_contrast", beyondText: false },
+      ]),
+    ).toBe(false);
+    // Only two levels → soft.
+    expect(
+      retestIsSoft([
+        { level: "knowledge", beyondText: true },
+        { level: "comprehension" },
+        { level: "knowledge" },
+      ]),
+    ).toBe(true);
+    // Enough levels but never leaves the textbook → soft.
+    expect(
+      retestIsSoft([
+        { level: "knowledge" },
+        { level: "application" },
+        { level: "critical_thinking" },
+      ]),
+    ).toBe(true);
+    // An empty set is not judged.
+    expect(retestIsSoft([])).toBe(false);
   });
 
   // The closed-answer route grades a multiple-choice/fill-in-the-blank by

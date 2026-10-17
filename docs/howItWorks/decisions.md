@@ -234,6 +234,32 @@
     recall always did. A closed question that the writer failed to make
     answerable (options with no matching answer, a blank with no answer) is
     downgraded to `short_answer` at parse time rather than shipped ungradeable.
-    The deterministic fallback can invent neither distractors nor a single
-    missing word, so it always emits `short_answer`. Retest stays free-form and
-    carries no format.
+    Retest stays free-form and carries no format.
+
+22. **Recall is easy on purpose; retest is hard on purpose — and both are
+    enforced, not merely requested.** The two writers had shared one difficulty
+    standard (and one closing line, *"never write an easy question"*), so a
+    diagnostic meant to be a low-pressure check was held to exam hardness. They
+    now take different tails from the same taxonomy: `recallLevelDirective`
+    (`apps/server/src/ai/questions.ts`) tells the recall writer that an easy,
+    quick factual prompt — a term, a definition, a filled blank — is exactly what
+    it wants, while `retestLevelDirective` keeps the exam-hard wording. Because
+    the mix was previously only a prose request, it could quietly collapse: a
+    reply that dropped `options`/`answer` was downgraded to `short_answer`, and a
+    run of those is a wall of "explain…" prompts. Three levers now make the shape
+    real. (a) Both writers are handed a provider-enforced JSON schema
+    (`questionSetSchema`), so `format` and its fields are guaranteed at the
+    provider, not hoped for — with an automatic retry *without* the schema if the
+    provider rejects it, so this stays a quality lever and never a hard
+    dependency. (b) `enforceRecallMix` reorders the parsed set so the spoken short
+    answers are spaced evenly among the closed questions and never two in a row,
+    preserving the closed questions' relative order. (c) The no-model fallback
+    now builds the same closed mix from the chapter's own text: it finds a
+    sentence that names a concept, blanks the concept out of it, and offers other
+    chapter concepts as the wrong options — so an offline student gets
+    tap-and-type recall, not spoken essays. A retest that comes back too soft
+    (fewer than three cognitive levels, or no beyond-textbook question) is counted
+    and logged (`retestIsSoft`) rather than silently passed. `generateRecallQuestions`
+    also stopped borrowing the retest's subject directives (`getPhaseDirectives(family, "recall")`),
+    and every answer control is keyed by question index so a repeated spoken
+    question can never be left unsubmittable.

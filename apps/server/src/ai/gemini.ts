@@ -14,16 +14,21 @@ import {
   STUDY_PLAN_MAX_STEPS,
 } from "./plan-config";
 import {
+  COGNITIVE_LEVELS,
   type CognitiveLevel,
   fallbackLevels,
   isCognitiveLevel,
   isRecallFormat,
   judgeClosedAnswer,
-  LEVEL_DIRECTIVE,
   type QuestionKind,
+  RECALL_FORMATS,
   RECALL_SET_SIZE,
   type RecallFormat,
   recallFormatCounts,
+  recallFormatPlan,
+  recallLevelDirective,
+  retestIsSoft,
+  retestLevelDirective,
 } from "./questions";
 import type { SubjectFamily } from "./subject-strategy";
 import { getFamily, getPhaseDirectives } from "./subject-strategy";
@@ -369,16 +374,24 @@ export type AiService = {
     options?: { skipAi?: boolean; subject?: string },
   ): Promise<GuideSection>;
   /**
-   * Diagnostic questions for *targeted* recall: they exist to expose gaps and
-   * wrong beliefs, so they lean on explanation and reasoning, not memorised
-   * facts. Deliberately a different pattern from the retest.
+   * Diagnostic questions for *targeted* recall: short, low-pressure checks that
+   * expose gaps and wrong beliefs — mostly multiple choice and fill-in-the-blank
+   * so the student answers by tapping or typing, with the wrong options doing the
+   * diagnosing. Deliberately a different, gentler pattern from the retest.
    */
   generateRecallQuestions(
     gaps: GapAnalysis,
     concepts: ConceptChecklistItem[],
     objectives: string[],
     language?: ContentLanguage,
-    options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
+    options?: {
+      skipAi?: boolean;
+      timeoutMs?: number;
+      subject?: string;
+      /** The chapter's raw text, used only by the deterministic fallback to
+       *  ground closed questions in the book's own sentences. */
+      chapterText?: string;
+    },
   ): Promise<GeneratedQuestion[]>;
   /**
    * Exam-readiness questions: standardized across the five cognitive levels,
@@ -713,40 +726,155 @@ function fallbackLesson(
 }
 
 /**
- * The deterministic questions, when no model answers. They cannot judge
- * cognitive level or invent a beyond-textbook scenario, so they do not pretend
- * to: each asks the student to explain a named idea, and the level is assigned
- * by the shared ladder so the set still spreads instead of repeating one shape.
- * Retest keeps its distinguishing rule by marking nothing beyond-text (a
- * deterministic writer has no basis for a novel scenario), and recall keeps its
- * diagnostic shape.
+ * The deterministic questions, when no model answers. Retest cannot judge a
+ * novel scenario, so it does not pretend to: each retest question asks the
+ * student to explain a named idea, and the level is assigned by the shared
+ * ladder so the set still spreads. Recall is better served: the chapter's own
+ * sentences let it build the same closed mix the writer aims for — a term blanked
+ * out of a sentence it appears in, with other chapter concepts as the wrong
+ * options — so an offline student still gets tap-and-type questions, not a wall
+ * of spoken essays.
  */
 function fallbackQuestions(
   gaps: GapAnalysis,
   kind: QuestionKind,
   language: ContentLanguage = "en",
+  recall: {
+    concepts?: ConceptChecklistItem[];
+    chapterText?: string;
+    family?: SubjectFamily;
+  } = {},
 ): GeneratedQuestion[] {
   const targets = [...gaps.missing, ...gaps.misconceptions].slice(
     0,
-    kind === "retest" ? 5 : 6,
+    kind === "retest" ? 5 : RECALL_SET_SIZE,
   );
   const levels = fallbackLevels(kind, targets.length);
-  return targets.map((t, i) => ({
-    question:
-      language === "am"
-        ? kind === "retest"
+  if (kind === "retest") {
+    return targets.map((t, i) => ({
+      question:
+        language === "am"
           ? `“${t}”ን በጥልቀት አብራራ፣ ግን በአንተ ቃላት።`
-          : `“${t}”ን በራስህ ቃላት ገልጽ — ጓደኛ እንደሆነ።`
-        : kind === "retest"
-          ? `Explain “${t}” in full and precise detail, using your own words.`
-          : `Explain “${t}” in your own words, as if explaining it to a friend.`,
-    level: levels[i] ?? "comprehension",
-    targetConcept: t,
-    // A deterministic writer has no basis for plausible distractors or a single
-    // missing word, so recall falls back to the spoken shape it can honestly
-    // produce. Retest stays free-form and carries no format at all.
-    format: kind === "recall" ? "short_answer" : undefined,
-  }));
+          : `Explain “${t}” in full and precise detail, using your own words.`,
+      level: levels[i] ?? "comprehension",
+      targetConcept: t,
+    }));
+  }
+  const sentences = recall.chapterText ? sentencesOf(recall.chapterText) : [];
+  const names = (recall.concepts ?? []).map((c) => c.conceptText);
+  const plan = recallFormatPlan(targets.length, recall.family ?? "other");
+  return targets.map((t, i) =>
+    fallbackRecallQuestion(
+      t,
+      sentences,
+      names,
+      plan[i] ?? "short_answer",
+      levels[i] ?? "knowledge",
+      language,
+    ),
+  );
+}
+
+/** Sentences of a chapter, whitespace-flattened and length-bounded, so the
+ *  deterministic recall builder has clean stems to work from. */
+function sentencesOf(text: string): string[] {
+  return text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 20 && s.length <= 320);
+}
+
+/** The first chapter sentence that names this concept, or null — the honest
+ *  gate on whether a closed fallback question can be grounded in the book. */
+function sentenceFor(concept: string, sentences: string[]): string | null {
+  const needle = concept.trim().toLowerCase();
+  if (!needle) return null;
+  return sentences.find((s) => s.toLowerCase().includes(needle)) ?? null;
+}
+
+/** Replace the concept's occurrence with a blank, keeping the sentence intact. */
+function blankOut(sentence: string, concept: string): string {
+  const needle = concept.trim();
+  const idx = sentence.toLowerCase().indexOf(needle.toLowerCase());
+  if (idx < 0) return sentence;
+  return `${sentence.slice(0, idx)}____${sentence.slice(idx + needle.length)}`;
+}
+
+/** Deterministic wrong options: other concept names from the same chapter, so
+ *  they are plausible to a student who does not yet know the term. */
+function distractorNames(
+  correct: string,
+  names: string[],
+  count: number,
+): string[] {
+  const seen = new Set([correct.trim().toLowerCase()]);
+  const out: string[] = [];
+  for (const name of names) {
+    const trimmed = name.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= count) break;
+  }
+  return out;
+}
+
+/** Place the correct option at a deterministic position so it is not always
+ *  first — a fixed "A is right" pattern is its own giveaway. */
+function orderedOptions(correct: string, distractors: string[]): string[] {
+  const options = [correct, ...distractors];
+  if (options.length <= 1) return options;
+  const offset = correct.trim().length % options.length;
+  return [...options.slice(offset), ...options.slice(0, offset)];
+}
+
+/** One deterministic recall question: multiple choice or fill-in-the-blank when
+ *  the chapter text grounds it, and a spoken short answer when it does not. */
+function fallbackRecallQuestion(
+  target: string,
+  sentences: string[],
+  names: string[],
+  format: RecallFormat,
+  level: CognitiveLevel,
+  language: ContentLanguage,
+): GeneratedQuestion {
+  const am = language === "am";
+  const sentence = sentenceFor(target, sentences);
+  const stem = sentence ? blankOut(sentence, target) : null;
+  if (format === "multiple_choice" && stem) {
+    const distractors = distractorNames(target, names, 3);
+    if (distractors.length >= 2) {
+      return {
+        question: am
+          ? `ከምዕራፉ የተወሰደውን ክፍተት የሚሞላው የትኛው ነው? “${stem}”`
+          : `Which term fills the blank in this sentence from the chapter? “${stem}”`,
+        level,
+        targetConcept: target,
+        format: "multiple_choice",
+        options: orderedOptions(target, distractors.slice(0, 3)),
+        answer: target,
+      };
+    }
+  }
+  if (format === "fill_blank" && stem) {
+    return {
+      question: am ? `ክፍተቱን ሙላ፦ “${stem}”` : `Fill in the blank: “${stem}”`,
+      level,
+      targetConcept: target,
+      format: "fill_blank",
+      answer: target,
+    };
+  }
+  return {
+    question: am
+      ? `“${target}”ን በራስህ ቃላት ገልጽ — ጓደኛ እንደሆነ።`
+      : `Explain “${target}” in your own words, as if explaining it to a friend.`,
+    level,
+    targetConcept: target,
+    format: "short_answer",
+  };
 }
 
 /**
@@ -1274,6 +1402,9 @@ const aiTelemetry = {
   timeouts: 0,
   malformed: 0,
   failed: 0,
+  /** Retest sets that came back too soft (fewer than 3 levels, or no
+   *  beyond-textbook question) — a quality signal, not a failure. */
+  softRetest: 0,
 };
 
 export function aiTelemetrySnapshot() {
@@ -1448,10 +1579,34 @@ async function ask(
     aiTelemetry.attempts += 1;
 
     try {
-      const response = await withTimeout(
-        providerCallbacks[provider](model, systemPrompt, userInput, options),
-        Math.min(PROVIDER_TIMEOUT_MS, remaining),
-      );
+      let response: string;
+      try {
+        response = await withTimeout(
+          providerCallbacks[provider](model, systemPrompt, userInput, options),
+          Math.min(PROVIDER_TIMEOUT_MS, remaining),
+        );
+      } catch (error) {
+        // A structured-output schema the provider rejects is a request-level
+        // fault — but the schema is an optimisation, not the task itself. Retry
+        // this same provider once without it, so a picky schema degrades to the
+        // prompt's own "STRICT JSON" instruction instead of losing the call.
+        const failedSchema = statusOf(error);
+        if (
+          !options.schema ||
+          failedSchema === undefined ||
+          !isCallerError(failedSchema)
+        ) {
+          throw error;
+        }
+        aiTelemetry.retries += 1;
+        response = await withTimeout(
+          providerCallbacks[provider](model, systemPrompt, userInput, {
+            ...options,
+            schema: undefined,
+          }),
+          Math.min(PROVIDER_TIMEOUT_MS, remaining),
+        );
+      }
       aiTelemetry.lastProvider = provider;
       aiTelemetry.lastModel = model;
       admission.settle("success");
@@ -1883,16 +2038,18 @@ const SECTION_SYSTEM =
   "including students who have no gap here at all. Explain the concept; do not coach a specific person. " +
   "- Do not invent facts, page numbers, or examples that are not in the text below.";
 
-// Diagnostic questions for *targeted* recall. Their job is to expose gaps, so
-// they are deliberately NOT exam questions and NOT the retest's shape: they
-// probe one weak idea at a time with explanation and reasoning, and their
+// Diagnostic questions for *targeted* recall. Their job is to expose gaps, but
+// gently: a student scanning for what they do and do not know should not have to
+// fight an exam. So these are SHORT and low-pressure — mostly factual checks the
+// student answers by tapping an option or filling a blank — and the wrong options
+// do the diagnosing. They are deliberately NOT the retest's shape, and their
 // results feed the same gap analysis the free-recall path feeds.
 const RECALL_QUESTION_SYSTEM =
-  "Write short diagnostic questions that reveal whether a student really understands each weak idea. " +
-  "This is a DIAGNOSTIC, not an exam: the point is to surface gaps and wrong beliefs, so prefer asking the student to explain and reason over asking them to recall a memorised fact. " +
+  "Write short, friendly diagnostic questions that reveal whether a student still remembers and understands each weak idea. " +
+  "This is a DIAGNOSTIC, not an exam: keep every question quick and low-pressure — the kind a student answers in a few seconds and moves on from. " +
+  "Lean on short factual checks (a term, a definition, or the word that fills a blank) and let the options do the diagnosing: for a known misconception, make the wrong belief a tempting distractor so that holding it shows. " +
   "Write one question per weak idea (missing or misconception item), and set targetConcept to that item's exact conceptText (bare, never the [MISCONCEPTION] marker) so the answer is graded only against that idea. " +
-  "For a misconception, ask a question whose correct answer would contradict the wrong belief, so holding the belief shows. " +
-  LEVEL_DIRECTIVE +
+  recallLevelDirective() +
   " ";
 
 /**
@@ -1914,6 +2071,44 @@ export function recallFormatDirective(family: SubjectFamily): string {
   );
 }
 
+/**
+ * The provider-enforced shape of a generated question set. "STRICT JSON" in the
+ * prompt is only a request; handing the provider a schema makes the fields — and
+ * crucially the `format` enum the recall mix depends on — a guarantee instead of
+ * a hope. Without it a reply can drop `options`/`answer`, the parser then
+ * downgrades every multiple choice to a spoken short answer, and the set
+ * collapses into a run of "explain…" prompts. Recall requires `format`; retest
+ * has no formats at all, so it does not.
+ *
+ * The ladder treats a schema the provider refuses as recoverable: `ask` retries
+ * without it, so this stays a quality lever and never a hard dependency.
+ */
+function questionSetSchema(requireFormat: boolean): Record<string, unknown> {
+  const item: Record<string, unknown> = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      question: { type: "string" },
+      level: { type: "string", enum: [...COGNITIVE_LEVELS] },
+      targetConcept: { type: "string" },
+      targetObjective: { type: "string" },
+      beyondText: { type: "boolean" },
+      format: { type: "string", enum: [...RECALL_FORMATS] },
+      options: { type: "array", items: { type: "string" } },
+      answer: { type: "string" },
+    },
+    required: requireFormat
+      ? ["format", "question", "level"]
+      : ["question", "level"],
+  };
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: { questions: { type: "array", items: item } },
+    required: ["questions"],
+  };
+}
+
 // Exam-readiness questions for the retest. Written to a national-exam standard
 // and deliberately a different pattern from a recall question: these must be
 // hard, detailed, spread across all five cognitive levels, and include at least
@@ -1922,7 +2117,7 @@ const RETEST_SYSTEM =
   "Write questions that prove a student is bulletproof on this chapter — exam-standard, and NEVER easy. " +
   "These are held to a national-exam standard and are a DIFFERENT pattern from a study check: do not simply ask the student to restate a definition. " +
   "Target every failed objective and every failed concept, probing the lowest mastery levels hardest. " +
-  LEVEL_DIRECTIVE +
+  retestLevelDirective() +
   " Two rules make a question exam-ready: " +
   "(1) Demand precise detail — exact terms, values, steps, conditions, or examples — never a vague prompt. " +
   "(2) At least one question must go BEYOND the textbook: describe a novel scenario the chapter never covers and ask the student to reason it out using the chapter's ideas. Set beyondText true on exactly those questions. " +
@@ -2395,12 +2590,22 @@ export const ai: AiService = {
     concepts: ConceptChecklistItem[],
     objectives: string[],
     language: ContentLanguage = "en",
-    options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
+    options: {
+      skipAi?: boolean;
+      timeoutMs?: number;
+      subject?: string;
+      chapterText?: string;
+    } = {},
   ): Promise<GeneratedQuestion[]> {
-    const fallback = () => fallbackQuestions(gaps, "recall", language);
+    const family = options.subject ? getFamily(options.subject) : "other";
+    const fallback = () =>
+      fallbackQuestions(gaps, "recall", language, {
+        concepts,
+        chapterText: options.chapterText,
+        family,
+      });
     if (!anyAiAvailable()) return fallback();
     try {
-      const family = options.subject ? getFamily(options.subject) : "other";
       // Recall questions are diagnostic, so they take the *recall* family
       // directives (probe for gaps) — not the retest's exam-hard bullets.
       const dirs = getPhaseDirectives(family, "recall");
@@ -2411,6 +2616,7 @@ export const ai: AiService = {
           sysExtra +
           outputInstruction(language),
         questionUserPrompt(gaps, concepts, objectives),
+        { schema: questionSetSchema(true) },
       );
       return (
         extractQuestions(raw, RECALL_SET_SIZE) ??
@@ -2437,11 +2643,19 @@ export const ai: AiService = {
       const raw = await ask(
         RETEST_SYSTEM + sysExtra + outputInstruction(language),
         questionUserPrompt(gaps, concepts, objectives),
+        { schema: questionSetSchema(false) },
       );
-      return (
-        extractQuestions(raw, 5) ??
-        malformed("generateRetestQuestions", fallback)
-      );
+      const questions = extractQuestions(raw, 5);
+      if (!questions) return malformed("generateRetestQuestions", fallback);
+      // A retest that never climbs or never leaves the textbook is not the proof
+      // it was written to be. Surface it as a signal; do not fake a fix.
+      if (retestIsSoft(questions)) {
+        aiTelemetry.softRetest += 1;
+        console.error(
+          "[ai] generateRetestQuestions produced a soft set (fewer than 3 levels or no beyond-text question)",
+        );
+      }
+      return questions;
     } catch (error) {
       return degraded("generateRetestQuestions", error, fallback);
     }
