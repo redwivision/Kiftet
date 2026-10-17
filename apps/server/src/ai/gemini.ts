@@ -2401,7 +2401,9 @@ export const ai: AiService = {
     if (!anyAiAvailable()) return fallback();
     try {
       const family = options.subject ? getFamily(options.subject) : "other";
-      const dirs = getPhaseDirectives(family, "retest");
+      // Recall questions are diagnostic, so they take the *recall* family
+      // directives (probe for gaps) — not the retest's exam-hard bullets.
+      const dirs = getPhaseDirectives(family, "recall");
       const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
         RECALL_QUESTION_SYSTEM +

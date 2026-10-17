@@ -533,9 +533,14 @@ function VoiceCapture({
   const spokenRef = useRef(spoken);
   spokenRef.current = spoken;
 
+  // A "capture window" is one answer to one question. Every phase that shows a
+  // *set* of questions must key on the question index, not just the phase — or
+  // the reset below never fires between questions and the second spoken answer
+  // is silently swallowed by `submittedRef`. Only single-capture phases (free
+  // recall) key on the phase alone.
   const baseKey =
-    state.phase === "retest"
-      ? `retest:${state.currentQuestion}`
+    state.phase === "retest" || state.phase === "targeted"
+      ? `${state.phase}:${state.currentQuestion}`
       : `phase:${state.phase}`;
 
   // Which capture window is current. Written when the window opens, read by the
@@ -1879,6 +1884,7 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
               <QueuedPanel text={t("queued-answer")} />
             ) : (
               <VoiceCapture
+                key={currentQuestion}
                 submit={submitText}
                 voiceAllowed={voiceAllowed}
                 busy={state.busy}
@@ -1969,6 +1975,7 @@ function TargetedRecallPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
               <QueuedPanel text={t("queued-answer")} />
             ) : (
               <TargetedAnswerInput
+                key={currentQuestion}
                 question={questions[currentQuestion]}
                 submit={submitText}
                 voiceAllowed={voiceAllowed}
