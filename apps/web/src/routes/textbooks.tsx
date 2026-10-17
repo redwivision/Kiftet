@@ -1354,7 +1354,7 @@ function AddTextbook({
                         : t("import-entries-n", { n: newChapters })}
                 </Button>
               ) : (
-                <Button disabled title="Preview mode — import is coming soon.">
+                <Button disabled title={t("preview-coming")}>
                   {t("preview-coming")}
                 </Button>
               )}

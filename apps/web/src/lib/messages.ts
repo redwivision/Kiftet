@@ -52,6 +52,7 @@ export const en = {
   "lesson-title": "The short lesson",
   "lesson-text":
     "Just what you missed — nothing more. Read it now, or hear it read out to you.",
+  "lesson-writing": "Writing the lesson…",
   // Guide (phase 11, 3b). The study order itself is the message: wrong first,
   // because that is the one thing re-reading does not fix.
   "guide-start-here": "Start here",
@@ -144,6 +145,12 @@ export const en = {
   "result-open-title": "Something is still missing.",
   "result-open-body":
     "Not everything is learned on the first try — now you know which ideas are still missing, so the next round will be faster.",
+  "result-knew-before-after": "How much you knew, before and after",
+  "result-knew-round": "How much you knew this round",
+  "result-points-up": "+{delta} points",
+  "result-points": "{delta} points",
+  "result-before": "Before",
+  "result-after": "After",
   "retest-the-gaps": "Test the missing ideas again",
   "relearn-short-version": "Read the short lesson again",
   "start-over": "Start over and say what you remember",
@@ -991,6 +998,7 @@ export const am: Record<MessageKey, string> = {
     "አሁን በከባይ ጥቅበት ላይ ነው፤ ስለዚህ ይህ ውጤት ከሰማት ብቻ የተዘጋጀ ፈጣን ግምት ነው፤ ሙሉ ምርመራ አይደለም። ክፍት የሆኑትን ተማር፣ ከዚያ ስራህን እንደገና ሞክር።",
   "lesson-title": "አጭሩ ማብራሪያ",
   "lesson-text": "ያመለጠህን ብቻ — ከዚያ ያለፈ ምንም። አሁን አንብበው፣ ወይም ተናግሮ ስማው።",
+  "lesson-writing": "ማብራሪያው በመጻፍ ላይ…",
   "guide-start-here": "እዚህ ይጀምር",
   "guide-wrong-first": "ይህን ተናሽተዋል",
   "guide-almost-first": "በጣም ቅርብ — አንድ ምርስ ከእርስህ",
@@ -1076,6 +1084,12 @@ export const am: Record<MessageKey, string> = {
   "result-open-title": "አንድ ክፍተት አሁንም ክፍት ነው።",
   "result-open-body":
     "ሁሉም በመጀመሪያ ሙከራ አይያዝም — አሁን የትኞቹ ሀሳቦች ክፍት እንደሆኑ ታውቃለህ፣ ስለዚህ ቀጣዩ ሙከራ ከመጀመሪያው ፈጣን ይሆናል።",
+  "result-knew-before-after": "ምን ያህል እንደምታውቅ፣ ከዚህ በፊትና በኋላ",
+  "result-knew-round": "ምን ያህል እንደምታውቅ በዚህ ዙር",
+  "result-points-up": "+{delta} ነጥብ",
+  "result-points": "{delta} ነጥብ",
+  "result-before": "በፊት",
+  "result-after": "በኋላ",
   "retest-the-gaps": "ክፍተቶቹን ድጋሚ ፈትን",
   "relearn-short-version": "አጭሩን ማብራሪያ እንደገና ተማር",
   "start-over": "በቀዝቃዛ ማስታወስ ከመጀመሪያ ጀምር",

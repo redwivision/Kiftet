@@ -202,7 +202,7 @@ export function TocPicker({
       <div
         role="tablist"
         aria-label={t("toc-view-label")}
-        className="mb-3 inline-flex rounded-full border border-border/70 bg-muted/30 p-0.5"
+        className="mb-3 inline-flex max-w-full overflow-x-auto rounded-full border border-border/70 bg-muted/30 p-0.5"
       >
         {tabs.map(({ key, label, hint, beta }) => (
           <button
@@ -215,7 +215,7 @@ export function TocPicker({
             title={hint}
             onClick={() => setView(key)}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium text-[0.78rem] transition-colors",
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-[0.78rem] transition-colors",
               view === key
                 ? "bg-gold text-background"
                 : "text-muted-foreground hover:text-foreground",

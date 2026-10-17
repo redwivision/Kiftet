@@ -1216,9 +1216,18 @@ function RecallPhase({
   const targeted = state.recallMode === "targeted";
   return (
     <div className="space-y-6">
-      <PhaseHeading title={t("recall-title")} text={t("recall-text")} />
+      {/* Targeted mode never asks the student to speak, so the "Remember it
+          out loud" heading would describe a step that isn't coming. */}
+      <PhaseHeading
+        title={targeted ? t("recall-mode-targeted") : t("recall-title")}
+        text={targeted ? t("recall-mode-targeted-desc") : t("recall-text")}
+      />
       <RecallModeChooser value={state.recallMode} onChange={setRecallMode} />
-      {subjectHint && (
+      {/* The subject hint is advice for *speaking* the chapter back (blurting,
+          or the blurting half of "both"). In targeted mode the student only
+          answers quick diagnostic questions, so that advice is wrong here and
+          would push them toward the exam shape recall no longer is. */}
+      {!targeted && subjectHint && (
         <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
           <p className="text-muted-foreground text-xs leading-5">
             {subjectHint}
@@ -1227,9 +1236,6 @@ function RecallPhase({
       )}
       {targeted ? (
         <div className="inner-surface space-y-4 p-5">
-          <p className="text-foreground/85 text-sm leading-6">
-            {t("recall-mode-targeted-desc")}
-          </p>
           <Button
             className="w-full justify-center"
             disabled={state.busy}
@@ -1636,7 +1642,7 @@ function LessonTextPanel({
                 {sentence}{" "}
               </button>
             ))
-          : (lessonText ?? "Writing the lesson…")}
+          : (lessonText ?? t("lesson-writing"))}
       </div>
 
       {lessonText && (
@@ -2353,6 +2359,7 @@ function BeforeAfter({
   tone: "sage" | "gold" | "rust";
   metric: { label: string; value: string }[];
 }) {
+  const { t } = useLanguage();
   const hasAfter = after !== undefined;
   const afterBar =
     tone === "gold" ? "bg-gold" : tone === "sage" ? "bg-sage" : "bg-rust";
@@ -2361,9 +2368,7 @@ function BeforeAfter({
     <div className="inner-surface p-5">
       <div className="mb-4 flex items-center justify-between">
         <p className="k-label">
-          {hasAfter
-            ? "How much you knew, before and after"
-            : "How much you knew this round"}
+          {hasAfter ? t("result-knew-before-after") : t("result-knew-round")}
         </p>
         {hasAfter && delta !== undefined && (
           <span
@@ -2376,7 +2381,9 @@ function BeforeAfter({
                   : "text-muted-foreground",
             )}
           >
-            {delta > 0 ? `+${delta} points` : `${delta} points`}
+            {delta > 0
+              ? t("result-points-up", { delta })
+              : t("result-points", { delta })}
           </span>
         )}
       </div>
@@ -2396,10 +2403,10 @@ function BeforeAfter({
           ))
         ) : (
           <>
-            <ScoreBar label="Before" value={before} />
+            <ScoreBar label={t("result-before")} value={before} />
             {hasAfter && (
               <ScoreBar
-                label="After"
+                label={t("result-after")}
                 value={after ?? 0}
                 active
                 barColor={afterBar}
@@ -2471,7 +2478,7 @@ function ScoreBar({
       <div className="h-2 overflow-hidden rounded-full bg-muted/60 dark:bg-white/10">
         <div
           className={cn(
-            "h-full origin-left animate-grow rounded-full transition-all duration-700",
+            "h-full origin-left animate-grow rounded-full transition-[width] duration-700",
             active ? barColor : "bg-muted-foreground/40",
           )}
           style={{
