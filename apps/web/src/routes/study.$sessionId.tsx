@@ -28,6 +28,7 @@ import {
   type CognitiveLevel,
   type Gaps,
   type RecallMode,
+  type SessionQuestion,
   type StudyPlan,
   StudyProvider,
   useStudy,
@@ -854,6 +855,83 @@ function TextRecorder({
       >
         {buttonLabel ?? t("submit")}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * The answer control for ONE targeted-recall question. The server assigns each
+ * question a format and grades the closed ones by exact match, so the input has
+ * to match: multiple choice is a tap (fastest to answer, deterministic to
+ * grade), fill-in-the-blank is typing the missing word, and short answer keeps
+ * the voice ring. Questions from before formats existed, and the no-model
+ * fallback, have no format and fall back to the spoken shape.
+ */
+function TargetedAnswerInput({
+  question,
+  submit,
+  voiceAllowed,
+  busy,
+  t,
+}: {
+  question: SessionQuestion | undefined;
+  submit: (text: string) => Promise<void>;
+  voiceAllowed: boolean;
+  busy: boolean;
+  t: Translate;
+}) {
+  const format = question?.format;
+  const options = question?.options ?? [];
+
+  if (format === "multiple_choice" && options.length) {
+    return (
+      <div className="space-y-3">
+        <p className="text-center text-muted-foreground text-sm leading-6">
+          {t("targeted-mcq-instruction")}
+        </p>
+        <div className="mx-auto grid max-w-md gap-2">
+          {options.map((option) => (
+            <Button
+              key={option}
+              variant="outline"
+              className="h-auto justify-start whitespace-normal py-3 text-left leading-6"
+              disabled={busy}
+              onClick={() => void submit(option)}
+            >
+              {option}
+            </Button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (format === "fill_blank") {
+    return (
+      <div className="space-y-3">
+        <p className="text-center text-muted-foreground text-sm leading-6">
+          {t("targeted-fill-blank-instruction")}
+        </p>
+        <TextRecorder
+          busy={busy}
+          submit={submit}
+          placeholder={t("targeted-fill-blank-instruction")}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-center text-muted-foreground text-sm leading-6">
+        {t("targeted-short-instruction")}
+      </p>
+      <VoiceCapture
+        submit={submit}
+        voiceAllowed={voiceAllowed}
+        busy={busy}
+        placeholder={t("type-answer-out-loud")}
+      />
     </div>
   );
 }
@@ -1890,11 +1968,12 @@ function TargetedRecallPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
             state.queued.questionIndex === currentQuestion ? (
               <QueuedPanel text={t("queued-answer")} />
             ) : (
-              <VoiceCapture
+              <TargetedAnswerInput
+                question={questions[currentQuestion]}
                 submit={submitText}
                 voiceAllowed={voiceAllowed}
                 busy={state.busy}
-                placeholder={t("type-answer-out-loud")}
+                t={t}
               />
             )}
           </div>

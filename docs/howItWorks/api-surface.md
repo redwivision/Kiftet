@@ -15,8 +15,8 @@ All routes live behind `/api`:
 | `PATCH /api/sessions/:id/recall-mode` | Persist the student's recall-mode choice so a reload restores the flow | 0 |
 | `GET /api/sessions/:id` | Session details + its attempts | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
-| `POST /api/sessions/:id/recall-questions` | Get diagnostic recall questions (`scope`: `gaps` or `chapter`) | 0/2 (AI in 2) |
-| `POST /api/sessions/:id/recall-questions/answer` | Answer one recall question → per-question gaps + merged gaps | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/recall-questions` | Get diagnostic recall questions (`scope`: `gaps` or `chapter`); each carries a format (multiple_choice / fill_blank / short_answer) in a 5/2/1 mix (3/4/1 for blank-heavy subjects) | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/recall-questions/answer` | Answer one recall question → per-question gaps + merged gaps. Multiple choice and fill-in-the-blank grade deterministically (no AI); only short answer reaches the model | 0/2 (AI in 2) |
 | `GET /api/sessions/:id/recall-gaps` | The merged gap analysis from every recall attempt so far | 0 |
 | `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/plan` | Build the gap roadmap from diagnosed mastery and a 10/20/40 minute budget (deterministic; one batched call for the *why* lines) | 12 |

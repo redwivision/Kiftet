@@ -383,15 +383,23 @@ The student picks how they want to remember **before** anything is generated;
 
 Targeted questions come from a different writer, `generateRecallQuestions`,
 which is built to **expose gaps and wrong beliefs**, not to grade at exam
-standard. Each answer is stored as a `recall` attempt, so both modes feed the
-same gap analysis:
+standard. Each question carries a **format** — `multiple_choice`, `fill_blank`,
+or `short_answer` — in a deterministic 5/2/1 mix (3/4/1 for blank-heavy
+subjects). The closed formats (multiple choice, fill-in-the-blank) are graded by
+exact match against a server-side answer with **no AI call**; only `short_answer`
+reaches the model. Each answer is stored as a `recall` attempt, so both modes
+feed the same gap analysis:
 
 ```mermaid
 flowchart LR
-  A["1 · POST /recall-questions<br/>{ scope: 'chapter' | 'gaps' }"] --> B["2 · diagnostic questions<br/>tagged with a level"]
-  B --> C["3 · POST /recall-questions/answer<br/>{ transcript, focus, attemptId }"]
-  C --> D["4 · mergeRecallGaps unions<br/>every attempt so far"]
-  D --> E["5 · GET /recall-gaps<br/>one merged analysis"]
+  A["1 · POST /recall-questions<br/>{ scope: 'chapter' | 'gaps' }"] --> B["2 · diagnostic questions<br/>tagged with a level + format"]
+  B --> C["3 · POST /recall-questions/answer<br/>{ answer text, questionIndex, attemptId }"]
+  C --> D{"4 · closed format?"}
+  D -->|"multiple_choice / fill_blank"| E["judgeClosedAnswer<br/>exact match, no AI"]
+  D -->|"short_answer"| F["gradeRecall<br/>the model"]
+  E --> G
+  F --> G["5 · mergeRecallGaps unions<br/>every attempt so far"]
+  G --> H["6 · GET /recall-gaps<br/>one merged analysis"]
 ```
 
 > The session's *before* score is the **mean of every recall attempt**, exactly
@@ -598,10 +606,14 @@ different things get asked:
    injects family directives.
 4. **RECALL QUESTIONS** (targeted / both modes) — a *diagnostic* writer
    (`generateRecallQuestions`): "Ask questions that expose this student's gaps
-   and wrong beliefs" → `{questions: [{question, level, targetConcept,
-   targetObjective}]}`. Leans on explanation and reasoning; never framed as an
-   exam. One shared taxonomy (`apps/server/src/ai/questions.ts`) tags every
-   question with a cognitive level.
+   and wrong beliefs" → `{questions: [{format, question, options, answer, level,
+   targetConcept, targetObjective}]}`. Leans on explanation and reasoning; never
+   framed as an exam. One shared taxonomy (`apps/server/src/ai/questions.ts`)
+   tags every question with a cognitive level, and the same file fixes the
+   **format** mix per set (5/2/1, or 3/4/1 for blank-heavy subjects): multiple
+   choice and fill-in-the-blank are graded by exact match with no model call,
+   short answer goes to the model. An unanswerable closed question is downgraded
+   to `short_answer` at parse time.
 5. **RETEST** (exam-readiness) — a *separate* writer (`generateRetestQuestions`):
    "Write questions that prove a student is bulletproof" → `{questions:
    [{question, level, targetConcept, targetObjective, beyondText}]}`. Must never
@@ -658,7 +670,7 @@ that works:
 | `POST /api/sessions/:id/recall` | StudyProvider | yes | yes |
 | `POST /api/sessions/:id/microlesson` | StudyProvider | yes | no |
 | `POST /api/sessions/:id/recall-questions` | StudyProvider (targeted/both) | yes | yes |
-| `POST /api/sessions/:id/recall-questions/answer` | StudyProvider | yes | yes |
+| `POST /api/sessions/:id/recall-questions/answer` | StudyProvider | only short answer (MCQ/blank are deterministic) | yes |
 | `GET /api/sessions/:id/recall-gaps` | StudyProvider | no | no |
 | `PATCH /api/sessions/:id/recall-mode` | StudyProvider | no | yes (update) |
 | `POST /api/sessions/:id/retest` | StudyProvider | yes | no |

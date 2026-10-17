@@ -77,6 +77,13 @@
   `generateRecallQuestions`) whose job is to expose gaps and wrong beliefs, not
   to grade at exam standard. Its answers are stored as `recall` attempts and
   merge into the same gap analysis the blurting path produces.
+- **Recall format** — how a targeted-recall question is answered
+  (`apps/server/src/ai/questions.ts`, `RecallFormat`): `multiple_choice` (tap one
+  of four options), `fill_blank` (type the missing word), or `short_answer`
+  (speak or type an explanation). A set holds a deterministic 5/2/1 mix (3/4/1
+  for blank-heavy subjects). Multiple choice and fill-in-the-blank are graded by
+  exact match server-side with no AI call; only `short_answer` reaches the
+  model. Retest has no format and stays free-form.
 - **Beyond-textbook question** — a retest question (`beyondText: true`) that
   describes a scenario the chapter does not cover and asks the student to reason
   it out using the chapter's ideas. Part of what makes the retest a full

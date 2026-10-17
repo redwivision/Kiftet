@@ -1949,7 +1949,9 @@ const recallAnswerSchema = z.object({
 });
 
 router.post("/sessions/:id/recall-questions/answer", async (req, res) => {
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  // Note: the AI admission check is deliberately NOT first. A multiple-choice or
+  // fill-in-the-blank answer is graded deterministically and needs no model, so
+  // only the short-answer path below asks for (and spends) the AI budget.
   const parsed = recallAnswerSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -1967,28 +1969,46 @@ router.post("/sessions/:id/recall-questions/answer", async (req, res) => {
   const subset = await focusSubset(chapterId, question.focus);
   if (!subset.length) return err(res, "No concepts matched that question", 400);
 
+  // A closed question (multiple choice or fill-in-the-blank) is graded
+  // deterministically against its stored answer — no model call and no request
+  // budget. A short answer (or a question from before formats existed) keeps the
+  // model grading it always got.
   let single: Awaited<ReturnType<typeof ai.gradeRecall>>;
   const fmt = question.format;
   if (fmt === "multiple_choice" || fmt === "fill_blank") {
-    const expected = question.answer ?? "";
-    const correct = judgeClosedAnswer(expected, parsed.data.transcriptText);
+    const correct = judgeClosedAnswer(
+      question.answer ?? "",
+      parsed.data.transcriptText,
+    );
+    const miscNames = new Set(
+      subset
+        .filter((c) => c.isMisconception)
+        .map((c) => c.conceptText.trim().toLowerCase()),
+    );
     if (correct) {
-      const covered = question.focus.slice();
-      const missing: string[] = [];
-      const misconceptions: string[] = [];
-      const mastery: Record<string, number> = {};
-      for (const f of question.focus) mastery[f] = 3;
-      single = gapAnalysisFrom({ covered, missing, misconceptions }, subset);
+      // Everything the question targets is right. A misconception target is
+      // credited to `covered`, which focusScore reads as "did not restate it".
+      single = gapAnalysisFrom(
+        { covered: question.focus.slice(), missing: [], misconceptions: [] },
+        subset,
+      );
     } else {
-      const covered: string[] = [];
-      const missing = question.focus.slice();
-      const misconceptions: string[] = [];
-      single = gapAnalysisFrom({ covered, missing, misconceptions }, subset);
+      // A wrong answer to a misconception question is the strongest signal
+      // there is: the student still holds the belief, so it is recorded as a
+      // misconception, not a mere missing idea.
+      const isMisc = (f: string) => miscNames.has(f.trim().toLowerCase());
+      single = gapAnalysisFrom(
+        {
+          covered: [],
+          missing: question.focus.filter((f) => !isMisc(f)),
+          misconceptions: question.focus.filter(isMisc),
+        },
+        subset,
+      );
     }
-    // Do not call allowAiRequest-consumed budget for closed grading; also
-    // ensure we didn't rely on AI. Nothing to call here — closed paths are
-    // free of AI.
   } else {
+    // Only an open, spoken answer reaches the model — so only it spends budget.
+    if (!allowAiRequest(req)) return aiBudgetError(res, req);
     single = await ai.gradeRecall(parsed.data.transcriptText, subset, subject);
   }
   const score = Math.round(focusScore(single, subset) * 100);

@@ -216,3 +216,24 @@
     *before* score is the mean of those attempts, exactly as the retest's
     *after* is the mean of its answers — so the delta stays one comparable
     number whichever mode the student chose.
+
+21. **Recall questions carry a format, and closed formats are graded without
+    the model.** A targeted-recall question is one of three formats —
+    `multiple_choice`, `fill_blank`, or `short_answer` (`apps/server/src/ai/questions.ts`,
+    `RecallFormat`) — and the set targets a 5/2/1 mix out of
+    `RECALL_SET_SIZE` (8): mostly taps, a couple of blanks, one spoken answer.
+    Subjects where a single missing word is the natural probe (mathematics,
+    physics, chemistry, biology, CS/ICT) shift to 3/4/1 so fill-in-the-blank can
+    be the largest share. `recallFormatCounts` computes the mix deterministically
+    (largest-remainder rounding), so the writer's instruction, the parser's
+    validation, and the no-model fallback all agree on one shape.
+    Multiple choice and fill-in-the-blank are graded by exact match
+    (`judgeClosedAnswer`, case/space/punctuation-insensitive) against a
+    server-stored `answer` the client never receives, so those grades cost no AI
+    call and no request budget. Only `short_answer` goes to the model, exactly as
+    recall always did. A closed question that the writer failed to make
+    answerable (options with no matching answer, a blank with no answer) is
+    downgraded to `short_answer` at parse time rather than shipped ungradeable.
+    The deterministic fallback can invent neither distractors nor a single
+    missing word, so it always emits `short_answer`. Retest stays free-form and
+    carries no format.
