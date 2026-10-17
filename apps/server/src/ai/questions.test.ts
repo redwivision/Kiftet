@@ -15,7 +15,7 @@ import {
   isCognitiveLevel,
   judgeClosedAnswer,
   RECALL_FORMATS,
-  RECALL_SET_SIZE,
+  RECALL_MIN_QUESTIONS,
   recallFormatCounts,
   recallFormatPlan,
   retestIsSoft,
@@ -87,14 +87,18 @@ describe("the two writers", () => {
     await ai.generateRecallQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
     await ai.generateRetestQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
 
-    expect(systems).toHaveLength(2);
-    expect(systems[0]).not.toBe(systems[1]);
+    // Recall now fans out into provider chunks, so there can be more than one
+    // recall system prompt; retest stays a single call.
+    const recallSystems = systems.filter((s) => s.includes("DIAGNOSTIC"));
+    const retestSystems = systems.filter((s) => s.includes("beyondText"));
+    expect(recallSystems.length).toBeGreaterThan(0);
+    expect(retestSystems).toHaveLength(1);
+    expect(recallSystems[0]).not.toBe(retestSystems[0]);
     // Both carry the shared taxonomy; only the retest asks for beyond-textbook
     // reasoning, and only the recall is framed as a diagnostic.
-    expect(systems[0]).toContain("cognitive level");
-    expect(systems[1]).toContain("cognitive level");
-    expect(systems[0]).toContain("DIAGNOSTIC");
-    expect(systems[1]).toContain("beyondText");
+    expect(recallSystems[0]).toContain("cognitive level");
+    expect(retestSystems[0]).toContain("cognitive level");
+    expect(recallSystems[0]).not.toContain("beyondText");
   });
 
   test("keeps the level and beyond-text flag the writer returned", async () => {
@@ -148,10 +152,10 @@ describe("the two writers", () => {
 });
 
 describe("recall formats", () => {
-  test("the 8-question default is 5/2/1 and the blank-heavy families 3/4/1", () => {
-    expect(recallFormatCounts(RECALL_SET_SIZE, "history_social")).toEqual({
-      multiple_choice: 5,
-      fill_blank: 2,
+  test("the ten-question floor is 6/3/1 and the blank-heavy families 4/5/1", () => {
+    expect(recallFormatCounts(RECALL_MIN_QUESTIONS, "history_social")).toEqual({
+      multiple_choice: 6,
+      fill_blank: 3,
       short_answer: 1,
     });
     for (const family of [
@@ -161,16 +165,16 @@ describe("recall formats", () => {
       "biology",
       "cs_ict",
     ] as const) {
-      expect(recallFormatCounts(RECALL_SET_SIZE, family)).toEqual({
-        multiple_choice: 3,
-        fill_blank: 4,
+      expect(recallFormatCounts(RECALL_MIN_QUESTIONS, family)).toEqual({
+        multiple_choice: 4,
+        fill_blank: 5,
         short_answer: 1,
       });
     }
   });
 
   test("counts always sum to the request, whatever the size", () => {
-    for (let count = 0; count <= 12; count++) {
+    for (let count = 0; count <= 16; count++) {
       for (const family of ["other", "mathematics"] as const) {
         const counts = recallFormatCounts(count, family);
         const sum = RECALL_FORMATS.reduce((acc, f) => acc + counts[f], 0);
@@ -179,9 +183,20 @@ describe("recall formats", () => {
     }
   });
 
+  test("a large set never carries more spoken answers than the cap", () => {
+    for (let count = 10; count <= 16; count++) {
+      expect(
+        recallFormatCounts(count, "other").short_answer,
+      ).toBeLessThanOrEqual(2);
+      expect(
+        recallFormatCounts(count, "mathematics").short_answer,
+      ).toBeLessThanOrEqual(2);
+    }
+  });
+
   test("the plan keeps one entry per question and never opens on the short answer", () => {
-    const plan = recallFormatPlan(RECALL_SET_SIZE, "other");
-    expect(plan).toHaveLength(RECALL_SET_SIZE);
+    const plan = recallFormatPlan(RECALL_MIN_QUESTIONS, "other");
+    expect(plan).toHaveLength(RECALL_MIN_QUESTIONS);
     expect(plan.filter((f) => f === "short_answer")).toHaveLength(1);
     expect(plan[0]).not.toBe("short_answer");
     expect(recallFormatPlan(4, "mathematics")).toHaveLength(4);
@@ -209,9 +224,8 @@ describe("recall formats", () => {
     expect(system).toContain("multiple_choice");
     expect(system).toContain("fill_blank");
     expect(system).toContain("short_answer");
-    // Mathematics is blank-heavy, so the mix is 3/4/1.
-    expect(system).toContain('3 "multiple_choice"');
-    expect(system).toContain('4 "fill_blank"');
+    // Mathematics is blank-heavy, so the format rules lean toward fill-in-the-blank.
+    expect(system).toContain("leaning toward fill_blank");
   });
 
   test("a well-formed multiple-choice question keeps its options and answer", async () => {
@@ -351,11 +365,15 @@ describe("recall formats", () => {
     });
     await ai.generateRecallQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
     await ai.generateRetestQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
-    expect(systems[0]).toContain(
+    const recallSystems = systems.filter((s) => s.includes("DIAGNOSTIC"));
+    const retestSystems = systems.filter((s) =>
+      s.includes("never write an easy question"),
+    );
+    expect(recallSystems[0]).toContain(
       "an easy, quick question is exactly what you want",
     );
-    expect(systems[0]).not.toContain("never write an easy question");
-    expect(systems[1]).toContain("never write an easy question");
+    expect(recallSystems[0]).not.toContain("never write an easy question");
+    expect(retestSystems).toHaveLength(1);
   });
 
   test("both writers are handed a provider-enforced question schema", async () => {
@@ -369,12 +387,21 @@ describe("recall formats", () => {
     );
     await ai.generateRecallQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
     await ai.generateRetestQuestions(GAPS, [CONCEPT], [OBJECTIVE]);
-    const recallSchema = options[0] as { schema?: { required?: string[] } };
-    const retestSchema = options[1] as { schema?: { required?: string[] } };
+    type Schema = {
+      required?: string[];
+      properties?: {
+        questions?: { items?: { required?: string[] } };
+      };
+    };
+    const recallSchema = options[0] as { schema?: Schema };
+    const retestSchema = options[options.length - 1] as { schema?: Schema };
+    const itemRequired = (schema?: Schema) =>
+      schema?.properties?.questions?.items?.required ?? [];
     expect(recallSchema.schema).toBeDefined();
     expect(retestSchema.schema).toBeDefined();
-    // Recall requires a format on every question; retest has no formats.
-    expect(JSON.stringify(recallSchema.schema)).toContain("fill_blank");
+    // Recall *requires* a format on every question; retest only offers it.
+    expect(itemRequired(recallSchema.schema)).toContain("format");
+    expect(itemRequired(retestSchema.schema)).not.toContain("format");
   });
 
   test("enforceRecallMix never leaves two spoken short answers adjacent", () => {
@@ -480,5 +507,116 @@ describe("recall formats", () => {
     );
     expect(focusScore(right, [trap])).toBe(1);
     expect(focusScore(wrong, [trap])).toBe(0);
+  });
+});
+
+describe("recall coverage across lessons", () => {
+  const SECTION_CONCEPTS: ConceptChecklistItem[] = [
+    {
+      conceptText: "2.1 Cells are the unit of life",
+      isMisconception: false,
+      weight: 3,
+    },
+    {
+      conceptText: "2.1.1 The cell membrane",
+      isMisconception: false,
+      weight: 2,
+    },
+    {
+      conceptText: "2.2 Tissues group similar cells",
+      isMisconception: false,
+      weight: 2,
+    },
+    {
+      conceptText: "2.3 Organs combine tissues",
+      isMisconception: false,
+      weight: 1,
+    },
+  ];
+  const GAPS_HERE = gapAnalysisFrom(
+    { missing: ["2.1 Cells are the unit of life"], misconceptions: [] },
+    SECTION_CONCEPTS,
+  );
+
+  // Answer each chunk exactly as asked: one question per slot the prompt names.
+  function answerSlots(counter: { n: number }) {
+    return async (_model: string, _system: string, user: string) => {
+      const concepts = [
+        ...user.matchAll(/targetConcept must be exactly "([^"]+)"/g),
+      ].map((m) => m[1] as string);
+      return JSON.stringify({
+        questions: concepts.map((c) => ({
+          format: "multiple_choice",
+          question: `Question ${counter.n++} about ${c}`,
+          options: ["A", "B", "C"],
+          answer: "A",
+          level: "knowledge",
+          targetConcept: c,
+        })),
+      });
+    };
+  }
+
+  test("the set reaches the floor and touches every numbered section", async () => {
+    const counter = { n: 0 };
+    __overrideProviderForTests("gemini", answerSlots(counter));
+    const questions = await ai.generateRecallQuestions(
+      GAPS_HERE,
+      SECTION_CONCEPTS,
+      [],
+    );
+    expect(questions.length).toBeGreaterThanOrEqual(10);
+    const lessons = new Set(
+      questions.map((q) => q.lesson).filter((l): l is string => !!l),
+    );
+    expect(lessons).toEqual(new Set(["2.1", "2.2", "2.3"]));
+  });
+
+  test("chunks are split across both providers when both are wired", async () => {
+    process.env.GROQ_API_KEY = "questions-test-groq-key";
+    const gemini = { n: 0 };
+    const groq = { n: 0 };
+    __overrideProviderForTests("gemini", answerSlots(gemini));
+    __overrideProviderForTests("groq", answerSlots(groq));
+    const questions = await ai.generateRecallQuestions(
+      GAPS_HERE,
+      SECTION_CONCEPTS,
+      [],
+    );
+    expect(questions.length).toBeGreaterThanOrEqual(10);
+    // The deliberate split means neither provider carries the whole set alone.
+    expect(gemini.n).toBeGreaterThan(0);
+    expect(groq.n).toBeGreaterThan(0);
+  });
+
+  test("a chunk that skips a lesson is topped up so no section is dropped", async () => {
+    // Gemini answers only the first concept it is asked about; every other slot
+    // it was given goes unanswered. The top-up and fallback must still leave
+    // every section with a question.
+    __overrideProviderForTests("gemini", async (_m, _s, user) => {
+      const first = /targetConcept must be exactly "([^"]+)"/.exec(user)?.[1];
+      if (!first) return JSON.stringify({ questions: [] });
+      return JSON.stringify({
+        questions: [
+          {
+            format: "multiple_choice",
+            question: `Only one, for ${first}`,
+            options: ["A", "B"],
+            answer: "A",
+            level: "knowledge",
+            targetConcept: first,
+          },
+        ],
+      });
+    });
+    const questions = await ai.generateRecallQuestions(
+      GAPS_HERE,
+      SECTION_CONCEPTS,
+      [],
+    );
+    const lessons = new Set(
+      questions.map((q) => q.lesson).filter((l): l is string => !!l),
+    );
+    expect(lessons).toEqual(new Set(["2.1", "2.2", "2.3"]));
   });
 });

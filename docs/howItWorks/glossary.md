@@ -82,12 +82,26 @@
 - **Recall format** — how a targeted-recall question is answered
   (`apps/server/src/ai/questions.ts`, `RecallFormat`): `multiple_choice` (tap one
   of four options), `fill_blank` (type the missing word), or `short_answer`
-  (speak or type an explanation). A set holds a deterministic 5/2/1 mix (3/4/1
-  for blank-heavy subjects), enforced by a provider JSON schema and re-spaced by
+  (speak or type an explanation). The mix is a deterministic ratio (about 5:2:1,
+  3:4:1 for blank-heavy subjects) scaled to the set's size and capped at two
+  spoken answers, enforced by a provider JSON schema and re-spaced by
   `enforceRecallMix` so two spoken answers never sit in a row. Multiple choice
   and fill-in-the-blank are graded by exact match server-side with no AI call;
   only `short_answer` reaches the model. Retest has no format and stays
   free-form.
+- **Recall lesson / section** (`lesson`) — the book's own numbering a recall
+  question covers ("2.3"), derived from the concepts' labels (there is no lesson
+  table). A chapter with no numbering has no lessons; the set is still spread by
+  equal windows. Lets the UI name the section being checked.
+- **Recall coverage** (`recall-coverage.ts`) — the plan that spreads a recall
+  set across *every* section rather than the first few ideas: build one unit per
+  numbered section, ask at least one question per unit, scale the total to the
+  floor (10) up to the ceiling (16). A section the model skipped is topped up by
+  a small reask and, failing that, a deterministic question.
+- **Recall origin** (`origin`) — why a recall question is in the set: `gap` (the
+  student's own blurting flagged that section) or `coverage` (added to sweep the
+  rest of the chapter). In `both` mode the gap questions are ordered first, then
+  the wider check.
 - **Beyond-textbook question** — a retest question (`beyondText: true`) that
   describes a scenario the chapter does not cover and asks the student to reason
   it out using the chapter's ideas. Part of what makes the retest a full

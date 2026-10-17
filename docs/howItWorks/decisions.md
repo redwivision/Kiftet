@@ -220,8 +220,9 @@
 21. **Recall questions carry a format, and closed formats are graded without
     the model.** A targeted-recall question is one of three formats —
     `multiple_choice`, `fill_blank`, or `short_answer` (`apps/server/src/ai/questions.ts`,
-    `RecallFormat`) — and the set targets a 5/2/1 mix out of
-    `RECALL_SET_SIZE` (8): mostly taps, a couple of blanks, one spoken answer.
+    `RecallFormat`) — and the set targets a 5/2/1 mix: mostly taps, a couple of
+    blanks, one spoken answer (the ratio scales to the set's size, capped at two
+    spoken answers — see decision 23 for how the size is set).
     Subjects where a single missing word is the natural probe (mathematics,
     physics, chemistry, biology, CS/ICT) shift to 3/4/1 so fill-in-the-blank can
     be the largest share. `recallFormatCounts` computes the mix deterministically
@@ -263,3 +264,25 @@
     also stopped borrowing the retest's subject directives (`getPhaseDirectives(family, "recall")`),
     and every answer control is keyed by question index so a repeated spoken
     question can never be left unsubmittable.
+23. **A recall set is a sweep of the whole chapter — at least one question per
+    lesson — not eight questions that happen to cluster.** Targeted recall was
+    capped at a flat eight questions drawn from the gap list, so a student in
+    `targeted` or `both` mode got a short quiz that could miss most of the
+    chapter, and Gemini would routinely answer for a few concepts and drop the
+    rest. Three changes fix that. (a) Kiftet has no lesson table, so the closest
+    honest lesson is the book's own numbering carried onto each concept
+    (`recall-coverage.ts`): concepts are grouped by their first two numbering
+    segments, one unit per section, and a chapter with no numbering falls back to
+    equal windows. (b) Before any call, a plan asks **at least one question per
+    unit** and scales the total to a floor of 10 up to a ceiling of 16
+    (`RECALL_MIN_QUESTIONS`/`RECALL_MAX_QUESTIONS`), fixing each question's
+    format server-side so the mix holds however the work is split. (c) The work
+    is **split across providers**: the slot list is chunked and alternate chunks
+    lead with Gemini and Groq (`buildProviderAttempts` gains a `preferProvider`
+    that reorders the ladder without dropping the other), so one model cannot
+    skip a lesson for lack of attention. Whatever a chunk still misses is topped
+    up by one small reask and then a deterministic question, and `origin`
+    (`gap` vs `coverage`) plus `lesson` are stored on each question so the UI can
+    say which section is being checked and, in `both` mode, order the student's
+    flagged gaps first. The user's request budget is still charged once per route;
+    the extra chunks spend provider rate limit, not the student's allowance.

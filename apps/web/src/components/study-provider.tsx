@@ -147,6 +147,12 @@ export type SessionQuestion = {
   /** Options for multiple choice recall questions. */
   options?: string[];
   // answer is never sent to the client; server-side only.
+  /** The book's own section this recall question covers ("2.3"), when the
+   *  chapter carried numbering. Lets the UI name the lesson being checked. */
+  lesson?: string;
+  /** Recall only: whether the question probes a gap the student flagged, or was
+   *  added to sweep the rest of the chapter. */
+  origin?: "gap" | "coverage";
 };
 
 export type AnswerRecord = {
@@ -328,6 +334,8 @@ export function toSessionQuestion(q: {
   targetObjective?: unknown;
   format?: unknown;
   options?: unknown;
+  lesson?: unknown;
+  origin?: unknown;
 }): SessionQuestion {
   const options = Array.isArray(q.options)
     ? q.options.filter(
@@ -340,6 +348,8 @@ export function toSessionQuestion(q: {
     q.format === "short_answer"
       ? q.format
       : undefined;
+  const origin =
+    q.origin === "gap" || q.origin === "coverage" ? q.origin : undefined;
   return {
     question: q.question,
     focus: q.focus,
@@ -349,6 +359,10 @@ export function toSessionQuestion(q: {
       typeof q.targetObjective === "string" ? q.targetObjective : undefined,
     ...(format ? { format } : {}),
     ...(options?.length ? { options } : {}),
+    ...(typeof q.lesson === "string" && q.lesson.trim()
+      ? { lesson: q.lesson.trim() }
+      : {}),
+    ...(origin ? { origin } : {}),
   };
 }
 

@@ -386,16 +386,29 @@ which is built to **expose gaps and wrong beliefs** — gently. Recall is a
 low-pressure check, not an exam, so its questions are short and mostly factual:
 an easy, quick question is the point, and the wrong options do the diagnosing.
 Each question carries a **format** — `multiple_choice`, `fill_blank`, or
-`short_answer` — in a deterministic 5/2/1 mix (3/4/1 for blank-heavy subjects),
-enforced by a provider JSON schema and re-spaced by `enforceRecallMix` so two
-spoken answers never sit in a row. The closed formats are graded by exact match
-against a server-side answer with **no AI call**; only `short_answer` reaches the
-model. Each answer is stored as a `recall` attempt, so both modes feed the same
-gap analysis:
+`short_answer` — in a deterministic ratio (about 5:2:1, 3:4:1 for blank-heavy
+subjects) scaled to the set's size, enforced by a provider JSON schema and
+re-spaced by `enforceRecallMix` so two spoken answers never sit in a row. The
+closed formats are graded by exact match against a server-side answer with **no
+AI call**; only `short_answer` reaches the model. Each answer is stored as a
+`recall` attempt, so both modes feed the same gap analysis.
+
+The set is a **sweep of the whole chapter, not a handful**. Before any call, a
+plan (`recall-coverage.ts`) groups the concepts by the book's own numbering into
+one unit per section, asks **at least one question per unit**, and scales the
+total to a floor of 10 up to a ceiling of 16. That plan is what stops Gemini
+skipping a lesson: the work is **split into provider chunks** (Gemini leads one,
+Groq the next, each still falling over to the other), and every chunk is handed
+the exact slots it must produce. A section a chunk still misses is topped up by
+one small reask (leaning on Groq) and, failing that, a deterministic question —
+so no lesson is silently dropped. `origin` records whether a question probes a
+flagged gap or fills out the rest; in `both` mode the gap questions are ordered
+first.
 
 ```mermaid
 flowchart LR
-  A["1 · POST /recall-questions<br/>{ scope: 'chapter' | 'gaps' }"] --> B["2 · diagnostic questions<br/>tagged with a level + format"]
+  A["1 · POST /recall-questions<br/>{ scope: 'chapter' | 'gaps' }"] --> P["1b · planRecallSlots<br/>one slot per section, ≥10 total"]
+  P --> B["2 · provider chunks (Gemini + Groq)<br/>each produces its exact slots<br/>+ coverage top-up"]
   B --> C["3 · POST /recall-questions/answer<br/>{ answer text, questionIndex, attemptId }"]
   C --> D{"4 · closed format?"}
   D -->|"multiple_choice / fill_blank"| E["judgeClosedAnswer<br/>exact match, no AI"]

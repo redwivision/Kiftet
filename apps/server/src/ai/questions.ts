@@ -55,8 +55,22 @@ export function isRecallFormat(value: unknown): value is RecallFormat {
   );
 }
 
-/** Questions per recall set — the batch the 5/2/1 mix is defined against. */
-export const RECALL_SET_SIZE = 8;
+/**
+ * The size of a recall set. A set is never smaller than the floor: a student
+ * choosing questions (or "both") should get a real sweep of the chapter, not a
+ * handful — and never larger than the ceiling, which bounds the provider calls,
+ * the wait, and how long the quiz feels. Between the two, the count scales with
+ * the number of lessons the chapter actually has (see `recall-coverage.ts`), so
+ * a ten-lesson chapter is covered by about ten questions and a three-lesson
+ * chapter still gets the full floor.
+ */
+export const RECALL_MIN_QUESTIONS = 10;
+export const RECALL_MAX_QUESTIONS = 16;
+
+/** Spoken answers are the slow ones to give, so a set carries at most this
+ *  many however large it grows — a 16-question set still asks the student to
+ *  speak only twice. */
+export const RECALL_SHORT_ANSWER_CAP = 2;
 
 /**
  * The shape of a recall set. Most questions are multiple choice (fast to
@@ -76,8 +90,9 @@ export function isBlankHeavy(family: SubjectFamily): boolean {
   );
 }
 
-/** The canonical 8-question batch each family aims for: 5/2/1 by default, 3/4/1
- *  where a blank is the natural probe. */
+/** The per-family mix each recall set aims for: 5/2/1 by default, 3/4/1 where a
+ *  blank is the natural probe. Expressed against an eight-question set and
+ *  scaled by `recallFormatCounts` to whatever size the chapter needs. */
 export function recallShapeWeights(
   blankHeavy: boolean,
 ): Record<RecallFormat, number> {
@@ -115,6 +130,14 @@ export function recallFormatCounts(
   for (let i = 0; remaining > 0 && byFraction.length > 0; i++, remaining--) {
     const next = byFraction[i % byFraction.length];
     if (next) result[next.format] += 1;
+  }
+  // A large set would otherwise earn proportionally more spoken answers; cap
+  // them and hand the surplus to fill-in-the-blank (the natural "type one word"
+  // probe), so size never means more speaking.
+  const surplus = result.short_answer - RECALL_SHORT_ANSWER_CAP;
+  if (surplus > 0) {
+    result.short_answer -= surplus;
+    result.fill_blank += surplus;
   }
   return result;
 }

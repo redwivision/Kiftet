@@ -114,6 +114,19 @@ describe("buildProviderAttempts", () => {
     expect(buildProviderAttempts(false, false)).toEqual([]);
   });
 
+  test("a groq preference leads groq but keeps gemini behind it", () => {
+    // Recall's chunk split asks one chunk to lead with groq. The preference
+    // reorders the providers without dropping the other: gemini stays as the
+    // failover rung, so a refusal on groq still has somewhere to go.
+    const list = buildProviderAttempts(true, true, false, "groq");
+    expect(list[0]?.provider).toBe("groq");
+    const groqCount = list.filter((a) => a.provider === "groq").length;
+    expect(list.slice(0, groqCount).every((a) => a.provider === "groq")).toBe(
+      true,
+    );
+    expect(list.some((a) => a.provider === "gemini")).toBe(true);
+  });
+
   test("a vision call never lists the text-only provider", () => {
     // Groq's models cannot see an image, so admitting one would spend a
     // request on a prompt it reads blind. Vision keeps Gemini's ladder and

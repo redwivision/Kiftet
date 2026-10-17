@@ -266,6 +266,18 @@ export type StoredQuestion = {
   format?: string;
   options?: string[];
   answer?: string;
+  /**
+   * Recall only: the book's own section this question covers ("2.3"), when the
+   * chapter carried numbering, so the UI can label which lesson is being
+   * checked. Absent for an unnumbered chapter.
+   */
+  lesson?: string;
+  /**
+   * Recall only: why this question is here — "gap" for one the student's own
+   * blurting flagged, "coverage" for one added to sweep the rest of the
+   * chapter. Absent on older rows.
+   */
+  origin?: "gap" | "coverage";
 };
 
 export const studySession = pgTable(

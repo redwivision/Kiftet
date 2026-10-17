@@ -22,7 +22,7 @@ import {
   judgeClosedAnswer,
   type QuestionKind,
   RECALL_FORMATS,
-  RECALL_SET_SIZE,
+  RECALL_MIN_QUESTIONS,
   type RecallFormat,
   recallFormatCounts,
   recallFormatPlan,
@@ -30,6 +30,17 @@ import {
   retestIsSoft,
   retestLevelDirective,
 } from "./questions";
+import {
+  buildCoverageUnits,
+  chunkRecallSlots,
+  planRecallSlots,
+  RECALL_CHUNK_SIZE,
+  type RecallSlot,
+  type RecallUnit,
+  recallQuestionCount,
+  unitByConcept,
+  unitForConcept,
+} from "./recall-coverage";
 import type { SubjectFamily } from "./subject-strategy";
 import { getFamily, getPhaseDirectives } from "./subject-strategy";
 
@@ -285,6 +296,18 @@ export type GeneratedQuestion = {
   options?: string[];
   /** Recall closed formats only: the expected answer, never sent to the client. */
   answer?: string;
+  /**
+   * Recall only: the book's own section label this question covers ("2.3"), when
+   * the chapter carried numbering, so the UI can say which lesson is being
+   * checked. Empty for a chapter with no numbering.
+   */
+  lesson?: string;
+  /**
+   * Recall only: why this question is here. "gap" is one the student's own
+   * blurting flagged; "coverage" is one added to sweep the rest of the chapter
+   * up to the floor. Lets the UI show the difference.
+   */
+  origin?: "gap" | "coverage";
 };
 
 /** Back-compat alias: a retest question is just a generated one. */
@@ -741,16 +764,14 @@ function fallbackQuestions(
   language: ContentLanguage = "en",
   recall: {
     concepts?: ConceptChecklistItem[];
+    objectives?: string[];
     chapterText?: string;
     family?: SubjectFamily;
   } = {},
 ): GeneratedQuestion[] {
-  const targets = [...gaps.missing, ...gaps.misconceptions].slice(
-    0,
-    kind === "retest" ? 5 : RECALL_SET_SIZE,
-  );
-  const levels = fallbackLevels(kind, targets.length);
   if (kind === "retest") {
+    const targets = [...gaps.missing, ...gaps.misconceptions].slice(0, 5);
+    const levels = fallbackLevels("retest", targets.length);
     return targets.map((t, i) => ({
       question:
         language === "am"
@@ -762,17 +783,231 @@ function fallbackQuestions(
   }
   const sentences = recall.chapterText ? sentencesOf(recall.chapterText) : [];
   const names = (recall.concepts ?? []).map((c) => c.conceptText);
-  const plan = recallFormatPlan(targets.length, recall.family ?? "other");
-  return targets.map((t, i) =>
-    fallbackRecallQuestion(
-      t,
+  const plan = buildRecallPlan(
+    recall.concepts ?? [],
+    recall.objectives ?? [],
+    gaps,
+    recall.family ?? "other",
+  );
+  // No concepts to cover (a bare chapter): fall back to the gap names, still at
+  // the floor size and still in the mixed format shape.
+  if (plan.slots.length === 0) {
+    const targets = [...gaps.missing, ...gaps.misconceptions].slice(
+      0,
+      RECALL_MIN_QUESTIONS,
+    );
+    const levels = fallbackLevels("recall", targets.length);
+    const formats = recallFormatPlan(targets.length, recall.family ?? "other");
+    return targets.map((t, i) =>
+      fallbackRecallQuestion(
+        t,
+        sentences,
+        names,
+        formats[i] ?? "short_answer",
+        levels[i] ?? "knowledge",
+        language,
+      ),
+    );
+  }
+  const levels = fallbackLevels("recall", plan.slots.length);
+  return plan.slots.map((slot, i) => ({
+    ...fallbackRecallQuestion(
+      slot.concept,
       sentences,
       names,
-      plan[i] ?? "short_answer",
+      slot.format,
       levels[i] ?? "knowledge",
       language,
     ),
+    lesson: slot.unit.label || undefined,
+    origin: plan.preferred.has(slot.unit.key) ? "gap" : "coverage",
+  }));
+}
+
+type RecallPlan = {
+  units: RecallUnit[];
+  slots: RecallSlot[];
+  preferred: Set<string>;
+};
+
+/**
+ * The one plan both the writer and the offline fallback follow: how many
+ * questions, one per lesson at least, in what format, and which lessons the
+ * student's own blurting already flagged. Built once so the model path and the
+ * no-model path cannot drift into two different shapes.
+ */
+function buildRecallPlan(
+  concepts: ConceptChecklistItem[],
+  objectives: string[],
+  gaps: GapAnalysis,
+  family: SubjectFamily,
+): RecallPlan {
+  const units = buildCoverageUnits(concepts, objectives);
+  const index = unitByConcept(units);
+  const preferred = new Set<string>();
+  for (const text of [...gaps.missing, ...gaps.misconceptions]) {
+    const unit = unitForConcept(index, text);
+    if (unit) preferred.add(unit.key);
+  }
+  const count = recallQuestionCount(units.length);
+  return {
+    units,
+    slots: planRecallSlots(units, count, family, preferred),
+    preferred,
+  };
+}
+
+/**
+ * The chunk's own user prompt: the shared context plus the exact list of
+ * questions this response must contain. Naming each slot's format and concept
+ * is what makes chunking safe — a model handed "write about these gaps" wanders
+ * off the list, but one told "these five rows, in this format" has no room to
+ * skip a lesson. The slot order is the round-robin from `planRecallSlots`, so a
+ * chunk is a contiguous slice of the whole, not a re-shuffle.
+ */
+function recallChunkPrompt(base: string, slots: RecallSlot[]): string {
+  const lines = slots.map(
+    (s) =>
+      `- ${s.format} — targetConcept must be exactly "${s.concept}"${
+        s.unit.label ? ` (book section ${s.unit.label})` : ""
+      }`,
   );
+  return `${base}\n\nTHIS RESPONSE MUST CONTAIN EXACTLY THESE ${slots.length} QUESTIONS, ONE PER ROW, IN THIS ORDER:\n${lines.join("\n")}`;
+}
+
+/**
+ * Attach the lesson label and origin a chunk's questions inherit from the slots
+ * they were asked for. The writer returns bare questions; the slot list is what
+ * knows which lesson each serves and whether the student's blurting flagged it.
+ * A question whose targetConcept matches no slot keeps a "coverage" origin and
+ * no lesson rather than being dropped — it still counts toward the mix.
+ */
+function tagRecallChunk(
+  questions: GeneratedQuestion[],
+  slots: RecallSlot[],
+  preferred: Set<string>,
+): GeneratedQuestion[] {
+  return questions.map((q) => {
+    const key = q.targetConcept?.trim().toLowerCase();
+    const slot = key
+      ? slots.find((s) => s.concept.trim().toLowerCase() === key)
+      : undefined;
+    if (!slot) return { ...q, origin: q.origin ?? "coverage" };
+    return {
+      ...q,
+      lesson: slot.unit.label || undefined,
+      origin: preferred.has(slot.unit.key) ? "gap" : "coverage",
+    };
+  });
+}
+
+/** Drop duplicate questions by normalized text — two chunks covering a shared
+ *  concept can otherwise ship the same prompt twice. First one wins. */
+function dedupeQuestions(questions: GeneratedQuestion[]): GeneratedQuestion[] {
+  const seen = new Set<string>();
+  const out: GeneratedQuestion[] = [];
+  for (const q of questions) {
+    const key = q.question.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(q);
+  }
+  return out;
+}
+
+/** Which lessons the merged set actually reached — the coverage check that
+ *  decides whether a top-up is needed. */
+function coveredUnitKeys(
+  questions: GeneratedQuestion[],
+  units: RecallUnit[],
+): Set<string> {
+  const index = unitByConcept(units);
+  const covered = new Set<string>();
+  for (const q of questions) {
+    if (!q.targetConcept) continue;
+    const unit = unitForConcept(index, q.targetConcept);
+    if (unit) covered.add(unit.key);
+  }
+  return covered;
+}
+
+/**
+ * One missing lesson's worth of questions, deterministically. Only the slots
+ * planned for that lesson are rebuilt, so the format mix the writer was given
+ * survives the fallback instead of collapsing to a run of "explain…" prompts.
+ */
+function fallbackRecallSlots(
+  slots: RecallSlot[],
+  names: string[],
+  sentences: string[],
+  language: ContentLanguage,
+): GeneratedQuestion[] {
+  const levels = fallbackLevels("recall", slots.length);
+  return slots.map((slot, i) => ({
+    ...fallbackRecallQuestion(
+      slot.concept,
+      sentences,
+      names,
+      slot.format,
+      levels[i] ?? "knowledge",
+      language,
+    ),
+    lesson: slot.unit.label || undefined,
+    origin: "coverage" as const,
+  }));
+}
+
+/**
+ * One more small call for the lessons the first pass skipped, then a
+ * deterministic question for anything still stranded. The reask leans on Groq
+ * (the lighter of the two) and its own slots, so it neither repeats the whole
+ * chapter nor breaks the format mix. A refusal or a miss here is not fatal —
+ * the fallback questions are still in the set's own closed shape.
+ */
+async function topUpRecallCoverage(
+  slots: RecallSlot[],
+  system: string,
+  base: string,
+  preferred: Set<string>,
+  names: string[],
+  sentences: string[],
+  language: ContentLanguage,
+): Promise<GeneratedQuestion[]> {
+  if (slots.length === 0) return [];
+  if (anyAiAvailable()) {
+    try {
+      const raw = await ask(system, recallChunkPrompt(base, slots), {
+        schema: questionSetSchema(true),
+        preferProvider: "groq",
+      });
+      const got = tagRecallChunk(
+        extractQuestions(raw, slots.length) ?? [],
+        slots,
+        preferred,
+      );
+      const answered = new Set(
+        got
+          .map((q) => q.targetConcept?.trim().toLowerCase())
+          .filter((c): c is string => !!c),
+      );
+      const filled = slots.filter(
+        (s) => !answered.has(s.concept.trim().toLowerCase()),
+      );
+      return [
+        ...got,
+        ...fallbackRecallSlots(filled, names, sentences, language),
+      ];
+    } catch (error) {
+      // A busy refusal re-throws (honest "try again"), everything else is
+      // simply this lesson's questions going deterministic.
+      if (isAiBusy(error)) throw error;
+      aiTelemetry.malformed += 1;
+      console.error(
+        "[ai] generateRecallQuestions coverage reask failed, using fallback",
+      );
+    }
+  }
+  return fallbackRecallSlots(slots, names, sentences, language);
 }
 
 /** Sentences of a chapter, whitespace-flattened and length-bounded, so the
@@ -1405,6 +1640,15 @@ const aiTelemetry = {
   /** Retest sets that came back too soft (fewer than 3 levels, or no
    *  beyond-textbook question) — a quality signal, not a failure. */
   softRetest: 0,
+  /** Recall requests split into provider chunks, so the cost of the coverage
+   *  sweep against the shared rate limit is visible. */
+  recallChunks: 0,
+  /** Chunks led by each provider (`{ gemini, groq }`) — the deliberate split,
+   *  so a skew shows up before it becomes an outage. */
+  recallProviderSplit: { gemini: 0, groq: 0 },
+  /** Recall requests where a lesson survived with no question and had to be
+   *  topped up by a reask or the deterministic fallback. */
+  recallCoverageMiss: 0,
 };
 
 export function aiTelemetrySnapshot() {
@@ -1452,6 +1696,12 @@ export function buildAttemptOrder(
  * first; Groq follows at its own attempt count. A provider that is not wired
  * up contributes nothing, in the same way a model that is not listed does.
  *
+ * `prefer` reorders the two providers' *groups* without touching the ladder
+ * inside either: when recall splits a chapter across providers, one chunk asks
+ * Groq to lead while Gemini stays behind it as the failover rung. The admission
+ * gate and breaker still decide whether the preferred provider may be called, so
+ * a preference bends the order, it never bypasses a refusal.
+ *
  * Exported for tests: the ordering is a claim about reliability and capacity,
  * so it is asserted rather than assumed.
  */
@@ -1459,18 +1709,22 @@ export function buildProviderAttempts(
   gemini: boolean,
   groq: boolean,
   vision = false,
+  prefer: AiProvider = "gemini",
 ): Array<{ provider: AiProvider; model: string }> {
-  const attempts: Array<{ provider: AiProvider; model: string }> = [];
+  const geminiAttempts: Array<{ provider: AiProvider; model: string }> = [];
   if (gemini)
     for (const model of buildAttemptOrder(MODEL_FALLBACKS, GEMINI_MAX_ATTEMPTS))
-      attempts.push({ provider: "gemini", model });
+      geminiAttempts.push({ provider: "gemini", model });
+  const groqAttempts: Array<{ provider: AiProvider; model: string }> = [];
   // Groq's only models are text-only, so a vision call must not consider it —
   // admitting the attempt would spend a request to receive a prompt the model
   // cannot see.
   if (groq && !vision)
     for (const model of buildAttemptOrder(GROQ_MODELS, GROQ_MAX_ATTEMPTS))
-      attempts.push({ provider: "groq", model });
-  return attempts;
+      groqAttempts.push({ provider: "groq", model });
+  return prefer === "groq"
+    ? [...groqAttempts, ...geminiAttempts]
+    : [...geminiAttempts, ...groqAttempts];
 }
 
 /**
@@ -1490,6 +1744,9 @@ type AiCallOptions = {
   text?: boolean;
   /** Read this page image alongside the prompt. */
   image?: ContentsImage;
+  /** Lead the ladder with this provider. A preference, not a pin: a refusal or
+   *  failure still hands the call to the other provider. */
+  preferProvider?: AiProvider;
 };
 
 type ProviderGenerate = (
@@ -1543,6 +1800,7 @@ async function ask(
     isAiAvailable(),
     isGroqAvailable(),
     Boolean(options.image),
+    options.preferProvider,
   );
   // Unreachable in practice — every caller guards on `anyAiAvailable` before
   // calling `ask` — but the ladder must not silently accept an empty order.
@@ -2053,21 +2311,21 @@ const RECALL_QUESTION_SYSTEM =
   " ";
 
 /**
- * The format mix for a recall set, as a deterministic instruction. The numbers
- * come from `recallFormatCounts` — the same source the parser and the fallback
- * trust — so the writer, the validator, and the no-model path agree on one
- * shape rather than three guesses. Subjects where a missing word is the natural
- * probe get more fill-in-the-blank; everything else is mostly multiple choice.
+ * The format contract for a recall set, as a deterministic instruction. The mix
+ * is no longer one global "write N questions" count — each chunk carries its own
+ * slot list (see `recallChunkPrompt`) — but the *rules* for each format, and the
+ * subject's leaning, still come from one shared place so the writer, the parser,
+ * and the offline fallback keep agreeing on what a valid question is.
  */
 export function recallFormatDirective(family: SubjectFamily): string {
-  const counts = recallFormatCounts(RECALL_SET_SIZE, family);
+  const counts = recallFormatCounts(RECALL_MIN_QUESTIONS, family);
   return (
-    `Every question has a "format". Write exactly ${RECALL_SET_SIZE} questions in this mix: ` +
-    `${counts.multiple_choice} "multiple_choice", ${counts.fill_blank} "fill_blank", ${counts.short_answer} "short_answer". ` +
+    'Every question has a "format". Use the three formats, leaning toward ' +
+    `${counts.fill_blank >= counts.multiple_choice ? "fill_blank" : "multiple_choice"} where it fits: ` +
     "- multiple_choice: offer four options, exactly one of which is correct and the others plausible but wrong; set answer to the EXACT text of the correct option, copied from options. " +
     "- fill_blank: the question contains one blank written as ____ whose missing word or short phrase IS the answer; set answer to that word or phrase (a couple of words at most). " +
     "- short_answer: a spoken question with no options and no answer; the student explains in their own words. " +
-    'Return STRICT JSON: {"questions":[{"format":"multiple_choice|fill_blank|short_answer","question":"...","options":["...","...","...","..."],"answer":"<the correct option for multiple_choice, or the missing word for fill_blank>","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<exact weak-idea conceptText>"}]}. '
+    'Return STRICT JSON: {"questions":[{"format":"multiple_choice|fill_blank|short_answer","question":"...","options":["...","...","...","..."],"answer":"<the correct option for multiple_choice, or the missing word for fill_blank>","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<the exact conceptText this question checks>"}]}. '
   );
 }
 
@@ -2598,30 +2856,82 @@ export const ai: AiService = {
     } = {},
   ): Promise<GeneratedQuestion[]> {
     const family = options.subject ? getFamily(options.subject) : "other";
+    const plan = buildRecallPlan(concepts, objectives, gaps, family);
+    const sentences = options.chapterText
+      ? sentencesOf(options.chapterText)
+      : [];
+    const names = concepts.map((c) => c.conceptText);
     const fallback = () =>
       fallbackQuestions(gaps, "recall", language, {
         concepts,
+        objectives,
         chapterText: options.chapterText,
         family,
       });
     if (!anyAiAvailable()) return fallback();
+    // A chapter with no numbered sections still gets its gap questions; there is
+    // simply nothing to spread them across, so the writer path is skipped.
+    if (plan.slots.length === 0) return fallback();
     try {
       // Recall questions are diagnostic, so they take the *recall* family
       // directives (probe for gaps) — not the retest's exam-hard bullets.
       const dirs = getPhaseDirectives(family, "recall");
       const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
-      const raw = await ask(
+      const system =
         RECALL_QUESTION_SYSTEM +
-          recallFormatDirective(family) +
-          sysExtra +
-          outputInstruction(language),
-        questionUserPrompt(gaps, concepts, objectives),
-        { schema: questionSetSchema(true) },
+        recallFormatDirective(family) +
+        sysExtra +
+        outputInstruction(language);
+      const base = questionUserPrompt(gaps, concepts, objectives);
+      const chunks = chunkRecallSlots(plan.slots, RECALL_CHUNK_SIZE);
+      aiTelemetry.recallChunks += chunks.length;
+      // Each chunk leads with the provider assigned to it — the split is
+      // deliberate, not round-robin luck — while still failing over to the
+      // other. Chunks run together so the whole set costs one wall-clock wait.
+      const results = await Promise.all(
+        chunks.map((chunk, i) => {
+          const preferProvider: AiProvider = i % 2 === 0 ? "gemini" : "groq";
+          return ask(system, recallChunkPrompt(base, chunk), {
+            schema: questionSetSchema(true),
+            timeoutMs: options.timeoutMs,
+            preferProvider,
+          })
+            .then((raw) => {
+              aiTelemetry.recallProviderSplit[preferProvider] += 1;
+              return tagRecallChunk(
+                extractQuestions(raw, chunk.length) ?? [],
+                chunk,
+                plan.preferred,
+              );
+            })
+            .catch((error) =>
+              degraded("generateRecallQuestions:chunk", error, () => []),
+            );
+        }),
       );
-      return (
-        extractQuestions(raw, RECALL_SET_SIZE) ??
-        malformed("generateRecallQuestions", fallback)
-      );
+      const merged = dedupeQuestions(results.flat());
+      const covered = coveredUnitKeys(merged, plan.units);
+      const missing = plan.units.filter((u) => !covered.has(u.key));
+      if (missing.length > 0) {
+        aiTelemetry.recallCoverageMiss += missing.length;
+        const missingSlots = missing.flatMap((u) =>
+          plan.slots.filter((s) => s.unit.key === u.key),
+        );
+        const topped = await topUpRecallCoverage(
+          missingSlots,
+          system,
+          base,
+          plan.preferred,
+          names,
+          sentences,
+          language,
+        );
+        merged.push(...topped);
+      }
+      const final = dedupeQuestions(merged);
+      return final.length
+        ? final
+        : malformed("generateRecallQuestions", fallback);
     } catch (error) {
       return degraded("generateRecallQuestions", error, fallback);
     }

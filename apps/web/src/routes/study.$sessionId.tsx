@@ -1002,6 +1002,46 @@ function LevelBadge({
   );
 }
 
+// Which lesson a recall question covers, and why it is in the set: a gap the
+// student themselves flagged, or a wider check added to sweep the chapter. The
+// lesson chip is only rendered when the book carried numbering; the origin chip
+// tells the student the set is not only about what they missed.
+function LessonBadge({
+  lesson,
+  origin,
+}: {
+  lesson?: string;
+  origin?: "gap" | "coverage";
+}) {
+  const { t } = useLanguage();
+  if (!lesson && !origin) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {lesson && (
+        <span className="rounded-full border border-border/60 px-2 py-0.5 font-medium text-[0.72rem] text-muted-foreground dark:border-white/10">
+          {t("targeted-lesson", { lesson })}
+        </span>
+      )}
+      {origin && (
+        <span
+          className={cn(
+            "rounded-full border px-2 py-0.5 font-medium text-[0.72rem]",
+            origin === "gap"
+              ? "border-gold/30 bg-gold/10 text-gold"
+              : "border-border/60 text-muted-foreground dark:border-white/10",
+          )}
+        >
+          {t(
+            origin === "gap"
+              ? "targeted-origin-gap"
+              : "targeted-origin-coverage",
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // The per-question feedback list, shared by the retest and targeted recall so
 // both families read the same way: what was asked, what the student said, and
 // which ideas are still open.
@@ -1952,15 +1992,19 @@ function TargetedRecallPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
       {!done ? (
         <div className="inner-surface p-5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            {questions[currentQuestion]?.focus?.length ? (
-              <p className="font-medium text-[0.78rem] text-muted-foreground">
-                {t("targeted-checking", {
-                  focus: questions[currentQuestion].focus.join(", "),
-                })}
-              </p>
-            ) : (
-              <span />
-            )}
+            <span className="flex flex-wrap items-center gap-2">
+              {questions[currentQuestion]?.focus?.length ? (
+                <p className="font-medium text-[0.78rem] text-muted-foreground">
+                  {t("targeted-checking", {
+                    focus: questions[currentQuestion].focus.join(", "),
+                  })}
+                </p>
+              ) : null}
+              <LessonBadge
+                lesson={questions[currentQuestion]?.lesson}
+                origin={questions[currentQuestion]?.origin}
+              />
+            </span>
             <LevelBadge
               level={questions[currentQuestion]?.level}
               beyondText={questions[currentQuestion]?.beyondText}

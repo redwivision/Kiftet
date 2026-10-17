@@ -1793,8 +1793,25 @@ function reconcileQuestions(
       format: q.format,
       options: q.options,
       answer: q.answer,
+      lesson: q.lesson,
+      origin: q.origin,
     };
   });
+}
+
+/**
+ * The order the student meets a recall set in: the questions that probe their
+ * own flagged gaps first, then the ones added to sweep the rest of the chapter.
+ * Both halves are still spread by focus, and the mix is spaced last, so "quiz
+ * my gaps, then broaden" never becomes a clump of look-alike questions.
+ */
+function orderRecallSet(questions: StoredQuestion[]): StoredQuestion[] {
+  const gap = questions.filter((q) => q.origin === "gap");
+  const coverage = questions.filter((q) => q.origin !== "gap");
+  if (gap.length === 0 || coverage.length === 0) {
+    return enforceRecallMix(spreadByFocus(questions));
+  }
+  return enforceRecallMix([...spreadByFocus(gap), ...spreadByFocus(coverage)]);
 }
 
 /** Interleave questions so consecutive ones do not share a target idea. */
@@ -1918,19 +1935,18 @@ router.post("/sessions/:id/recall-questions", async (req, res) => {
     { subject, chapterText: rawText },
   );
 
-  // `spreadByFocus` keeps consecutive questions on different ideas; then
-  // `enforceRecallMix` spaces the spoken short answers among the closed ones so
-  // a run of downgraded "explain…" prompts can never bunch at the end.
-  const orderedQuestions = enforceRecallMix(
-    spreadByFocus(
-      reconcileQuestions(
-        questions,
-        concepts,
-        objectives,
-        wholeChapter
-          ? concepts.map((c) => c.conceptText)
-          : [...parsed.data.missing, ...parsed.data.misconceptions],
-      ),
+  // `orderRecallSet` puts the student's own flagged gaps first, then the
+  // coverage questions; `spreadByFocus` keeps consecutive questions on different
+  // ideas; `enforceRecallMix` spaces the spoken short answers among the closed
+  // ones so a run of downgraded "explain…" prompts can never bunch at the end.
+  const orderedQuestions = orderRecallSet(
+    reconcileQuestions(
+      questions,
+      concepts,
+      objectives,
+      wholeChapter
+        ? concepts.map((c) => c.conceptText)
+        : [...parsed.data.missing, ...parsed.data.misconceptions],
     ),
   );
 
