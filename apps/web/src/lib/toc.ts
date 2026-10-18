@@ -453,21 +453,21 @@ export const TOC_SEARCH_PAGES = 15;
 /**
  * How many pages to recognize before stopping.
  *
- * The contents of the book this was written against runs to two pages. Reading
- * a fixed six wasted four recognitions on the first chapter's opening — about
- * six seconds a student watches for nothing. The reader instead stops as soon
- * as a page stops yielding contents entries, and this is the ceiling for a book
- * whose contents genuinely are longer.
+ * The contents of the book this was written against runs to two pages. A fixed
+ * cap would waste recognitions on a longer contents page, so the walk stops as
+ * soon as a page yields no contents entries — and this ceiling is only for the
+ * books that genuinely list sections across more pages.
  */
-export const TOC_MAX_PAGES = 6;
+export const TOC_MAX_PAGES = 8;
 
 /**
  * How many pages of a readable book to read looking for the contents.
  *
- * Reading a text layer is free and instant, unlike OCR, so this is bounded only
- * by where a contents page plausibly ends rather than by what a student waits.
+ * Reading a text layer is free and instant, unlike OCR, so this only bounds how
+ * far into the front matter the read looks. Eight covers a contents that runs
+ * past its own first page, which a four-page read would have cut off.
  */
-export const TOC_TEXT_PAGES = 4;
+export const TOC_TEXT_PAGES = 8;
 
 /**
  * A page that yields fewer than this many entries is not a contents page.

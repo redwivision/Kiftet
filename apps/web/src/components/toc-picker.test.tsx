@@ -137,11 +137,10 @@ test("the contents nests exactly as the TOC does: Unit > 1.1 > 1.1.1", () => {
   expect(html).toContain(">Unit 1<");
 });
 
-test("units open by default so a 6-unit book is not 6 closed rows", () => {
+test("units start collapsed so a long contents does not bury the first one", () => {
   const html = render();
-  // Every branch that has children starts expanded — the two units with topics
-  // in this book — so the whole numbering is on screen without a click.
-  expect(html.match(/aria-expanded="true"/g)?.length).toBe(3);
+  // No branch opens on its own — the whole numbering appears only after a click.
+  expect(html.match(/aria-expanded="true"/g)?.length ?? 0).toBe(0);
   expect(html).toContain("Expand all");
   expect(html).toContain("Collapse all");
 });

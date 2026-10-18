@@ -28,6 +28,7 @@ import {
   aiProviderConfig,
   aiTelemetrySnapshot,
   buildStudyPlan,
+  type ChapterExtraction,
   type ContentsImage,
   focusScore,
   type GeneratedQuestion,
@@ -430,6 +431,20 @@ function readMasteryParam(raw: unknown): MasteryMap {
 // Chapters
 // ────────────────────────────────────────────────────────────────
 
+const ingestTopicSchema = z.object({
+  path: z
+    .string()
+    .trim()
+    .min(1, "A topic name came through empty.")
+    .max(300, "That topic name is too long."),
+  title: z
+    .string()
+    .trim()
+    .min(1, "A topic name came through empty.")
+    .max(300, "That topic name is too long."),
+  page: z.number().int().min(0).nullable(),
+});
+
 const ingestSchema = z.object({
   textbookTitle: z
     .string({ message: "Name the textbook first." })
@@ -450,22 +465,17 @@ const ingestSchema = z.object({
     .max(200_000, "That chunk is too large. Pick a smaller section."),
   /**
    * The chapter's own topics, in the order the book lays them out, as printed:
-   * "2.3.1 The internal structure of a leaf".
+   * "2.3.1 The internal structure of a leaf", with the page each begins on.
    *
    * When the import could read a contents page these arrive with the chapter
    * and are used verbatim. A model re-inferring a table of contents from prose
    * gets the *ideas* right and the *structure* wrong — it will happily return
    * twelve unrelated bullets where the book had three nested sections, and it
-   * will reorder them. The book already knows.
+   * will reorder them. The book already knows. They are stored whole (not just
+   * the label) so a later read can tell where each topic sits in the book.
    */
   topics: z
-    .array(
-      z
-        .string()
-        .trim()
-        .min(1, "A topic name came through empty.")
-        .max(300, "That topic name is too long."),
-    )
+    .array(ingestTopicSchema)
     .max(200, "Too many topics in one chapter.")
     .optional(),
 });
@@ -635,22 +645,31 @@ router.post("/chapters/ingest", async (req, res) => {
     });
   }
 
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
-
   const chapterId = crypto.randomUUID();
-  await db().insert(chapter).values({
-    id: chapterId,
-    textbookId,
-    title,
-    rawText,
-  });
+  await db()
+    .insert(chapter)
+    .values({
+      id: chapterId,
+      textbookId,
+      title,
+      rawText,
+      topics: topics ?? null,
+      // Left null on purpose: the model read is deferred to the moment the
+      // chapter is actually studied (see `ensureChapterExtraction`). Importing a
+      // whole book used to spend one free-tier call per chapter up front, most of
+      // them on chapters the student would never open — which is what ran the
+      // shared quota dry before the student reached the chapter they came for.
+      extractedAt: null,
+    });
 
-  const extraction = await ai.extractChapter(rawText);
-  // A chapter read from a contents page carries the author's own structure;
-  // the model is still asked, because it finds misconceptions and detail the
-  // contents left out, but it no longer decides what the chapter contains or
-  // what order it goes in.
-  const concepts = mergeConcepts(topics, extraction.concepts);
+  // The book's own contents is enough to seed the checklist now: those topics
+  // are the author's structure, needing no model. Concepts the model finds in
+  // the prose (and the objectives the book states) are added later, once, when
+  // a session or the opener asks for them.
+  const concepts = mergeConcepts(
+    topics?.map((topic) => topic.path),
+    [],
+  );
   if (concepts.length) {
     await db()
       .insert(conceptNode)
@@ -666,34 +685,13 @@ router.post("/chapters/ingest", async (req, res) => {
       );
   }
 
-  // The book's own stated objectives, when it lists them. Read in the same
-  // call as the concepts (see `extractChapter`); kept as their own rows so
-  // targeted questions and the retest can hold the student to the book's
-  // contract rather than to the concept checklist alone.
-  const objectives = extraction.objectives;
-  if (objectives.length) {
-    await db()
-      .insert(chapterObjective)
-      .values(
-        objectives.map((o, i) => ({
-          id: crypto.randomUUID(),
-          chapterId,
-          objectiveText: o.objectiveText,
-          sortOrder: i,
-          sourceOffset: o.sourceOffset ?? null,
-          sourceQuote: o.sourceQuote ?? null,
-          estimated: extraction.estimated,
-        })),
-      );
-  }
-
   ok(
     res,
     {
       textbookId,
       chapterId,
       conceptsExtracted: concepts.length,
-      objectivesExtracted: objectives.length,
+      objectivesExtracted: 0,
       // Worth showing: it tells the student the checklist came from the book.
       seededFromContents: (topics?.length ?? 0) > 0,
       reused: false,
@@ -701,6 +699,117 @@ router.post("/chapters/ingest", async (req, res) => {
     201,
   );
 });
+
+// The model reads that are underway, keyed by chapter, so two requests that
+// arrive together for the same un-read chapter share one call instead of
+// spending two from a shared, per-project quota.
+const extractionInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Bring a chapter's checklist up to date with the model — once.
+ *
+ * Import writes only the book's own contents (its topics). The model read that
+ * adds the concepts the prose holds and the objectives the book states is
+ * deferred to here, and runs at most once per chapter: the first session start
+ * or checklist open for an un-read chapter pays for it, every later one is
+ * free. On success the chapter is stamped `extractedAt`, so the read never
+ * happens twice.
+ *
+ * Best-effort by design. This rides along with a request the student made for
+ * something else (their session, their checklist), so a chapter read that is
+ * busy, throttled, or simply wrong must never fail that request, and must never
+ * hand back the deterministic fallback as though it were the model's read: a
+ * `degraded` rethrow of `AiBusyError` is caught here and the chapter is left
+ * un-stamped so a calmer moment can try again.
+ */
+async function ensureChapterExtraction(
+  req: Request,
+  chapterId: string,
+): Promise<void> {
+  const inFlight = extractionInFlight.get(chapterId);
+  if (inFlight) return inFlight;
+
+  const run = (async () => {
+    const [row] = await db()
+      .select({
+        rawText: chapter.rawText,
+        topics: chapter.topics,
+        extractedAt: chapter.extractedAt,
+      })
+      .from(chapter)
+      .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+      .where(and(eq(chapter.id, chapterId), eq(textbook.ownerId, ownerId(req))))
+      .limit(1);
+    // A missing chapter, one already read, or a moment with no AI budget left:
+    // none of these is the caller's problem to report.
+    if (!row || row.extractedAt) return;
+    if (!allowAiRequest(req)) return;
+
+    let extraction: ChapterExtraction;
+    try {
+      extraction = await ai.extractChapter(row.rawText);
+    } catch {
+      return;
+    }
+
+    const concepts = mergeConcepts(
+      row.topics?.map((topic) => topic.path),
+      extraction.concepts,
+    );
+    // Replace, do not append: the rows written at import were the topic-only
+    // seed, and this read is the fuller version of the same list.
+    await db().delete(conceptNode).where(eq(conceptNode.chapterId, chapterId));
+    if (concepts.length) {
+      await db()
+        .insert(conceptNode)
+        .values(
+          concepts.map((c, i) => ({
+            id: crypto.randomUUID(),
+            chapterId,
+            conceptText: c.conceptText,
+            isMisconception: c.isMisconception,
+            weight: c.weight,
+            sortOrder: i,
+          })),
+        );
+    }
+
+    await db()
+      .delete(chapterObjective)
+      .where(eq(chapterObjective.chapterId, chapterId));
+    if (extraction.objectives.length) {
+      await db()
+        .insert(chapterObjective)
+        .values(
+          extraction.objectives.map((o, i) => ({
+            id: crypto.randomUUID(),
+            chapterId,
+            objectiveText: o.objectiveText,
+            sortOrder: i,
+            sourceOffset: o.sourceOffset ?? null,
+            sourceQuote: o.sourceQuote ?? null,
+            estimated: extraction.estimated,
+          })),
+        );
+    }
+
+    // Stamped only on a real read. An estimated (fallback) extraction stays
+    // un-stamped so the next visit can try the model again.
+    if (!extraction.estimated) {
+      await db()
+        .update(chapter)
+        .set({ extractedAt: new Date() })
+        .where(eq(chapter.id, chapterId));
+    }
+  })();
+
+  extractionInFlight.set(chapterId, run);
+  try {
+    await run;
+  } finally {
+    extractionInFlight.delete(chapterId);
+  }
+}
 
 // What the visitor can still spend — the UI paints this as a small pill so
 // nobody is surprised by a 429 mid-session, and so "when does it restart?" has
@@ -955,6 +1064,11 @@ router.get("/chapters", async (req, res) => {
 
 router.get("/chapters/:id/concepts", async (req, res) => {
   const owner = ownerId(req);
+  // Opening the checklist is a good moment to bring it up to date: the student
+  // is looking right at it, and if it only holds the book's contents we read
+  // the prose now rather than serving a thinner list. Best-effort — a chapter
+  // that cannot be read today still returns what it has.
+  await ensureChapterExtraction(req, req.params.id);
   const rows = await db()
     .select()
     .from(conceptNode)
@@ -975,6 +1089,9 @@ router.get("/chapters/:id/concepts", async (req, res) => {
 // chapter that does not list any — which is an answer, not a failure.
 router.get("/chapters/:id/objectives", async (req, res) => {
   const owner = ownerId(req);
+  // Objectives arrive with the concepts in the same deferred read; a student
+  // asking for one is a student the other is due for too.
+  await ensureChapterExtraction(req, req.params.id);
   const rows = await db()
     .select({
       id: chapterObjective.id,
@@ -1025,6 +1142,10 @@ router.post("/sessions/start", async (req, res) => {
     .where(and(eq(chapter.id, chapterId), eq(textbook.ownerId, userId)))
     .limit(1);
   if (!chapterExists.length) return err(res, "Chapter not found", 404);
+
+  // The session is about to need a real checklist; if this chapter has not been
+  // read yet, read it now, before the student is dropped into recall.
+  await ensureChapterExtraction(req, chapterId);
 
   await db()
     .insert(studySession)

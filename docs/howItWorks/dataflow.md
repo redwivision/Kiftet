@@ -107,15 +107,26 @@ flowchart LR
 Save book: { title, subject, language, sourceName, sourceSize, toc }
 Response:  { textbookId }
 Ingest:    { textbookTitle, subject, language, title, rawText, topics? }
-Data kept: textbook (1 + nested toc) → chapter (1+) → concept_node (5-12 each)
+           topics = [{ path, title, page }]  — the book's own numbered lines
+Data kept: textbook (1 + nested toc) → chapter (1+, topics stored, extractedAt null)
+           → concept_node (the book's topics, seeded at import)
 ```
 
 When `topics` are supplied from a book's contents, their titles and numbering
-lead the checklist in the order the book lays them out; model-extracted details
-and misconceptions are added without duplicating those topics. Otherwise, the
-model builds the checklist from chapter text as before. When the AI fails, the
-server falls back to deterministic extraction (sentence splitting + token
-matching), so ingest does not hard-fail.
+lead the checklist in the order the book lays them out. **They are the whole
+checklist at import time**: `POST /chapters/ingest` no longer calls the model, so
+no AI is spent on chapters the student may never open — the failure-and-fallback
+behaviour that used to live here now lives in the deferred read below.
+
+The deferred read. The first time a chapter is actually used —
+`POST /sessions/start`, `GET /chapters/:id/concepts`, or
+`GET /chapters/:id/objectives` — the server reads it once
+(`ensureChapterExtraction`): the model's concepts are merged under the book's
+topics (misconceptions and detail the contents left out survive), the book's own
+stated objectives are stored, and `chapter.extractedAt` is stamped so it never
+happens twice. It is best-effort: if the model is busy or throttled the request
+still succeeds with the topic-only checklist, and a deterministic fallback is
+never stamped as a real read, so a later visit retries the model.
 
 ---
 

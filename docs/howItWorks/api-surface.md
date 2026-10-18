@@ -7,11 +7,11 @@ All routes live behind `/api`:
 
 | Method & path | What it does | Phase |
 |---|---|---|
-| `POST /api/chapters/ingest` | Store a textbook chapter; optional `topics` seed the checklist from the book's contents | 0 (skeleton) |
+| `POST /api/chapters/ingest` | Store a textbook chapter; optional `topics` seed the checklist from the book's contents. The model read is deferred to first use (no AI spent here) | 0 (skeleton) |
 | `GET /api/chapters` | List all chapters | 0 |
-| `GET /api/chapters/:id/concepts` | View a chapter's concept checklist | 0 |
-| `GET /api/chapters/:id/objectives` | View the learning objectives the book itself states for a chapter (empty when it states none) | 0 |
-| `POST /api/sessions/start` | Begin a study session on a chapter (optional `recallMode`: `blurting` (default) / `targeted` / `both`) | 0 |
+| `GET /api/chapters/:id/concepts` | View a chapter's concept checklist; reads the chapter with the model once if it has not been read yet | 0 |
+| `GET /api/chapters/:id/objectives` | View the learning objectives the book itself states for a chapter (empty when it states none); shares the same deferred read | 0 |
+| `POST /api/sessions/start` | Begin a study session on a chapter (optional `recallMode`: `blurting` (default) / `targeted` / `both`); reads the chapter with the model once if it has not been read yet | 0 |
 | `PATCH /api/sessions/:id/recall-mode` | Persist the student's recall-mode choice so a reload restores the flow | 0 |
 | `GET /api/sessions/:id` | Session details + its attempts | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
@@ -52,14 +52,24 @@ tracing for CS/ICT).
 
 **Textbook ingest.** `POST /chapters/ingest` requires `textbookTitle`,
 `subject`, `language`, `title` and `rawText`. `topics` is optional and accepts
-the chapter's numbered contents entries (for example
-`["2.3 Structure and function of plant parts", "2.3.1 The internal structure of a leaf"]`).
-When provided, they seed the checklist in book order; the model can add
-distinct concepts and misconceptions from the chapter prose. The response
-includes `seededFromContents` to indicate whether TOC topics were supplied, and
-`objectivesExtracted` — the number of the chapter's own learning objectives
-stored in `chapter_objective` (0 when the book states none). Extraction is one
-model call returning both concepts and objectives.
+the chapter's numbered contents entries as objects — `{ path, title, page }`,
+where `path` is the nesting the book's own outline spells (for example
+`{ "path": "2.3.1 The internal structure of a leaf", "title": "2.3.1 The internal structure of a leaf", "page": 42 }`).
+When provided, they seed the checklist in book order, and they are stored whole
+so a later read can tell where each topic sits in the book.
+
+**Ingest no longer reads the chapter with a model.** It writes the book's own
+topics (seeded as the checklist) and stops; the response reports
+`objectivesExtracted: 0` and `seededFromContents`. The model read that adds the
+concepts the prose holds — and the objectives the book states — is **deferred**
+to the first moment the chapter is actually used: `POST /sessions/start`, or a
+`GET /chapters/:id/concepts` / `GET /chapters/:id/objectives`. That read runs at
+most once per chapter (guarded by `chapter.extractedAt`, set only after a real
+model read), is best-effort — a busy or throttled model never fails the request
+it rode in on — and never lets the deterministic fallback masquerade as the
+model's read: a fallback leaves `extractedAt` unset so a calmer moment retries.
+This is what stops importing a whole book from spending a free-tier call per
+chapter, most of them on chapters the student never opens.
 
 **The gaps payload.** `POST /recall` and `POST /retest/answer` return the same
 shape, and `mastery` is the part that matters:

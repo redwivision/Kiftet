@@ -35,6 +35,7 @@ import {
   tocPageOffset,
   transcribeImageContents,
   transcribeModelContents,
+  transcriptChapters,
   visibleChapterTitle,
   withPartSplits,
 } from "./textbook";
@@ -1691,6 +1692,26 @@ describe("stripRunningFurniture", () => {
       "Body three.\nUnit 1: Theory of Consumer Behaviour 6",
     ]);
     expect(pages[1]).toBe(`Body two.\n${table}`);
+  });
+});
+
+describe("transcriptChapters unit cap", () => {
+  // A long contents the loose reader has to handle (no chapter keyword, no
+  // plain numbering — just titled lines each ending in a page). The old reader
+  // stopped at 40 units and dropped the rest of a long book's contents on the
+  // floor without saying so.
+  const longContents = (count: number): string =>
+    Array.from(
+      { length: count },
+      (_, i) => `Zeta${i + 1} overview ${i + 10}`,
+    ).join("\n");
+
+  test("a contents past 40 units is read in full, not truncated", () => {
+    expect(transcriptChapters(longContents(60))).toHaveLength(60);
+  });
+
+  test("runaway output is still bounded at the cap", () => {
+    expect(transcriptChapters(longContents(300))).toHaveLength(120);
   });
 });
 

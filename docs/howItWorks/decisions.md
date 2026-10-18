@@ -15,10 +15,19 @@
    we change one file. The system design explicitly calls for a fallback chain
    so a provider outage can't kill a live demo.
 
-3. **Concept extraction is cached per chapter.** We AI-extract concepts once when
-   a chapter is ingested, store them in `concept_node`, and **never re-run the
-   expensive AI call during a live session**. The demo must not depend on a slow
-   API call while judges watch.
+3. **Concept extraction is cached per chapter — and paid for lazily.** We
+   AI-extract concepts once, store them in `concept_node`, and never re-run the
+   expensive call for that chapter again (`chapter.extractedAt` is the guard).
+   The change from the original design is *when* that once happens: at ingest it
+   spent a free-tier call on every chapter of an imported book, including the
+   ones the student never opens, which is what drained the shared per-project
+   quota before a student reached the chapter they came for. So the read is
+   deferred to the first time the chapter is actually used (session start or a
+   checklist/objectives open). It is still once, still cached, and it still keeps
+   a slow API call out of the *middle* of a session — but it is best-effort: a
+   busy or throttled model leaves the chapter on its book-seeded checklist and
+   the request succeeds, and a deterministic fallback is never stamped as a real
+   read, so a later visit retries the model.
 
 4. **Mobile-first, calm design.** True black `#0A0B0D` + Ivory `#F2EFE9`
    is the monochrome identity. The voice state ("Listening…", "Thinking…") is a first-class

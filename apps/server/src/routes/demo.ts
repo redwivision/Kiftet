@@ -166,6 +166,11 @@ router.post("/start", async (req, res) => {
       id: chapterId,
       textbookId,
       ...DEMO_CHAPTER,
+      // The demo chapter ships with its checklist already written by hand.
+      // Stamping it as read keeps the deferred model pass from replacing those
+      // curated concepts with a live call — the demo is meant to work without
+      // spending a shared-quota request, and to say the same thing every time.
+      extractedAt: new Date(),
     });
     await db.insert(conceptNode).values(
       DEMO_CONCEPTS.map((conceptText, sortOrder) => ({

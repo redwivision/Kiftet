@@ -39,7 +39,6 @@ import {
   renderPageImage,
   type TocJob,
   tocJobs,
-  topicLabel,
   visibleChapterTitle,
   withPartSplits,
 } from "@/lib/textbook";
@@ -584,7 +583,7 @@ export default function Textbooks() {
             language,
             title: part.title,
             rawText: part.rawText,
-            topics: part.topics?.map(topicLabel),
+            topics: part.topics,
           }),
         });
       }

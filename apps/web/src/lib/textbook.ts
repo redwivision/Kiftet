@@ -520,11 +520,6 @@ export type TopicEntry = {
   page: number | null;
 };
 
-/** The topic as the ingest endpoint and the book both spell it. */
-export function topicLabel(topic: TopicEntry): string {
-  return topic.path;
-}
-
 export type ImportTocNode = {
   id: string;
   title: string;
@@ -2100,6 +2095,11 @@ export const TOC_PROBE_MIN_CHARS = TOC_PROBE_PAGE_CHARS;
 /** Fewer units than this is not a contents, however confidently it was read. */
 export const TOC_MODEL_MIN_UNITS = 2;
 
+/** The most units a transcribed contents may yield before the read is treated
+ *  as runaway output. A book's contents is tens of entries, not hundreds; the
+ *  earlier cap of 40 silently truncated long books mid-list. */
+const MAX_TOC_UNITS = 120;
+
 export type TocProbePage = { index: number; text: string };
 
 /** The opening pages offered to the model, keyed by PDF page index. */
@@ -2303,7 +2303,7 @@ function looseTranscriptChapters(text: string): TocChapter[] {
     // Contents run forwards; a line whose page goes backwards is a misread.
     if (page < lastPage) continue;
     lastPage = page;
-    if (units.length >= 40) break;
+    if (units.length >= MAX_TOC_UNITS) break;
     current = { unit, title, page, topics: [] };
     units.push(current);
   }

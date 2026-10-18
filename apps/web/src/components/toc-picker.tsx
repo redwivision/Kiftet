@@ -546,10 +546,10 @@ function UnitRow({
 /**
  * The book, as the contents page writes it.
  *
- * Expansion defaults to fully open, because this tab is a contents page and a
- * contents page does not arrive folded: a student opening it to check how the
- * book is organised has to see 1.1.1 sitting under 1.1, not infer it from a
- * chevron. Collapse All is one click away for the long book.
+ * Expansion starts collapsed: a long book's contents can now run to a hundred
+ * entries across eight pages, and opening it to a fully expanded tree buries
+ * the first unit under everything below it. The units are one click away — the
+ * "Expand all" button shows the whole numbering when a student wants it.
  */
 function ContentsView({
   toc,
@@ -563,9 +563,8 @@ function ContentsView({
   ocrProgress,
 }: ViewProps) {
   const { t } = useLanguage();
-  // Everything starts open: the whole tree, so the printed numbering and the
-  // nesting it implies are both visible without a single click.
-  const [open, setOpen] = useState<Set<string>>(() => new Set(allIds(toc)));
+  // Collapsed by default; a student expands the unit they are working through.
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
 
   const toggleOpen = useCallback((id: string) => {
     setOpen((prev) => {
@@ -735,8 +734,8 @@ function ContentsNode({
         />
       </div>
 
-      {hasChildren && isOpen && (
-        <ul className="space-y-0.5">
+      {hasChildren && (
+        <ul className="space-y-0.5" hidden={!isOpen}>
           {node.children.map((child) => (
             <ContentsNode
               key={child.id}
