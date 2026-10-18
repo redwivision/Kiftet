@@ -95,6 +95,8 @@ export const chapter = pgTable(
     }),
     title: text("title").notNull(),
     rawText: text("raw_text").notNull(),
+    topics: jsonb("topics").$type<TopicEntry[] | null>(),
+    extractedAt: timestamp("extracted_at", { withTimezone: true }),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),

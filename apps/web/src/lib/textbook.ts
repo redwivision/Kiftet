@@ -36,6 +36,8 @@ type PdfTextItem = {
   hasEOL?: boolean;
   transform?: number[];
   width?: number;
+  height?: number;
+  fontName?: string;
 };
 
 type PositionedRun = { text: string; x: number; y: number; w: number };
@@ -1077,6 +1079,7 @@ async function openPdf(file: File): Promise<{
   geometryPages: string[];
   outline: OutlineEntry[];
   audit: PageTextAudit;
+  bodyPages: string[];
 }> {
   const sizeError = fileSizeError(file);
   if (sizeError) {
@@ -1088,11 +1091,7 @@ async function openPdf(file: File): Promise<{
   const loadingTask = pdf.getDocument({ data });
   const doc = await loadingTask.promise;
 
-  const pages: string[] = [];
-  // The same pages rebuilt from item geometry, kept alongside so a book whose
-  // contents is laid out in two columns — which scrambles the naive read — can
-  // be re-read without paying for a second pass over the PDF. Built eagerly
-  // because the cost is one join per page, and the alternative is a re-open.
+  const naivePages: string[] = [];
   const geometryPages: string[] = [];
   for (let i = 1; i <= doc.numPages; i += 1) {
     const page = await doc.getPage(i);
@@ -1110,9 +1109,7 @@ async function openPdf(file: File): Promise<{
       }
     }
     if (line.trim()) lines.push(line);
-    // Drop undecodable glyphs per page, so a page that is half headers and
-    // half control codes does not poison the chunk it lands in.
-    pages.push(stripUndecodableGlyphs(lines.join("\n")).trim());
+    naivePages.push(stripUndecodableGlyphs(lines.join("\n")).trim());
     geometryPages.push(
       stripUndecodableGlyphs(
         reconstructPageLines(content.items as PdfTextItem[]),
@@ -1122,12 +1119,14 @@ async function openPdf(file: File): Promise<{
 
   const outline = await readOutline(doc);
 
+  const pages = geometryPages;
   return {
     doc,
     pages,
     geometryPages,
     outline,
     audit: auditPageText(pages),
+    bodyPages: naivePages,
     close: () => loadingTask.destroy(),
   };
 }
@@ -2616,16 +2615,12 @@ export async function planImport(
 
   const {
     doc,
-    pages: naivePages,
-    geometryPages,
+    pages: geometryPages,
     outline,
     audit,
     close,
   } = await openPdf(source.file);
-  // Geometry-rebuilt pages are only swapped in when the naive read cannot see
-  // a contents at all; every other path keeps the byte-for-byte text the
-  // pipeline has always used.
-  let pages = naivePages;
+  let pages = geometryPages;
   report.pageCount = pages.length;
   report.outlineEntries = outline.length;
   let open = true;
