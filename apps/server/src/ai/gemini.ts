@@ -353,9 +353,13 @@ export type TitleParse = {
 export type AiService = {
   /**
    * Read a chapter once: its concept checklist AND the learning objectives the
-   * book states for it. One call, not two — the Gemini free tier is per
-   * project, so a second pass over the same text would double the cost of the
-   * most quota-sensitive path in the app for no new information.
+   * book states for it, in the same pass so a chapter is never half-read.
+   *
+   * A short chapter is one call. A long one is read in windows — a single call
+   * only sees the first 24k characters, so a full unit would otherwise leave
+   * most of its concepts unread. The windows are bounded (`MAX_EXTRACT_CALLS`)
+   * so a very long chapter cannot spend a whole day's quota in one import, and
+   * Groq leads each one because its ceiling is far above Gemini's.
    *
    * Objectives are absent, not fabricated, when the book states none: the
    * combined prompt is told to return an empty list rather than invent them.
@@ -1649,6 +1653,9 @@ const aiTelemetry = {
   /** Recall requests where a lesson survived with no question and had to be
    *  topped up by a reask or the deterministic fallback. */
   recallCoverageMiss: 0,
+  /** Chapter windows sent to extraction, so a chapter that now costs several
+   *  calls is visible against the shared rate limit rather than invisible. */
+  extractChunks: 0,
 };
 
 export function aiTelemetrySnapshot() {
@@ -2262,6 +2269,50 @@ function extractItems(raw: string): ConceptChecklistItem[] | null {
  *  used by the deterministic extractor. */
 const MAX_OBJECTIVES = 15;
 
+/** The most concepts a chapter may carry after every window is merged. */
+const MAX_EXTRACT_CONCEPTS = 24;
+
+/** One extraction call reads this much text before another is needed. */
+const EXTRACT_WINDOW_CHARS = 24_000;
+
+/** The hard ceiling on extraction calls per chapter, so a very long chapter
+ *  cannot spend a whole day's quota in one import. */
+const MAX_EXTRACT_CALLS = 8;
+
+/**
+ * Split a chapter into the windows extraction reads, at most `maxCalls` of them.
+ *
+ * A single call only ever saw the first 24k characters, so anything past that
+ * was extracted blind — on a full unit that left most of the chapter with no
+ * concepts at all. The cuts prefer a line break so a window does not end
+ * mid-sentence, which would cost the sentence that straddles it.
+ */
+export function extractionWindows(
+  text: string,
+  maxChars: number = EXTRACT_WINDOW_CHARS,
+  maxCalls: number = MAX_EXTRACT_CALLS,
+): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  if (trimmed.length <= maxChars) return [trimmed];
+  const calls = Math.min(maxCalls, Math.ceil(trimmed.length / maxChars));
+  const windows: string[] = [];
+  let start = 0;
+  for (let i = 0; i < calls && start < trimmed.length; i += 1) {
+    const remaining = trimmed.length - start;
+    const target = start + Math.ceil(remaining / (calls - i));
+    let end = i === calls - 1 ? trimmed.length : target;
+    if (end < trimmed.length) {
+      const newline = trimmed.indexOf("\n", end);
+      if (newline !== -1 && newline - end <= 2_000) end = newline;
+    }
+    const window = trimmed.slice(start, end);
+    if (window.trim()) windows.push(window);
+    start = end;
+  }
+  return windows;
+}
+
 /**
  * Read the `objectives` array out of an extraction reply and anchor each one.
  *
@@ -2813,24 +2864,54 @@ export const ai: AiService = {
   async extractChapter(rawText: string): Promise<ChapterExtraction> {
     const fallback = () => fallbackExtraction(rawText);
     if (!anyAiAvailable()) return fallback();
-    try {
-      const raw = await ask(
-        EXTRACT_SYSTEM,
-        `CHAPTER TEXT:\n${rawText.slice(0, 24000)}`,
-      );
-      const concepts = extractItems(raw);
-      // A reply that yields no usable concepts is malformed; the whole read
-      // falls back together, so concepts and objectives come from one source
-      // rather than a model/concept split that would look half-trusted.
-      if (!concepts) return malformed("extractChapter", fallback);
-      return {
-        concepts,
-        objectives: extractObjectiveItems(raw, rawText),
-        estimated: false,
-      };
-    } catch (error) {
-      return degraded("extractChapter", error, fallback);
+    const windows = extractionWindows(rawText);
+    if (windows.length === 0) return fallback();
+    aiTelemetry.extractChunks += windows.length;
+    const concepts: ConceptChecklistItem[] = [];
+    const objectives: ObjectiveItem[] = [];
+    const seenConcepts = new Set<string>();
+    const seenObjectives = new Set<string>();
+    let read = false;
+    for (const window of windows) {
+      let raw: string;
+      try {
+        raw = await ask(EXTRACT_SYSTEM, `CHAPTER TEXT:\n${window}`, {
+          // Groq leads the sweep: extraction is the bulk text path, and its
+          // ceiling is far higher than Gemini's daily free-tier one.
+          preferProvider: "groq",
+        });
+      } catch (error) {
+        degraded("extractChapter:window", error, () => "");
+        continue;
+      }
+      const items = extractItems(raw);
+      // A window that yields no usable concepts is malformed and skipped, but
+      // the others stand: one bad window is not a reason to distrust the read.
+      if (!items) continue;
+      read = true;
+      for (const item of items) {
+        const key = item.conceptText.toLowerCase();
+        if (seenConcepts.has(key) || concepts.length >= MAX_EXTRACT_CONCEPTS) {
+          continue;
+        }
+        seenConcepts.add(key);
+        concepts.push(item);
+      }
+      // Anchors are computed against the whole chapter's text, never the
+      // window, so an objective's quote resolves wherever it actually sits.
+      for (const objective of extractObjectiveItems(raw, rawText)) {
+        const key = objective.objectiveText.toLowerCase();
+        if (seenObjectives.has(key) || objectives.length >= MAX_OBJECTIVES) {
+          continue;
+        }
+        seenObjectives.add(key);
+        objectives.push(objective);
+      }
     }
+    // Every window failed: the whole read falls back together, so concepts and
+    // objectives still come from one source rather than a half-trusted split.
+    if (!read) return fallback();
+    return { concepts, objectives, estimated: false };
   },
 
   async gradeRecall(
