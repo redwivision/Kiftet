@@ -36,11 +36,70 @@ type PdfTextItem = {
   hasEOL?: boolean;
   transform?: number[];
   width?: number;
-  height?: number;
-  fontName?: string;
 };
 
-type PositionedRun = { text: string; x: number; y: number; w: number };
+/**
+ * A detected table, recorded as the rows it spans and the x positions of its
+ * columns. The anchors come from the first row's cells, so a cell that is
+ * missing later — the book's own "missed values" activity — simply leaves its
+ * column empty instead of shifting every value one column left.
+ */
+type TableSegment = {
+  /** x of each column, taken from the first row's cells. */
+  anchors: number[];
+  xMin: number;
+  xMax: number;
+};
+
+type PositionedRun = {
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  /** Set when this run belongs to a detected table. */
+  seg?: TableSegment;
+  /** Column this run's cell landed in, for tests and debugging. */
+  anchorIdx?: number;
+};
+
+/** One merged cell of a row, with the runs that built it. */
+type RowCell = { text: string; x: number; w: number; runs: PositionedRun[] };
+
+/** A table detected on a page, with the half-open row range it covers. */
+type DetectedTable = {
+  first: number;
+  end: number;
+  seg: TableSegment;
+};
+
+/**
+ * Baseline slack when clustering runs into rows. 6pt keeps a subscript or
+ * superscript on its line — the header of the Economics activity table carries
+ * its "(Qb)" subscript ~3pt below the baseline — while real text lines in
+ * these books sit 10pt+ apart.
+ */
+const ROW_BASELINE_TOLERANCE = 6;
+/** A table needs at least this many rows … */
+const MIN_TABLE_ROWS = 3;
+/** … and its first row at least this many cells. */
+const MIN_TABLE_COLS = 3;
+/** A cell maps to the nearest anchor within this many points, or the row fails. */
+const ANCHOR_TOLERANCE = 8;
+/** Runs closer than this in a row belong to the same cell. */
+const CELL_MERGE_GAP = 1.5;
+/**
+ * Rows further apart than this are not one table, however well they line up.
+ * Real table rows sit ~16pt apart; the page folio 71pt below Table 1.1 lines
+ * up with the last column within anchor tolerance, and without this ceiling
+ * it would be absorbed as a fourth row.
+ */
+const MAX_TABLE_ROW_GAP = 40;
+/**
+ * Data cells longer than this make the block prose, not a table. Short-answer
+ * lists look tabular by geometry but their right column is a sentence; the
+ * first row (headers) and the row-label column are exempt.
+ */
+const SHORT_CELL_CHARS = 14;
 
 const ANCHOR_HAS_LETTER_RE = /[A-Za-z\u1200-\u137f]/;
 
@@ -137,24 +196,223 @@ function joinLineRuns(runs: readonly PositionedRun[]): string {
   return out.replace(/\s+/g, " ").trim();
 }
 
-function columnLines(runs: readonly PositionedRun[]): string[] {
+/** Group runs into visual rows, top to bottom. */
+function clusterRows(runs: readonly PositionedRun[]): PositionedRun[][] {
   const sorted = [...runs].sort((a, b) => b.y - a.y || a.x - b.x);
-  const lines: string[] = [];
+  const rows: PositionedRun[][] = [];
   let current: PositionedRun[] = [];
   let currentY: number | null = null;
   for (const run of sorted) {
-    if (currentY === null || Math.abs(run.y - currentY) <= 2.5) {
+    if (
+      currentY === null ||
+      Math.abs(run.y - currentY) <= ROW_BASELINE_TOLERANCE
+    ) {
       current.push(run);
       if (currentY === null) currentY = run.y;
       continue;
     }
-    const line = joinLineRuns(current);
-    if (line) lines.push(line);
+    rows.push(current);
     current = [run];
     currentY = run.y;
   }
-  const last = joinLineRuns(current);
-  if (last) lines.push(last);
+  if (current.length) rows.push(current);
+  return rows;
+}
+
+/**
+ * Merge a row's runs into cells: whitespace-only runs drop out, and runs that
+ * nearly touch (kerning-split words) fuse into one cell.
+ */
+function rowCells(row: readonly PositionedRun[]): RowCell[] {
+  const sorted = row
+    .filter((r) => r.text.trim() !== "")
+    .sort((a, b) => a.x - b.x);
+  const cells: RowCell[] = [];
+  for (const run of sorted) {
+    const prev = cells[cells.length - 1];
+    if (prev) {
+      const gap = run.x - (prev.x + prev.w);
+      if (gap <= CELL_MERGE_GAP) {
+        prev.text += run.text;
+        prev.w = run.x + run.w - prev.x;
+        prev.runs.push(run);
+        continue;
+      }
+    }
+    cells.push({ text: run.text, x: run.x, w: run.w, runs: [run] });
+  }
+  return cells;
+}
+
+/**
+ * Map each cell to its nearest anchor, or fail the row when a cell lines up
+ * with none. A column can be empty — the book's missed-value activity — but
+ * every cell that *is* printed has to belong to a column, and two cells may
+ * not claim the same one. One stray cell kills the row, which is what stops
+ * a sparse row of prose words from anchoring a segment across the page.
+ */
+function mapToAnchors(
+  cells: readonly RowCell[],
+  anchors: readonly number[],
+): number[] | null {
+  const used = new Set<number>();
+  const mapping: number[] = [];
+  for (const cell of cells) {
+    let best = -1;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < anchors.length; i++) {
+      if (used.has(i)) continue;
+      const dist = Math.abs(cell.x - anchors[i]);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+    if (best < 0 || bestDist > ANCHOR_TOLERANCE) return null;
+    used.add(best);
+    mapping.push(best);
+  }
+  return mapping;
+}
+
+/**
+ * Every data cell — rows after the first, columns after the row label — must
+ * be short, and at least two such columns must actually carry values. That is
+ * what tells a numeric table apart from a numbered list whose "columns" are
+ * just a short index and a folio.
+ */
+function dataColumnsShort(
+  rows: readonly PositionedRun[][],
+  first: number,
+  mappings: readonly number[][],
+): boolean {
+  const seen = new Set<number>();
+  for (let i = 0; i < mappings.length; i++) {
+    const cells = rowCells(rows[first + i]);
+    const mapping = mappings[i];
+    for (let c = 0; c < cells.length; c++) {
+      const a = mapping[c];
+      if (a < 1) continue;
+      seen.add(a);
+      if (cells[c].text.trim().length > SHORT_CELL_CHARS) return false;
+    }
+  }
+  return seen.size >= 2;
+}
+
+/** The top of a row — rows cluster downward, so this is the first baseline. */
+function rowTopY(row: readonly PositionedRun[]): number {
+  return Math.max(...row.map((r) => r.y));
+}
+
+/**
+ * Scan the rows for tables and tag their runs. A candidate starts wherever a
+ * row has enough cells; it grows while every following row still maps onto the
+ * first row's anchors and sits close enough to be the same block; it is
+ * accepted only when it is deep enough and its data columns are short.
+ */
+function detectTableSegments(
+  rows: readonly PositionedRun[][],
+): DetectedTable[] {
+  const tables: DetectedTable[] = [];
+  for (let start = 0; start < rows.length; start++) {
+    const firstCells = rowCells(rows[start]);
+    if (firstCells.length < MIN_TABLE_COLS) continue;
+    const anchors = firstCells.map((c) => c.x);
+    const mappings: number[][] = [];
+    let end = start;
+    while (end < rows.length) {
+      if (
+        end > start &&
+        rowTopY(rows[end - 1]) - rowTopY(rows[end]) > MAX_TABLE_ROW_GAP
+      ) {
+        break;
+      }
+      const mapping = mapToAnchors(rowCells(rows[end]), anchors);
+      if (!mapping) break;
+      mappings.push(mapping);
+      end++;
+    }
+    if (end - start < MIN_TABLE_ROWS) continue;
+    if (!dataColumnsShort(rows, start + 1, mappings.slice(1))) continue;
+    const seg: TableSegment = {
+      anchors,
+      xMin: Number.POSITIVE_INFINITY,
+      xMax: Number.NEGATIVE_INFINITY,
+    };
+    for (let i = start; i < end; i++) {
+      const cells = rowCells(rows[i]);
+      const mapping = mappings[i - start];
+      for (let c = 0; c < cells.length; c++) {
+        const a = mapping[c];
+        const cell = cells[c];
+        seg.xMin = Math.min(seg.xMin, cell.x);
+        seg.xMax = Math.max(seg.xMax, cell.x + cell.w);
+        for (const run of cell.runs) {
+          run.seg = seg;
+          run.anchorIdx = a;
+        }
+      }
+    }
+    tables.push({ first: start, end, seg });
+    start = end - 1;
+  }
+  return tables;
+}
+
+/** Render the rows a table spans as GitHub-flavoured markdown. */
+function tableMarkdown(
+  rows: readonly PositionedRun[][],
+  first: number,
+  end: number,
+  anchors: readonly number[],
+): string {
+  const lines: string[] = [];
+  for (let i = first; i < end; i++) {
+    const cells = rowCells(rows[i]);
+    const mapping = mapToAnchors(cells, anchors);
+    if (!mapping) continue;
+    const values = anchors.map(() => "");
+    cells.forEach((cell, c) => {
+      values[mapping[c]] = cell.text
+        .trim()
+        .replace(/\s+/g, " ")
+        .replace(/\|/g, "\\|");
+    });
+    lines.push(`| ${values.join(" | ")} |`);
+    if (i === first) lines.push(`|${anchors.map(() => "---").join("|")}|`);
+  }
+  return lines.join("\n");
+}
+
+/** Render rows in order: tables become markdown, everything else stays prose. */
+function renderLines(
+  rows: readonly PositionedRun[][],
+  tables: readonly DetectedTable[],
+): string[] {
+  const lines: string[] = [];
+  let i = 0;
+  let t = 0;
+  while (i < rows.length) {
+    if (t < tables.length && tables[t].first === i) {
+      const md = tableMarkdown(
+        rows,
+        tables[t].first,
+        tables[t].end,
+        tables[t].seg.anchors,
+      );
+      if (lines.length && lines[lines.length - 1] !== "") lines.push("");
+      lines.push(...md.split("\n"));
+      lines.push("");
+      i = tables[t].end;
+      t++;
+      continue;
+    }
+    const line = joinLineRuns(rows[i]);
+    if (line) lines.push(line);
+    i++;
+  }
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
   return lines;
 }
 
@@ -170,20 +428,44 @@ function columnLines(runs: readonly PositionedRun[]): string[] {
  * by baseline, sort left-to-right within a line, and when a gutter splits the
  * page, read the left column top-to-bottom before the right.
  *
+ * Tables are detected from the same geometry: cells that line up in columns
+ * over several short-valued rows become one markdown table, so a missed cell
+ * keeps its column instead of shifting every value left. Tables wide enough to
+ * cross the gutter are emitted full-width before the column prose.
+ *
  * Exported because column detection is a judgement worth pinning in a test.
  */
 export function reconstructPageLines(items: readonly PdfTextItem[]): string {
   const runs = positionedRuns(items);
   if (!runs.length) return "";
-  const gutter = twoColumnGutter(runs);
-  if (gutter === null) return columnLines(runs).join("\n");
+  const rows = clusterRows(runs);
+  const tables = detectTableSegments(rows);
+  const gutter = twoColumnGutter(runs.filter((r) => !r.seg));
+  if (gutter === null) return renderLines(rows, tables).join("\n");
+  const fullWidth: string[] = [];
+  const consumed = new Set<PositionedRun>();
+  for (const table of tables) {
+    if (table.seg.xMin >= gutter || table.seg.xMax <= gutter) continue;
+    const md = tableMarkdown(rows, table.first, table.end, table.seg.anchors);
+    if (fullWidth.length && fullWidth[fullWidth.length - 1] !== "") {
+      fullWidth.push("");
+    }
+    fullWidth.push(...md.split("\n"), "");
+    for (let i = table.first; i < table.end; i++) {
+      for (const run of rows[i]) consumed.add(run);
+    }
+  }
   const left: PositionedRun[] = [];
   const right: PositionedRun[] = [];
   for (const run of runs) {
-    const center = run.x + run.w / 2;
-    (center < gutter ? left : right).push(run);
+    if (consumed.has(run)) continue;
+    (run.x + run.w / 2 < gutter ? left : right).push(run);
   }
-  return [...columnLines(left), ...columnLines(right)].join("\n");
+  const renderSide = (side: PositionedRun[]): string[] => {
+    const sideRows = clusterRows(side);
+    return renderLines(sideRows, detectTableSegments(sideRows));
+  };
+  return [...fullWidth, ...renderSide(left), ...renderSide(right)].join("\n");
 }
 
 // The units we cut and hand to AI are *chunks* — one TOC section at a time,

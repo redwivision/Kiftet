@@ -21,6 +21,12 @@ export type TextbookTocNode = {
   children: TextbookTocNode[];
 };
 
+export type TopicEntry = {
+  path: string;
+  title: string;
+  page: number | null;
+};
+
 export const textbook = pgTable("textbook", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id")
