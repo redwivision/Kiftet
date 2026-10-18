@@ -15,10 +15,17 @@ import {
 import { and, count, desc, eq, gte, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
-import { allAdmissionSnapshots, isAiBusy } from "../ai/admission";
+import {
+  AI_PROVIDERS,
+  type AiProvider,
+  allAdmissionSnapshots,
+  isAiBusy,
+} from "../ai/admission";
 import { mergeConcepts } from "../ai/concepts";
 import {
   ai,
+  aiLastProbes,
+  aiProviderConfig,
   aiTelemetrySnapshot,
   buildStudyPlan,
   type ContentsImage,
@@ -29,6 +36,8 @@ import {
   levelOf,
   type MasteryLevel,
   type MasteryMap,
+  probeProvider,
+  providerHealth,
   triageConcepts,
 } from "../ai/gemini";
 import {
@@ -709,11 +718,66 @@ router.get("/ai/budget", async (req, res) => {
 // instead of a real model answer. This is the "usage visibility" the money
 // decision needs — in-memory for now, so it resets on restart, but it is what
 // tells us whether we are quietly serving fallbacks and not real generations.
+//
+// `config` and `health` keep two different claims apart: whether a key exists
+// in this process's environment, and what we have observed since. Neither is a
+// statement about the provider's own quota — only /ai/probe can establish that.
 router.get("/ai/telemetry", async (_req, res) => {
+  const providers = allAdmissionSnapshots();
   ok(res, {
     ...aiTelemetrySnapshot(),
-    providers: allAdmissionSnapshots(),
+    providers,
+    config: aiProviderConfig(),
+    health: {
+      gemini: providerHealth("gemini"),
+      groq: providerHealth("groq"),
+    },
+    probes: aiLastProbes(),
   });
+});
+
+// One real request per provider, spent only when a human asks, to answer the
+// question /ai/telemetry cannot: is this key working right now? The cooldown is
+// the abuse control — this route is reachable by any signed-in student, and
+// without it a loop would drain the shared per-project quota that the whole
+// product depends on.
+const PROBE_COOLDOWN_MS = 60_000;
+const probeCooldownUntil: Record<AiProvider, number> = { gemini: 0, groq: 0 };
+const probeBodySchema = z.object({
+  provider: z
+    .enum(["gemini", "groq"], {
+      message: "Specify which provider to probe, or send {} for both.",
+    })
+    .optional(),
+});
+
+router.post("/ai/probe", async (req, res) => {
+  const parsed = probeBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  const targets: AiProvider[] = parsed.data.provider
+    ? [parsed.data.provider]
+    : [...AI_PROVIDERS];
+
+  const now = Date.now();
+  const blocked = targets.find((p) => probeCooldownUntil[p] > now);
+  if (blocked) {
+    const wait = Math.ceil((probeCooldownUntil[blocked] - now) / 1000);
+    res.setHeader("Retry-After", String(wait));
+    return err(
+      res,
+      `The ${blocked} probe spends a real request from the shared quota, so it runs at most once a minute. Try again in ${wait} second${wait === 1 ? "" : "s"}.`,
+      429,
+    );
+  }
+
+  // Claim the window before awaiting: a probe that hangs for ten seconds has
+  // still spent (or is about to spend) the request, and a second click arriving
+  // during it must not double the cost.
+  for (const p of targets) probeCooldownUntil[p] = now + PROBE_COOLDOWN_MS;
+
+  const probes = await Promise.all(targets.map((p) => probeProvider(p)));
+  ok(res, { probes, cooldownSeconds: PROBE_COOLDOWN_MS / 1000 });
 });
 
 // Each textbook with its chapters, in import order — the library view and the

@@ -1659,6 +1659,201 @@ export function aiTelemetrySnapshot() {
 }
 
 /**
+ * What is wired up, as opposed to how it is behaving.
+ *
+ * `configured` is a claim about THIS process's environment only — a key is
+ * present and is not the "placeholder-…" default the schema ships so builds
+ * without secrets still compile. It says nothing about the provider: a present
+ * key can still be exhausted, revoked or mistyped, which is exactly the
+ * question `probeProvider` answers and `providerHealth` cannot.
+ */
+export function aiProviderConfig() {
+  return {
+    gemini: {
+      configured: isAiAvailable(),
+      models: [...MODEL_FALLBACKS],
+      // A page image can only ever be read by Gemini: Groq's models are
+      // text-only, so vision is present exactly when Gemini is.
+      vision: isAiAvailable(),
+    },
+    groq: {
+      configured: isGroqAvailable(),
+      models: [...GROQ_MODELS],
+      vision: false as const,
+    },
+  };
+}
+
+/**
+ * A provider's health, derived only from evidence this process actually holds.
+ *
+ * There is deliberately no "healthy" for a provider we have never spent from:
+ * `unprobed` is the honest answer, because an untouched rate-limit bucket is
+ * indistinguishable from a working one until someone tries to use it. `/ai/probe`
+ * exists to turn that uncertainty into a real answer.
+ */
+export type AiProviderHealth =
+  | "not_configured"
+  | "circuit_open"
+  | "degraded"
+  | "rate_limited"
+  | "unprobed"
+  | "ready";
+
+export function providerHealth(provider: AiProvider): AiProviderHealth {
+  if (
+    !configured(provider === "gemini" ? env.GEMINI_API_KEY : env.GROQ_API_KEY)
+  )
+    return "not_configured";
+  const snap = admissionSnapshot(provider);
+  // Order matters: the breaker is a present tense refusal, consecutive
+  // failures a warning that it is close, and an empty bucket a wait rather
+  // than a fault.
+  if (snap.circuitOpen) return "circuit_open";
+  if (snap.consecutiveFailures > 0) return "degraded";
+  if (snap.tokensAvailable < 1) return "rate_limited";
+  if (snap.admitted === 0) return "unprobed";
+  return "ready";
+}
+
+/** The verdict a probe can reach. `provider_error` covers 5xx and anything
+ *  carrying no status: a probe has no ladder to fall through to, so an
+ *  upstream blip must not be reported as a bad key. */
+export type ProbeOutcome =
+  | "ok"
+  | "not_configured"
+  | "rate_limited"
+  | "invalid_key"
+  | "invalid_request"
+  | "timeout"
+  | "provider_error";
+
+export type ProbeResult = {
+  provider: AiProvider;
+  outcome: ProbeOutcome;
+  model: string;
+  latencyMs: number;
+  /** The upstream HTTP status when the failure carried one, else null. */
+  status: number | null;
+  /** The provider's own message, truncated — enough to tell a revoked key
+   *  from a malformed request without echoing an entire error body. */
+  detail: string | null;
+};
+
+/**
+ * The most recent probe that actually reached the wire, with when it ran.
+ *
+ * Kept apart from `providerHealth` because the two answer different questions
+ * on different clocks: health describes what student traffic has done to OUR
+ * gates since restart, a probe describes the provider at one instant. A probe
+ * is the only one of the two that can go stale — a key can be revoked or a
+ * quota blown ten minutes after it said `ok` — which is why it carries a
+ * timestamp and is reported as its own field rather than folded into health.
+ *
+ * `not_configured` is deliberately not recorded: that is re-derived from the
+ * environment on every read, so recording it would let a key that arrived
+ * later be reported by a stale row.
+ */
+const lastProbes: Partial<Record<AiProvider, ProbeResult & { at: string }>> =
+  {};
+
+export function aiLastProbes() {
+  return {
+    gemini: lastProbes.gemini ?? null,
+    groq: lastProbes.groq ?? null,
+  };
+}
+
+// Short on purpose: a probe is an operator's yes/no question, so it waits for
+// an answer rather than sitting in the 24s shared student budget.
+const PROBE_TIMEOUT_MS = 10_000;
+const PROBE_SYSTEM = "Reply with exactly the word: ok";
+const PROBE_USER = "ping";
+
+function probeOutcomeFor(error: unknown): ProbeOutcome {
+  const status = statusOf(error);
+  if (status === undefined) {
+    const message = (error as Error | null)?.message ?? "";
+    return /timed out/i.test(message) ? "timeout" : "provider_error";
+  }
+  if (status === 429) return "rate_limited";
+  // 401/403 are the key itself being rejected. 400/404/422 cannot be our
+  // prompt — the prompt is the fixed string above — so they mean the request
+  // shape or endpoint is wrong for this key, which is still "not usable" but
+  // is a different repair than a revoked key.
+  if (status === 401 || status === 403) return "invalid_key";
+  if (status >= 400 && status < 500) return "invalid_request";
+  return "provider_error";
+}
+
+/**
+ * One real, minimal call to ONE provider, answering the question `configured`
+ * cannot: does this key actually work right now?
+ *
+ * The two deliberate bypasses are the whole point of the function:
+ *
+ *  - **Admission.** `ask` spends a token from Gemini's bucket, takes one of the
+ *    four shared concurrency slots and can trip the circuit breaker — which
+ *    would shed real students so a diagnostic could learn something. A probe is
+ *    run by a human, on demand, so its rate limiting lives at the route as a
+ *    cooldown instead.
+ *  - **Telemetry.** A probe that incremented `attempts` and overwrote
+ *    `lastProvider`/`lastModel` would corrupt the two fields that exist to show
+ *    which provider served a student. The counters stay untouched.
+ *
+ * It also has no ladder: the point is to learn about THIS provider, so a
+ * failure is reported rather than failed over to the other one.
+ */
+export async function probeProvider(
+  provider: AiProvider,
+  timeoutMs: number = PROBE_TIMEOUT_MS,
+): Promise<ProbeResult> {
+  const models = provider === "gemini" ? MODEL_FALLBACKS : GROQ_MODELS;
+  const model = models[0];
+  const base = {
+    provider,
+    model,
+    latencyMs: 0,
+    status: null as number | null,
+    detail: null as string | null,
+  };
+
+  if (
+    !configured(provider === "gemini" ? env.GEMINI_API_KEY : env.GROQ_API_KEY)
+  )
+    return { ...base, outcome: "not_configured" as const };
+
+  const startedAt = Date.now();
+  let result: ProbeResult;
+  try {
+    await withTimeout(
+      providerCallbacks[provider](model, PROBE_SYSTEM, PROBE_USER, {
+        text: true,
+      }),
+      timeoutMs,
+    );
+    result = {
+      ...base,
+      outcome: "ok" as const,
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    result = {
+      ...base,
+      outcome: probeOutcomeFor(error),
+      latencyMs: Date.now() - startedAt,
+      status: statusOf(error) ?? null,
+      detail: message.slice(0, 300),
+    };
+  }
+  if (result.outcome !== "not_configured") {
+    lastProbes[provider] = { ...result, at: new Date().toISOString() };
+  }
+  return result;
+}
+
+/**
  * Interleave the model list so a busy model is answered by another one rather
  * than by waiting.
  *
