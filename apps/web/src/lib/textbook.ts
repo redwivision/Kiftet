@@ -1354,11 +1354,83 @@ function isUndecodableRun(text: string): boolean {
   return text.length > 0 && stripUndecodableGlyphs(text).trim().length === 0;
 }
 
+const BARE_FOLIO_RE = /^(?:\d{1,4}|[ivxlcdm]{1,7})$/i;
+
+/**
+ * The comparison key for a line that might be running furniture.
+ *
+ * A running header carries the page number on alternate pages ("... Behaviour
+ * 4" / "... Behaviour"), and a running footer carries it on the other side
+ * ("4 Citizenship Education Student Textbook Grade 10" / "... Grade 10"). So
+ * the number is normalised away wherever it sits, and the key is what is left.
+ * An empty key means the line was nothing but a folio.
+ */
+function furnitureKey(line: string): string {
+  const tokens = line
+    .replace(/\d{1,4}/g, "#")
+    .split(/\s+/)
+    .filter(Boolean);
+  const folio = /^[#ivxlcdm]+$/i;
+  while (tokens.length > 0 && folio.test(tokens[0])) tokens.shift();
+  while (tokens.length > 0 && folio.test(tokens[tokens.length - 1])) {
+    tokens.pop();
+  }
+  return tokens.join(" ").toLowerCase();
+}
+
+/**
+ * Drop the running header and footer from each page's text.
+ *
+ * The header and footer repeat down a unit, so a line that opens or closes at
+ * least three pages is furniture, not prose — the same phrase recurring is the
+ * one thing a body never does. A line that is nothing but a page number is
+ * furniture wherever it sits. Neither rule ever empties a page: a page that is
+ * only its header (a plate, a divider) keeps what it has.
+ */
+export function stripRunningFurniture(pages: readonly string[]): string[] {
+  if (pages.length < 3) return pages.map((page) => page);
+  const lines = pages.map((page) =>
+    page.split("\n").map((line) => line.trim()),
+  );
+  const edges = new Map<string, number>();
+  for (const page of lines) {
+    const content = page.filter(Boolean);
+    if (content.length === 0) continue;
+    for (const edge of [content[0], content[content.length - 1]]) {
+      const key = furnitureKey(edge);
+      if (key) edges.set(key, (edges.get(key) ?? 0) + 1);
+    }
+  }
+  return lines.map((page, index) => {
+    const content = page
+      .map((line, i) => ({ line, i }))
+      .filter((entry) => entry.line.length > 0);
+    if (content.length <= 1) return pages[index];
+    const isFurniture = (line: string) => {
+      if (BARE_FOLIO_RE.test(line)) return true;
+      const key = furnitureKey(line);
+      return key.length > 0 && (edges.get(key) ?? 0) >= 3;
+    };
+    let lo = 0;
+    let hi = content.length - 1;
+    while (hi > lo && isFurniture(content[lo].line)) lo += 1;
+    while (hi > lo && isFurniture(content[hi].line)) hi -= 1;
+    if (lo === 0 && hi === content.length - 1) return pages[index];
+    const drop = new Set<number>();
+    for (let i = 0; i < lo; i += 1) drop.add(content[i].i);
+    for (let i = hi + 1; i < content.length; i += 1) drop.add(content[i].i);
+    if (drop.size >= content.length) return pages[index];
+    return page
+      .filter((_, i) => !drop.has(i))
+      .join("\n")
+      .trim();
+  });
+}
+
 async function openPdf(file: File): Promise<{
   doc: PDFDocumentProxy;
   close: () => Promise<void>;
   pages: string[];
-  geometryPages: string[];
   outline: OutlineEntry[];
   audit: PageTextAudit;
   bodyPages: string[];
@@ -1373,25 +1445,10 @@ async function openPdf(file: File): Promise<{
   const loadingTask = pdf.getDocument({ data });
   const doc = await loadingTask.promise;
 
-  const naivePages: string[] = [];
   const geometryPages: string[] = [];
   for (let i = 1; i <= doc.numPages; i += 1) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    const lines: string[] = [];
-    let line = "";
-    for (const item of content.items) {
-      if (!item || typeof item !== "object" || !("str" in item)) continue;
-      const { str, hasEOL } = item as ExtractedItem;
-      const text = str ?? "";
-      line += text;
-      if (hasEOL || isUndecodableRun(text)) {
-        if (line.trim()) lines.push(line);
-        line = "";
-      }
-    }
-    if (line.trim()) lines.push(line);
-    naivePages.push(stripUndecodableGlyphs(lines.join("\n")).trim());
     geometryPages.push(
       stripUndecodableGlyphs(
         reconstructPageLines(content.items as PdfTextItem[]),
@@ -1405,10 +1462,9 @@ async function openPdf(file: File): Promise<{
   return {
     doc,
     pages,
-    geometryPages,
     outline,
     audit: auditPageText(pages),
-    bodyPages: naivePages,
+    bodyPages: stripRunningFurniture(geometryPages),
     close: () => loadingTask.destroy(),
   };
 }
@@ -1598,6 +1654,7 @@ export function chaptersFromOutlineRanges(
 export function chaptersFromOutline(
   pages: string[],
   outline: OutlineEntry[],
+  bodyPages: string[] = pages,
 ): ImportChunk[] | null {
   const found = outlineCuts(outline, pages.length);
   if (!found) return null;
@@ -1606,7 +1663,7 @@ export function chaptersFromOutline(
   const chunks = cuts.flatMap((entry, index) => {
     const start = entry.pageIndex;
     const end = cuts[index + 1]?.pageIndex ?? pages.length;
-    const body = pages.slice(start, end).join("\n\n").trim();
+    const body = bodyPages.slice(start, end).join("\n\n").trim();
     if (!body) return [];
     const prefix = `${entry.path} · `;
     const topics = valid
@@ -2895,14 +2952,9 @@ export async function planImport(
     };
   }
 
-  const {
-    doc,
-    pages: geometryPages,
-    outline,
-    audit,
-    close,
-  } = await openPdf(source.file);
-  let pages = geometryPages;
+  const { doc, pages, bodyPages, outline, audit, close } = await openPdf(
+    source.file,
+  );
   report.pageCount = pages.length;
   report.outlineEntries = outline.length;
   let open = true;
@@ -2917,7 +2969,9 @@ export async function planImport(
       // The normal path: real text, no OCR, nothing left open.
       await closeOnce();
       let chunks =
-        outline.length >= 2 ? chaptersFromOutline(pages, outline) : null;
+        outline.length >= 2
+          ? chaptersFromOutline(pages, outline, bodyPages)
+          : null;
       // Set when the model read the contents after the deterministic parse
       // came up empty. Hoisted because `report.source` is written below, past
       // the block that decides it.
@@ -2926,18 +2980,7 @@ export async function planImport(
         // No bookmarks. A book that still has a readable text layer states its
         // own structure outright on its contents page, and reading that is free
         // and instant — strictly better than guessing chapters out of headings.
-        let found = contentsFromPages(pages);
-        if (!found && geometryPages.join("\n") !== pages.join("\n")) {
-          // The naive read found no contents. A two-column contents page is the
-          // usual reason: it scrambles into "Unit 1  Unit 3  Introduction
-          // Genetics". Re-read from geometry, and only adopt it if it is what
-          // finally sees a contents — never as a general replacement.
-          const geometric = contentsFromPages(geometryPages);
-          if (geometric) {
-            pages = geometryPages;
-            found = geometric;
-          }
-        }
+        const found = contentsFromPages(pages);
         report.contentsPage = found ? found.tocStart : null;
         // Where each unit actually starts, which is what turns the printed page
         // numbers on the contents into page indices. Tolerant of a running
@@ -3041,13 +3084,16 @@ export async function planImport(
             ? built.flatMap((c) =>
                 withPartSplits(
                   c.title,
-                  pages.slice(c.start, c.end).join("\n\n").trim(),
+                  bodyPages.slice(c.start, c.end).join("\n\n").trim(),
                   c.topics,
                   { start: c.start, end: c.end },
                 ),
               )
             : segments.flatMap((s) => {
-                const full = pages.slice(s.start, s.end).join("\n\n").trim();
+                const full = bodyPages
+                  .slice(s.start, s.end)
+                  .join("\n\n")
+                  .trim();
                 return full
                   ? withPartSplits(s.title, full, undefined, {
                       start: s.start,
@@ -3075,7 +3121,7 @@ export async function planImport(
       return {
         chunks: unique,
         toc,
-        reader: textLayerReader(pages),
+        reader: textLayerReader(bodyPages),
         ocrReason: null,
         diagnostics: report,
       };
@@ -3353,11 +3399,15 @@ export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
     );
   }
 
-  const { pages, outline, audit, close } = await openPdf(source.file);
+  const { pages, bodyPages, outline, audit, close } = await openPdf(
+    source.file,
+  );
   try {
     if (audit.problem) throw new PdfUnreadableError(audit);
     let chunks =
-      outline.length >= 2 ? chaptersFromOutline(pages, outline) : null;
+      outline.length >= 2
+        ? chaptersFromOutline(pages, outline, bodyPages)
+        : null;
     if (!chunks) {
       let segments =
         outline.length >= 2
@@ -3366,7 +3416,7 @@ export async function planChunks(source: ImportSource): Promise<ImportChunk[]> {
       if (segments.length <= 1) segments = fallbackPages(pages);
       chunks = segments
         .flatMap((s) => {
-          const full = pages.slice(s.start, s.end).join("\n\n").trim();
+          const full = bodyPages.slice(s.start, s.end).join("\n\n").trim();
           return full
             ? withPartSplits(s.title, full, undefined, {
                 start: s.start,

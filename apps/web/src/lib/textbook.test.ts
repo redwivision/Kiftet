@@ -24,6 +24,7 @@ import {
   reconstructPageLines,
   segmentsForOcrBook,
   splitTocNumber,
+  stripRunningFurniture,
   stripUndecodableGlyphs,
   TOC_PROBE_CHARS,
   TOC_PROBE_MAX_PAGES,
@@ -643,6 +644,27 @@ test("a unit that opens on the book's first page keeps its place at the top", ()
   ]);
   const tree = importTocTree(chunks ?? []);
   expect(tree.map((n) => n.title)).toEqual(["Unit 1: Cells", "Unit 2: Plants"]);
+});
+
+test("the outline joins bodies from bodyPages, not the structural pages", () => {
+  // The chapter boundaries are found on the pages that still carry the running
+  // header; the text handed on as a chapter body is the stripped copy, so the
+  // same header does not repeat through every chapter.
+  const body = (tag: string) =>
+    Array.from({ length: 45 }, (_, i) => `${tag}${i}`).join(" ");
+  const pages = [
+    `${body("a")}\nUnit 1: Cells`,
+    `${body("b")}\nUnit 1: Cells`,
+    `${body("c")}\nUnit 2: Plants`,
+  ];
+  const bodyPages = [body("a"), body("b"), body("c")];
+  const outline = [
+    { title: "Unit 1: Cells", path: "Unit 1: Cells", pageIndex: 0 },
+    { title: "Unit 2: Plants", path: "Unit 2: Plants", pageIndex: 2 },
+  ];
+  const chunks = chaptersFromOutline(pages, outline, bodyPages);
+  expect(chunks?.[0].rawText).toBe(`${body("a")}\n\n${body("b")}`);
+  expect(chunks?.[1].rawText).toBe(body("c"));
 });
 
 test("the outline builds the same structure without a readable body", () => {
@@ -1588,6 +1610,87 @@ describe("reconstructPageLines", () => {
   test("empty input yields an empty page, not a throw", () => {
     expect(reconstructPageLines([])).toBe("");
     expect(reconstructPageLines([{ str: "x" }])).toBe("");
+  });
+});
+
+describe("stripRunningFurniture", () => {
+  test("removes a running footer whose folio rides inline on alternate pages", () => {
+    const pages = stripRunningFurniture([
+      "Body one.\nUnit 1: Theory of Consumer Behaviour",
+      "Body two.\nUnit 1: Theory of Consumer Behaviour 4",
+      "Body three.\nUnit 1: Theory of Consumer Behaviour",
+      "Body four.\nUnit 1: Theory of Consumer Behaviour 6",
+    ]);
+    expect(pages).toEqual([
+      "Body one.",
+      "Body two.",
+      "Body three.",
+      "Body four.",
+    ]);
+  });
+
+  test("removes a folio that sits on its own line above the footer", () => {
+    const pages = stripRunningFurniture([
+      "Body one.\n3\nUnit 1: Theory of Consumer Behaviour",
+      "Body two.\nUnit 1: Theory of Consumer Behaviour 4",
+      "Body three.\n5\nUnit 1: Theory of Consumer Behaviour",
+    ]);
+    expect(pages).toEqual(["Body one.", "Body two.", "Body three."]);
+  });
+
+  test("removes a running footer whose folio leads the line", () => {
+    const pages = stripRunningFurniture([
+      "Body one.\nCitizenship Education Student Textbook Grade 10",
+      "Body two.\n4 Citizenship Education Student Textbook Grade 10",
+      "Body three.\nCitizenship Education Student Textbook Grade 10",
+    ]);
+    expect(pages).toEqual(["Body one.", "Body two.", "Body three."]);
+  });
+
+  test("removes a running header and a running footer together", () => {
+    const pages = stripRunningFurniture([
+      "Unit One: Sub-fields of Biology\nBody one.\n6 Grade 10 Biology",
+      "Unit One: Sub-fields of Biology\nBody two.\nGrade 10 Biology 7",
+      "Unit One: Sub-fields of Biology\nBody three.\n8 Grade 10 Biology",
+    ]);
+    expect(pages).toEqual(["Body one.", "Body two.", "Body three."]);
+  });
+
+  test("a line at the edge of only two pages is not furniture", () => {
+    const input = [
+      "Body one.\nReview Questions",
+      "Body two.\nReview Questions",
+      "Body three.\nSomething else",
+    ];
+    expect(stripRunningFurniture(input)).toEqual(input);
+  });
+
+  test("a book of fewer than three pages is left alone", () => {
+    const input = ["Body.\n4 Running Header", "Body two.\n5 Running Header"];
+    expect(stripRunningFurniture(input)).toEqual(input);
+  });
+
+  test("a page that is nothing but furniture is never emptied", () => {
+    const pages = stripRunningFurniture([
+      "Body one.\nUnit 1: Theory of Consumer Behaviour",
+      "3\nUnit 1: Theory of Consumer Behaviour",
+      "Body three.\nUnit 1: Theory of Consumer Behaviour 6",
+    ]);
+    expect(pages[1].trim().length).toBeGreaterThan(0);
+  });
+
+  test("keeps a markdown table that runs to the foot of a page", () => {
+    const table = [
+      "| Q | 1 | 2 | 3 |",
+      "|---|---|---|---|",
+      "| TU | 0 | 8 | 15 |",
+    ].join("\n");
+    const pages = stripRunningFurniture([
+      "Body one.\nUnit 1: Theory of Consumer Behaviour",
+      `Body two.\n${table}\nUnit 1: Theory of Consumer Behaviour 4`,
+      "Body three.\nUnit 1: Theory of Consumer Behaviour 6",
+    ]);
+    expect(pages[1]).toBe(`Body two.\n${table}`);
   });
 });
 
