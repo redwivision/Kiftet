@@ -48,11 +48,18 @@ import {
   STUDY_PLAN_DEFAULT_BUDGET,
 } from "../ai/plan-config";
 import { enforceRecallMix, judgeClosedAnswer } from "../ai/questions";
-import { buildCoverageUnits, type RecallUnit } from "../ai/recall-coverage";
+import {
+  buildCoverageUnits,
+  type RecallUnit,
+  scopedConcepts,
+  scopedUnits,
+} from "../ai/recall-coverage";
 import {
   deriveSessionVerdict,
+  masteryFromStudyAttempts,
   type SessionVerdict,
 } from "../ai/retest-verdict";
+import { summarizeStudyScores } from "../ai/study-result";
 import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -333,7 +340,10 @@ async function mergeRecallGaps(sessionId: string): Promise<{
   estimated: boolean;
 }> {
   const session = await db()
-    .select({ chapterId: studySession.chapterId })
+    .select({
+      chapterId: studySession.chapterId,
+      scopeKeys: studySession.scopeKeys,
+    })
     .from(studySession)
     .where(eq(studySession.id, sessionId))
     .limit(1)
@@ -412,12 +422,15 @@ async function mergeRecallGaps(sessionId: string): Promise<{
       .from(conceptNode)
       .where(eq(conceptNode.chapterId, session.chapterId))
       .orderBy(conceptNode.sortOrder);
+    // Out-of-scope sections are not "leftovers" — the student chose not to
+    // study them, so the retest writer must not be told to cover them.
+    const inScope = scopedConcepts(allConcepts, session.scopeKeys);
     const judged = new Set<string>();
     for (const c of covered) judged.add(c.toLowerCase());
     for (const m of missing) judged.add(m.toLowerCase());
     for (const x of misconceptions) judged.add(x.toLowerCase());
     for (const k of Object.keys(mastery)) judged.add(k.toLowerCase());
-    for (const c of allConcepts) {
+    for (const c of inScope) {
       if (judged.has(c.conceptText.toLowerCase())) continue;
       unprobed.push(c.conceptText);
     }
@@ -1121,6 +1134,34 @@ router.get("/chapters/:id/concepts", async (req, res) => {
   ok(res, rows);
 });
 
+/**
+ * The chapter's studyable sections, as the scope picker shows them (phase 11,
+ * step 4). These are the same coverage units the recall sweep and the exam
+ * verdict use, so "2.3" means the same thing to the student, the question
+ * planner and the pass/fail breakdown. Keys are stable section numbers, or
+ * "w1"/"w2" for a book whose concepts carry no numbering.
+ */
+router.get("/chapters/:id/units", async (req, res) => {
+  const chapterId = await chapterOwned(req.params.id, ownerId(req));
+  if (!chapterId) return err(res, "Chapter not found", 404);
+  await ensureChapterExtraction(req, chapterId);
+  const concepts = (await chapterConcepts(chapterId)).filter(
+    (concept) => !concept.isMisconception,
+  );
+  const weightOf = new Map(concepts.map((c) => [c.conceptText, c.weight]));
+  const units = buildCoverageUnits(concepts, []).map((unit) => ({
+    key: unit.key,
+    label: unit.label,
+    conceptCount: unit.concepts.length,
+    weight: unit.concepts.reduce(
+      (sum, name) => sum + (weightOf.get(name) ?? 1),
+      0,
+    ),
+    concepts: unit.concepts,
+  }));
+  ok(res, { units });
+});
+
 // The chapter's own stated learning objectives, in book order. Empty for a
 // chapter that does not list any — which is an answer, not a failure.
 router.get("/chapters/:id/objectives", async (req, res) => {
@@ -1219,38 +1260,10 @@ type SessionResultSummary = {
   verdict: SessionVerdict | null;
 };
 
-/**
- * Mastery across EVERY attempt in the session, in order, so a retest answer
- * overrides the recall reading for the same idea and the verdict reflects the
- * student's final state rather than the oldest attempt.
- */
-function masteryFromAttempts(
-  rows: readonly {
-    stage: string;
-    gapsIdentified: unknown;
-  }[],
-): MasteryMap {
-  const mastery: MasteryMap = {};
-  for (const row of rows) {
-    const raw = row.gapsIdentified;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    const map = (raw as Record<string, unknown>).mastery;
-    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
-    for (const [concept, value] of Object.entries(
-      map as Record<string, unknown>,
-    )) {
-      const level = Math.round(Number(value));
-      if (!Number.isFinite(level) || level < 0 || level > 3) continue;
-      const name = concept.trim();
-      if (name) mastery[name] = level as MasteryLevel;
-    }
-  }
-  return mastery;
-}
-
 async function sessionVerdict(
   chapterId: string,
   rows: readonly { stage: string; gapsIdentified: unknown }[],
+  scopeKeys?: readonly string[] | null,
 ): Promise<SessionVerdict | null> {
   const [concepts, objectives] = await Promise.all([
     chapterConcepts(chapterId),
@@ -1258,16 +1271,25 @@ async function sessionVerdict(
   ]);
   const real = concepts.filter((c) => !c.isMisconception);
   if (real.length === 0) return null;
-  const units: RecallUnit[] = buildCoverageUnits(real, objectives);
+  // Only the sections the student actually scoped are judged; a section they
+  // chose not to study must not read as an unchecked failure.
+  const units: RecallUnit[] = scopedUnits(
+    buildCoverageUnits(real, objectives),
+    scopeKeys,
+  );
+  const inScope = new Set(units.flatMap((unit) => unit.concepts));
   const weights: Record<string, number> = {};
-  for (const concept of real) weights[concept.conceptText] = concept.weight;
-  return deriveSessionVerdict(units, masteryFromAttempts(rows), weights);
+  for (const concept of real) {
+    if (inScope.has(concept.conceptText)) {
+      weights[concept.conceptText] = concept.weight;
+    }
+  }
+  return deriveSessionVerdict(units, masteryFromStudyAttempts(rows), weights);
 }
 
-// One canonical "how did this session go" number: before comes from the first
-// recall attempt, after from the AVERAGE of the retest answers (the delta is
-// the product's metric, so it should reflect the whole retest, not whichever
-// question was answered last).
+// One canonical "how did this session go" number: before comes from the
+// baseline when present, otherwise the mean recall score; after is the mean of
+// retest answers, so the delta reflects the whole retest.
 async function resultSummary(
   sessionId: string,
   userId?: string,
@@ -1286,35 +1308,19 @@ async function resultSummary(
     .where(eq(attempt.sessionId, sessionId))
     .orderBy(attempt.createdAt);
 
-  const recallScores: number[] = [];
-  const retestScores: number[] = [];
-  for (const row of attemptsRows) {
-    if (row.score === null) continue;
-    if (row.stage === "recall") recallScores.push(row.score);
-    else if (row.stage === "retest") retestScores.push(row.score);
-  }
-  // "Before" is the mean of the recall attempts: exactly one in blurting mode,
-  // and one per answered diagnostic in targeted mode — the same averaging the
-  // "after" side already does for the retest.
-  const before = recallScores.length
-    ? Math.round(
-        recallScores.reduce((sum, s) => sum + s, 0) / recallScores.length,
-      )
-    : null;
-  const after = retestScores.length
-    ? Math.round(
-        retestScores.reduce((sum, s) => sum + s, 0) / retestScores.length,
-      )
-    : null;
+  const { before, after } = summarizeStudyScores(attemptsRows);
   const durationMs = session.startedAt
     ? session.completedAt
       ? Math.max(0, session.completedAt.getTime() - session.startedAt.getTime())
       : Math.max(0, Date.now() - session.startedAt.getTime())
     : null;
 
+  const retestComplete =
+    (session.retestQuestions?.length ?? 0) > 0 &&
+    session.retestIndex >= (session.retestQuestions?.length ?? 0);
   const verdict =
-    options.withVerdict && session.chapterId
-      ? await sessionVerdict(session.chapterId, attemptsRows)
+    options.withVerdict && retestComplete && session.chapterId
+      ? await sessionVerdict(session.chapterId, attemptsRows, session.scopeKeys)
       : null;
 
   return {
@@ -1434,7 +1440,7 @@ router.get("/sessions/:id", async (req, res) => {
 type AttemptInsert = {
   id?: string;
   sessionId: string;
-  stage: "recall" | "retest";
+  stage: "recall" | "pretest" | "retest";
   transcriptText: string;
   gapsIdentified: {
     covered: string[];
@@ -1610,7 +1616,17 @@ router.post("/sessions/:id/recall", async (req, res) => {
   const chapterId = await sessionChapterId(sessionId, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
-  const concepts = await chapterConcepts(chapterId);
+  const session = await findSession(sessionId, ownerId(req));
+  if (
+    session?.pretestQuestions?.length &&
+    session.pretestIndex < session.pretestQuestions.length
+  ) {
+    return err(res, "Finish the baseline test before starting recall", 409);
+  }
+  const concepts = scopedConcepts(
+    await chapterConcepts(chapterId),
+    session?.scopeKeys,
+  );
   const subjectForRecall = await chapterSubject(chapterId);
 
   const gaps = await ai.gradeRecall(
@@ -1670,7 +1686,11 @@ router.post("/sessions/:id/microlesson", async (req, res) => {
   const chapterId = await sessionChapterId(req.params.id, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
-  const concepts = await chapterConcepts(chapterId);
+  const sessionRow = await findSession(req.params.id, ownerId(req));
+  const concepts = scopedConcepts(
+    await chapterConcepts(chapterId),
+    sessionRow?.scopeKeys,
+  );
 
   const gapAnalysis = gapAnalysisFrom(
     {
@@ -1716,7 +1736,13 @@ router.post("/sessions/:id/plan", async (req, res) => {
   const chapterId = await sessionChapterId(req.params.id, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
-  const concepts = await chapterConcepts(chapterId);
+  const sessionRow = await findSession(req.params.id, ownerId(req));
+  // A scoped session plans only its chosen sections; the rest of the chapter
+  // is not "known", it is simply out of scope.
+  const concepts = scopedConcepts(
+    await chapterConcepts(chapterId),
+    sessionRow?.scopeKeys,
+  );
   const [chapterRow] = await db()
     .select({
       title: chapter.title,
@@ -1896,7 +1922,17 @@ router.get("/chapters/:id/guide", async (req, res) => {
   if (!chapterId) return err(res, "Chapter not found", 404);
 
   const language = req.query.language === "am" ? "am" : "en";
-  const concepts = await chapterConcepts(chapterId);
+  // Sections the session is scoped to, if any. Only unit keys travel here —
+  // never concept names — so the query is short and cannot be spoofed into
+  // reading another chapter.
+  const scopeKeys =
+    typeof req.query.scope === "string"
+      ? req.query.scope
+          .split(",")
+          .map((key) => key.trim())
+          .filter(Boolean)
+      : [];
+  const concepts = scopedConcepts(await chapterConcepts(chapterId), scopeKeys);
   const [row] = await db()
     .select({ rawText: chapter.rawText })
     .from(chapter)
@@ -2027,6 +2063,80 @@ const retestSchema = z.object({
   language: z.enum(["en", "am"]).optional(),
 });
 
+router.post("/sessions/:id/pretest", async (req, res) => {
+  const parsed = retestSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+
+  const session = await findSession(req.params.id, ownerId(req));
+  if (!session) return err(res, "Session not found", 404);
+  if (session.status !== "in_progress") {
+    return err(res, "This study session is already complete", 409);
+  }
+  if (session.pretestQuestions?.length) {
+    return ok(res, { questions: session.pretestQuestions });
+  }
+  const [priorAttempt] = await db()
+    .select({ id: attempt.id })
+    .from(attempt)
+    .where(eq(attempt.sessionId, req.params.id))
+    .limit(1);
+  if (priorAttempt) {
+    return err(res, "A baseline test must come before study answers", 409);
+  }
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+
+  const chapterId = session.chapterId;
+  const concepts = scopedConcepts(
+    await chapterConcepts(chapterId),
+    session.scopeKeys,
+  );
+  if (concepts.length === 0) return err(res, "No concepts to test", 400);
+  const objectives = await chapterObjectiveText(chapterId);
+  const subject = await chapterSubject(chapterId);
+  const rawText = await chapterRawText(chapterId);
+  const questions = await ai.generateRetestQuestions(
+    gapAnalysisFrom(
+      {
+        missing: concepts.map((concept) => concept.conceptText),
+        misconceptions: [],
+      },
+      concepts,
+    ),
+    concepts,
+    objectives,
+    parsed.data.language,
+    {
+      subject,
+      chapterText: rawText,
+      unprobed: concepts.map((concept) => concept.conceptText),
+    },
+  );
+  const prepared = spreadByFocus(
+    reconcileQuestions(
+      questions,
+      concepts,
+      objectives,
+      concepts.map((concept) => concept.conceptText),
+    ),
+  );
+  if (prepared.length === 0) {
+    return err(res, "Could not prepare a baseline test for this scope", 502);
+  }
+
+  await db()
+    .update(studySession)
+    .set({ pretestQuestions: prepared, pretestIndex: 0 })
+    .where(
+      and(
+        eq(studySession.id, req.params.id),
+        eq(studySession.userId, ownerId(req)),
+        eq(studySession.status, "in_progress"),
+      ),
+    );
+
+  ok(res, { questions: prepared });
+});
+
 /**
  * Reconcile a writer's questions against the stored chapter. The model's
  * targetConcept/targetObjective are matched tolerantly (case/whitespace) to the
@@ -2114,18 +2224,46 @@ function spreadByFocus(questions: StoredQuestion[]): StoredQuestion[] {
 }
 
 router.post("/sessions/:id/retest", async (req, res) => {
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = retestSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  const chapterId = await sessionChapterId(req.params.id, ownerId(req));
-  if (!chapterId) return err(res, "Session not found", 404);
+  const session = await findSession(req.params.id, ownerId(req));
+  if (!session) return err(res, "Session not found", 404);
+  if (session.status !== "in_progress") {
+    return err(res, "This study session is already complete", 409);
+  }
+  if (session.retestQuestions?.length) {
+    return ok(res, { questions: session.retestQuestions });
+  }
+  if (session.pretestQuestions?.length) {
+    if (session.pretestIndex < session.pretestQuestions.length) {
+      return err(res, "Finish the baseline test before the post-test", 409);
+    }
+    await db()
+      .update(studySession)
+      .set({
+        retestQuestions: session.pretestQuestions,
+        retestIndex: 0,
+      })
+      .where(eq(studySession.id, req.params.id));
+    return ok(res, { questions: session.pretestQuestions });
+  }
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
 
-  const concepts = await chapterConcepts(chapterId);
+  const chapterId = session.chapterId;
+  const concepts = scopedConcepts(
+    await chapterConcepts(chapterId),
+    session.scopeKeys,
+  );
+  if (concepts.length === 0) return err(res, "No concepts to test", 400);
+  const missing =
+    parsed.data.missing.length || parsed.data.misconceptions.length
+      ? parsed.data.missing
+      : concepts.map((concept) => concept.conceptText);
 
   const gapAnalysis = gapAnalysisFrom(
     {
-      missing: parsed.data.missing,
+      missing,
       misconceptions: parsed.data.misconceptions,
     },
     concepts,
@@ -2147,7 +2285,7 @@ router.post("/sessions/:id/retest", async (req, res) => {
 
   const orderedQuestions = spreadByFocus(
     reconcileQuestions(questions, concepts, objectives, [
-      ...parsed.data.missing,
+      ...missing,
       ...parsed.data.misconceptions,
     ]),
   );
@@ -2195,7 +2333,17 @@ router.post("/sessions/:id/recall-questions", async (req, res) => {
   const chapterId = await sessionChapterId(req.params.id, ownerId(req));
   if (!chapterId) return err(res, "Session not found", 404);
 
-  const concepts = await chapterConcepts(chapterId);
+  const sessionRow = await findSession(req.params.id, ownerId(req));
+  if (
+    sessionRow?.pretestQuestions?.length &&
+    sessionRow.pretestIndex < sessionRow.pretestQuestions.length
+  ) {
+    return err(res, "Finish the baseline test before starting recall", 409);
+  }
+  const concepts = scopedConcepts(
+    await chapterConcepts(chapterId),
+    sessionRow?.scopeKeys,
+  );
   const wholeChapter = parsed.data.scope === "chapter";
   const gapAnalysis = gapAnalysisFrom(
     wholeChapter
@@ -2215,7 +2363,11 @@ router.post("/sessions/:id/recall-questions", async (req, res) => {
     concepts,
     objectives,
     parsed.data.language,
-    { subject, chapterText: rawText },
+    {
+      subject,
+      chapterText: rawText,
+      scopeKeys: sessionRow?.scopeKeys ?? undefined,
+    },
   );
 
   // `orderRecallSet` puts the student's own flagged gaps first, then the
@@ -2367,6 +2519,58 @@ const recallModeSchema = z.object({
   recallMode: z.enum(["blurting", "targeted", "both"]),
 });
 
+/**
+ * Pick the sections this session covers (phase 11, step 4). Keys are validated
+ * against the chapter's current coverage units, so a stale picker cannot shrink
+ * a session to nothing; an empty selection means the whole chapter.
+ */
+const scopeSchema = z.object({
+  scopeKeys: z.array(z.string().trim().min(1).max(120)).max(200).nullable(),
+});
+
+router.patch("/sessions/:id/scope", async (req, res) => {
+  const parsed = scopeSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+  const session = await findSession(req.params.id, ownerId(req));
+  if (!session) return err(res, "Session not found", 404);
+  if (
+    session.pretestQuestions?.length ||
+    session.recallQuestions?.length ||
+    session.retestQuestions?.length
+  ) {
+    return err(
+      res,
+      "The study scope cannot change after a test is prepared",
+      409,
+    );
+  }
+  const [existingAttempt] = await db()
+    .select({ id: attempt.id })
+    .from(attempt)
+    .where(eq(attempt.sessionId, req.params.id))
+    .limit(1);
+  if (existingAttempt) {
+    return err(res, "The study scope cannot change after answering", 409);
+  }
+
+  const concepts = (await chapterConcepts(session.chapterId)).filter(
+    (c) => !c.isMisconception,
+  );
+  const valid = new Set(buildCoverageUnits(concepts, []).map((u) => u.key));
+  const picked =
+    parsed.data.scopeKeys === null
+      ? []
+      : [...new Set(parsed.data.scopeKeys)].filter((key) => valid.has(key));
+  const scopeKeys = picked.length > 0 ? picked : null;
+
+  await db()
+    .update(studySession)
+    .set({ scopeKeys })
+    .where(eq(studySession.id, req.params.id));
+
+  ok(res, { scopeKeys });
+});
+
 router.patch("/sessions/:id/recall-mode", async (req, res) => {
   const parsed = recallModeSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
@@ -2403,10 +2607,10 @@ const answerSchema = z.object({
     .int()
     .min(0, "That retest question can't be found."),
   attemptId: z.string().optional(),
+  stage: z.enum(["pretest", "retest"]).default("retest"),
 });
 
 router.post("/sessions/:id/retest/answer", async (req, res) => {
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
   const parsed = answerSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -2414,9 +2618,44 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
   if (!chapterId) return err(res, "Session not found", 404);
 
   const session = await findSession(req.params.id, ownerId(req));
-  const question = session?.retestQuestions?.[parsed.data.questionIndex];
-  if (!session || !question) return err(res, "Retest question not found", 400);
-  if (parsed.data.questionIndex !== session.retestIndex) {
+  if (!session) return err(res, "Session not found", 404);
+  if (parsed.data.attemptId) {
+    const [prior] = await db()
+      .select({
+        sessionId: attempt.sessionId,
+        stage: attempt.stage,
+        score: attempt.score,
+        gapsIdentified: attempt.gapsIdentified,
+      })
+      .from(attempt)
+      .where(eq(attempt.id, parsed.data.attemptId))
+      .limit(1);
+    if (prior) {
+      if (
+        prior.sessionId !== req.params.id ||
+        prior.stage !== parsed.data.stage
+      ) {
+        return err(res, "That answer id has already been used", 409);
+      }
+      const score = prior.score ?? 0;
+      return ok(res, {
+        score,
+        gaps: { ...prior.gapsIdentified, score },
+      });
+    }
+  }
+  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  const questions =
+    parsed.data.stage === "pretest"
+      ? session.pretestQuestions
+      : session.retestQuestions;
+  const index =
+    parsed.data.stage === "pretest"
+      ? session.pretestIndex
+      : session.retestIndex;
+  const question = questions?.[parsed.data.questionIndex];
+  if (!question) return err(res, "Retest question not found", 400);
+  if (parsed.data.questionIndex !== index) {
     return err(res, "That retest question is out of order", 409);
   }
   const subject = await chapterSubject(chapterId);
@@ -2437,7 +2676,7 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
   const inserted = await insertAttemptOnce({
     id: parsed.data.attemptId,
     sessionId: req.params.id,
-    stage: "retest",
+    stage: parsed.data.stage,
     transcriptText: parsed.data.transcriptText,
     gapsIdentified: {
       covered: gaps.covered,
@@ -2451,7 +2690,11 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
   if (inserted) {
     await db()
       .update(studySession)
-      .set({ retestIndex: (currentSession?.retestIndex ?? 0) + 1 })
+      .set(
+        parsed.data.stage === "pretest"
+          ? { pretestIndex: (currentSession?.pretestIndex ?? 0) + 1 }
+          : { retestIndex: (currentSession?.retestIndex ?? 0) + 1 },
+      )
       .where(
         and(
           eq(studySession.id, req.params.id),

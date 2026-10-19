@@ -10,6 +10,8 @@ table can't tell you.
 
 | When | What landed | Notes |
 |---|---|---|
+| 2026-10-19 | **Optional baseline and post-study test (phase 11, step 5)** | A student can take an exam-style baseline before recall or skip it. The generated questions and progress persist; after studying, the post-test reuses the exact same questions for a fair before/after comparison. The result prefers the baseline mean as `before`, otherwise the recall mean; a skipped post-test leaves `after`/`delta` null and withholds the readiness verdict. Attempt retries return the saved grade instead of advancing twice or failing as out of order. Migration `0016` adds `pretest_questions` and `pretest_index`. |
+| 2026-10-19 | **Topic scope — a session can cover part of a chapter (phase 11, step 4)** | The existing chapter chooser picks the one chapter per session; the scope picker sits on the recall screen, under the recall-mode chooser. `GET /chapters/:id/units` returns the chapter's sections (the same coverage units the recall sweep and verdict use, so `2.3` means one thing everywhere; an unnumbered book shows `Part n`), and `PATCH /sessions/:id/scope` stores the chosen keys on nullable `study_session.scope_keys` (migration `0015`; `null` = whole chapter, including sessions created before the picker). Scope applies server-side to recall, the study plan, guide, retest, unprobed gaps and verdict. Keys are validated; scope locks after questions are prepared or answers recorded; stale/empty selections never produce an empty session. Multi-chapter queues remain out of scope, consistent with the one-chapter session boundary. |
 | 2026-10-19 | **The guide was built but unreachable — the lesson phase now reads it** | `GET /chapters/:id/guide` (cached sections, per-student order, source anchors) was fully implemented while no client ever called it: `GUIDE` was never dispatched, `masteryQuery` was unused, and both `GuideView` branches in the lesson phase were dead code. The provider now fetches the guide in parallel with the plan (`fetchGuide`, deliberately outside `run` so a throttled or offline guide can never surface as an error over a lesson that already loaded), `RECALL`/`RECALL_FULL` clear the stale guide from the last cycle, and the lesson phase renders **plan on top, guide underneath** (falling back to the lesson panel only when neither exists). |
 | 2026-10-19 | **Exam readiness is a chapter-wide verdict, and the retest is grounded in the book** | The result screen now answers "would this pass?", not only "did the score move?". Two pieces. **(1) A server-derived verdict.** New `apps/server/src/ai/retest-verdict.ts` merges mastery from every attempt (a retest answer overrides the recall reading for the same idea), groups the chapter by its own sections (`buildCoverageUnits`), and weights each idea by concept weight — mastered full, partial half, misconception or unjudged zero. Unprobed ideas stay in the denominator, and a pass requires **≥70% weighted** *and* **no section unprobed**. `GET /sessions/:id/result` returns `verdict` with the per-section breakdown; the result UI shows solid/weak/unchecked sections and en/am copy was added. The dashboard list omits the verdict on purpose (one checklist read per card is too much). **(2) A retest that can carry it.** `generateRetestQuestions` now writes **6–10** questions (was 3–5; `extractQuestions` limit raised to match), receives the chapter's raw text and the recall sweep's `unprobed` ideas, asks for **exactly one** beyond-textbook scenario (`enforceSingleBeyondText` clears extras), and gets **one corrective pass** when `retestIsSoft` still sees fewer than three levels or no beyond-text question. `questionUserPrompt` gained optional `chapterText`/`unprobed` blocks, and `POST /retest` resolves `unprobed` itself via `mergeRecallGaps`. Recall's own quality signal is now mirrored at its gentler bar: `recallIsFlat` (every question at one cognitive level) increments `flatRecall` and logs, so "mostly knowledge" cannot quietly become "nothing but knowledge". |
 | 2026-10-18 | **Structure first, and the model read is lazy — import stops burning the quota** | Four changes that make a real Ministry-of-Education PDF import well *and* cheaply. **(1) Tables from geometry.** `reconstructPageLines` now rebuilds a page from pdf.js text-item positions instead of the naive string concatenation: `detectTableSegments` clusters runs into rows by baseline (`ROW_BASELINE_TOLERANCE`), `mapToAnchors` aligns each row's cells to the page's column anchors (a row it cannot align is not a table), and the segment renders as markdown with missed cells keeping their column — verified against Economics Table 1.1 (page 12), whose per-cell numbers pdf.js emits as separate runs. **(2) Running furniture stripped.** `stripRunningFurniture` votes the normalized keys of each page's top and bottom lines across the whole book and removes the ones that repeat (running headers, footers, bare folios), leaving real body text — verified on the Economics, Citizenship and Biology PDFs, whose folios sit inline, leading, or on their own line depending on the book. `openPdf` returns a `bodyPages` alongside `pages`, and chapter bodies are joined from it while boundaries still come from the raw pages. **(3) Chunked chapter read.** `ai.extractChapter` no longer sends a whole (up to 200k-char) chapter in one prompt and silently fall back when that overflows: `extractionWindows` splits it into ≤8 windows of ~24k chars on line boundaries, each read prefers Groq (whose limits are looser) and merges/dedupes concepts and objectives, and a window that fails is skipped rather than sinking the read. **(4) The read is deferred.** `POST /chapters/ingest` no longer calls the model — it stores the book's own `topics` and seeds the checklist from them — and `ensureChapterExtraction` does the one model read at first use (`/sessions/start`, `GET /chapters/:id/concepts`, `GET /chapters/:id/objectives`), guarded by `chapter.extractedAt` and stamped only on a *real* read (a deterministic fallback stays un-stamped so a calmer moment retries). `topics` on the wire are now `{path,title,page}` objects (they were bare labels). Importing a 20-chapter book now spends zero AI calls until a chapter is opened. |
@@ -63,7 +65,7 @@ Not cosmetic — both were live in the study loop:
 | 9 | Offline-first loop (bet 3) — cached checklists/chapters, a submission outbox with an honest "saved — will be graded when you're back online" state, reconnect sync through the existing attempt idempotency | ✅ First slice shipped (IndexedDB caches/outbox, original `attemptId` replay, connectivity probe, offline banner, queued states, lesson/question cache and offline reads) |
 | 10 | Amharic everywhere (bet 4) — bilingual EN/🇪🇹 both-script chrome, generated content in both scripts, Ethiopic type verified | ✅ Done (slices A–D shipped: `Language` pref at `kiftet-language` + persisted through the `LanguageProvider`, pre-hydration `lang` script, `LanguageSwitcher` in the header, typed `messages.ts` corpus where `am` must cover every key, and the study loop's load-bearing chrome wired → `t()`: the four step pills, phase headings/bodies, every primary CTA, session/error/queued/result/voice-guide copy, and the offline banner), plus the landing page and the dashboard, syllabus, textbooks, and voice-test routes. Slice C makes generated content follow the pref: the loop sends `language: "am"`, gemini.ts writes lessons/retest questions in Amharic (Ge'ez) via the `AMHARIC_OUTPUT` instruction with concept names kept verbatim as data, offline fallback content is Amharic too, cached reads honestly flag their language, and a "በአማርኛ / In Amharic" badge marks generated text. Slice D verified the SVG/icon set (same `OPEN_ARC` geometry as the brand mark) and the Ethiopic type stack (Noto Sans Ethiopic loaded at 400–700, Ethiopic-first font stacks, pre-hydration `lang`), and closed the doc gaps — including this doc being split into `docs/howItWorks/` |
 
-| 11 | The smart study guide — scope the student picks (chapter(s) and/or topic(s)), per-concept mastery, a structured guide cached per concept, retest as an optional pre/post tool | 🔨 In progress (per-concept grading and diagnosis, ordered/cached guide sections, source anchors, model fallback ladder, and budget accounting have shipped; multi-chapter/topic scope and optional pre/post retest remain) |
+| 11 | The smart study guide — chapter/topic scope, per-concept mastery, a structured guide cached per concept, optional pre/post retest | ✅ Shipped (one selected chapter per session with topic-level scope; cached, anchored guide; optional baseline and post-test using the same questions). Multi-chapter queues remain out of scope. Automated checks are green; manual browser/real-textbook coverage remains in the testing guide. |
 | 12 | Syllabus depth — official `periods` per unit, then Biology 9/10/11 | 🔨 Schema landed (migration `0004`: nullable `periods` + `periods_source` on `syllabus_unit`, exposed via the syllabus API and shown on `/syllabus`; the seed writes figures only when a unit declares one, and never blanks an instructor's transcription on boot). **The data is the remaining work** — Biology 12's six units are deliberately `NULL` until transcribed from the official syllabus document ([`SYLLABUS.md`](../SYLLABUS.md) §4, §6) |
 
 The five product bets that steer the phases after this — syllabus
@@ -86,13 +88,14 @@ commitment, not only an engineering one.
 ## Phase 11 — the smart study guide
 
 **Read this second when picking the work back up.** The guide is implemented
-and now actually used: per-concept mastery drives the diagnosis and guide order,
+and now actually used: per-concept mastery drives diagnosis and guide order,
 guide sections are cached per chapter/concept/language, each section points to a
-deterministic source anchor, and the lesson phase fetches and renders it (the
-fetch was the missing piece until 2026-10-19). The
-remaining work is to let students choose broader chapter/topic scope and make
-retesting an optional pre/post tool. The existing micro-lesson endpoint remains
-for compatibility and its existing UI paths.
+deterministic source anchor, and the lesson phase fetches and renders it.
+Students choose a chapter from the library and can narrow the session to its
+topics. Pre/post testing is optional and reuses the exact same question set when
+a baseline is taken. Multi-chapter queues remain out of scope because each
+persisted study session represents one chapter. The existing micro-lesson
+endpoint remains for compatibility and its existing UI paths.
 
 ### Why the micro-lesson has to go
 
@@ -112,9 +115,9 @@ Not a matter of taste. Four things are wrong with it, all verifiable:
   hardcodes `covered: []` and `score: 0`, so the summary the lesson reads is
   built from absence alone.
 
-The loop around it compounds this: retest is a *mandatory* phase 4 asking 2–3
-questions immediately, so a student who just read the answer is asked to prove
-they learned it.
+The old loop compounded this: retest was a *mandatory* phase 4 asking 2–3
+questions immediately after study. Phase 11 makes the baseline and post-study
+test optional.
 
 ### The constraint that decides the design
 
@@ -275,8 +278,11 @@ newlines and returned mid-sentence fragments in hard-wrapped textbook text, and
 the deterministic fallback copied the English book sentence into a guide that had
 already claimed `language: "am"`.
 
-**What is next.** 4 scope selection, then 5 retest as an optional tool, then
-broader manual coverage and measurement against more textbooks and users.
+**Phase 11 landed.** Scope is one chosen chapter with an optional section
+subset; pre/post retest is optional and comparable. Remaining launch work is
+hands-on testing across real textbooks, Amharic-dense PDFs, offline behavior,
+retest and voice, plus any future product decision to support multi-chapter
+queues.
 
 **One thing 3b deliberately did not do:** the offline `CachedLessonRow` is still
 keyed by `sessionId` (`apps/web/src/lib/store.ts:175`), so the *phone* copy
@@ -284,12 +290,11 @@ still cannot dedupe across students even though the server can. The server cache
 is the one that costs money; the local one is a convenience. Re-keying it is
 still open and is noted rather than silently forgotten.
 
-**One trap in the new pre/post retest.** Retest questions deliberately mirror
-the student's *own* recall wording, and the cache carries the originating gap
-set to stay honest about staleness (`store.ts:181-184`). That is good for
-engagement and **invalid as a before/after delta** — you cannot compare two
-different questions. Keep the mirroring; grade pre and post against the same
-per-concept rubric, targeting the same concepts.
+**One trap in pre/post comparison.** Different question sets would make the
+before/after delta unreliable. When a baseline exists, its exact saved
+questions are reused after study and both attempts are graded against the same
+stored focus. Without a baseline, the post-test stays gap-focused and no
+pre/post delta is claimed.
 
 **Landed (step 3b, follow-up) — a model that answers.** The long-standing
 default `gemini-3.6-flash` started returning `503 high demand` on every call,
@@ -320,8 +325,13 @@ and not the model.
    the three-step ladder; Amharic parity; source anchors. **Landed** — the guide
    is the ordered section list, cached and shared, and cost is measured (cold 10
    calls, warm 0).
-4. **Scope selection** — chapters and/or topics, the student's choice.
+4. **Scope selection** — the existing library chooses the chapter; the student
+   can narrow the session to topics inside it. Multi-chapter planning remains
+   out of scope under the one-chapter session decision. *(Landed; migration
+   `0015`.)*
 5. **Retest as an optional tool**, pre- and post-, with the before/after view.
+   *(Landed; migration `0016`; exact baseline questions are reused for the
+   post-test.)*
 6. **Tests.** Automated coverage includes diagnosis, guide ordering/fallbacks,
    model selection, OCR TOC parsing/page alignment, and the study loop. `bun
    test` runs in CI alongside lint, typecheck and build. Browser OCR quality on
@@ -338,11 +348,11 @@ exists to prevent. Still to do: transcribe the real numbers, and let a unit's
 allocation drive concept ordering in the Phase 11 guide. Details in
 [`SYLLABUS.md`](../SYLLABUS.md) §4.
 
-### Open forks — decisions needed before step 4
+### Scope boundary
 
-- **Plan scope is one chapter per study session.** The grounded plan is the
-  delivery step after diagnosis, inside the existing loop; the existing retest
-  follows the last attempted check. Multi-chapter planning remains out of scope.
+- **Plan scope is one chapter per study session.** The chapter is chosen from
+  the library; the topic picker narrows work inside it. A multi-chapter queue is
+  a separate product feature and remains out of scope.
 - **Keep guide content typed.** The shipped guide flow uses structured
   `GuideSection` values; the legacy microlesson still uses `lessonText`. Do not
   serialize the guide into that string field when adding scope selection or

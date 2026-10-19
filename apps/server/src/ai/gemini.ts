@@ -40,6 +40,7 @@ import {
   type RecallSlot,
   type RecallUnit,
   recallQuestionCount,
+  scopedUnits,
   unitByConcept,
   unitForConcept,
 } from "./recall-coverage";
@@ -420,6 +421,9 @@ export type AiService = {
       /** The chapter's raw text, used only by the deterministic fallback to
        *  ground closed questions in the book's own sentences. */
       chapterText?: string;
+      /** Phase 11, step 4: the coverage-unit keys the student scoped this
+       *  session to ("2.3", "w2"). Omitted/empty means the whole chapter. */
+      scopeKeys?: string[];
     },
   ): Promise<GeneratedQuestion[]>;
   /**
@@ -779,6 +783,7 @@ function fallbackQuestions(
     objectives?: string[];
     chapterText?: string;
     family?: SubjectFamily;
+    scopeKeys?: readonly string[];
   } = {},
 ): GeneratedQuestion[] {
   if (kind === "retest") {
@@ -800,6 +805,7 @@ function fallbackQuestions(
     recall.objectives ?? [],
     gaps,
     recall.family ?? "other",
+    recall.scopeKeys,
   );
   // No concepts to cover (a bare chapter): fall back to the gap names, still at
   // the floor size and still in the mixed format shape.
@@ -853,8 +859,12 @@ function buildRecallPlan(
   objectives: string[],
   gaps: GapAnalysis,
   family: SubjectFamily,
+  scopeKeys?: readonly string[] | null,
 ): RecallPlan {
-  const units = buildCoverageUnits(concepts, objectives);
+  const units = scopedUnits(
+    buildCoverageUnits(concepts, objectives),
+    scopeKeys,
+  );
   const index = unitByConcept(units);
   const preferred = new Set<string>();
   for (const text of [...gaps.missing, ...gaps.misconceptions]) {
@@ -3151,10 +3161,17 @@ export const ai: AiService = {
       timeoutMs?: number;
       subject?: string;
       chapterText?: string;
+      scopeKeys?: string[];
     } = {},
   ): Promise<GeneratedQuestion[]> {
     const family = options.subject ? getFamily(options.subject) : "other";
-    const plan = buildRecallPlan(concepts, objectives, gaps, family);
+    const plan = buildRecallPlan(
+      concepts,
+      objectives,
+      gaps,
+      family,
+      options.scopeKeys,
+    );
     const sentences = options.chapterText
       ? sentencesOf(options.chapterText)
       : [];
@@ -3165,6 +3182,7 @@ export const ai: AiService = {
         objectives,
         chapterText: options.chapterText,
         family,
+        scopeKeys: options.scopeKeys,
       });
     if (!anyAiAvailable()) return fallback();
     // A chapter with no numbered sections still gets its gap questions; there is

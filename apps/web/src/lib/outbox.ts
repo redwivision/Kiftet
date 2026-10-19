@@ -25,6 +25,7 @@ export type OutboxItem = {
   payload: {
     transcriptText: string;
     questionIndex?: number;
+    stage?: "pretest" | "retest";
   };
   createdAt: number;
 };

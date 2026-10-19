@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { buildCoverageUnits } from "./recall-coverage";
-import { deriveSessionVerdict } from "./retest-verdict";
+import {
+  deriveSessionVerdict,
+  masteryFromStudyAttempts,
+} from "./retest-verdict";
 
 const units = buildCoverageUnits(
   [
@@ -18,6 +21,7 @@ describe("deriveSessionVerdict", () => {
       "2.1 Tissues": 3,
       "2.2 Organs": 3,
     });
+
     expect(verdict.overall).toBe(100);
     expect(verdict.passed).toBe(true);
     expect(verdict.unprobedSections).toBe(0);
@@ -93,5 +97,26 @@ describe("deriveSessionVerdict", () => {
     const mastery = { "2.1 Cells": 3, "2.1 Tissues": 3, "2.2 Organs": 3 };
     expect(deriveSessionVerdict(units, mastery, {}, 100).passed).toBe(true);
     expect(deriveSessionVerdict(units, mastery, {}, 101).passed).toBe(false);
+  });
+});
+
+describe("masteryFromStudyAttempts", () => {
+  test("uses recall and post-test evidence but never baseline evidence", () => {
+    expect(
+      masteryFromStudyAttempts([
+        {
+          stage: "pretest",
+          gapsIdentified: { mastery: { "2.1 Cells": 3, "2.1 Tissues": 3 } },
+        },
+        {
+          stage: "recall",
+          gapsIdentified: { mastery: { "2.1 Cells": 1 } },
+        },
+        {
+          stage: "retest",
+          gapsIdentified: { mastery: { "2.1 Cells": 3 } },
+        },
+      ]),
+    ).toEqual({ "2.1 Cells": 3 });
   });
 });

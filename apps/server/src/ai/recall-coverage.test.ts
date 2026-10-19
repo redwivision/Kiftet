@@ -5,6 +5,8 @@ import {
   chunkRecallSlots,
   planRecallSlots,
   recallQuestionCount,
+  scopedConcepts,
+  scopedUnits,
   sectionKey,
   unitByConcept,
   unitForConcept,
@@ -86,6 +88,57 @@ describe("buildCoverageUnits", () => {
     expect(units.length).toBeLessThanOrEqual(RECALL_MAX_QUESTIONS);
     // Nothing is lost in the merge.
     expect(units.flatMap((u) => u.concepts)).toHaveLength(30);
+  });
+});
+
+describe("scoping a session's sections (phase 11, step 4)", () => {
+  const sectioned = numbered([
+    "2.1 Cells",
+    "2.1.1 Cell wall",
+    "2.2 Tissues",
+    "2.3 Organs",
+  ]);
+
+  test("empty, absent or unknown scope means the whole chapter", () => {
+    const units = buildCoverageUnits(sectioned, []);
+    expect(scopedUnits(units, null).map((u) => u.key)).toEqual([
+      "2.1",
+      "2.2",
+      "2.3",
+    ]);
+    expect(scopedUnits(units, []).map((u) => u.key)).toEqual([
+      "2.1",
+      "2.2",
+      "2.3",
+    ]);
+    // A stale key from a re-read chapter must not shrink the session to nothing.
+    expect(scopedUnits(units, ["9.9"]).map((u) => u.key)).toEqual([
+      "2.1",
+      "2.2",
+      "2.3",
+    ]);
+  });
+
+  test("a selected section keeps all of its concepts", () => {
+    const units = buildCoverageUnits(sectioned, []);
+    expect(scopedUnits(units, ["2.1"]).map((u) => u.key)).toEqual(["2.1"]);
+    expect(
+      scopedConcepts(sectioned, ["2.1"]).map((c) => c.conceptText),
+    ).toEqual(["2.1 Cells", "2.1.1 Cell wall"]);
+  });
+
+  test("several sections stay in the chapter's order", () => {
+    expect(
+      scopedConcepts(sectioned, ["2.3", "2.1"]).map((c) => c.conceptText),
+    ).toEqual(["2.1 Cells", "2.1.1 Cell wall", "2.3 Organs"]);
+  });
+
+  test("an unnumbered chapter scopes by its window keys", () => {
+    const loose = numbered(["A one", "B two", "C three", "D four"]);
+    const units = buildCoverageUnits(loose, []);
+    const first = units[0]?.key ?? "";
+    expect(scopedConcepts(loose, [first]).length).toBeLessThan(loose.length);
+    expect(scopedConcepts(loose, [first]).length).toBeGreaterThan(0);
   });
 });
 

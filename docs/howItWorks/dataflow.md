@@ -155,6 +155,81 @@ of the session use this `sessionId`.
 
 ---
 
+### 5.3b Scope — "which topics am I revising?" (phase 11, step 4)
+
+The library already lets the student choose a chapter. A session remains **one
+chapter**, but the student can now narrow it to the book's sections.
+Multi-chapter queues are intentionally outside this phase: they need a separate
+persisted plan and should not be disguised as one chapter session.
+
+```mermaid
+flowchart LR
+  A["1 · GET /chapters/:id/units<br/>sections as the book numbers them"] --> B["2 · ScopePicker on the<br/>recall screen"]
+  B --> C["3 · PATCH /sessions/:id/scope<br/>{ scopeKeys }"]
+  C --> D["4 · recall, plan, guide,<br/>retest and verdict all<br/>read the same scope"]
+```
+
+> **Trace:** the chapter's sections are the same coverage units the recall sweep
+> and the exam verdict already use (`buildCoverageUnits`), so `2.3` means one
+> thing everywhere. The picker shows them as *Section 2.3*, or *Part n* when the
+> book numbers nothing. Selecting everything is stored as `null` — the whole
+> chapter — so a section added to the chapter later is not silently excluded.
+
+**One column:** `study_session.scope_keys` (jsonb, migration `0015`), `null` for
+every session written before the picker existed, which is exactly "all of it".
+
+**What the scope actually changes — all server-side, nothing to trust on the
+phone:**
+
+| Reads scope | Effect |
+|---|---|
+| `POST /sessions/:id/recall-questions` | the plan only asks about scoped sections |
+| `POST /sessions/:id/plan` | plans its steps from scoped concepts; out-of-scope ideas are not marked "known" |
+| `GET /chapters/:id/guide?scope=…` | only scoped sections are generated/cached and returned |
+| `POST /sessions/:id/retest` | the checklist and reconcile are scoped |
+| `mergeRecallGaps` | `unprobed` lists only in-scope ideas, so the writer is never told to cover a topic the student chose to skip |
+| `resultSummary` → `deriveSessionVerdict` | only scoped sections are judged and weighted; an unscoped section cannot show up as an unchecked failure |
+
+Two guards keep a stale picker honest: `PATCH /sessions/:id/scope` validates the
+keys against the chapter's *current* sections and stores `null` when nothing
+valid is left; it refuses changes after questions are prepared or answers are
+recorded. `scopedUnits` falls back to the whole chapter whenever a scope would
+select nothing. A scope can therefore shrink a session, never empty it.
+
+---
+
+### 5.3c Optional baseline and post-study test (phase 11, step 5)
+
+The student can take an exam-style baseline before recall, or skip it and begin
+the usual study loop. A chosen baseline is saved with its question order and
+progress; after the study plan, the student can take the post-test or finish
+without it.
+
+```mermaid
+flowchart LR
+  A["Optional POST /pretest<br/>generate once, save questions"] --> B["Answer set<br/>stage = pretest"]
+  B --> C["Recall → diagnose → guide"]
+  C --> D{"Take post-test?"}
+  D -->|"yes"| E["POST /retest<br/>reuse exact baseline questions"]
+  D -->|"skip"| F["GET /result<br/>after and delta = null"]
+  E --> G["Answer same set<br/>stage = retest"]
+  G --> H["GET /result<br/>pretest before → retest after"]
+```
+
+The same saved questions make the before/after comparison comparable; the
+post-test does not ask the model to produce a fresh, potentially easier set.
+Without a baseline, the existing gap-focused retest is generated after study.
+The result uses the pretest mean as `before` when present, otherwise the recall
+mean; `after` is the post-test mean. Skipping the post-test leaves `after` and
+`delta` null, and the exam-readiness verdict is withheld until every post-test
+question has been answered. The database stores the baseline set and its
+answered index in `study_session.pretest_questions` and `pretest_index`
+(migration `0016`); attempts are labeled `pretest`, `recall`, or `retest`.
+Answer replays return the saved grade before checking question order, so an
+offline retry after a lost response does not become a false out-of-order error.
+
+---
+
 ### 5.4 Recall — "what do you remember?"
 
 This is the heart of the product. The student speaks out loud; the system
@@ -343,7 +418,8 @@ notification.
 
 ### 5.7 Retest — "prove you learned it"
 
-The retest has two parts: generating questions, then grading each answer. Two
+The optional post-test has two parts: generating or reusing questions, then
+grading each answer. Two
 design goals matter above all: **each question is graded alone against exactly
 one focus** (so getting one right can't secretly help the others), and the
 questions are an **exam-readiness check, not a re-quiz** — never easy, tagged
@@ -439,9 +515,9 @@ flowchart LR
   G --> H["6 · GET /recall-gaps<br/>one merged analysis"]
 ```
 
-> The session's *before* score is the **mean of every recall attempt**, exactly
-> as the retest's *after* is the mean of its answers — so the delta stays one
-> comparable number whichever mode was chosen. (`mergeRecallGaps`,
+> The session's *before* score is the pretest mean when one exists, otherwise
+> the **mean of every recall attempt**; *after* is the mean of retest answers.
+> A skipped post-test has no after score or delta. (`mergeRecallGaps`,
 > `spreadByFocus`, `focusSubset` in `apps/server/src/routes/study.ts`.)
 
 **Part B — Answer each question:**
@@ -469,13 +545,14 @@ Receiving: { score: 100, gaps: { covered, missing, misconceptions, score } }
 
 ```mermaid
 flowchart LR
-  A["1 · GET /result"] --> B["2 · before = mean of recall attempts<br/>after = avg of every<br/>retest answer"]
+  A["1 · GET /result"] --> B["2 · before = pretest mean or recall mean<br/>after = mean of retest answers"]
   B --> C["3 · delta = after − before<br/>+ live durationMs"]
   C --> V["4 · verdict: merged mastery by<br/>book section; unprobed counts zero"]
   V --> D{"5 · which outcome?"}
   D -->|"delta > 0"| E["Improved — done ✓"]
   D -->|"delta ≤ 0"| F["Still open — retest /<br/>relearn / fresh recall"]
   D -->|"nothing missing"| G["Nothing missing — done ✓"]
+  D -->|"post-test skipped"| H["No after score or delta<br/>no readiness verdict"]
 ```
 
 > **Trace:** fetch result → compute the metrics → derive the verdict → pick the

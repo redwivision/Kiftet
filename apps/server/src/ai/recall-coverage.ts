@@ -188,6 +188,36 @@ function mergeDown(units: RecallUnit[]): RecallUnit[] {
   return out;
 }
 
+/**
+ * Narrow units to the sections a session is scoped to (phase 11, step 4).
+ * An empty selection, or one whose keys no longer exist (a re-read chapter can
+ * renumber), means the whole chapter — never an empty quiz.
+ */
+export function scopedUnits<T extends { key: string }>(
+  units: readonly T[],
+  scopeKeys: readonly string[] | null | undefined,
+): T[] {
+  if (!scopeKeys?.length) return [...units];
+  const wanted = new Set(scopeKeys);
+  const kept = units.filter((unit) => wanted.has(unit.key));
+  return kept.length > 0 ? kept : [...units];
+}
+
+/** The concepts inside a set of scoped sections, in the chapter's order.
+ *  Sections are kept whole, so a topic is never half-diagnosed. An empty or
+ *  stale selection means the whole chapter (see `scopedUnits`). */
+export function scopedConcepts<T extends { conceptText: string }>(
+  concepts: readonly T[],
+  scopeKeys: readonly string[] | null | undefined,
+): T[] {
+  if (!scopeKeys?.length) return [...concepts];
+  const units = buildCoverageUnits(concepts, []);
+  const inScope = new Set(
+    scopedUnits(units, scopeKeys).flatMap((unit) => unit.concepts),
+  );
+  return concepts.filter((concept) => inScope.has(concept.conceptText));
+}
+
 /** How many questions a chapter of `unitCount` lessons should ask: the floor,
  *  scaled up to one per lesson, and never past the ceiling. */
 export function recallQuestionCount(unitCount: number): number {

@@ -78,6 +78,21 @@ export const en = {
     "These questions come after the lesson, so they test what you really remember — not what you just heard.",
   "retest-done-text":
     "You've finished the questions. See whether the short lesson filled what was missing.",
+  "pretest-option": "Take a short test first (optional)",
+  "pretest-option-hint":
+    "Get a starting score now. After studying, you can answer the same questions again to compare fairly.",
+  "pretest-title": "Your starting test",
+  "pretest-text":
+    "Try these before studying. We will save your starting score and ask the same questions after the lesson, so the comparison uses the same test.",
+  "pretest-done-text":
+    "Starting score saved. Continue to the study steps; you can skip the final test later.",
+  "pretest-continue": "Continue to study",
+  "pretest-restored": "Your starting test is ready where you left off.",
+  "skip-posttest": "Finish without taking the test",
+  "result-untested-title": "Your study round is done; no final test taken.",
+  "result-untested-body":
+    "Your starting picture is saved, but there is no after-test score to compare. You can take the test now or finish without it.",
+  "result-start-test": "Take the test",
 
   // ── Primary CTAs ──────────────────────────────────────────────
   preparing: "Preparing the short lesson…",
@@ -935,6 +950,14 @@ export const en = {
   // ── Recall mode + targeted recall (phase 2) ───────────────────
   // The student chooses how to recall before recall starts. "Targeted" runs
   // diagnostic questions; "both" blurs first, then quizzes the gaps.
+  "scope-label": "Which topics?",
+  "scope-hint":
+    "Study only what is being examined. Recall, the plan and the final proof all stay inside the topics you pick.",
+  "scope-all": "Whole chapter",
+  "scope-section": "Section {label}",
+  "scope-part": "Part {n}",
+  "scope-ideas": "{n} ideas",
+  "scope-picked": "{n} of {total} topics",
   "recall-mode-label": "How do you want to remember?",
   "recall-mode-blurting": "Blurt it out",
   "recall-mode-blurting-desc":
@@ -1034,6 +1057,21 @@ export const am: Record<MessageKey, string> = {
   "retest-text":
     "እነዚህ ጥያቄዎች ከትምህርቱ በኋላ ይመጣሉ፣ ስለዚህ የተረጋገጠውን ይፈትናሉ — አሁን የሰማኸውን አይደለም።",
   "retest-done-text": "ስብስቡን አጠናቀህ። አጭሩ ማብራሪያ ክፍተቶቹን አስተካክሏል እንደሆነ ተመልከት።",
+  "pretest-option": "መጀመሪያ አጭር ፈተና ውሰድ (አማራጭ)",
+  "pretest-option-hint":
+    "የመነሻ ውጤትህን አሁን አግኝ። ከጥናት በኋላ ለትክክለኛ ንጽጽር ተመሳሳይ ጥያቄዎችን መመለስ ትችላለህ።",
+  "pretest-title": "የመነሻ ፈተናህ",
+  "pretest-text":
+    "ከጥናትህ በፊት እነዚህን ሞክር። የመነሻ ውጤትህን እናስቀምጣለን፤ ከማብራሪያው በኋላም ተመሳሳይ ጥያቄዎችን እንጠይቅሃለን።",
+  "pretest-done-text":
+    "የመነሻ ውጤትህ ተቀምጧል። ወደ ጥናቱ ቀጥል፤ በኋላ የመጨረሻውን ፈተና መዝለል ትችላለህ።",
+  "pretest-continue": "ወደ ጥናት ቀጥል",
+  "pretest-restored": "የመነሻ ፈተናህን ከቆመበት ቦታ መልሰናል።",
+  "skip-posttest": "የመጨረሻ ፈተናውን ሳትወስድ ጨርስ",
+  "result-untested-title": "የጥናት ዙርህ ተጠናቋል፤ የመጨረሻ ፈተና አልወሰድክም።",
+  "result-untested-body":
+    "የመነሻ ሁኔታህ ተቀምጧል፣ ግን ለማነጻጸር የኋላ ውጤት የለም። አሁን ፈተና መውሰድ ወይም ያለ ፈተና መጨረስ ትችላለህ።",
+  "result-start-test": "ፈተናውን ውሰድ",
 
   // ── Primary CTAs ──────────────────────────────────────────────
   preparing: "አጭሩ ማብራሪያ እየተዘጋጀ ነው…",
@@ -1808,6 +1846,14 @@ export const am: Record<MessageKey, string> = {
   "share-card-caption": "አንድ ክፍተት ተሞላ።",
 
   // ── Recall mode + targeted recall (phase 2) ───────────────────
+  "scope-label": "የትኞቹ ርዕሶች?",
+  "scope-hint":
+    "የሚፈተንበትን ብቻ አጥና። ማስታወሻ፣ እቅዱና የመጨረሻው ማረጋገጫ ሁሉ በመረጥካቸው ርዕሶች ውስጥ ብቻ ይቆያሉ።",
+  "scope-all": "ሙሉ ምዕራፍ",
+  "scope-section": "ክፍል {label}",
+  "scope-part": "ክፍል {n}",
+  "scope-ideas": "{n} ሀሳቦች",
+  "scope-picked": "ከ{total} ርዕሶች {n}",
   "recall-mode-label": "እንዴት ማስታወስ ትፈልጋለህ?",
   "recall-mode-blurting": "ብቻ ተናገር",
   "recall-mode-blurting-desc": "የምታስታውሰውን ሁሉ በነጻነት ተናገር ወይም ጻፍ — የጎደለውን ጨምሮ።",

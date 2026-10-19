@@ -28,6 +28,7 @@ import {
   type CognitiveLevel,
   type Gaps,
   type RecallMode,
+  type ScopeUnit,
   type SessionQuestion,
   type SessionVerdict,
   type StudyPlan,
@@ -1187,6 +1188,86 @@ function RecallModeChooser({
   );
 }
 
+function ScopePicker() {
+  const { state, setScope } = useStudy();
+  const { t } = useLanguage();
+  const units = state.scopeUnits;
+  // One section is no choice at all, and a missing list means the chapter's
+  // checklist could not be read — either way the session stays whole-chapter.
+  if (!units || units.length < 2) return null;
+  const selected = state.scopeKeys ?? [];
+  const active = new Set(selected);
+  const wholeChapter = selected.length === 0;
+
+  const labelFor = (unit: ScopeUnit, index: number) =>
+    unit.label
+      ? t("scope-section", { label: unit.label })
+      : t("scope-part", { n: String(index + 1) });
+
+  const toggle = (key: string) => {
+    const next = new Set(active);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    // Everything selected is the whole chapter: store null, not every key, so
+    // a later section added to the chapter is not silently excluded.
+    setScope(next.size === units.length ? null : [...next]);
+  };
+
+  return (
+    <fieldset className="space-y-2">
+      <legend className="k-label mb-2 block">{t("scope-label")}</legend>
+      <p className="mb-1 text-muted-foreground text-xs leading-5">
+        {t("scope-hint")}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          aria-pressed={wholeChapter}
+          onClick={() => setScope(null)}
+          className={cn(
+            "rounded-full border px-3 py-1.5 text-sm transition-colors duration-200",
+            wholeChapter
+              ? "border-gold/40 bg-gold/10 text-gold"
+              : "border-border/60 text-muted-foreground hover:bg-muted/40 dark:border-white/10",
+          )}
+        >
+          {t("scope-all")}
+        </button>
+        {units.map((unit, index) => {
+          const on = active.has(unit.key);
+          return (
+            <button
+              key={unit.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(unit.key)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-left text-sm transition-colors duration-200",
+                on
+                  ? "border-gold/40 bg-gold/10 text-gold"
+                  : "border-border/60 text-muted-foreground hover:bg-muted/40 dark:border-white/10",
+              )}
+            >
+              <span className="block font-medium">{labelFor(unit, index)}</span>
+              <span className="mt-0.5 block text-xs opacity-80">
+                {t("scope-ideas", { n: String(unit.conceptCount) })}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {!wholeChapter && (
+        <p className="text-gold text-xs">
+          {t("scope-picked", {
+            n: String(selected.length),
+            total: String(units.length),
+          })}
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 function RecallPhase({
   demo,
   voiceAllowed,
@@ -1194,8 +1275,13 @@ function RecallPhase({
   demo: boolean;
   voiceAllowed: boolean;
 }) {
-  const { state, submitRecall, setRecallMode, startRecallQuestions } =
-    useStudy();
+  const {
+    state,
+    submitRecall,
+    setRecallMode,
+    startRecallQuestions,
+    startPretest,
+  } = useStudy();
   const { t } = useLanguage();
   // Stable so VoiceCapture's capture effects can depend on it honestly instead
   // of re-running on every render of an inline arrow.
@@ -1224,6 +1310,22 @@ function RecallPhase({
         text={targeted ? t("recall-mode-targeted-desc") : t("recall-text")}
       />
       <RecallModeChooser value={state.recallMode} onChange={setRecallMode} />
+      <ScopePicker />
+      {!state.hasPretest && (
+        <div className="space-y-2">
+          <Button
+            className="w-full justify-center"
+            variant="outline"
+            disabled={state.busy}
+            onClick={() => void startPretest()}
+          >
+            {t("pretest-option")}
+          </Button>
+          <p className="text-center text-muted-foreground text-xs leading-5">
+            {t("pretest-option-hint")}
+          </p>
+        </div>
+      )}
       {/* The subject hint is advice for *speaking* the chapter back (blurting,
           or the blurting half of "both"). In targeted mode the student only
           answers quick diagnostic questions, so that advice is wrong here and
@@ -1681,7 +1783,7 @@ function LessonTextPanel({
 }
 
 function LessonPhase() {
-  const { state, startRetest, viewGaps } = useStudy();
+  const { state, startRetest, skipRetest, viewGaps } = useStudy();
   const { t, lang } = useLanguage();
   // A single acknowledged "something is being read aloud" flag. Every
   // interaction flips it immediately, so a tap on the button is never answered
@@ -1816,6 +1918,13 @@ function LessonPhase() {
         <button
           type="button"
           className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
+          onClick={() => void skipRetest()}
+        >
+          {t("skip-posttest")}
+        </button>
+        <button
+          type="button"
+          className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
           onClick={viewGaps}
         >
           {t("back-to-gaps")}
@@ -1826,10 +1935,11 @@ function LessonPhase() {
 }
 
 function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
-  const { state, submitAnswer, fetchResult } = useStudy();
+  const { state, submitAnswer, fetchResult, continueAfterPretest } = useStudy();
   const { t, lang } = useLanguage();
   const { questions, currentQuestion, answered } = state;
   const done = currentQuestion >= questions.length;
+  const isPretest = state.questionStage === "pretest";
   const submitText = useCallback(
     (text: string) => submitAnswer(text),
     [submitAnswer],
@@ -1839,8 +1949,12 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
   return (
     <div className="space-y-6">
       <PhaseHeading
-        title={t("retest-title")}
-        text={done ? t("retest-done-text") : t("retest-text")}
+        title={t(isPretest ? "pretest-title" : "retest-title")}
+        text={
+          isPretest
+            ? t(done ? "pretest-done-text" : "pretest-text")
+            : t(done ? "retest-done-text" : "retest-text")
+        }
       />
       {!done && retestHint && (
         <div className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm">
@@ -1915,9 +2029,13 @@ function RetestPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
           <Button
             className="w-full justify-center"
             disabled={state.busy}
-            onClick={() => void fetchResult()}
+            onClick={() =>
+              isPretest ? continueAfterPretest() : void fetchResult()
+            }
           >
-            {state.busy ? t("grading") : t("see-result")}
+            {state.busy
+              ? t("grading")
+              : t(isPretest ? "pretest-continue" : "see-result")}
           </Button>
         </div>
       )}
@@ -2028,10 +2146,18 @@ function ResultPhase({
   onDone: () => Promise<void>;
   onTryAgain: () => void;
 }) {
-  const { state, startRetest, goLesson } = useStudy();
+  const { state, startRetest, skipRetest, goLesson } = useStudy();
   const { t } = useLanguage();
   const result = state.result;
   const busy = state.busy;
+  const loadedBaselineRef = useRef(false);
+
+  useEffect(() => {
+    if (!state.allCovered || !state.hasPretest || !result) return;
+    if (loadedBaselineRef.current) return;
+    loadedBaselineRef.current = true;
+    void skipRetest();
+  }, [state.allCovered, state.hasPretest, result, skipRetest]);
 
   if (!result) {
     return (
@@ -2052,17 +2178,63 @@ function ResultPhase({
           body={t("result-none-body")}
           metric={durationMetric(result, t)}
           actions={
-            <Button
-              className="w-full justify-center"
-              disabled={busy}
-              onClick={() => void onDone()}
-            >
-              {t("done-for-now")}
-            </Button>
+            <div className="space-y-3">
+              {result.after === null && (
+                <Button
+                  className="w-full justify-center"
+                  disabled={busy}
+                  onClick={() => void startRetest()}
+                >
+                  {t("result-start-test")}
+                </Button>
+              )}
+              <Button
+                className="w-full justify-center"
+                variant={result.after === null ? "outline" : "default"}
+                disabled={busy}
+                onClick={() => void onDone()}
+              >
+                {t("done-for-now")}
+              </Button>
+            </div>
           }
           before={result.before ?? 0}
         />
         <ExamVerdict verdict={result.verdict} />
+      </div>
+    );
+  }
+
+  if (result.after === null) {
+    return (
+      <div className="space-y-6">
+        <ResultPanel
+          tone="gold"
+          headline={t("result-untested-title")}
+          body={t("result-untested-body")}
+          metric={durationMetric(result, t)}
+          actions={
+            <div className="space-y-3">
+              <Button
+                className="w-full justify-center"
+                disabled={busy}
+                onClick={() => void startRetest()}
+              >
+                {t("result-start-test")}
+              </Button>
+              <Button
+                className="w-full justify-center"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void onDone()}
+              >
+                {t("done-for-now")}
+              </Button>
+            </div>
+          }
+          before={result.before ?? 0}
+        />
+        <StillOpen gaps={state.gaps} />
       </div>
     );
   }

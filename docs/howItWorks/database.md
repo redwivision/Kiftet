@@ -18,8 +18,8 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `guide_section` | Cached guide content for one chapter concept and language | `chapterId`, `conceptText`, `language`, structured guide content and source anchor; unique `(chapterId, conceptText, language)` |
 | `plan_content` | **Unused since v1.** Grounded per-step content cache from the pre-roadmap plan | `chapterId`, `conceptText`, `stepType`, `language`, `planVersion`; unique across all five fields |
 | `plan_step_check` | **Unused since v1.** The v0 plan's per-concept check (the plan is a roadmap now, not a quiz) | `sessionId`, `conceptText`, `responseText`; unique `(sessionId, conceptText)` |
-| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `recallMode` (`blurting`/`targeted`/`both`), `recallQuestions` (JSON; each entry may carry `format`/`options`/`answer` for closed recall questions) + `recallIndex`, `retestQuestions` (JSON) + `retestIndex` |
-| `attempt` | One measurement inside a session: the recall, or a retest answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`recall`/`retest`), `transcriptText`, `gapsIdentified` (mastery map, derived lists, optional matched evidence and estimate flag), `score` (int 0–100) |
+| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `recallMode` (`blurting`/`targeted`/`both`), nullable `scopeKeys` (section keys; null = whole chapter), `pretestQuestions` + `pretestIndex`, `recallQuestions` + `recallIndex`, `retestQuestions` + `retestIndex` |
+| `attempt` | One measurement inside a session: baseline, recall, or post-test answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`pretest`/`recall`/`retest`), `transcriptText`, `gapsIdentified` (mastery map, derived lists, optional matched evidence and estimate flag), `score` (int 0–100) |
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
 | `misconception_hit` | One time a grader saw a known misconception surface in a real session (bet 2) | `conceptNodeId` → concept_node, `sessionId`, `userId`; unique `(sessionId, conceptNodeId)` so retries never double-count |
@@ -139,5 +139,8 @@ the tables are the same names.)
 | `0011_glamorous_bulldozer` | `user.kind` (`student`/`demo`) so demo identities can be swept |
 | `0012_milky_sugar_man` | `chapter_objective` — the book's own stated learning objectives, source-anchored |
 | `0013_special_salo` | `study_session.recall_mode` (`blurting`/`targeted`/`both`), `recall_questions` (JSON), `recall_index` |
+| `0014_familiar_landau` | `chapter.topics` (saved textbook outline entries) and `chapter.extracted_at` (lazy model-read marker) |
+| `0015_plain_sinister_six` | `study_session.scope_keys` — nullable section scope; null means the whole chapter |
+| `0016_stale_raza` | `study_session.pretest_questions` and `pretest_index` — persistent optional baseline test and progress |
 
 ---

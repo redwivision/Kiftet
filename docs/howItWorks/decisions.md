@@ -316,3 +316,32 @@
     chapter's raw text and the recall sweep's `unprobed` ideas in the writer
     prompt, and one corrective pass when `retestIsSoft` still reports a set that
     never climbs or never leaves the book.
+25. **A session is one chapter, but the student picks the topics inside it.**
+    Phase 11 asks for "chapters and/or topics", and the recorded fork keeps a
+    session to a single chapter — so the honest first half is section scope
+    inside that chapter. The sections are the same coverage units the recall
+    sweep and the exam verdict already use (`buildCoverageUnits`), which is what
+    makes `2.3` mean one thing to the student, the question planner and the
+    pass/fail breakdown; an unnumbered book scopes by `w1`/`w2` windows, shown as
+    "Part n". One nullable jsonb column (`study_session.scope_keys`, migration
+    `0015`) carries it, and `null` means the whole chapter — including every
+    session written before the picker. Two rules keep a narrow scope honest and
+    safe: the picker stores `null` when everything is selected (so a section
+    added to the chapter later is not silently excluded), and the server's
+    `scopedUnits`/`scopedConcepts` fall back to the whole chapter whenever a
+    selection is empty or its keys no longer exist, so a scope can shrink a
+    session but never empty it. The scope is enforced server-side at every
+    reader — recall plan, study plan, guide, retest checklist, the recall
+    sweep's `unprobed`, and the verdict — because a client-side filter would be
+    a promise a reload could break.
+26. **Optional before/after tests reuse one question set.** A fresh set on each
+    side would make the score delta depend on question difficulty rather than
+    learning. When a student chooses a baseline before recall, save its
+    questions and focus tags, then reuse those exact questions after study.
+    `before` prefers the mean baseline score; without one, it remains the mean
+    recall score. `after` is the retest mean; if the student skips the post-test,
+    `after` and `delta` are `null` and the exam-readiness verdict is withheld.
+    A baseline question set and index live on `study_session` so a refresh
+    resumes the test; attempt rows distinguish `pretest`, `recall`, and
+    `retest`. One chapter remains the session boundary; a multi-chapter queue
+    needs a separate product decision.

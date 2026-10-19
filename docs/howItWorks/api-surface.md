@@ -10,6 +10,7 @@ All routes live behind `/api`:
 | `POST /api/chapters/ingest` | Store a textbook chapter; optional `topics` seed the checklist from the book's contents. The model read is deferred to first use (no AI spent here) | 0 (skeleton) |
 | `GET /api/chapters` | List all chapters | 0 |
 | `GET /api/chapters/:id/concepts` | View a chapter's concept checklist; reads the chapter with the model once if it has not been read yet | 0 |
+| `GET /api/chapters/:id/units` | The chapter's studyable sections as coverage-unit objects (`{key,label,conceptCount,weight,concepts}`) for the scope picker | 0 |
 | `GET /api/chapters/:id/objectives` | View the learning objectives the book itself states for a chapter (empty when it states none); shares the same deferred read | 0 |
 | `POST /api/sessions/start` | Begin a study session on a chapter (optional `recallMode`: `blurting` (default) / `targeted` / `both`); reads the chapter with the model once if it has not been read yet | 0 |
 | `PATCH /api/sessions/:id/recall-mode` | Persist the student's recall-mode choice so a reload restores the flow | 0 |
@@ -17,14 +18,16 @@ All routes live behind `/api`:
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/recall-questions` | Get diagnostic recall questions (`scope`: `gaps` or `chapter`); a chapter-wide sweep of ≥10 questions (one per numbered section at least), split into provider chunks (Gemini + Groq); each carries a format (multiple_choice / fill_blank / short_answer), the section it covers (`lesson`), and its `origin` (gap / coverage) | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/recall-questions/answer` | Answer one recall question → per-question gaps + merged gaps. Multiple choice and fill-in-the-blank grade deterministically (no AI); only short answer reaches the model | 0/2 (AI in 2) |
+| `PATCH /api/sessions/:id/scope` | Choose which sections this one-chapter session covers (`{scopeKeys: string[] \| null}`); keys are validated, and the choice locks once questions or answers exist | 0/11 |
 | `GET /api/sessions/:id/recall-gaps` | The merged gap analysis from every recall attempt so far, including `unprobed` (ideas no answer judged) | 0 |
 | `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/plan` | Build the gap roadmap from diagnosed mastery and a 10/20/40 minute budget (deterministic; one batched call for the *why* lines) | 12 |
 | `GET /api/review-due` | Concepts whose latest mastery check is at least two days old | 12 |
 | `GET /api/chapters/:id/guide` | The ordered guide sections for this student (cached per chapter) | 0/11 (AI only on a cache miss) |
-| `POST /api/sessions/:id/retest` | Get 6–10 exam-readiness questions (5 cognitive levels, detail, exactly one beyond-textbook) for the gaps + objectives, grounded in the chapter text and the recall sweep's `unprobed` ideas | 0/2 (AI in 2) |
-| `POST /api/sessions/:id/retest/answer` | Submit retest answers → updated score | 0/2 (AI in 2) |
-| `GET /api/sessions/:id/result` | The before/after coverage delta **and** a chapter-wide exam verdict (weighted per section, ≥70%, no section unprobed) | 0 |
+| `POST /api/sessions/:id/pretest` | Optionally generate and save the baseline test before any study answers; uses the chosen scope | 11 (AI in 2) |
+| `POST /api/sessions/:id/retest` | Start the optional post-study test; reuses the exact saved pretest questions when a baseline exists, otherwise generates 6–10 grounded exam questions | 0/11 (AI only when generating) |
+| `POST /api/sessions/:id/retest/answer` | Submit a pretest or retest answer (`stage`: `pretest` / `retest`, default `retest`) → per-question grade; idempotent retries return the saved grade | 0/11 (AI in 2) |
+| `GET /api/sessions/:id/result` | Before/after scores (pretest baseline when available, otherwise recall; after = retest mean), delta, and a verdict only after the full post-test is answered | 0/11 |
 | `POST /api/sessions/:id/complete` | Mark the session finished | 0 |
 
 Additional routes added for Phase 6 (textbook library + demo quotas):
@@ -109,14 +112,33 @@ the session's merged recall gaps itself to learn which ideas were never judged
 (`unprobed`), and passes those plus the chapter's raw text into the writer — no
 new client field is required.
 
+**Scope (phase 11, step 4).** `study_session.scope_keys` (jsonb, migration
+`0015`) holds the coverage-unit keys the student picked, `null` = whole chapter.
+`GET /chapters/:id/units` is the picker's data; `PATCH /sessions/:id/scope`
+writes it (validated, never empty); `GET /sessions/:id` returns it. Every
+scope-sensitive route resolves it server-side: recall-questions, plan, retest,
+`mergeRecallGaps`'s `unprobed`, and the verdict. The guide takes it as a query
+parameter instead — `GET /chapters/:id/guide?scope=2.1,2.3` — because the guide
+is keyed by chapter, not by session, and only unit keys travel in that parameter.
+
 **Exam verdict on the result.** `GET /sessions/:id/result` now also returns
-`verdict` (or `null` when the chapter has no checklist): `{ passed, overall,
+`verdict` (or `null` until the post-test is complete, or when the chapter has no checklist): `{ passed, overall,
 threshold, unprobedSections, sections: [{ key, label, concepts, probedConcepts,
 score, probed }] }`. It is derived server-side from the merged mastery of every
 attempt, grouped into the book's own sections and weighted by concept weight. A
 pass requires `overall >= 70` **and** `unprobedSections === 0`. `GET /sessions`
 (the dashboard list) deliberately omits the verdict to keep one checklist read
 per card from turning into twenty.
+
+**Optional pre/post retest (phase 11, step 5).** The student may request
+`POST /sessions/:id/pretest` before answering recall. The question set and its
+progress are stored in `study_session.pretest_questions` / `pretest_index`
+(migration `0016`). After study, `POST /sessions/:id/retest` reuses those exact
+questions; without a baseline it generates the existing gap-focused set.
+Answer submissions use the same `/retest/answer` route with an explicit stage.
+The result's `before` prefers the baseline score; older sessions and sessions
+without a baseline use the recall mean. A skipped post-test leaves `after` and
+`delta` null and does not claim an exam verdict.
 
 `GET /chapters/:id/guide` takes the levels as a query string instead —
 `?language=en&mastery=<urlencoded name:level, name:level>` — because the order

@@ -95,6 +95,18 @@ export type Guide = {
   language: "en" | "am";
 };
 
+/** A studyable section of the chapter, as the scope picker lists it (phase 11,
+ *  step 4). Same coverage units the recall sweep and the verdict use, so "2.3"
+ *  means one thing everywhere. */
+export type ScopeUnit = {
+  key: string;
+  /** The book's own label ("2.3"), or "" for an unnumbered book — the UI then
+   *  says "Part {n}". */
+  label: string;
+  conceptCount: number;
+  weight: number;
+};
+
 /** One gap-specific study-plan step: a route, not a lesson. */
 export type StudyPlanStep = {
   concept: string;
@@ -188,6 +200,12 @@ export type StudyState = {
   sessionNotFound: boolean;
   /** How the student chose to recall (chosen upfront, before recall starts). */
   recallMode: RecallMode;
+  /** The sections this session covers (phase 11, step 4). Null = whole chapter,
+   *  which is also what every session written before the picker existed means. */
+  scopeKeys: string[] | null;
+  /** The chapter's selectable sections, for the picker. Null while loading or
+   *  when the chapter's checklist could not be read. */
+  scopeUnits: ScopeUnit[] | null;
   gaps: Gaps | null;
   /** The running merged gap analysis from targeted-recall answers, held until
    *  the student moves on to the gaps view. */
@@ -210,7 +228,8 @@ export type StudyState = {
   /** Which family the shared question UI is showing: a diagnostic recall set or
    *  the exam-readiness retest. Drives where an answer is submitted and what
    *  happens when the set is finished. */
-  questionStage: "recall" | "retest";
+  questionStage: "recall" | "pretest" | "retest";
+  hasPretest: boolean;
   result: SessionResult | null;
   resultLoading: boolean;
   attempts: number;
@@ -238,6 +257,8 @@ export type StudyAction =
   | { type: "RECALL"; gaps: Gaps }
   | { type: "RECALL_FULL"; gaps: Gaps }
   | { type: "SET_RECALL_MODE"; mode: RecallMode }
+  | { type: "SET_SCOPE"; scopeKeys: string[] | null }
+  | { type: "SCOPE_UNITS"; units: ScopeUnit[] }
   | { type: "RECALL_QUESTIONS"; questions: SessionQuestion[] }
   | {
       type: "RESTORE_TARGETED";
@@ -249,7 +270,18 @@ export type StudyAction =
   | { type: "LESSON"; text: string }
   | { type: "GUIDE"; guide: GuideSection[]; estimated: boolean }
   | { type: "PLAN"; plan: StudyPlan }
-  | { type: "QUESTIONS"; questions: SessionQuestion[] }
+  | {
+      type: "QUESTIONS";
+      questions: SessionQuestion[];
+      stage: "pretest" | "retest";
+    }
+  | {
+      type: "RESTORE_PRETEST";
+      questions: SessionQuestion[];
+      answered: AnswerRecord[];
+    }
+  | { type: "PRETEST_STATUS"; hasPretest: boolean }
+  | { type: "CONTINUE_AFTER_PRETEST" }
   | {
       type: "RESTORE_RETEST";
       questions: SessionQuestion[];
@@ -263,7 +295,7 @@ export type StudyAction =
 
 type SessionAttemptRow = {
   id: string;
-  stage: "recall" | "retest";
+  stage: "recall" | "pretest" | "retest";
   score: number | null;
   gapsIdentified: unknown;
   transcriptText: string | null;
@@ -278,6 +310,8 @@ function initialState(_sessionId: string): StudyState {
     chapterLoading: true,
     sessionNotFound: false,
     recallMode: "blurting",
+    scopeKeys: null,
+    scopeUnits: null,
     gaps: null,
     recallGaps: null,
     allCovered: false,
@@ -291,6 +325,7 @@ function initialState(_sessionId: string): StudyState {
     currentQuestion: 0,
     answered: [],
     questionStage: "retest",
+    hasPretest: false,
     result: null,
     resultLoading: false,
     attempts: 0,
@@ -471,6 +506,10 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         notice: null,
         queued: null,
       };
+    case "SET_SCOPE":
+      return { ...state, scopeKeys: action.scopeKeys };
+    case "SCOPE_UNITS":
+      return { ...state, scopeUnits: action.units };
     case "SET_RECALL_MODE":
       return { ...state, recallMode: action.mode };
     case "RECALL_QUESTIONS":
@@ -530,10 +569,39 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
       return {
         ...state,
         phase: "retest",
-        questionStage: "retest",
+        questionStage: action.stage,
+        hasPretest: state.hasPretest || action.stage === "pretest",
+        allCovered: false,
         questions: action.questions,
         currentQuestion: 0,
         answered: [],
+        error: null,
+        notice: null,
+        queued: null,
+      };
+    case "RESTORE_PRETEST":
+      return {
+        ...state,
+        phase: "retest",
+        questionStage: "pretest",
+        hasPretest: true,
+        questions: action.questions,
+        currentQuestion: action.answered.length,
+        answered: action.answered,
+        error: null,
+        notice: null,
+        queued: null,
+      };
+    case "PRETEST_STATUS":
+      return { ...state, hasPretest: action.hasPretest };
+    case "CONTINUE_AFTER_PRETEST":
+      return {
+        ...state,
+        phase: "recall",
+        questions: [],
+        currentQuestion: 0,
+        answered: [],
+        questionStage: "recall",
         error: null,
         notice: null,
         queued: null,
@@ -567,7 +635,6 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         ...state,
         phase: "result",
         result: action.result,
-        allCovered: false,
         attempts: anotherPass ? state.attempts + 1 : 0,
         error: null,
         notice: null,
@@ -606,6 +673,7 @@ interface StudyContextValue {
   beginRecall: () => void;
   viewGaps: () => void;
   setRecallMode: (mode: RecallMode) => void;
+  setScope: (scopeKeys: string[] | null) => void;
   startRecallQuestions: (scope: "gaps" | "chapter") => Promise<void>;
   submitRecallAnswer: (text: string) => Promise<void>;
   viewTargetedGaps: () => void;
@@ -613,7 +681,10 @@ interface StudyContextValue {
   fetchLesson: (budgetMinutes?: 10 | 20 | 40) => Promise<void>;
   goLesson: () => void;
   startRetest: () => Promise<void>;
+  startPretest: () => Promise<void>;
   submitAnswer: (text: string) => Promise<void>;
+  continueAfterPretest: () => void;
+  skipRetest: () => Promise<void>;
   fetchResult: () => Promise<void>;
   retryAgain: () => void;
   retryLast: () => Promise<void>;
@@ -636,6 +707,7 @@ export function StudyProvider({
   const stateRef = useRef(state);
   stateRef.current = state;
   const replayRef = useRef<(() => Promise<void>) | null>(null);
+  const scopeWriteRef = useRef(0);
   // Guards against two submissions racing to grade the same recall/answer.
   const submittingRef = useRef(false);
   // Set the first time a submission (or the initial load) can't reach the
@@ -740,6 +812,31 @@ export function StudyProvider({
       }).catch(() => {});
     },
     [sessionId],
+  );
+
+  const setScope = useCallback(
+    (scopeKeys: string[] | null) => {
+      const requestId = ++scopeWriteRef.current;
+      const previous = stateRef.current.scopeKeys;
+      dispatch({ type: "SET_SCOPE", scopeKeys });
+      // Persist the choice before the student starts; a rejected write must not
+      // leave the picker showing a scope the server will ignore.
+      void api<{ scopeKeys: string[] | null }>(`/sessions/${sessionId}/scope`, {
+        method: "PATCH",
+        body: JSON.stringify({ scopeKeys }),
+      })
+        .then((res) => {
+          if (requestId === scopeWriteRef.current) {
+            dispatch({ type: "SET_SCOPE", scopeKeys: res.scopeKeys });
+          }
+        })
+        .catch((err: unknown) => {
+          if (requestId !== scopeWriteRef.current) return;
+          dispatch({ type: "SET_SCOPE", scopeKeys: previous });
+          reportError(err);
+        });
+    },
+    [sessionId, reportError],
   );
 
   const startRecallQuestions = useCallback(
@@ -855,8 +952,12 @@ export function StudyProvider({
    */
   const fetchGuide = useCallback(
     (gaps: Gaps, chapterId: string) => {
+      const scope = stateRef.current.scopeKeys;
+      const scopeParam = scope?.length
+        ? `&scope=${encodeURIComponent(scope.join(","))}`
+        : "";
       void api<Guide>(
-        `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}`,
+        `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}${scopeParam}`,
       )
         .then((guide) => {
           if (!guide.sections?.length) return;
@@ -950,7 +1051,11 @@ export function StudyProvider({
             // the connection mid-retest can still answer them, and the
             // answers queue in the outbox to be graded on reconnect.
             void cacheQuestions(sessionId, normalized, lang);
-            dispatch({ type: "QUESTIONS", questions: normalized });
+            dispatch({
+              type: "QUESTIONS",
+              questions: normalized,
+              stage: "retest",
+            });
           })
           .catch(async (err: unknown) => {
             // Offline: reuse the questions saved earlier for this session.
@@ -962,6 +1067,7 @@ export function StudyProvider({
               dispatch({
                 type: "QUESTIONS",
                 questions: cached.questions,
+                stage: "retest",
               });
               const language = cached.language ?? "en";
               dispatch({
@@ -981,11 +1087,49 @@ export function StudyProvider({
     );
   }, [run, sessionId, lang, t]);
 
+  const startPretest = useCallback(
+    () =>
+      run(
+        () =>
+          api<{ questions: SessionQuestion[] }>(
+            `/sessions/${sessionId}/pretest`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                missing: [],
+                misconceptions: [],
+                language: lang,
+              }),
+            },
+          ).then(({ questions }) =>
+            dispatch({
+              type: "QUESTIONS",
+              questions: questions.map(toSessionQuestion),
+              stage: "pretest",
+            }),
+          ),
+        undefined,
+      ),
+    [run, sessionId, lang],
+  );
+
+  const continueAfterPretest = useCallback(() => {
+    dispatch({ type: "CONTINUE_AFTER_PRETEST" });
+    if (stateRef.current.recallMode === "targeted") {
+      void startRecallQuestions("chapter");
+    }
+  }, [startRecallQuestions]);
+
   const submitAnswer = useCallback(
     (text: string) => {
-      const { gaps, questions, currentQuestion } = stateRef.current;
+      const { questions, currentQuestion, questionStage } = stateRef.current;
       const question = questions[currentQuestion];
-      if (!gaps || !question) return Promise.resolve();
+      if (
+        !question ||
+        (questionStage !== "pretest" && questionStage !== "retest")
+      ) {
+        return Promise.resolve();
+      }
       if (submittingRef.current) return Promise.resolve();
       submittingRef.current = true;
       const attemptId = crypto.randomUUID();
@@ -999,6 +1143,7 @@ export function StudyProvider({
                 transcriptText: text,
                 questionIndex: currentQuestion,
                 attemptId,
+                stage: questionStage,
               }),
             },
           )
@@ -1028,6 +1173,7 @@ export function StudyProvider({
                   payload: {
                     transcriptText: text,
                     questionIndex: currentQuestion,
+                    stage: questionStage,
                   },
                   createdAt: Date.now(),
                 });
@@ -1063,6 +1209,8 @@ export function StudyProvider({
     [run, sessionId],
   );
 
+  const skipRetest = useCallback(() => fetchResult(), [fetchResult]);
+
   // Opens the session: loads it + the chapter list (caching both), pre-caches
   // the current chapter's checklist (bet 3 — conservatively, one chapter, not
   // the whole library), then restores where the loop left off from the attempt
@@ -1077,6 +1225,9 @@ export function StudyProvider({
           status: string;
           attempts: SessionAttemptRow[];
           recallMode?: RecallMode;
+          scopeKeys?: string[] | null;
+          pretestQuestions?: SessionQuestion[] | null;
+          pretestIndex: number;
           recallQuestions: SessionQuestion[] | null;
           recallIndex: number;
           retestQuestions: SessionQuestion[] | null;
@@ -1104,14 +1255,57 @@ export function StudyProvider({
         if (session.recallMode) {
           dispatch({ type: "SET_RECALL_MODE", mode: session.recallMode });
         }
+        // Restore the chosen scope so a reload keeps studying the same topics.
+        dispatch({ type: "SET_SCOPE", scopeKeys: session.scopeKeys ?? null });
+        const pretests = session.attempts.filter(
+          (attempt) => attempt.stage === "pretest",
+        );
+        dispatch({
+          type: "PRETEST_STATUS",
+          hasPretest: Boolean(session.pretestQuestions?.length),
+        });
         // Pre-cache this chapter's checklist for offline study. Non-fatal:
         // the gaps view re-fetches and caches it too.
         void api<ChecklistRow[]>(`/chapters/${chapter.id}/concepts`)
           .then((rows) => void cacheChecklist(chapter.id, rows))
           .catch(() => {});
+        // The chapter's selectable sections, for the scope picker. Non-fatal:
+        // without them the picker simply does not appear and the session stays
+        // whole-chapter.
+        void api<{ units: ScopeUnit[] }>(`/chapters/${chapter.id}/units`)
+          .then(({ units }) => {
+            if (token !== loadTokenRef.current) return;
+            dispatch({ type: "SCOPE_UNITS", units });
+          })
+          .catch(() => {});
 
         const recalls = session.attempts.filter((a) => a.stage === "recall");
         const retests = session.attempts.filter((a) => a.stage === "retest");
+        if (
+          session.status === "in_progress" &&
+          session.pretestQuestions?.length &&
+          session.pretestIndex < session.pretestQuestions.length
+        ) {
+          const restored = pretests
+            .slice(0, session.pretestIndex)
+            .map((attempt, index) => ({
+              question:
+                session.pretestQuestions?.[index]?.question ??
+                t("previously-answered"),
+              answer: attempt.transcriptText ?? "",
+              correct: (attempt.score ?? 0) >= 50,
+              score: attempt.score ?? 0,
+              gaps: attemptGaps(attempt.gapsIdentified),
+            }));
+          if (token !== loadTokenRef.current) return;
+          dispatch({
+            type: "RESTORE_PRETEST",
+            questions: session.pretestQuestions,
+            answered: restored,
+          });
+          dispatch({ type: "NOTICE", message: t("pretest-restored") });
+          return;
+        }
         const targetedInProgress =
           session.recallMode &&
           session.recallMode !== "blurting" &&
@@ -1119,7 +1313,9 @@ export function StudyProvider({
           !!session.recallQuestions?.length &&
           session.recallIndex > 0;
 
-        if (targetedInProgress) {
+        if (session.status === "completed") {
+          if (token === loadTokenRef.current) void fetchResult();
+        } else if (targetedInProgress) {
           const questions = session.recallQuestions ?? [];
           const restored = recalls
             .slice(0, session.recallIndex)
@@ -1189,8 +1385,6 @@ export function StudyProvider({
             answered: restored,
           });
           dispatch({ type: "NOTICE", message: t("retest-restored") });
-        } else if (retests.length && session.status === "completed") {
-          if (token === loadTokenRef.current) void fetchResult();
         } else if (recalls.length) {
           const last = recalls[recalls.length - 1];
           const stored = attemptGaps(last.gapsIdentified);
@@ -1294,6 +1488,7 @@ export function StudyProvider({
         beginRecall,
         viewGaps,
         setRecallMode,
+        setScope,
         startRecallQuestions,
         submitRecallAnswer,
         viewTargetedGaps,
@@ -1301,7 +1496,10 @@ export function StudyProvider({
         fetchLesson,
         goLesson,
         startRetest,
+        startPretest,
         submitAnswer,
+        continueAfterPretest,
+        skipRetest,
         fetchResult,
         retryAgain,
         retryLast,

@@ -698,6 +698,19 @@ describe("recall coverage across lessons", () => {
     expect(lessons).toEqual(new Set(["2.1", "2.2", "2.3"]));
   });
 
+  test("a scoped session quizzes only its chosen section", async () => {
+    __overrideProviderForTests("gemini", answerSlots({ n: 0 }));
+    const questions = await ai.generateRecallQuestions(
+      GAPS_HERE,
+      SECTION_CONCEPTS,
+      [],
+      "en",
+      { scopeKeys: ["2.2"] },
+    );
+    const lessons = new Set(questions.map((q) => q.lesson));
+    expect(lessons).toEqual(new Set(["2.2"]));
+  });
+
   test("chunks are split across both providers when both are wired", async () => {
     process.env.GROQ_API_KEY = "questions-test-groq-key";
     const gemini = { n: 0 };

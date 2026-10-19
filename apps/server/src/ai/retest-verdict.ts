@@ -45,6 +45,36 @@ export type SessionVerdict = {
 /** The exam-readiness bar. */
 export const PASS_THRESHOLD = 70;
 
+/**
+ * Build the final mastery map from study evidence. Baseline answers measure
+ * where the student started; only recall and post-test answers can establish
+ * readiness, with later post-test evidence overriding earlier recall.
+ */
+export function masteryFromStudyAttempts(
+  rows: readonly {
+    stage: string;
+    gapsIdentified: unknown;
+  }[],
+): Record<string, number> {
+  const mastery: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.stage !== "recall" && row.stage !== "retest") continue;
+    const raw = row.gapsIdentified;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const map = (raw as Record<string, unknown>).mastery;
+    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+    for (const [concept, value] of Object.entries(
+      map as Record<string, unknown>,
+    )) {
+      const level = Math.round(Number(value));
+      if (!Number.isFinite(level) || level < 0 || level > 3) continue;
+      const name = concept.trim();
+      if (name) mastery[name] = level;
+    }
+  }
+  return mastery;
+}
+
 /** What a mastery level earns: mastered counts fully, partial counts half, a
  *  misconception (2) or an untouched idea (0) earns nothing. */
 function earnedFraction(level: number | undefined): number {

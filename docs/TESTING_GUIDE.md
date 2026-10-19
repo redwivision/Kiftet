@@ -1039,6 +1039,54 @@ for the case that genuinely needs it — retrying the model we measured working.
 `aiTelemetry.lastModel` records which model last answered, so "is this the
 model, or is it us?" is answerable from `/api/ai/telemetry` alone.
 
+---
+
+## Phase 11 steps 4–5 — topic scope and optional pre/post test
+
+Automated coverage:
+
+- `apps/server/src/ai/recall-coverage.test.ts` verifies scoped units and
+  concepts, including empty/stale keys, multiple selected sections and
+  unnumbered chapters.
+- `apps/server/src/ai/study-result.test.ts` verifies that a saved pretest is
+  preferred as the baseline, older sessions fall back to recall means, and
+  skipped tests do not get invented scores.
+- `apps/server/src/ai/questions.test.ts` verifies that the recall writer
+  respects selected scope.
+- `bun test --preload ./test-setup.ts` covers the repository test suite.
+
+Manual browser checks still required before launch (not represented by the
+automated unit tests):
+
+1. Start a chapter with multiple sections. Confirm the initial scope is the
+   whole chapter; select one section, reload, and confirm the choice persists.
+   Verify recall, plan, guide, retest and verdict only include that section.
+2. Try to change scope after questions have been prepared; confirm the server
+   rejects the change and the picker reports the error rather than silently
+   showing a scope the server did not save.
+3. On a fresh session, take the optional baseline. Answer some questions, reload
+   mid-test, and confirm the same question and progress return. Finish it,
+   complete study, then start the post-test: the questions and focus labels
+   must match the baseline exactly.
+4. Confirm `before` equals the baseline mean, `after` equals the post-test mean,
+   and `delta` is their difference. Verify the readiness verdict is absent until
+   all post-test questions are answered.
+5. Run a separate session without a baseline and confirm `before` uses recall.
+   Skip the post-test: the result must show no after score, no delta and no
+   readiness verdict; it must not claim that the student failed or passed.
+6. Exercise the all-covered path both with and without an optional post-test;
+   it should still let the student finish or choose to test.
+7. Switch to Amharic and repeat the entry, continue, skip and result screens;
+   generated questions should be Amharic while canonical concept names remain
+   unchanged.
+8. During a baseline answer, go offline after submitting but before the server
+   response. Reconnect and verify the saved answer is graded once and the
+   question index advances once, not zero or twice.
+
+These checks require a running app, a migrated database and real browser
+interaction. A green test/build suite does not prove them; do not mark them
+complete until someone performs them against representative textbooks.
+
 **The real ceiling is 5 requests a minute**, not the ~1,500/day the free tier
 allows. A cold ten-concept guide wants ten. Measured on the demo chapter:
 

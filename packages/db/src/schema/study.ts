@@ -310,6 +310,21 @@ export const studySession = pgTable(
     recallMode: text("recall_mode", {
       enum: ["blurting", "targeted", "both"],
     }).default("blurting"),
+    /**
+     * Which sections of the chapter this session covers (phase 11, step 4):
+     * the coverage-unit keys the student picked at the scope picker — "2.3" for
+     * a numbered book, "w2" for one whose concepts carry no numbering. Null
+     * means the whole chapter, which is what every row written before the
+     * picker existed reads as. Nothing else about the session changes: a
+     * session is still one chapter; the scope narrows what is diagnosed,
+     * planned, quizzed and judged inside it.
+     */
+    scopeKeys: jsonb("scope_keys").$type<string[] | null>(),
+    /** Questions used for an optional baseline and reused unchanged after study. */
+    pretestQuestions: jsonb("pretest_questions").$type<
+      StoredQuestion[] | null
+    >(),
+    pretestIndex: integer("pretest_index").default(0).notNull(),
     recallQuestions: jsonb("recall_questions").$type<StoredQuestion[] | null>(),
     recallIndex: integer("recall_index").default(0).notNull(),
     retestQuestions: jsonb("retest_questions").$type<StoredQuestion[] | null>(),
@@ -362,7 +377,7 @@ export const attempt = pgTable(
     sessionId: text("session_id")
       .notNull()
       .references(() => studySession.id, { onDelete: "cascade" }),
-    stage: text("stage", { enum: ["recall", "retest"] }).notNull(),
+    stage: text("stage", { enum: ["recall", "pretest", "retest"] }).notNull(),
     transcriptText: text("transcript_text"),
     gapsIdentified: jsonb("gaps_identified").$type<AttemptGaps>().notNull(),
     score: integer("score"),
