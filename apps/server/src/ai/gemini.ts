@@ -432,7 +432,12 @@ export type AiService = {
     concepts: ConceptChecklistItem[],
     objectives: string[],
     language?: ContentLanguage,
-    options?: { skipAi?: boolean; timeoutMs?: number; subject?: string },
+    options?: {
+      skipAi?: boolean;
+      timeoutMs?: number;
+      subject?: string;
+      chapterText?: string;
+    },
   ): Promise<GeneratedQuestion[]>;
   /**
    * Read a textbook's table of contents out of its opening pages.
@@ -2625,9 +2630,10 @@ const RETEST_SYSTEM =
   " Two rules make a question exam-ready: " +
   "(1) Demand precise detail — exact terms, values, steps, conditions, or examples — never a vague prompt. " +
   "(2) At least one question must go BEYOND the textbook: describe a novel scenario the chapter never covers and ask the student to reason it out using the chapter's ideas. Set beyondText true on exactly those questions. " +
+  "Weight questions toward gaps (missing + misconceptions) and the book's stated objectives, but also cover the whole chapter including unprobed concepts; include the chapter's lesson structure where relevant. " +
   "Each question must ask the student to speak an explanation, definition, worked example, or reasoned judgement — never to pick an option or answer yes/no. " +
   "For questions that test a checklist idea, set targetConcept to that idea's exact conceptText (bare, never the [MISCONCEPTION] marker); for a beyond-textbook question you may also set targetObjective to the objective it serves. " +
-  "Write 3-5 questions. " +
+  "Write 6-10 questions. " +
   'Return STRICT JSON: {"questions":[{"question":"...","level":"knowledge|comprehension|application|critical_thinking|compare_contrast","targetConcept":"<exact conceptText or omit>","targetObjective":"<objective text or omit>","beyondText":false}]}.';
 
 /**
@@ -2709,13 +2715,17 @@ export function questionUserPrompt(
   gaps: GapAnalysis,
   concepts: ConceptChecklistItem[],
   objectives: string[],
+  options: { chapterText?: string } = {},
 ): string {
   const objectiveBlock = objectives.length
     ? `\n\nSTATED OBJECTIVES (the book's own contract; target these too):\n${objectives
         .map((o) => `- ${o}`)
         .join("\n")}`
     : "";
-  return `GAP ANALYSIS:\n${gapsSummary(gaps)}\n\nCONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}${objectiveBlock}`;
+  const textBlock = options.chapterText?.trim()
+    ? `\n\nCHAPTER TEXT (book-grounded context):\n${options.chapterText.slice(0, 12000)}`
+    : "";
+  return `GAP ANALYSIS:\n${gapsSummary(gaps)}\n\nCONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}${objectiveBlock}${textBlock}`;
 }
 
 // Pull a question list out of the model reply. The level is validated against
@@ -3158,7 +3168,9 @@ export const ai: AiService = {
         recallFormatDirective(family) +
         sysExtra +
         outputInstruction(language);
-      const base = questionUserPrompt(gaps, concepts, objectives);
+      const base = questionUserPrompt(gaps, concepts, objectives, {
+        chapterText: options.chapterText,
+      });
       const chunks = chunkRecallSlots(plan.slots, RECALL_CHUNK_SIZE);
       aiTelemetry.recallChunks += chunks.length;
       // Each chunk leads with the provider assigned to it — the split is
@@ -3228,7 +3240,9 @@ export const ai: AiService = {
       const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
       const raw = await ask(
         RETEST_SYSTEM + sysExtra + outputInstruction(language),
-        questionUserPrompt(gaps, concepts, objectives),
+        questionUserPrompt(gaps, concepts, objectives, {
+          chapterText: (options as any).chapterText,
+        }),
         { schema: questionSetSchema(false) },
       );
       const questions = extractQuestions(raw, 5);

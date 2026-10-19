@@ -2070,12 +2070,13 @@ router.post("/sessions/:id/retest", async (req, res) => {
 
   const objectives = await chapterObjectiveText(chapterId);
   const retestSubject = await chapterSubject(chapterId);
+  const rawText = await chapterRawText(chapterId);
   const questions = await ai.generateRetestQuestions(
     gapAnalysis,
     concepts,
     objectives,
     parsed.data.language,
-    { subject: retestSubject },
+    { subject: retestSubject, chapterText: rawText },
   );
 
   const orderedQuestions = spreadByFocus(
