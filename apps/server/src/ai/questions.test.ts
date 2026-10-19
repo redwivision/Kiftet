@@ -3,6 +3,7 @@ import { __resetAdmissionForTests } from "./admission";
 import {
   __overrideProviderForTests,
   ai,
+  aiTelemetrySnapshot,
   type ConceptChecklistItem,
   focusScore,
   gapAnalysisFrom,
@@ -19,6 +20,7 @@ import {
   RECALL_MIN_QUESTIONS,
   recallFormatCounts,
   recallFormatPlan,
+  recallIsFlat,
   retestIsSoft,
 } from "./questions";
 
@@ -67,6 +69,23 @@ describe("the cognitive taxonomy", () => {
     expect(fallbackLevels("recall", 6)[5]).toBe("comprehension");
     expect(fallbackLevels("retest", 5)).toEqual([...COGNITIVE_LEVELS]);
     expect(fallbackLevels("retest", 6)[5]).toBe("knowledge");
+  });
+
+  test("a recall set is flat only when it never leaves one level", () => {
+    expect(recallIsFlat([])).toBe(false);
+    expect(recallIsFlat([{ level: "knowledge" }])).toBe(true);
+    expect(
+      recallIsFlat([
+        { level: "knowledge" },
+        { level: "comprehension" },
+        { level: "knowledge" },
+      ]),
+    ).toBe(false);
+    // Every question at one level (or untagged) measures nothing but memory.
+    expect(recallIsFlat([{ level: "knowledge" }, { level: "knowledge" }])).toBe(
+      true,
+    );
+    expect(recallIsFlat([{}, {}])).toBe(true);
   });
 });
 
@@ -656,6 +675,13 @@ describe("recall coverage across lessons", () => {
       });
     };
   }
+
+  test("a recall set that never leaves one level is counted as flat", async () => {
+    __overrideProviderForTests("gemini", answerSlots({ n: 0 }));
+    const before = aiTelemetrySnapshot().flatRecall;
+    await ai.generateRecallQuestions(GAPS_HERE, SECTION_CONCEPTS, []);
+    expect(aiTelemetrySnapshot().flatRecall).toBe(before + 1);
+  });
 
   test("the set reaches the floor and touches every numbered section", async () => {
     const counter = { n: 0 };

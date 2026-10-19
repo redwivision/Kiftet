@@ -269,7 +269,11 @@
     chapter concepts as the wrong options — so an offline student gets
     tap-and-type recall, not spoken essays. A retest that comes back too soft
     (fewer than three cognitive levels, or no beyond-textbook question) is counted
-    and logged (`retestIsSoft`) rather than silently passed. `generateRecallQuestions`
+    and logged (`retestIsSoft`) rather than silently passed. Recall gets the
+    mirror signal at its own gentler bar: a set where every question wears the
+    same cognitive level (`recallIsFlat`) has stopped measuring understanding,
+    so it is counted (`flatRecall`) and logged too — gentle is not the same as
+    one-note. `generateRecallQuestions`
     also stopped borrowing the retest's subject directives (`getPhaseDirectives(family, "recall")`),
     and every answer control is keyed by question index so a repeated spoken
     question can never be left unsubmittable.

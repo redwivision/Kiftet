@@ -27,6 +27,7 @@ import {
   type RecallFormat,
   recallFormatCounts,
   recallFormatPlan,
+  recallIsFlat,
   recallLevelDirective,
   retestIsSoft,
   retestLevelDirective,
@@ -1651,6 +1652,10 @@ const aiTelemetry = {
   /** Retest sets that came back too soft (fewer than 3 levels, or no
    *  beyond-textbook question) — a quality signal, not a failure. */
   softRetest: 0,
+  /** Recall sets that never left one cognitive level (usually all knowledge)
+   *  — gentle recall is fine, but a set that measures nothing but memory is a
+   *  quality signal worth surfacing, not silently passing. */
+  flatRecall: 0,
   /** Recall requests split into provider chunks, so the cost of the coverage
    *  sweep against the shared rate limit is visible. */
   recallChunks: 0,
@@ -3224,6 +3229,12 @@ export const ai: AiService = {
         merged.push(...topped);
       }
       const final = dedupeQuestions(merged);
+      if (recallIsFlat(final)) {
+        aiTelemetry.flatRecall += 1;
+        console.error(
+          "[ai] generateRecallQuestions produced a flat set (every question at one cognitive level)",
+        );
+      }
       return final.length
         ? final
         : malformed("generateRecallQuestions", fallback);

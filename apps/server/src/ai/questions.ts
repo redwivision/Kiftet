@@ -287,6 +287,23 @@ export function retestIsSoft(
 }
 
 /**
+ * Whether a recall set is too *flat* for the job it exists to do. Recall is
+ * deliberately gentle — mostly knowledge checks, the odd comprehension — so it
+ * is held to a lower bar than the retest: a set is flat only when every
+ * question wears the same cognitive level (usually all `knowledge`), which means
+ * it stopped measuring understanding at all. Pure and exported so the signal is
+ * testable without a live model.
+ */
+export function recallIsFlat(
+  questions: readonly { level?: CognitiveLevel }[],
+): boolean {
+  const levels = new Set(
+    questions.map((q) => q.level).filter((l): l is CognitiveLevel => !!l),
+  );
+  return questions.length > 0 && levels.size < 2;
+}
+
+/**
  * Keep exactly one beyond-textbook question, which is what the retest prompt
  * asks for. A writer that marks several gets the extras cleared rather than the
  * whole set thrown away; a writer that marks none is left alone, because that
