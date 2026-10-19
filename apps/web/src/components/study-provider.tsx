@@ -125,11 +125,29 @@ export type StudyPlan = {
   estimated: boolean;
 };
 
+export type SessionVerdictSection = {
+  key: string;
+  label: string;
+  concepts: number;
+  probedConcepts: number;
+  score: number;
+  probed: boolean;
+};
+
+export type SessionVerdict = {
+  passed: boolean;
+  overall: number;
+  threshold: number;
+  sections: SessionVerdictSection[];
+  unprobedSections: number;
+};
+
 export type SessionResult = {
   before: number | null;
   after: number | null;
   delta: number | null;
   durationMs?: number | null;
+  verdict?: SessionVerdict | null;
 };
 
 export type SessionQuestion = {

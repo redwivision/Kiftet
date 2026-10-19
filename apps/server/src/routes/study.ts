@@ -48,6 +48,11 @@ import {
   STUDY_PLAN_DEFAULT_BUDGET,
 } from "../ai/plan-config";
 import { enforceRecallMix, judgeClosedAnswer } from "../ai/questions";
+import { buildCoverageUnits, type RecallUnit } from "../ai/recall-coverage";
+import {
+  deriveSessionVerdict,
+  type SessionVerdict,
+} from "../ai/retest-verdict";
 import { createRollingWindow } from "../lib/rolling-window";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
@@ -1208,7 +1213,56 @@ type SessionResultSummary = {
   after: number | null;
   delta: number | null;
   durationMs: number | null;
+  /** The chapter-wide exam-readiness verdict, derived from every judged idea
+   *  (recall and retest alike) and every section, including the ones nobody
+   *  probed. Null when the chapter has no checklist to judge against. */
+  verdict: SessionVerdict | null;
 };
+
+/**
+ * Mastery across EVERY attempt in the session, in order, so a retest answer
+ * overrides the recall reading for the same idea and the verdict reflects the
+ * student's final state rather than the oldest attempt.
+ */
+function masteryFromAttempts(
+  rows: readonly {
+    stage: string;
+    gapsIdentified: unknown;
+  }[],
+): MasteryMap {
+  const mastery: MasteryMap = {};
+  for (const row of rows) {
+    const raw = row.gapsIdentified;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const map = (raw as Record<string, unknown>).mastery;
+    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+    for (const [concept, value] of Object.entries(
+      map as Record<string, unknown>,
+    )) {
+      const level = Math.round(Number(value));
+      if (!Number.isFinite(level) || level < 0 || level > 3) continue;
+      const name = concept.trim();
+      if (name) mastery[name] = level as MasteryLevel;
+    }
+  }
+  return mastery;
+}
+
+async function sessionVerdict(
+  chapterId: string,
+  rows: readonly { stage: string; gapsIdentified: unknown }[],
+): Promise<SessionVerdict | null> {
+  const [concepts, objectives] = await Promise.all([
+    chapterConcepts(chapterId),
+    chapterObjectiveText(chapterId),
+  ]);
+  const real = concepts.filter((c) => !c.isMisconception);
+  if (real.length === 0) return null;
+  const units: RecallUnit[] = buildCoverageUnits(real, objectives);
+  const weights: Record<string, number> = {};
+  for (const concept of real) weights[concept.conceptText] = concept.weight;
+  return deriveSessionVerdict(units, masteryFromAttempts(rows), weights);
+}
 
 // One canonical "how did this session go" number: before comes from the first
 // recall attempt, after from the AVERAGE of the retest answers (the delta is
@@ -1217,28 +1271,28 @@ type SessionResultSummary = {
 async function resultSummary(
   sessionId: string,
   userId?: string,
+  options: { withVerdict?: boolean } = {},
 ): Promise<SessionResultSummary | null> {
   const session = await findSession(sessionId, userId);
   if (!session) return null;
 
   const attemptsRows = await db()
-    .select({ stage: attempt.stage, score: attempt.score })
+    .select({
+      stage: attempt.stage,
+      score: attempt.score,
+      gapsIdentified: attempt.gapsIdentified,
+    })
     .from(attempt)
     .where(eq(attempt.sessionId, sessionId))
     .orderBy(attempt.createdAt);
 
-  const recallScores = attemptsRows
-    .filter(
-      (a): a is { stage: "recall"; score: number } =>
-        a.stage === "recall" && a.score !== null,
-    )
-    .map((a) => a.score);
-  const retestScores = attemptsRows
-    .filter(
-      (a): a is { stage: "retest"; score: number } =>
-        a.stage === "retest" && a.score !== null,
-    )
-    .map((a) => a.score);
+  const recallScores: number[] = [];
+  const retestScores: number[] = [];
+  for (const row of attemptsRows) {
+    if (row.score === null) continue;
+    if (row.stage === "recall") recallScores.push(row.score);
+    else if (row.stage === "retest") retestScores.push(row.score);
+  }
   // "Before" is the mean of the recall attempts: exactly one in blurting mode,
   // and one per answered diagnostic in targeted mode — the same averaging the
   // "after" side already does for the retest.
@@ -1258,11 +1312,17 @@ async function resultSummary(
       : Math.max(0, Date.now() - session.startedAt.getTime())
     : null;
 
+  const verdict =
+    options.withVerdict && session.chapterId
+      ? await sessionVerdict(session.chapterId, attemptsRows)
+      : null;
+
   return {
     before,
     after,
     delta: before != null && after != null ? after - before : null,
     durationMs,
+    verdict,
   };
 }
 
@@ -1286,7 +1346,10 @@ router.get("/sessions", async (req, res) => {
       status: row.status,
       startedAt: row.startedAt,
       completedAt: row.completedAt,
-      ...summary,
+      before: summary.before,
+      after: summary.after,
+      delta: summary.delta,
+      durationMs: summary.durationMs,
     });
   }
   ok(res, out);
@@ -2071,12 +2134,15 @@ router.post("/sessions/:id/retest", async (req, res) => {
   const objectives = await chapterObjectiveText(chapterId);
   const retestSubject = await chapterSubject(chapterId);
   const rawText = await chapterRawText(chapterId);
+  // The recall sweep's honest leftovers: ideas no answer has judged. The retest
+  // writer is told to cover them rather than quietly skip half the chapter.
+  const { unprobed } = await mergeRecallGaps(req.params.id);
   const questions = await ai.generateRetestQuestions(
     gapAnalysis,
     concepts,
     objectives,
     parsed.data.language,
-    { subject: retestSubject, chapterText: rawText },
+    { subject: retestSubject, chapterText: rawText, unprobed },
   );
 
   const orderedQuestions = spreadByFocus(
@@ -2402,7 +2468,9 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
 // ────────────────────────────────────────────────────────────────
 
 router.get("/sessions/:id/result", async (req, res) => {
-  const summary = await resultSummary(req.params.id, ownerId(req));
+  const summary = await resultSummary(req.params.id, ownerId(req), {
+    withVerdict: true,
+  });
   if (!summary) return err(res, "Session not found", 404);
   ok(res, summary);
 });

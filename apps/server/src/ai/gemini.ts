@@ -16,6 +16,7 @@ import {
 import {
   COGNITIVE_LEVELS,
   type CognitiveLevel,
+  enforceSingleBeyondText,
   fallbackLevels,
   isCognitiveLevel,
   isRecallFormat,
@@ -437,6 +438,7 @@ export type AiService = {
       timeoutMs?: number;
       subject?: string;
       chapterText?: string;
+      unprobed?: string[];
     },
   ): Promise<GeneratedQuestion[]>;
   /**
@@ -2629,7 +2631,7 @@ const RETEST_SYSTEM =
   retestLevelDirective() +
   " Two rules make a question exam-ready: " +
   "(1) Demand precise detail — exact terms, values, steps, conditions, or examples — never a vague prompt. " +
-  "(2) At least one question must go BEYOND the textbook: describe a novel scenario the chapter never covers and ask the student to reason it out using the chapter's ideas. Set beyondText true on exactly those questions. " +
+  "(2) Exactly one question must go BEYOND the textbook: describe a novel scenario the chapter never covers and ask the student to reason it out using the chapter's ideas. Set beyondText true on exactly those questions. " +
   "Weight questions toward gaps (missing + misconceptions) and the book's stated objectives, but also cover the whole chapter including unprobed concepts; include the chapter's lesson structure where relevant. " +
   "Each question must ask the student to speak an explanation, definition, worked example, or reasoned judgement — never to pick an option or answer yes/no. " +
   "For questions that test a checklist idea, set targetConcept to that idea's exact conceptText (bare, never the [MISCONCEPTION] marker); for a beyond-textbook question you may also set targetObjective to the objective it serves. " +
@@ -2715,17 +2717,22 @@ export function questionUserPrompt(
   gaps: GapAnalysis,
   concepts: ConceptChecklistItem[],
   objectives: string[],
-  options: { chapterText?: string } = {},
+  options: { chapterText?: string; unprobed?: string[] } = {},
 ): string {
   const objectiveBlock = objectives.length
     ? `\n\nSTATED OBJECTIVES (the book's own contract; target these too):\n${objectives
         .map((o) => `- ${o}`)
         .join("\n")}`
     : "";
+  const unprobedBlock = options.unprobed?.length
+    ? `\n\nNOT YET CHECKED (no answer has judged these ideas; cover them too):\n${options.unprobed
+        .map((c) => `- ${c}`)
+        .join("\n")}`
+    : "";
   const textBlock = options.chapterText?.trim()
     ? `\n\nCHAPTER TEXT (book-grounded context):\n${options.chapterText.slice(0, 12000)}`
     : "";
-  return `GAP ANALYSIS:\n${gapsSummary(gaps)}\n\nCONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}${objectiveBlock}${textBlock}`;
+  return `GAP ANALYSIS:\n${gapsSummary(gaps)}\n\nCONCEPT CHECKLIST:\n${conceptsChecklist(concepts)}${objectiveBlock}${unprobedBlock}${textBlock}`;
 }
 
 // Pull a question list out of the model reply. The level is validated against
@@ -3230,7 +3237,13 @@ export const ai: AiService = {
     concepts: ConceptChecklistItem[],
     objectives: string[],
     language: ContentLanguage = "en",
-    options: { skipAi?: boolean; timeoutMs?: number; subject?: string } = {},
+    options: {
+      skipAi?: boolean;
+      timeoutMs?: number;
+      subject?: string;
+      chapterText?: string;
+      unprobed?: string[];
+    } = {},
   ): Promise<GeneratedQuestion[]> {
     const fallback = () => fallbackQuestions(gaps, "retest", language);
     if (!anyAiAvailable()) return fallback();
@@ -3238,24 +3251,54 @@ export const ai: AiService = {
       const family = options.subject ? getFamily(options.subject) : "other";
       const dirs = getPhaseDirectives(family, "retest");
       const sysExtra = dirs.system?.length ? ` ${dirs.system.join(" ")}` : "";
-      const raw = await ask(
-        RETEST_SYSTEM + sysExtra + outputInstruction(language),
-        questionUserPrompt(gaps, concepts, objectives, {
-          chapterText: (options as any).chapterText,
-        }),
-        { schema: questionSetSchema(false) },
-      );
-      const questions = extractQuestions(raw, 5);
+      const system = RETEST_SYSTEM + sysExtra + outputInstruction(language);
+      const prompt = questionUserPrompt(gaps, concepts, objectives, {
+        chapterText: options.chapterText,
+        unprobed: options.unprobed,
+      });
+      const raw = await ask(system, prompt, {
+        schema: questionSetSchema(false),
+      });
+      const questions = extractQuestions(raw, 10);
       if (!questions) return malformed("generateRetestQuestions", fallback);
+      let final = enforceSingleBeyondText(questions);
       // A retest that never climbs or never leaves the textbook is not the proof
-      // it was written to be. Surface it as a signal; do not fake a fix.
-      if (retestIsSoft(questions)) {
-        aiTelemetry.softRetest += 1;
-        console.error(
-          "[ai] generateRetestQuestions produced a soft set (fewer than 3 levels or no beyond-text question)",
-        );
+      // it was written to be. Give the writer exactly one corrective pass; if it
+      // is still soft, keep the better of the two and surface the signal.
+      if (retestIsSoft(final)) {
+        try {
+          const repairedRaw = await ask(
+            `${system} The previous set was too soft: climb to at least three distinct cognitive levels and make exactly one question a beyond-textbook scenario.`,
+            prompt,
+            { schema: questionSetSchema(false) },
+          );
+          const repaired = repairedRaw
+            ? extractQuestions(repairedRaw, 10)
+            : null;
+          if (repaired) {
+            const repairedFinal = enforceSingleBeyondText(repaired);
+            if (!retestIsSoft(repairedFinal)) {
+              final = repairedFinal;
+            } else {
+              aiTelemetry.softRetest += 1;
+              console.error(
+                "[ai] generateRetestQuestions produced a soft set (fewer than 3 levels or no beyond-text question)",
+              );
+            }
+          } else {
+            aiTelemetry.softRetest += 1;
+            console.error(
+              "[ai] generateRetestQuestions produced a soft set (fewer than 3 levels or no beyond-text question)",
+            );
+          }
+        } catch {
+          aiTelemetry.softRetest += 1;
+          console.error(
+            "[ai] generateRetestQuestions produced a soft set (fewer than 3 levels or no beyond-text question)",
+          );
+        }
       }
-      return questions;
+      return final;
     } catch (error) {
       return degraded("generateRetestQuestions", error, fallback);
     }

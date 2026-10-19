@@ -347,7 +347,10 @@ The retest has two parts: generating questions, then grading each answer. Two
 design goals matter above all: **each question is graded alone against exactly
 one focus** (so getting one right can't secretly help the others), and the
 questions are an **exam-readiness check, not a re-quiz** — never easy, tagged
-with a cognitive level, and carrying at least one scenario beyond the textbook.
+with a cognitive level, six to ten in number, and carrying exactly one scenario
+beyond the textbook. The writer is grounded in the chapter's own text and told
+which ideas the recall sweep never judged (`unprobed`), so it cannot substitute
+a narrow quiz for the chapter-wide proof.
 
 **Part A — Generate the questions:**
 
@@ -370,13 +373,20 @@ Receiving: { questions: [ { question: "...", level: "application",
                             focus: ["..."], beyondText?: true }, ... ] }
 ```
 
+> **One corrective pass, not a silent soft set.** If the parsed set climbs fewer
+> than three cognitive levels or carries no beyond-textbook question,
+> (`retestIsSoft`), the writer is re-asked once with a corrective instruction.
+> The repaired set replaces the first only when it is no longer soft; otherwise
+> the signal is counted and logged. `enforceSingleBeyondText` clears any extra
+> beyond-text flags, so "exactly one" is a contract rather than a hope.
+
 > **Exam-readiness, not a mirror.** Earlier the retest echoed the student's own
 > recall wording; that made it a quiz on their phrasing and collapsed the
 > before/after delta, so it was reversed (decision #19). The writer now receives
 > the gap list *and* the chapter's stated objectives, and is told the questions
 > must never be easy, must include fine detail, must climb all five cognitive
 > levels (`knowledge` → `compare_contrast`, from
-> `apps/server/src/ai/questions.ts`), and must include at least one `beyondText`
+> `apps/server/src/ai/questions.ts`), and must include exactly one `beyondText`
 > scenario the chapter doesn't cover. The chapter's subject is still passed,
 > injecting family-specific directives. (`RETEST_SYSTEM` / `questionUserPrompt`
 > in `apps/server/src/ai/gemini.ts`.)
@@ -461,20 +471,36 @@ Receiving: { score: 100, gaps: { covered, missing, misconceptions, score } }
 flowchart LR
   A["1 · GET /result"] --> B["2 · before = mean of recall attempts<br/>after = avg of every<br/>retest answer"]
   B --> C["3 · delta = after − before<br/>+ live durationMs"]
-  C --> D{"4 · which outcome?"}
+  C --> V["4 · verdict: merged mastery by<br/>book section; unprobed counts zero"]
+  V --> D{"5 · which outcome?"}
   D -->|"delta > 0"| E["Improved — done ✓"]
   D -->|"delta ≤ 0"| F["Still open — retest /<br/>relearn / fresh recall"]
   D -->|"nothing missing"| G["Nothing missing — done ✓"]
 ```
 
-> **Trace:** fetch result → compute the metrics → pick the outcome → suggest the
-> next move. After two consecutive no-improvement rounds, the app suggests
-> coming back later.
+> **Trace:** fetch result → compute the metrics → derive the verdict → pick the
+> outcome → suggest the next move. After two consecutive no-improvement rounds,
+> the app suggests coming back later.
 
 ```
-Receiving: { before: 60, after: 85, delta: 25, durationMs: 124000 }
-Data kept: nothing — reads earlier attempts
+Receiving: { before: 60, after: 85, delta: 25, durationMs: 124000,
+             verdict: { passed: false, overall: 68, threshold: 70,
+                        unprobedSections: 1,
+                        sections: [ { key: "2.1", label: "2.1",
+                                      score: 82, probed: true }, ... ] } }
+Data kept: nothing — reads earlier attempts and the chapter checklist
 ```
+
+> **Why a verdict on top of the delta.** "The score went up" is not "this would
+> pass". `retest-verdict.ts` merges mastery from every attempt (retest answers
+> override recall for the same idea), groups the chapter by the book's own
+> sections, and weights each idea by its concept weight: mastered earns full,
+> partial earns half, a misconception or an unjudged idea earns nothing.
+> Unprobed ideas stay in the denominator, and a pass requires **no section
+> unprobed** at **≥70%**. The result UI shows the per-section breakdown so a
+> skipped lesson reads as "not checked", never as mastered. The dashboard list
+> deliberately omits the verdict (it would cost a checklist read per card); only
+> the session result carries it.
 
 ---
 

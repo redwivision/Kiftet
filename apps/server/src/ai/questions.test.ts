@@ -11,6 +11,7 @@ import {
 import {
   COGNITIVE_LEVELS,
   enforceRecallMix,
+  enforceSingleBeyondText,
   fallbackLevels,
   isCognitiveLevel,
   judgeClosedAnswer,
@@ -75,6 +76,80 @@ describe("the two writers", () => {
     expect(prompt).toContain(CONCEPT.conceptText);
     expect(prompt).toContain("STATED OBJECTIVES");
     expect(prompt).toContain(OBJECTIVE);
+  });
+
+  test("the user prompt carries the chapter text and the unprobed leftovers", () => {
+    const prompt = questionUserPrompt(GAPS, [CONCEPT], [OBJECTIVE], {
+      chapterText: "Osmosis is the movement of water across a membrane.",
+      unprobed: ["Active transport"],
+    });
+    expect(prompt).toContain("CHAPTER TEXT");
+    expect(prompt).toContain("movement of water across a membrane");
+    expect(prompt).toContain("NOT YET CHECKED");
+    expect(prompt).toContain("Active transport");
+    // Both blocks are optional; the prompt is unchanged without them.
+    const bare = questionUserPrompt(GAPS, [CONCEPT], [OBJECTIVE]);
+    expect(bare).not.toContain("CHAPTER TEXT");
+    expect(bare).not.toContain("NOT YET CHECKED");
+  });
+
+  test("only the first beyond-text question survives, and a soft set gets one repair", async () => {
+    const systems: string[] = [];
+    __overrideProviderForTests("gemini", async (_model, system) => {
+      systems.push(system);
+      if (systems.length === 1) {
+        // First answer: one level only, no spread — a soft set.
+        return JSON.stringify({
+          questions: [
+            {
+              question: "What is osmosis?",
+              level: "knowledge",
+              targetConcept: CONCEPT.conceptText,
+            },
+          ],
+        });
+      }
+      return JSON.stringify({
+        questions: [
+          { question: "Define it.", level: "knowledge", beyondText: true },
+          { question: "Use it.", level: "application", beyondText: true },
+          {
+            question: "Compare it.",
+            level: "compare_contrast",
+            beyondText: false,
+          },
+        ],
+      });
+    });
+    const questions = await ai.generateRetestQuestions(
+      GAPS,
+      [CONCEPT],
+      [OBJECTIVE],
+    );
+    // One corrective call, and the repaired set is the one returned.
+    expect(systems).toHaveLength(2);
+    expect(systems[1]).toContain("too soft");
+    expect(questions).toHaveLength(3);
+    expect(questions.filter((q) => q.beyondText)).toHaveLength(1);
+  });
+
+  test("a 6–10 question prompt keeps at most ten of what the writer sent", async () => {
+    __overrideProviderForTests("gemini", async () =>
+      JSON.stringify({
+        questions: Array.from({ length: 12 }, (_, i) => ({
+          question: `Question ${i + 1}`,
+          level: COGNITIVE_LEVELS[i % COGNITIVE_LEVELS.length],
+          targetConcept: CONCEPT.conceptText,
+          beyondText: i === 0,
+        })),
+      }),
+    );
+    const questions = await ai.generateRetestQuestions(
+      GAPS,
+      [CONCEPT],
+      [OBJECTIVE],
+    );
+    expect(questions).toHaveLength(10);
   });
 
   test("recall and retest are given different system prompts", async () => {
@@ -465,6 +540,31 @@ describe("recall formats", () => {
     ).toBe(true);
     // An empty set is not judged.
     expect(retestIsSoft([])).toBe(false);
+  });
+
+  test("exactly one beyond-text question survives, however many the writer marked", () => {
+    const set = [
+      { id: 1, beyondText: false },
+      { id: 2, beyondText: true },
+      { id: 3 },
+      { id: 4, beyondText: true },
+    ];
+    const out = enforceSingleBeyondText(set);
+    expect(out.map((q) => q.beyondText)).toEqual([
+      false,
+      true,
+      undefined,
+      false,
+    ]);
+    // The original objects are not mutated.
+    expect(set[3]?.beyondText).toBe(true);
+    // A set with none is left alone — that is the soft-set signal's job.
+    const untouched = enforceSingleBeyondText<{
+      id: number;
+      beyondText?: boolean;
+    }>([{ id: 1 }]);
+    expect(untouched).toHaveLength(1);
+    expect(untouched[0]?.beyondText).toBeUndefined();
   });
 
   // The closed-answer route grades a multiple-choice/fill-in-the-blank by

@@ -295,3 +295,20 @@
     say which section is being checked and, in `both` mode, order the student's
     flagged gaps first. The user's request budget is still charged once per route;
     the extra chunks spend provider rate limit, not the student's allowance.
+24. **Exam readiness is a verdict, not a delta — and it cannot be passed by
+    skipping half the chapter.** The result screen used to report only
+    before/after and let "did the score go up?" stand in for "would this pass?".
+    The server now derives a chapter-wide verdict (`retest-verdict.ts`) from the
+    merged mastery of *every* attempt, grouped by the book's own sections
+    (`buildCoverageUnits`). Each idea earns its concept weight when mastered and
+    half when partial; a misconception or an idea nobody judged earns nothing.
+    Two rules keep it honest: unprobed ideas stay in the denominator (so a set
+    that quietly avoided a section cannot report a high score), and a pass
+    requires **no section left unprobed** at a weighted **≥70%**. The result
+    payload carries the verdict plus the per-section breakdown, and the UI shows
+    which sections are solid, weak, or still unchecked. The retest itself was
+    hardened to feed that verdict: 6–10 questions (up from 3–5), exactly one
+    beyond-textbook scenario (extras cleared by `enforceSingleBeyondText`), the
+    chapter's raw text and the recall sweep's `unprobed` ideas in the writer
+    prompt, and one corrective pass when `retestIsSoft` still reports a set that
+    never climbs or never leaves the book.

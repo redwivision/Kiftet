@@ -151,6 +151,20 @@ export const en = {
   "result-points": "{delta} points",
   "result-before": "Before",
   "result-after": "After",
+  "verdict-title": "Exam readiness",
+  "verdict-passed": "Passed",
+  "verdict-failed": "Not yet",
+  "verdict-incomplete": "Not proven yet",
+  "verdict-score": "{score}%",
+  "verdict-pass-body":
+    "Every section was checked and the weighted score is {score}% — above the {threshold}% pass mark.",
+  "verdict-fail-body":
+    "The weighted score across every section is {score}%; a pass needs {threshold}%.",
+  "verdict-incomplete-body":
+    "{n} sections were never checked, so this cannot be called a pass yet.",
+  "verdict-section": "Section {label}",
+  "verdict-part": "Part {n}",
+  "verdict-unprobed": "not checked",
   "retest-the-gaps": "Test the missing ideas again",
   "relearn-short-version": "Read the short lesson again",
   "start-over": "Start over and say what you remember",
@@ -1090,6 +1104,20 @@ export const am: Record<MessageKey, string> = {
   "result-points": "{delta} ነጥብ",
   "result-before": "በፊት",
   "result-after": "በኋላ",
+  "verdict-title": "የፈተና ዝግጁነት",
+  "verdict-passed": "አልፈሃል",
+  "verdict-failed": "እስካሁን አልቻለም",
+  "verdict-incomplete": "እስካሁን አልተረጋገጠም",
+  "verdict-score": "{score}%",
+  "verdict-pass-body":
+    "ሁሉም ክፍል ተመርምሯል፤ ክብደቱ የተሰጠው ውጤት {score}% ነው — ከ{threshold}% የማለፊያ መስመር በላይ።",
+  "verdict-fail-body":
+    "በሁሉም ክፍል ላይ ክብደቱ የተሰጠው ውጤት {score}% ነው፤ ለማለፍ {threshold}% ያስፈልጋል።",
+  "verdict-incomplete-body":
+    "{n} ክፍሎች በጭራሽ አልተመረመሩም፤ ስለዚህ ይህን ማለፍ ብሎ መጥራት አይቻልም።",
+  "verdict-section": "ክፍል {label}",
+  "verdict-part": "ክፍል {n}",
+  "verdict-unprobed": "አልተመረመረም",
   "retest-the-gaps": "ክፍተቶቹን ድጋሚ ፈትን",
   "relearn-short-version": "አጭሩን ማብራሪያ እንደገና ተማር",
   "start-over": "በቀዝቃዛ ማስታወስ ከመጀመሪያ ጀምር",

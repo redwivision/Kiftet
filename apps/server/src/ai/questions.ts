@@ -287,6 +287,25 @@ export function retestIsSoft(
 }
 
 /**
+ * Keep exactly one beyond-textbook question, which is what the retest prompt
+ * asks for. A writer that marks several gets the extras cleared rather than the
+ * whole set thrown away; a writer that marks none is left alone, because that
+ * is the soft-set signal `retestIsSoft` reports. Pure and exported so the
+ * contract is testable without a live model.
+ */
+export function enforceSingleBeyondText<T extends { beyondText?: boolean }>(
+  questions: readonly T[],
+): T[] {
+  let seen = false;
+  return questions.map((q) => {
+    if (q.beyondText !== true) return q;
+    if (seen) return { ...q, beyondText: false };
+    seen = true;
+    return q;
+  });
+}
+
+/**
  * The levels a deterministic fallback question uses, cycled, so even the
  * no-model path produces a spread instead of three identical "explain it"
  * prompts. Recall stays gentle — mostly knowledge checks with the occasional

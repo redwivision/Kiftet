@@ -29,6 +29,7 @@ import {
   type Gaps,
   type RecallMode,
   type SessionQuestion,
+  type SessionVerdict,
   type StudyPlan,
   StudyProvider,
   useStudy,
@@ -2075,22 +2076,25 @@ function ResultPhase({
 
   if (state.allCovered) {
     return (
-      <ResultPanel
-        tone="sage"
-        headline={t("result-none-title")}
-        body={t("result-none-body")}
-        metric={durationMetric(result, t)}
-        actions={
-          <Button
-            className="w-full justify-center"
-            disabled={busy}
-            onClick={() => void onDone()}
-          >
-            {t("done-for-now")}
-          </Button>
-        }
-        before={result.before ?? 0}
-      />
+      <div className="space-y-6">
+        <ResultPanel
+          tone="sage"
+          headline={t("result-none-title")}
+          body={t("result-none-body")}
+          metric={durationMetric(result, t)}
+          actions={
+            <Button
+              className="w-full justify-center"
+              disabled={busy}
+              onClick={() => void onDone()}
+            >
+              {t("done-for-now")}
+            </Button>
+          }
+          before={result.before ?? 0}
+        />
+        <ExamVerdict verdict={result.verdict} />
+      </div>
     );
   }
 
@@ -2118,6 +2122,7 @@ function ResultPhase({
           after={result.after ?? 0}
           delta={result.delta ?? 0}
         />
+        <ExamVerdict verdict={result.verdict} />
         <StillOpen gaps={state.gaps} />
       </div>
     );
@@ -2169,6 +2174,91 @@ function ResultPhase({
         delta={result.delta ?? 0}
       />
       <StillOpen gaps={state.gaps} />
+    </div>
+  );
+}
+
+// The chapter-wide exam verdict: one honest pass/fail derived on the server
+// from every judged idea and every section, including the ones nobody probed.
+// The breakdown is the point — a single number cannot show which lesson is
+// still a hole, and a skipped lesson must not look like a mastered one.
+function ExamVerdict({ verdict }: { verdict?: SessionVerdict | null }) {
+  const { t } = useLanguage();
+  if (!verdict || verdict.sections.length === 0) return null;
+  const incomplete = verdict.unprobedSections > 0;
+  const status = verdict.passed
+    ? t("verdict-passed")
+    : incomplete
+      ? t("verdict-incomplete")
+      : t("verdict-failed");
+  const body = incomplete
+    ? t("verdict-incomplete-body", { n: verdict.unprobedSections })
+    : verdict.passed
+      ? t("verdict-pass-body", {
+          score: verdict.overall,
+          threshold: verdict.threshold,
+        })
+      : t("verdict-fail-body", {
+          score: verdict.overall,
+          threshold: verdict.threshold,
+        });
+
+  return (
+    <div
+      className={cn(
+        "rounded-3xl border p-5",
+        verdict.passed
+          ? "border-sage/30 bg-sage/[0.07] dark:border-sage/25"
+          : "border-rust/30 bg-rust/[0.06] dark:border-rust/30",
+      )}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="k-label flex items-center gap-2 text-muted-foreground">
+          {verdict.passed ? (
+            <Check className="size-3.5 text-sage" aria-hidden="true" />
+          ) : (
+            <X className="size-3.5 text-rust" aria-hidden="true" />
+          )}
+          {t("verdict-title")}
+        </p>
+        <p
+          className={cn(
+            "font-display font-semibold text-2xl tabular-nums",
+            verdict.passed ? "text-sage" : "text-rust",
+          )}
+        >
+          {status} · {t("verdict-score", { score: verdict.overall })}
+        </p>
+      </div>
+      <p className="mt-2 text-foreground/80 text-sm leading-6">{body}</p>
+      <ul className="mt-4 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {verdict.sections.map((section, index) => (
+          <li
+            key={section.key}
+            className="flex items-baseline justify-between gap-3 text-sm"
+          >
+            <span className="truncate text-foreground/80">
+              {section.label
+                ? t("verdict-section", { label: section.label })
+                : t("verdict-part", { n: index + 1 })}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 font-medium tabular-nums",
+                !section.probed
+                  ? "text-muted-foreground"
+                  : section.score >= verdict.threshold
+                    ? "text-sage"
+                    : "text-rust",
+              )}
+            >
+              {section.probed
+                ? t("verdict-score", { score: section.score })
+                : t("verdict-unprobed")}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

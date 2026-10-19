@@ -17,14 +17,14 @@ All routes live behind `/api`:
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/recall-questions` | Get diagnostic recall questions (`scope`: `gaps` or `chapter`); a chapter-wide sweep of ≥10 questions (one per numbered section at least), split into provider chunks (Gemini + Groq); each carries a format (multiple_choice / fill_blank / short_answer), the section it covers (`lesson`), and its `origin` (gap / coverage) | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/recall-questions/answer` | Answer one recall question → per-question gaps + merged gaps. Multiple choice and fill-in-the-blank grade deterministically (no AI); only short answer reaches the model | 0/2 (AI in 2) |
-| `GET /api/sessions/:id/recall-gaps` | The merged gap analysis from every recall attempt so far | 0 |
+| `GET /api/sessions/:id/recall-gaps` | The merged gap analysis from every recall attempt so far, including `unprobed` (ideas no answer judged) | 0 |
 | `POST /api/sessions/:id/microlesson` | Get the read-aloud script covering only the gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/plan` | Build the gap roadmap from diagnosed mastery and a 10/20/40 minute budget (deterministic; one batched call for the *why* lines) | 12 |
 | `GET /api/review-due` | Concepts whose latest mastery check is at least two days old | 12 |
 | `GET /api/chapters/:id/guide` | The ordered guide sections for this student (cached per chapter) | 0/11 (AI only on a cache miss) |
-| `POST /api/sessions/:id/retest` | Get exam-readiness questions (5 cognitive levels, detail, one beyond-textbook) for the gaps + objectives | 0/2 (AI in 2) |
+| `POST /api/sessions/:id/retest` | Get 6–10 exam-readiness questions (5 cognitive levels, detail, exactly one beyond-textbook) for the gaps + objectives, grounded in the chapter text and the recall sweep's `unprobed` ideas | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/retest/answer` | Submit retest answers → updated score | 0/2 (AI in 2) |
-| `GET /api/sessions/:id/result` | The before/after coverage delta | 0 |
+| `GET /api/sessions/:id/result` | The before/after coverage delta **and** a chapter-wide exam verdict (weighted per section, ≥70%, no section unprobed) | 0 |
 | `POST /api/sessions/:id/complete` | Mark the session finished | 0 |
 
 Additional routes added for Phase 6 (textbook library + demo quotas):
@@ -104,7 +104,19 @@ mastery-based triage.
 
 `POST /microlesson` and `POST /retest` take only the gap **names**
 (`missing`, `misconceptions`) and rebuild the levels server-side, so a lesson is
-always aimed at the gaps that were actually graded.
+always aimed at the gaps that were actually graded. The retest route also reads
+the session's merged recall gaps itself to learn which ideas were never judged
+(`unprobed`), and passes those plus the chapter's raw text into the writer — no
+new client field is required.
+
+**Exam verdict on the result.** `GET /sessions/:id/result` now also returns
+`verdict` (or `null` when the chapter has no checklist): `{ passed, overall,
+threshold, unprobedSections, sections: [{ key, label, concepts, probedConcepts,
+score, probed }] }`. It is derived server-side from the merged mastery of every
+attempt, grouped into the book's own sections and weighted by concept weight. A
+pass requires `overall >= 70` **and** `unprobedSections === 0`. `GET /sessions`
+(the dashboard list) deliberately omits the verdict to keep one checklist read
+per card from turning into twenty.
 
 `GET /chapters/:id/guide` takes the levels as a query string instead —
 `?language=en&mastery=<urlencoded name:level, name:level>` — because the order
