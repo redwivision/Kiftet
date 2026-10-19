@@ -322,10 +322,18 @@ async function mergeRecallGaps(sessionId: string): Promise<{
   covered: string[];
   missing: string[];
   misconceptions: string[];
+  unprobed: string[];
   mastery: MasteryMap;
   score: number;
   estimated: boolean;
 }> {
+  const session = await db()
+    .select({ chapterId: studySession.chapterId })
+    .from(studySession)
+    .where(eq(studySession.id, sessionId))
+    .limit(1)
+    .then((r) => r[0]);
+
   const rows = await db()
     .select({
       score: attempt.score,
@@ -388,10 +396,33 @@ async function mergeRecallGaps(sessionId: string): Promise<{
   const score = scores.length
     ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
     : 0;
+
+  const unprobed: string[] = [];
+  if (session?.chapterId) {
+    const allConcepts = await db()
+      .select({
+        conceptText: conceptNode.conceptText,
+        sortOrder: conceptNode.sortOrder,
+      })
+      .from(conceptNode)
+      .where(eq(conceptNode.chapterId, session.chapterId))
+      .orderBy(conceptNode.sortOrder);
+    const judged = new Set<string>();
+    for (const c of covered) judged.add(c.toLowerCase());
+    for (const m of missing) judged.add(m.toLowerCase());
+    for (const x of misconceptions) judged.add(x.toLowerCase());
+    for (const k of Object.keys(mastery)) judged.add(k.toLowerCase());
+    for (const c of allConcepts) {
+      if (judged.has(c.conceptText.toLowerCase())) continue;
+      unprobed.push(c.conceptText);
+    }
+  }
+
   return {
     covered: [...covered],
     missing: [...missing],
     misconceptions: [...misconceptions],
+    unprobed,
     mastery,
     score,
     estimated,
