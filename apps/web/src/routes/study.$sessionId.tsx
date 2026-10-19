@@ -1749,7 +1749,7 @@ function LessonPhase() {
 
   return (
     <div className="space-y-6">
-      {showPlan && plan ? (
+      {plan && (
         <>
           <PhaseHeading title={t("plan-title")} text={t("plan-text")} />
           {plan.estimated && (
@@ -1759,80 +1759,49 @@ function LessonPhase() {
           )}
           <PlanView plan={plan} startRetest={startRetest} />
         </>
-      ) : state.guide?.length ? (
-        <>
-          <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
-          {lang === "am" && (
-            <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
-              {t("fluency-am")}
-            </p>
-          )}
-          <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
-            {t("lesson-only-gaps")}
-          </p>
-          {state.guide?.length ? (
-            <GuideView
-              sections={state.guide}
-              estimated={state.guideEstimated}
-              onRecall={(section) =>
-                section.recall &&
-                void narrate(`${section.what} ${section.recall}`)
-              }
-            />
-          ) : (
-            <LessonTextPanel
-              lessonText={state.lessonText}
-              sentences={sentences}
-              activeSentence={activeSentence}
-              recording={reading}
-              narrate={() => void narrate(state.lessonText ?? "")}
-              stopReading={stopReading}
-              onReplaySentence={(i) => void narrate(sentences[i] ?? "")}
-            />
-          )}
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={viewGaps}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-medium text-muted-foreground text-xs transition-colors duration-200 hover:border-gold/40 hover:text-gold"
-            >
-              {t("back-to-gaps")}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
-          {lang === "am" && (
-            <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
-              {t("fluency-am")}
-            </p>
-          )}
-          <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
-            {t("lesson-only-gaps")}
-          </p>
-          {state.guide?.length ? (
-            <GuideView
-              sections={state.guide}
-              estimated={state.guideEstimated}
-              onRecall={(section) =>
-                section.recall &&
-                void narrate(`${section.what} ${section.recall}`)
-              }
-            />
-          ) : (
-            <LessonTextPanel
-              lessonText={state.lessonText}
-              sentences={sentences}
-              activeSentence={activeSentence}
-              recording={reading}
-              narrate={() => void narrate(state.lessonText ?? "")}
-              stopReading={stopReading}
-              onReplaySentence={(i) => void narrate(sentences[i] ?? "")}
-            />
-          )}
-        </>
       )}
+      {state.guide?.length ? (
+        <>
+          <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
+          {lang === "am" && (
+            <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
+              {t("fluency-am")}
+            </p>
+          )}
+          <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
+            {t("lesson-only-gaps")}
+          </p>
+          <GuideView
+            sections={state.guide}
+            estimated={state.guideEstimated}
+            onRecall={(section) =>
+              section.recall &&
+              void narrate(`${section.what} ${section.recall}`)
+            }
+          />
+        </>
+      ) : !plan ? (
+        <>
+          <PhaseHeading title={t("lesson-title")} text={t("lesson-text")} />
+          {lang === "am" && (
+            <p className="mx-auto inline-block rounded-full border border-gold/30 bg-gold/10 px-3 py-1 font-medium text-[0.78rem] text-gold tracking-wide">
+              {t("fluency-am")}
+            </p>
+          )}
+          <p className="font-display font-medium text-foreground text-lg tracking-[-0.01em]">
+            {t("lesson-only-gaps")}
+          </p>
+          <LessonTextPanel
+            lessonText={state.lessonText}
+            sentences={sentences}
+            activeSentence={activeSentence}
+            recording={reading}
+            narrate={() => void narrate(state.lessonText ?? "")}
+            stopReading={stopReading}
+            onReplaySentence={(i) => void narrate(sentences[i] ?? "")}
+          />
+        </>
+      ) : null}
 
       <div className="space-y-2 pt-1">
         {!showPlan && (

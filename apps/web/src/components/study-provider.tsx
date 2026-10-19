@@ -443,6 +443,8 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         recallGaps: null,
         lessonText: null,
         plan: null,
+        guide: null,
+        guideEstimated: false,
         questions: [],
         answered: [],
         questionStage: "retest",
@@ -458,6 +460,8 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
         gaps: action.gaps,
         allCovered: true,
         plan: null,
+        guide: null,
+        guideEstimated: false,
         result: {
           before: Math.round(action.gaps.score),
           after: null,
@@ -842,6 +846,33 @@ export function StudyProvider({
     }
   }, []);
 
+  /**
+   * The guide (phase 11, step 3b): per-concept sections, ordered for this
+   * student, content cached per chapter. Fetched alongside the plan so the
+   * lesson phase has both the route and the reading — and deliberately never
+   * through `run`: a throttled or offline guide must not surface as an error
+   * over a lesson that is already there.
+   */
+  const fetchGuide = useCallback(
+    (gaps: Gaps, chapterId: string) => {
+      void api<Guide>(
+        `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}`,
+      )
+        .then((guide) => {
+          if (!guide.sections?.length) return;
+          dispatch({
+            type: "GUIDE",
+            guide: guide.sections,
+            estimated: guide.estimated,
+          });
+        })
+        .catch(() => {
+          /* additive: the plan and the checklist already carry this phase */
+        });
+    },
+    [lang],
+  );
+
   const fetchLesson = useCallback(
     (budgetMinutes: 10 | 20 | 40 = 20) => {
       const gaps = stateRef.current.gaps;
@@ -849,6 +880,9 @@ export function StudyProvider({
       if (!gaps) return Promise.resolve();
 
       if (!chapterId) return Promise.resolve();
+      // The guide is content the student can start reading while the plan is
+      // still being built; both come back in the same phase.
+      fetchGuide(gaps, chapterId);
       return run(async () => {
         try {
           const plan = await api<StudyPlan>(`/sessions/${sessionId}/plan`, {
@@ -885,7 +919,7 @@ export function StudyProvider({
         }
       }, undefined);
     },
-    [run, sessionId, lang, t],
+    [run, sessionId, lang, t, fetchGuide],
   );
 
   const goLesson = useCallback(() => {
