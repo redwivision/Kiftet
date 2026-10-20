@@ -8,6 +8,7 @@ import { MasteryRing } from "@/components/mastery-ring";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
+import { SYLLABUS_ENABLED } from "@/lib/feature-flags";
 import type { Route } from "./+types/syllabus";
 
 export function meta(_args: Route.MetaArgs) {
@@ -91,6 +92,13 @@ export default function Syllabus() {
   }, []);
 
   useEffect(() => {
+    // The syllabus surface is parked (see `SYLLABUS_ENABLED`): focus is the
+    // uploaded textbook. A direct URL hit goes back to the chapters rather than
+    // loading a view the student cannot act on.
+    if (!SYLLABUS_ENABLED) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
     if (!sessionPending && !session && !getDemoUser()) {
       navigate("/login");
       return;
@@ -189,6 +197,10 @@ export default function Syllabus() {
       setSavingUnit(null);
     }
   };
+
+  // Parked: nothing renders while the redirect above runs, so a disabled
+  // syllabus never flashes its skeleton or fires its data fetches.
+  if (!SYLLABUS_ENABLED) return null;
 
   if (demoExpired) {
     return (

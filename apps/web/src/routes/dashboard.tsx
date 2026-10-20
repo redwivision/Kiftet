@@ -10,6 +10,7 @@ import type { ChapterInfo } from "@/components/study-provider";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
+import { SYLLABUS_ENABLED } from "@/lib/feature-flags";
 import {
   type CachedChapter,
   cacheChapters,
@@ -408,7 +409,7 @@ export default function Dashboard() {
           >
             {t("add-textbook")}
           </Link>
-          {chapters && chapters.length > 0 && (
+          {SYLLABUS_ENABLED && chapters && chapters.length > 0 && (
             <Link
               to="/syllabus"
               className={buttonVariants({

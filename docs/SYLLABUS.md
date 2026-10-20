@@ -91,6 +91,15 @@ happens, "verified" means "we transcribed the official list carefully," not
 "an instructor has signed off."** We don't ship it to students as gospel before
 then.
 
+**Status: the surface is parked.** The team's focus is the textbook students
+were given, and browsing by unit currently shows structure they cannot act on
+(the period figures are untranscribed `NULL`s by design, and no verified source
+for them is on hand). So `/syllabus` is hidden behind `SYLLABUS_ENABLED`
+(`apps/web/src/lib/feature-flags.ts`): the dashboard button is gone and a direct
+URL redirects to the chapters. The route, the endpoints and the components are
+kept intact — this is a pause, not a removal — and the phase-12 transcription
+work resumes when a trustworthy source is available.
+
 ---
 
 ## 4. The asset we're underrating: period allocations
