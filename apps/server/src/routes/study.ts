@@ -1513,22 +1513,61 @@ router.get("/sessions", async (req, res) => {
     )
     .orderBy(desc(studySession.startedAt))
     .limit(20);
-  const out = [];
-  for (const row of rows) {
-    const summary = await resultSummary(row.id, userId);
-    if (!summary) continue;
-    out.push({
+  if (rows.length === 0) {
+    ok(res, []);
+    return;
+  }
+
+  // One query for every attempt across all 20 sessions, rather than a
+  // per-session round-trip. The dashboard used to issue ~41 sequential
+  // queries here (a findSession plus an attempt scan per row) against a
+  // 5-connection pool — the single slowest thing a returning student touches.
+  // Responses are a fixed shape, so grouping is safe: no verdict is computed
+  // on the dashboard path, only the score summary.
+  const attemptRows = await db()
+    .select({
+      sessionId: attempt.sessionId,
+      stage: attempt.stage,
+      score: attempt.score,
+      gapsIdentified: attempt.gapsIdentified,
+    })
+    .from(attempt)
+    .where(
+      inArray(
+        attempt.sessionId,
+        rows.map((row) => row.id),
+      ),
+    )
+    .orderBy(attempt.createdAt);
+
+  const attemptsBySession = new Map<string, typeof attemptRows>();
+  for (const row of attemptRows) {
+    const list = attemptsBySession.get(row.sessionId);
+    if (list) list.push(row);
+    else attemptsBySession.set(row.sessionId, [row]);
+  }
+
+  const out = rows.map((row) => {
+    const { before, after } = summarizeStudyScores(
+      attemptsBySession.get(row.id) ?? [],
+    );
+    const durationMs = row.startedAt
+      ? row.completedAt
+        ? Math.max(0, row.completedAt.getTime() - row.startedAt.getTime())
+        : Math.max(0, Date.now() - row.startedAt.getTime())
+      : null;
+    return {
       id: row.id,
       chapterId: row.chapterId,
       status: row.status,
       startedAt: row.startedAt,
       completedAt: row.completedAt,
-      before: summary.before,
-      after: summary.after,
-      delta: summary.delta,
-      durationMs: summary.durationMs,
-    });
-  }
+      before,
+      after,
+      delta: before != null && after != null ? after - before : null,
+      durationMs,
+    };
+  });
   ok(res, out);
 });
 
