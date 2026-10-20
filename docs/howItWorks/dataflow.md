@@ -158,9 +158,9 @@ of the session use this `sessionId`.
 ### 5.3b Scope — "which topics am I revising?" (phase 11, step 4)
 
 The library already lets the student choose a chapter. A session remains **one
-chapter**, but the student can now narrow it to the book's sections.
-Multi-chapter queues are intentionally outside this phase: they need a separate
-persisted plan and should not be disguised as one chapter session.
+chapter**, but the student can now narrow it to the book's sections. (Studying
+several chapters is a *queue* of these sessions — see 5.3c — so this section
+never has to reason about more than one chapter.)
 
 ```mermaid
 flowchart LR
@@ -195,6 +195,47 @@ keys against the chapter's *current* sections and stores `null` when nothing
 valid is left; it refuses changes after questions are prepared or answers are
 recorded. `scopedUnits` falls back to the whole chapter whenever a scope would
 select nothing. A scope can therefore shrink a session, never empty it.
+
+---
+
+### 5.3c The study queue — "I have four chapters to get through" (phase 11, step 4c)
+
+Planning, not a new session shape. A queue is an ordered list of **complete
+one-chapter sessions**; the student taps chapters on the dashboard in study
+order and the server writes one normal session per chapter up front. The
+sessions are real rows from the first second, so the plan survives a reload, a
+restart and a closed tab, and "what is next" is never client state.
+
+```mermaid
+flowchart LR
+  A["1 · dashboard, 'Plan a study queue'<br/>tap chapters in study order"] --> B["2 · POST /sessions/queue<br/>{ chapterIds }"]
+  B --> C["3 · one study_queue row<br/>+ one session per chapter<br/>first in_progress, rest pending"]
+  C --> D["4 · walk them one at a time<br/>POST /sessions/:id/complete"]
+  D --> E["5 · next pending chapter<br/>becomes in_progress<br/>result screen: 'Next: {title}'"]
+```
+
+> **Trace:** pick several chapters → server plans them → study the first →
+> finishing it opens the second, and the result screen offers it in one tap.
+
+| Route | What it does |
+|---|---|
+| `POST /sessions/queue { chapterIds }` | validates ownership (404 on a stranger), dedupes while keeping order, caps at 12, creates the queue and one session per chapter (`queue_position` = tap order) |
+| `GET /sessions/queue` | the newest plan that still has something unfinished: ordered items plus `done`; empty when there is nothing left to walk |
+| `GET /sessions/:id` | adds read-only `queueNext` (`{sessionId, chapterTitle}`) so the result screen can name the handoff |
+| `POST /sessions/:id/complete` | promotes the next `pending` sibling (status flip + fresh `startedAt`, guarded by `status = 'pending'`) and returns it as `next` |
+| `DELETE /sessions/:id/queue` | drops a chapter that was never opened; 409 once it is `in_progress` or `completed` |
+| `GET /sessions` | history omits `pending` rows — a chapter nobody opened is not a past session |
+
+**Three columns:** `study_queue`, plus `study_session.queue_id` and
+`queue_position` (migration `0017`). `status` gains `pending`; because the
+column is a Drizzle `text({ enum })` rather than a Postgres enum, that costs
+nothing at the database level.
+
+Two things the queue deliberately does not do: it never spans chapters in a
+single session (so scope, baseline, retest and verdict stay exactly as they
+are), and it never blocks a student who has arrived at a `pending` chapter — the
+study screen says "this chapter is still in your queue" and points back to the
+dashboard instead of letting a write hit a 409.
 
 ---
 

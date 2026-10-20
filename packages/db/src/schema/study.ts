@@ -288,6 +288,31 @@ export type StoredQuestion = {
   origin?: "gap" | "coverage";
 };
 
+/**
+ * An ordered study queue (phase 11, step 4c): the chapters a student lined up
+ * to work through, one session each.
+ *
+ * The one-chapter-per-session rule is not bent here — the queue is a *plan*,
+ * not a session. Each queued chapter still gets its own `study_session` row
+ * with its own recall, guide, scope and verdict; the queue only records the
+ * order and which one is open. That is what makes "next chapter" a matter of
+ * opening the row after this one rather than rebuilding a study screen that
+ * understands several chapters at once.
+ */
+export const studyQueue = pgTable(
+  "study_queue",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [index("study_queue_userId_idx").on(table.userId)],
+);
+
 export const studySession = pgTable(
   "study_session",
   {
@@ -296,6 +321,16 @@ export const studySession = pgTable(
     chapterId: text("chapter_id")
       .notNull()
       .references(() => chapter.id, { onDelete: "cascade" }),
+    /**
+     * The queue this session belongs to, when the student planned one
+     * (phase 11, step 4c). Null for a session started from a single chapter,
+     * which is every row written before queues existed.
+     */
+    queueId: text("queue_id").references(() => studyQueue.id, {
+      onDelete: "cascade",
+    }),
+    /** This session's place in its queue; null outside a queue. */
+    queuePosition: integer("queue_position"),
     startedAt: timestamp("started_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -329,13 +364,22 @@ export const studySession = pgTable(
     recallIndex: integer("recall_index").default(0).notNull(),
     retestQuestions: jsonb("retest_questions").$type<StoredQuestion[] | null>(),
     retestIndex: integer("retest_index").default(0).notNull(),
-    status: text("status", { enum: ["in_progress", "completed"] })
+    /**
+     * "pending" is a queued chapter that has not been opened yet (phase 11,
+     * step 4c): its row exists so the whole queue is durable and ordered, but
+     * it is not a study session in progress. It is excluded from the dashboard
+     * history and promoted to "in_progress" when the chapter before it is
+     * completed. Kept as a TS-level enum on a text column, so adding a value
+     * never needs a Postgres enum migration.
+     */
+    status: text("status", { enum: ["pending", "in_progress", "completed"] })
       .default("in_progress")
       .notNull(),
   },
   (table) => [
     index("study_session_userId_idx").on(table.userId),
     index("study_session_chapterId_idx").on(table.chapterId),
+    index("study_session_queueId_idx").on(table.queueId),
   ],
 );
 
@@ -455,9 +499,21 @@ export const studySessionRelations = relations(
       fields: [studySession.chapterId],
       references: [chapter.id],
     }),
+    queue: one(studyQueue, {
+      fields: [studySession.queueId],
+      references: [studyQueue.id],
+    }),
     attempts: many(attempt),
   }),
 );
+
+export const studyQueueRelations = relations(studyQueue, ({ one, many }) => ({
+  user: one(user, {
+    fields: [studyQueue.userId],
+    references: [user.id],
+  }),
+  sessions: many(studySession),
+}));
 
 export const attemptRelations = relations(attempt, ({ one }) => ({
   session: one(studySession, {

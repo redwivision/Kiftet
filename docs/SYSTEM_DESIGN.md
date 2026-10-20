@@ -77,9 +77,11 @@ The authoritative schema and migration history are in
    and untouched concepts, with already-solid items last. Guide sections
    are cached per chapter/concept/language and linked to deterministic source
    quotes and offsets in the chapter text.
-6. **Retest and compare.** The current loop offers retest after study and shows
-   per-concept/overall change. Optional pre/post retesting and broader
-   multi-chapter/topic scope remain planned.
+6. **Retest and compare.** The loop offers retest after study and shows
+   per-concept/overall change. Optional pre/post retesting is shipped (the
+   post-test reuses the baseline's exact questions), as are topic scope inside a
+   chapter and a queue that plans several chapters as an ordered list of
+   one-chapter sessions.
 
 ## 4. API surface
 

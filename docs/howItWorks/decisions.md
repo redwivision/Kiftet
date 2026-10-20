@@ -343,5 +343,23 @@
     `after` and `delta` are `null` and the exam-readiness verdict is withheld.
     A baseline question set and index live on `study_session` so a refresh
     resumes the test; attempt rows distinguish `pretest`, `recall`, and
-    `retest`. One chapter remains the session boundary; a multi-chapter queue
-    needs a separate product decision.
+    `retest`. One chapter remains the session boundary; several of them are
+    walked as a queue instead (decision 27).
+27. **A queue is an ordered list of one-chapter sessions, not a multi-chapter
+    session.** Studying several chapters in one sitting is a real habit — the
+    syllabus hands a student whole units — but making a session span chapters
+    would force scope, the baseline, the retest and the verdict to all learn
+    what "the chapter" means, and every one of them would get it subtly wrong
+    (which chapter's guide? which retest score?). So a queue is **durable
+    planning, not a new session shape**: `POST /sessions/queue` creates one
+    ordinary session per chapter in a `study_queue`, the first `in_progress` and
+    the rest `pending`, and "what comes next" is a row rather than client state.
+    That buys resume-after-reload, a dashboard that can show the plan, and a
+    handoff at the end of a session with no new study semantics at all. The
+    costs are honest ones: `pending` is a third status every reader of
+    `study_session` must not trip on (history lists omit it, the drop endpoint
+    only touches it, writes refuse it), and promoting the next chapter is a
+    status flip guarded by `status = 'pending'` so two concurrent completions
+    cannot open two chapters. Plans are capped at 12 chapters — beyond that it
+    is a to-do list, not a study plan — and duplicates are deduped rather than
+    rejected, because the same chapter twice is a mis-tap, not an error.

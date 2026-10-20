@@ -27,12 +27,12 @@ Ethiopia's national exam pass rate has climbed from 3.2% (2023) to 5.4% (2024) t
 
 The loop is **Recall → Diagnose → Relearn → Re-test**, and it works end to end
 today. The current study flow includes per-concept diagnosis and an ordered,
-cached guide. Phase 11's remaining scope is student-chosen multi-chapter/topic
-study and making re-test *optional* before or after studying.
+cached guide. A session can also be narrowed to topics inside a chapter, tested
+before and after studying, and planned as part of a queue of chapters.
 
 1. Student picks a **unit** from the official syllabus structure, or their own
-chapter. Choosing broader multi-chapter/topic scope remains planned Phase 11
-work.
+   chapter. They can narrow the session to the sections inside it, or queue
+   several chapters and walk them in order.
 2. Student speaks a cold explanation of what they remember — no notes, no
    prompting.
 3. System transcribes and grades the explanation against that chapter's

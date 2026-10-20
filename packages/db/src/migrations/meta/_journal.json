@@ -120,6 +120,13 @@
       "when": 1792430914184,
       "tag": "0016_stale_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792468601016,
+      "tag": "0017_low_genesis",
+      "breakpoints": true
     }
   ]
 }

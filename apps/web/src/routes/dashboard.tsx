@@ -39,6 +39,20 @@ type SessionHistory = {
   durationMs: number | null;
 };
 
+type QueueItem = {
+  sessionId: string;
+  chapterId: string;
+  chapterTitle: string;
+  position: number;
+  status: "pending" | "in_progress" | "completed";
+};
+
+type ActiveQueue = {
+  queueId: string | null;
+  items: QueueItem[];
+  done: number;
+};
+
 type ReviewDue = {
   chapterId: string;
   chapterTitle: string;
@@ -112,6 +126,15 @@ export default function Dashboard() {
   const [misconceptions, setMisconceptions] = useState<MisconceptionMap | null>(
     null,
   );
+  const [queue, setQueue] = useState<ActiveQueue | null>(null);
+  // Planning a queue is a mode, not a dialog: the chapters grid is already the
+  // place where chapters are chosen, so picking several uses the same cards.
+  const [queuePlanning, setQueuePlanning] = useState(false);
+  // The order the student tapped matters — it is the order they will study —
+  // so this is an array, and the badge on each card is its position in it.
+  const [queuePicks, setQueuePicks] = useState<string[]>([]);
+  const [queueBusy, setQueueBusy] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   // The wait is the whole point of showing the number, so it counts down in the
   // open instead of saying "a moment" and leaving the student to guess. It
@@ -237,6 +260,13 @@ export default function Dashboard() {
       .catch(() => {
         // Non-fatal: cards just render without a history line.
       });
+    api<ActiveQueue>("/sessions/queue")
+      .then((active) => {
+        if (!cancelled) setQueue(active.queueId ? active : null);
+      })
+      .catch(() => {
+        // Non-fatal: without it the dashboard simply offers no queue card.
+      });
     api<ReviewDue[]>("/review-due")
       .then((rows) => {
         if (cancelled) return;
@@ -286,6 +316,61 @@ export default function Dashboard() {
       }
       setError(apiError(err));
       setStarting(null);
+    }
+  };
+
+  const togglePick = (chapterId: string) => {
+    setQueuePicks((picks) =>
+      picks.includes(chapterId)
+        ? picks.filter((id) => id !== chapterId)
+        : [...picks, chapterId],
+    );
+  };
+
+  const cancelPlanning = () => {
+    setQueuePlanning(false);
+    setQueuePicks([]);
+    setQueueError(null);
+  };
+
+  const planQueue = async () => {
+    if (queuePicks.length === 0) return;
+    setQueueBusy(true);
+    setQueueError(null);
+    try {
+      const res = await api<{
+        queueId: string;
+        sessions: { sessionId: string }[];
+      }>("/sessions/queue", {
+        method: "POST",
+        body: JSON.stringify({ chapterIds: queuePicks }),
+      });
+      const first = res.sessions[0]?.sessionId;
+      setQueuePlanning(false);
+      setQueuePicks([]);
+      if (first) navigate(`/study/${first}`);
+      else setQueueBusy(false);
+    } catch (err) {
+      setQueueError(apiError(err));
+      setQueueBusy(false);
+    }
+  };
+
+  const dropFromQueue = async (sessionId: string) => {
+    if (!queue) return;
+    const before = queue;
+    // Optimistic: dropping a chapter the student never opened has no
+    // consequences to confirm, and a spinner on a chip would be heavier than
+    // the act. A failure puts it back and says why.
+    setQueue({
+      ...queue,
+      items: queue.items.filter((item) => item.sessionId !== sessionId),
+    });
+    try {
+      await api(`/sessions/${sessionId}/queue`, { method: "DELETE" });
+    } catch (err) {
+      setQueue(before);
+      setQueueError(apiError(err));
     }
   };
 
@@ -423,6 +508,64 @@ export default function Dashboard() {
         </div>
       )}
 
+      {queue && queue.items.length > 0 && (
+        <section className="inner-surface mb-8 border p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <p className="k-label">{t("queue-title")}</p>
+              <h2 className="font-display font-semibold text-lg tracking-tight">
+                {t("queue-left", { n: queue.items.length })}
+              </h2>
+              {queue.done > 0 && (
+                <p className="text-muted-foreground text-sm">
+                  {t("queue-done", { n: queue.done })}
+                </p>
+              )}
+            </div>
+            {queueError && (
+              <p className="text-rust text-sm" role="alert">
+                {queueError}
+              </p>
+            )}
+          </div>
+          <ol className="mt-4 space-y-2">
+            {queue.items.map((item, i) => (
+              <li
+                key={item.sessionId}
+                className="flex items-center gap-3 rounded-2xl border border-border/70 px-3 py-2 text-sm dark:border-white/10"
+              >
+                <span className="grid size-6 shrink-0 place-items-center rounded-full border border-gold/30 bg-gold/10 font-medium text-[0.72rem] text-gold">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  {item.chapterTitle}
+                </span>
+                {item.status === "in_progress" ? (
+                  <Link
+                    to={`/study/${item.sessionId}`}
+                    className="shrink-0 font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
+                  >
+                    {t("queue-continue")}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={t("queue-remove", {
+                      title: item.chapterTitle,
+                    })}
+                    title={t("queue-remove", { title: item.chapterTitle })}
+                    className="shrink-0 rounded-full px-2 text-muted-foreground transition-colors duration-200 hover:text-rust"
+                    onClick={() => void dropFromQueue(item.sessionId)}
+                  >
+                    ×
+                  </button>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       {misconceptions && (
         <div className="inner-surface mb-8 border p-5">
           <div className="flex items-start justify-between gap-3">
@@ -519,7 +662,24 @@ export default function Dashboard() {
       )}
 
       {chapters && chapters.length > 0 && (
-        <ul className="grid gap-4 md:grid-cols-2">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-muted-foreground text-sm">
+            {t("queue-plan-hint")}
+          </p>
+          <Button
+            variant={queuePlanning ? "outline" : "default"}
+            size="sm"
+            onClick={() =>
+              queuePlanning ? cancelPlanning() : setQueuePlanning(true)
+            }
+          >
+            {queuePlanning ? t("queue-cancel") : t("queue-plan")}
+          </Button>
+        </div>
+      )}
+
+      {chapters && chapters.length > 0 && (
+        <ul className="grid gap-4 pb-24 md:grid-cols-2">
           {chapters.map((chapter, i) => {
             const last = lastFor(chapter.id);
             const chapterTitle = visibleChapterTitle(chapter.title);
@@ -549,8 +709,12 @@ export default function Dashboard() {
                     reviewDue={reviewsDue.find(
                       (item) => item.chapterId === chapter.id,
                     )}
-                    morph={i === 0}
-                    onStart={() => start(chapter)}
+                    morph={i === 0 && !queuePlanning}
+                    picking={queuePlanning}
+                    pickOrder={queuePicks.indexOf(chapter.id)}
+                    onStart={() =>
+                      queuePlanning ? togglePick(chapter.id) : start(chapter)
+                    }
                   />
                   <ChapterHistory last={last} />
                 </div>
@@ -558,6 +722,32 @@ export default function Dashboard() {
             );
           })}
         </ul>
+      )}
+
+      {queuePlanning && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-border/70 border-t bg-panel/95 backdrop-blur-sm dark:border-white/10">
+          <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            <p className="min-w-0 text-sm">
+              {queuePicks.length === 0
+                ? t("queue-pick-none")
+                : queuePicks.length === 1
+                  ? t("queue-pick-count-one")
+                  : t("queue-pick-count", { n: queuePicks.length })}
+            </p>
+            <span className="flex shrink-0 items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={cancelPlanning}>
+                {t("queue-cancel")}
+              </Button>
+              <Button
+                size="sm"
+                disabled={queuePicks.length === 0 || queueBusy}
+                onClick={() => void planQueue()}
+              >
+                {queueBusy ? t("opening-ellipsis") : t("queue-start")}
+              </Button>
+            </span>
+          </div>
+        </div>
       )}
     </main>
   );
@@ -596,6 +786,8 @@ function ChapterCard({
   percent,
   reviewDue,
   morph = false,
+  picking = false,
+  pickOrder = -1,
   onStart,
 }: {
   chapter: ChapterInfo;
@@ -604,15 +796,25 @@ function ChapterCard({
   percent: number;
   reviewDue?: ReviewDue;
   morph?: boolean;
+  /** Queue-planning mode: tapping the card picks it instead of starting it. */
+  picking?: boolean;
+  /** This chapter's position in the queue being planned, or -1. */
+  pickOrder?: number;
   onStart: () => void;
 }) {
   const { t } = useLanguage();
+  const picked = picking && pickOrder >= 0;
   return (
     <button
       type="button"
       onClick={onStart}
       disabled={starting}
-      className="group w-full rounded-3xl border border-border/70 bg-panel/80 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(242,239,233,0.18)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10"
+      aria-pressed={picking ? picked : undefined}
+      className={`group w-full rounded-3xl border bg-panel/80 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(242,239,233,0.18)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 ${
+        picked
+          ? "border-gold/60 shadow-[0_20px_50px_-24px_rgba(242,239,233,0.22)]"
+          : "border-border/70"
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1.5">
@@ -630,7 +832,13 @@ function ChapterCard({
             className={morph ? "[view-transition-name:kiftet-ring]" : undefined}
           />
           <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
-            {starting ? t("opening-ellipsis") : t("start-review")}
+            {starting
+              ? t("opening-ellipsis")
+              : picking
+                ? picked
+                  ? t("queue-picked", { n: pickOrder + 1 })
+                  : t("queue-add")
+                : t("start-review")}
           </span>
         </span>
       </div>

@@ -18,7 +18,8 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `guide_section` | Cached guide content for one chapter concept and language | `chapterId`, `conceptText`, `language`, structured guide content and source anchor; unique `(chapterId, conceptText, language)` |
 | `plan_content` | **Unused since v1.** Grounded per-step content cache from the pre-roadmap plan | `chapterId`, `conceptText`, `stepType`, `language`, `planVersion`; unique across all five fields |
 | `plan_step_check` | **Unused since v1.** The v0 plan's per-concept check (the plan is a roadmap now, not a quiz) | `sessionId`, `conceptText`, `responseText`; unique `(sessionId, conceptText)` |
-| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`in_progress`/`completed`), `startedAt`/`completedAt`, `recallMode` (`blurting`/`targeted`/`both`), nullable `scopeKeys` (section keys; null = whole chapter), `pretestQuestions` + `pretestIndex`, `recallQuestions` + `recallIndex`, `retestQuestions` + `retestIndex` |
+| `study_queue` | A planned set of chapters to walk in order (phase 11, step 4c) | `userId`, `createdAt`; its sessions point back through `study_session.queueId` |
+| `study_session` | One study attempt: "student reviews chapter X" | `chapterId`, `userId`, `status` (`pending`/`in_progress`/`completed`), `startedAt`/`completedAt`, `recallMode` (`blurting`/`targeted`/`both`), nullable `scopeKeys` (section keys; null = whole chapter), nullable `queueId` + `queuePosition` (the planned order when the session came from a queue), `pretestQuestions` + `pretestIndex`, `recallQuestions` + `recallIndex`, `retestQuestions` + `retestIndex` |
 | `attempt` | One measurement inside a session: baseline, recall, or post-test answer | `id` (client `attemptId`, dedup scoped to session), `sessionId`, `stage` (`pretest`/`recall`/`retest`), `transcriptText`, `gapsIdentified` (mastery map, derived lists, optional matched evidence and estimate flag), `score` (int 0–100) |
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
@@ -142,5 +143,6 @@ the tables are the same names.)
 | `0014_familiar_landau` | `chapter.topics` (saved textbook outline entries) and `chapter.extracted_at` (lazy model-read marker) |
 | `0015_plain_sinister_six` | `study_session.scope_keys` — nullable section scope; null means the whole chapter |
 | `0016_stale_raza` | `study_session.pretest_questions` and `pretest_index` — persistent optional baseline test and progress |
+| `0017_low_genesis` | `study_queue`, plus `study_session.queue_id` / `queue_position` — a planned set of one-chapter sessions walked in order |
 
 ---

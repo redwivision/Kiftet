@@ -244,6 +244,7 @@ function StudyScreen({
   voiceAllowed: boolean;
 }) {
   const navigate = useNavigate();
+  const { sessionId: currentSessionId } = useParams();
   const { t } = useLanguage();
   const { state, retryAgain, retryLast, completeSession, clearError } =
     useStudy();
@@ -291,8 +292,33 @@ function StudyScreen({
     );
   }
 
+  // A queued chapter that has not come up yet. It is a real session (so the
+  // plan survives a reload), but starting it before its turn would skip ahead
+  // of the queue, and the server refuses every write to it.
+  if (state.queueWaiting) {
+    return (
+      <main className="mx-auto grid w-full max-w-md content-center gap-4 px-6 py-24 text-center">
+        <h1 className="font-display font-semibold text-2xl text-foreground tracking-tight">
+          {t("queue-waiting-title")}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          {t("queue-waiting-body")}
+        </p>
+        <Button onClick={() => navigate("/dashboard")}>
+          {t("queue-waiting-cta")}
+        </Button>
+      </main>
+    );
+  }
+
   const done = async () => {
-    await completeSession();
+    const res = await completeSession();
+    // A queued session completes into the next chapter, so "done" means "hand
+    // over", not "go home" — unless the student says otherwise.
+    if (res?.next && res.next.sessionId !== currentSessionId) {
+      navigate(`/study/${res.next.sessionId}`);
+      return;
+    }
     navigate("/dashboard");
   };
 
@@ -377,7 +403,11 @@ function StudyScreen({
               <RetestPhase voiceAllowed={voiceAllowed} />
             )}
             {state.phase === "result" && (
-              <ResultPhase onDone={done} onTryAgain={retryAgain} />
+              <ResultPhase
+                onDone={done}
+                onTryAgain={retryAgain}
+                onNext={done}
+              />
             )}
             {state.phase === "result" && <AddToHomeHint />}
           </div>
@@ -2142,9 +2172,12 @@ function TargetedRecallPhase({ voiceAllowed }: { voiceAllowed: boolean }) {
 function ResultPhase({
   onDone,
   onTryAgain,
+  onNext,
 }: {
   onDone: () => Promise<void>;
   onTryAgain: () => void;
+  /** Complete this session and open the next chapter in the queue. */
+  onNext: () => Promise<void>;
 }) {
   const { state, startRetest, skipRetest, goLesson } = useStudy();
   const { t } = useLanguage();
@@ -2169,6 +2202,20 @@ function ResultPhase({
 
   const improved = (result.delta ?? 0) > 0;
 
+  // The queue handoff. The next chapter is already planned (it is a real
+  // session row), so this is one tap from finishing to starting, which is the
+  // whole point of planning several chapters at once.
+  const queueNext = state.queueNext;
+  const nextButton = queueNext ? (
+    <Button
+      className="w-full justify-center"
+      disabled={busy}
+      onClick={() => void onNext()}
+    >
+      {t("queue-next-cta", { title: queueNext.chapterTitle })}
+    </Button>
+  ) : null;
+
   if (state.allCovered) {
     return (
       <div className="space-y-6">
@@ -2188,9 +2235,12 @@ function ResultPhase({
                   {t("result-start-test")}
                 </Button>
               )}
+              {nextButton}
               <Button
                 className="w-full justify-center"
-                variant={result.after === null ? "outline" : "default"}
+                variant={
+                  queueNext || result.after !== null ? "outline" : "default"
+                }
                 disabled={busy}
                 onClick={() => void onDone()}
               >
@@ -2222,6 +2272,7 @@ function ResultPhase({
               >
                 {t("result-start-test")}
               </Button>
+              {nextButton}
               <Button
                 className="w-full justify-center"
                 variant="outline"
@@ -2249,8 +2300,10 @@ function ResultPhase({
           metric={durationMetric(result, t)}
           actions={
             <div className="space-y-3">
+              {nextButton}
               <Button
                 className="w-full justify-center"
+                variant={queueNext ? "outline" : "default"}
                 disabled={busy}
                 onClick={() => void onDone()}
               >
@@ -2306,6 +2359,15 @@ function ResultPhase({
                 onClick={() => void onDone()}
               >
                 {t("come-back-later")}
+              </button>
+            )}
+            {queueNext && (
+              <button
+                type="button"
+                className="w-full text-center text-muted-foreground text-xs underline underline-offset-4 transition-colors duration-200 hover:text-foreground"
+                onClick={() => void onNext()}
+              >
+                {t("queue-next-cta", { title: queueNext.chapterTitle })}
               </button>
             )}
           </div>

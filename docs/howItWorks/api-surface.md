@@ -14,7 +14,10 @@ All routes live behind `/api`:
 | `GET /api/chapters/:id/objectives` | View the learning objectives the book itself states for a chapter (empty when it states none); shares the same deferred read | 0 |
 | `POST /api/sessions/start` | Begin a study session on a chapter (optional `recallMode`: `blurting` (default) / `targeted` / `both`); reads the chapter with the model once if it has not been read yet | 0 |
 | `PATCH /api/sessions/:id/recall-mode` | Persist the student's recall-mode choice so a reload restores the flow | 0 |
-| `GET /api/sessions/:id` | Session details + its attempts | 0 |
+| `POST /api/sessions/queue` | Plan a queue: one ordinary session per chapter, in the order given (deduped, capped at 12); the first opens, the rest wait as `pending` | 0/11 |
+| `GET /api/sessions/queue` | The open plan, in order, with a `done` count; empty when nothing is left to walk | 0/11 |
+| `DELETE /api/sessions/:id/queue` | Drop a queued chapter that was never opened (409 once it is open or finished) | 0/11 |
+| `GET /api/sessions/:id` | Session details + its attempts, plus read-only `queueNext` (`{sessionId, chapterTitle}`) when the session belongs to a queue | 0 |
 | `POST /api/sessions/:id/recall` | Submit the student's spoken recall transcript → get gaps | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/recall-questions` | Get diagnostic recall questions (`scope`: `gaps` or `chapter`); a chapter-wide sweep of ≥10 questions (one per numbered section at least), split into provider chunks (Gemini + Groq); each carries a format (multiple_choice / fill_blank / short_answer), the section it covers (`lesson`), and its `origin` (gap / coverage) | 0/2 (AI in 2) |
 | `POST /api/sessions/:id/recall-questions/answer` | Answer one recall question → per-question gaps + merged gaps. Multiple choice and fill-in-the-blank grade deterministically (no AI); only short answer reaches the model | 0/2 (AI in 2) |
@@ -28,7 +31,7 @@ All routes live behind `/api`:
 | `POST /api/sessions/:id/retest` | Start the optional post-study test; reuses the exact saved pretest questions when a baseline exists, otherwise generates 6–10 grounded exam questions | 0/11 (AI only when generating) |
 | `POST /api/sessions/:id/retest/answer` | Submit a pretest or retest answer (`stage`: `pretest` / `retest`, default `retest`) → per-question grade; idempotent retries return the saved grade | 0/11 (AI in 2) |
 | `GET /api/sessions/:id/result` | Before/after scores (pretest baseline when available, otherwise recall; after = retest mean), delta, and a verdict only after the full post-test is answered | 0/11 |
-| `POST /api/sessions/:id/complete` | Mark the session finished | 0 |
+| `POST /api/sessions/:id/complete` | Mark the session finished; opens the next chapter in the queue if there is one and returns it as `next` | 0 |
 
 Additional routes added for Phase 6 (textbook library + demo quotas):
 

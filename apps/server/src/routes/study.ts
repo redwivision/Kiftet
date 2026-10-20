@@ -6,13 +6,14 @@ import {
   guideSection,
   misconceptionHit,
   type StoredQuestion,
+  studyQueue,
   studySession,
   syllabusUnit,
   type TextbookTocNode,
   textbook,
   user,
 } from "@kiftet/db/schema";
-import { and, count, desc, eq, gte, ne } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, ne } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
 import {
@@ -61,6 +62,7 @@ import {
 } from "../ai/retest-verdict";
 import { summarizeStudyScores } from "../ai/study-result";
 import { createRollingWindow } from "../lib/rolling-window";
+import { nextQueueSlot, orderedQueueSlots } from "../lib/study-queue";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
 
@@ -1249,6 +1251,167 @@ async function findSession(sessionId: string, userId?: string) {
   return rows[0] ?? null;
 }
 
+// Registered before `GET /sessions/:id` on purpose: Express matches in
+// declaration order, and a param route would otherwise swallow `/sessions/queue`
+// as a session whose id is the word "queue".
+// ────────────────────────────────────────────────────────────────
+// The study queue (phase 11, step 4c)
+// ────────────────────────────────────────────────────────────────
+
+/** The next chapter still pending in a queue, with its title for the handoff. */
+async function nextInQueue(
+  queueId: string,
+): Promise<{ sessionId: string; chapterTitle: string } | null> {
+  const rows = await db()
+    .select({
+      id: studySession.id,
+      status: studySession.status,
+      position: studySession.queuePosition,
+      chapterTitle: chapter.title,
+    })
+    .from(studySession)
+    .innerJoin(chapter, eq(studySession.chapterId, chapter.id))
+    .where(eq(studySession.queueId, queueId));
+  const slot = nextQueueSlot(rows);
+  return slot ? { sessionId: slot.id, chapterTitle: slot.chapterTitle } : null;
+}
+
+const queueSchema = z.object({
+  chapterIds: z
+    .array(z.string({ message: "Choose at least one chapter." }).min(1))
+    .min(1, "Choose at least one chapter.")
+    .max(12, "A queue of more than 12 chapters is too long to plan."),
+});
+
+/**
+ * Plan an ordered queue: several chapters, one session each, walked in the
+ * order they were picked.
+ *
+ * The sessions are created up front and durably — the first `in_progress`, the
+ * rest `pending` — so the plan survives a reload, a restart and a closed tab,
+ * and "which chapter is next" is a row rather than client state. Each row is a
+ * complete one-chapter session with its own scope, so the queue composes with
+ * everything else instead of forking the study loop.
+ */
+router.post("/sessions/queue", async (req, res) => {
+  const parsed = queueSchema.safeParse(req.body);
+  if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
+  const userId = ownerId(req);
+  if (!userId) return err(res, "You must be signed in.", 401);
+
+  // Duplicates are dropped, not rejected: the same chapter twice would create
+  // two identical sessions the student cannot tell apart.
+  const chapterIds = [...new Set(parsed.data.chapterIds)];
+  const owned = await db()
+    .select({ id: chapter.id, title: chapter.title })
+    .from(chapter)
+    .innerJoin(textbook, eq(chapter.textbookId, textbook.id))
+    .where(and(inArray(chapter.id, chapterIds), eq(textbook.ownerId, userId)));
+  const titleOf = new Map(owned.map((row) => [row.id, row.title]));
+  if (owned.length !== chapterIds.length) {
+    return err(res, "One of those chapters was not found", 404);
+  }
+
+  const queueId = crypto.randomUUID();
+  const now = new Date();
+  await db().insert(studyQueue).values({ id: queueId, userId });
+  const rows = chapterIds.map((chapterId, position) => ({
+    id: crypto.randomUUID(),
+    chapterId,
+    userId,
+    queueId,
+    queuePosition: position,
+    startedAt: now,
+    status: position === 0 ? ("in_progress" as const) : ("pending" as const),
+  }));
+  await db().insert(studySession).values(rows);
+
+  ok(
+    res,
+    {
+      queueId,
+      sessions: rows.map((row) => ({
+        sessionId: row.id,
+        chapterId: row.chapterId,
+        chapterTitle: titleOf.get(row.chapterId) ?? "",
+        position: row.queuePosition,
+        status: row.status,
+      })),
+    },
+    201,
+  );
+});
+
+/** The student's open queue, in order. Empty when there is nothing left to do. */
+router.get("/sessions/queue", async (req, res) => {
+  const userId = ownerId(req);
+  if (!userId) return ok(res, { queueId: null, items: [], done: 0 });
+
+  // The newest queue that still has something unfinished in it. A finished
+  // queue is history, so a student who has just cleared their plan does not
+  // keep seeing an empty queue card.
+  const [active] = await db()
+    .select({ queueId: studySession.queueId })
+    .from(studySession)
+    .innerJoin(studyQueue, eq(studySession.queueId, studyQueue.id))
+    .where(
+      and(
+        eq(studySession.userId, userId),
+        ne(studySession.status, "completed"),
+      ),
+    )
+    .orderBy(desc(studyQueue.createdAt))
+    .limit(1);
+  const queueId = active?.queueId ?? null;
+  if (!queueId) return ok(res, { queueId: null, items: [], done: 0 });
+
+  const rows = await db()
+    .select({
+      id: studySession.id,
+      chapterId: studySession.chapterId,
+      status: studySession.status,
+      position: studySession.queuePosition,
+      chapterTitle: chapter.title,
+    })
+    .from(studySession)
+    .innerJoin(chapter, eq(studySession.chapterId, chapter.id))
+    .where(eq(studySession.queueId, queueId));
+  const ordered = orderedQueueSlots(rows);
+
+  ok(res, {
+    queueId,
+    items: ordered
+      .filter((row) => row.status !== "completed")
+      .map((row) => ({
+        sessionId: row.id,
+        chapterId: row.chapterId,
+        chapterTitle: row.chapterTitle,
+        position: row.position,
+        status: row.status,
+      })),
+    done: ordered.filter((row) => row.status === "completed").length,
+  });
+});
+
+/** Drop a chapter the student has not opened yet. */
+router.delete("/sessions/:id/queue", async (req, res) => {
+  const session = await findSession(req.params.id, ownerId(req));
+  if (!session) return err(res, "Session not found", 404);
+  if (session.status !== "pending") {
+    return err(
+      res,
+      "Only a chapter that has not been opened can be removed from the queue",
+      409,
+    );
+  }
+  await db()
+    .delete(studySession)
+    .where(
+      and(eq(studySession.id, session.id), eq(studySession.status, "pending")),
+    );
+  ok(res, { ok: true });
+});
+
 type SessionResultSummary = {
   before: number | null;
   after: number | null;
@@ -1339,7 +1502,12 @@ router.get("/sessions", async (req, res) => {
   const rows = await db()
     .select()
     .from(studySession)
-    .where(eq(studySession.userId, userId))
+    // A queued chapter is not history yet: it has no answers and the student
+    // has not opened it. Showing it here would both pad the list and hand the
+    // "resume where you left off" card a session that never started.
+    .where(
+      and(eq(studySession.userId, userId), ne(studySession.status, "pending")),
+    )
     .orderBy(desc(studySession.startedAt))
     .limit(20);
   const out = [];
@@ -1422,6 +1590,7 @@ router.get("/sessions/:id", async (req, res) => {
     .limit(1);
 
   if (!rows.length) return err(res, "Session not found", 404);
+  const session = rows[0] as (typeof rows)[number];
 
   const attemptsRows = await db()
     .select()
@@ -1429,7 +1598,12 @@ router.get("/sessions/:id", async (req, res) => {
     .where(eq(attempt.sessionId, req.params.id))
     .orderBy(attempt.createdAt);
 
-  ok(res, { ...rows[0], attempts: attemptsRows });
+  // The chapter after this one in the student's queue, so the result screen can
+  // offer the handoff before the session is even marked complete (it is
+  // promoted when this session completes, not when the button is drawn).
+  const queueNext = session.queueId ? await nextInQueue(session.queueId) : null;
+
+  ok(res, { ...session, queueNext, attempts: attemptsRows });
 });
 
 // Idempotent attempt insert: the client sends a UUID per submission so a
@@ -2725,6 +2899,9 @@ router.get("/sessions/:id/result", async (req, res) => {
 router.post("/sessions/:id/complete", async (req, res) => {
   const session = await findSession(req.params.id, ownerId(req));
   if (!session) return err(res, "Session not found", 404);
+  if (session.status === "pending") {
+    return err(res, "This chapter has not been started yet", 409);
+  }
 
   await db()
     .update(studySession)
@@ -2736,11 +2913,30 @@ router.post("/sessions/:id/complete", async (req, res) => {
       ),
     );
 
+  // Open the next chapter in the queue, if this session came from one. The row
+  // already exists — creating it now would lose the plan if the student closed
+  // the tab — so "moving on" is a status flip and a fresh `startedAt` (the one
+  // from planning time would count the days spent on the earlier chapters
+  // toward this session's duration). The `status = 'pending'` guard makes two
+  // concurrent completions promote the same chapter once.
+  const next = session.queueId ? await nextInQueue(session.queueId) : null;
+  if (next) {
+    await db()
+      .update(studySession)
+      .set({ status: "in_progress", startedAt: new Date() })
+      .where(
+        and(
+          eq(studySession.id, next.sessionId),
+          eq(studySession.status, "pending"),
+        ),
+      );
+  }
+
   const durationMs = session.startedAt
     ? Math.max(0, Date.now() - session.startedAt.getTime())
     : null;
 
-  ok(res, { ok: true, durationMs });
+  ok(res, { ok: true, durationMs, next });
 });
 
 export default router;

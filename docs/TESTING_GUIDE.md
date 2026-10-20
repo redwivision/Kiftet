@@ -1041,7 +1041,7 @@ model, or is it us?" is answerable from `/api/ai/telemetry` alone.
 
 ---
 
-## Phase 11 steps 4–5 — topic scope and optional pre/post test
+## Phase 11 steps 4–5 — topic scope, the study queue and optional pre/post test
 
 Automated coverage:
 
@@ -1053,7 +1053,53 @@ Automated coverage:
   skipped tests do not get invented scores.
 - `apps/server/src/ai/questions.test.ts` verifies that the recall writer
   respects selected scope.
+- `apps/server/src/lib/study-queue.test.ts` verifies the queue's ordering
+  rules: tap order wins, an unpositioned row sorts last, ties are stable, and
+  "next" is the earliest *pending* chapter — never the one already open.
 - `bun test --preload ./test-setup.ts` covers the repository test suite.
+
+### Live smoke: the wiring, on a real server and database
+
+Unit tests prove the pure helpers; they cannot prove that a PATCHed scope
+actually narrows generated questions or that `before` really comes off the
+baseline. That is a route reading a column, and a route reading the wrong column
+is what a green unit suite hides. So the wiring has its own runnable check:
+
+```sh
+bun run --cwd apps/server dev                                  # terminal 1
+bun run --cwd apps/server smoke:phase11                        # terminal 2
+bun run --cwd apps/server smoke:phase11 --pace=20000           # if AI is busy
+```
+
+`apps/server/scripts/smoke-phase11-scope.ts` drives the real HTTP surface over a
+demo room and asserts, in order: units list a section with its concepts; a new
+session is whole-chapter (`scopeKeys: null`); PATCH stores a selection, drops
+duplicates and unknown keys, and turns a stale/unknown-only selection back into
+the whole chapter; the scope survives a reload; **every `focus` of every
+generated recall question and every baseline question is inside the chosen
+section** (the assertion that catches a route that forgot to scope); the scope
+locks after a test is prepared (409); recall is refused until the baseline is
+finished (409); a graded baseline answer advances `pretestIndex` and makes
+`result.before` a number with `after: null`; and a scoped guide contains only
+that section's concepts while an unscoped guide still contains other sections'.
+It then plans a queue over three throwaway chapters (imported with the AI-free
+`POST /chapters/ingest`) and asserts: one session per chapter in tap order, the
+first `in_progress` and the rest `pending`, every planned session carrying its
+chapter's title, **a `pending` chapter absent from `GET /sessions`**, the open
+plan returned in order, `queueNext` naming the following chapter on an open
+session, `complete` opening the next one, a waiting chapter droppable while an
+opened or finished one is refused (409), the dropped chapter gone and `done`
+counting the finished one, a duplicated chapter producing one session, and an
+empty queue (400) or a chapter that belongs to somebody else (404) refused.
+
+It is honest about the shared budget: AI checks are paced, a `429` is retried
+once after the server's own `Retry-After`, and a still-busy minute is reported
+as **SKIP** (exit 0), never as a failure. Only a real assertion failure exits
+non-zero.
+
+Last run (dev Neon, `gemini-2.5-flash`): **31 passed, 0 failed** (17 scope +
+baseline checks, 14 queue checks) — one `429` encountered and recovered by the
+retry, which is the free tier behaving normally.
 
 Manual browser checks still required before launch (not represented by the
 automated unit tests):
@@ -1082,6 +1128,19 @@ automated unit tests):
 8. During a baseline answer, go offline after submitting but before the server
    response. Reconnect and verify the saved answer is graded once and the
    question index advances once, not zero or twice.
+9. Plan a queue of three chapters from the dashboard ("Plan a study queue",
+   tapping them in the order you want them studied). Confirm the queue card
+   lists them in that order, the first is open, and the others say they are
+   waiting. Reload the dashboard mid-plan and confirm the queue is still there
+   with the same order.
+10. Finish the first queued chapter: the result screen must offer "Next:
+   {chapter}", and tapping it must land on that chapter already in progress —
+   with one tap, no dashboard round-trip. Take the second chapter's own scope
+   and baseline and confirm they belong to that chapter, not the first.
+11. Open a waiting chapter by URL: it must say the chapter is still in the
+    queue and point back, not offer an answer the server would reject. Drop a
+    waiting chapter from the card and confirm it disappears; confirm a chapter
+    already opened cannot be dropped.
 
 These checks require a running app, a migrated database and real browser
 interaction. A green test/build suite does not prove them; do not mark them

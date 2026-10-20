@@ -245,6 +245,13 @@ export type StudyState = {
     | { kind: "answer"; questionIndex: number }
     | { kind: "recall-answer"; questionIndex: number }
     | null;
+  /** The next chapter in the student's queue (phase 11, step 4c), so the result
+   *  screen can offer the handoff. Null when the session was not queued. */
+  queueNext: { sessionId: string; chapterTitle: string } | null;
+  /** This session is a queued chapter the student has not opened yet. The
+   *  server refuses answers on a pending session, so the UI says so instead of
+   *  letting the student talk into a 409. */
+  queueWaiting: boolean;
 };
 
 export type StudyAction =
@@ -291,7 +298,12 @@ export type StudyAction =
   | { type: "RESULT"; result: SessionResult }
   | { type: "RETRY_CYCLE" }
   | { type: "GO_PHASE"; phase: Phase }
-  | { type: "QUEUED"; queued: StudyState["queued"] };
+  | { type: "QUEUED"; queued: StudyState["queued"] }
+  | {
+      type: "QUEUE_NEXT";
+      next: { sessionId: string; chapterTitle: string } | null;
+    }
+  | { type: "QUEUE_WAITING" };
 
 type SessionAttemptRow = {
   id: string;
@@ -334,6 +346,8 @@ function initialState(_sessionId: string): StudyState {
     demoExpired: false,
     notice: null,
     queued: null,
+    queueNext: null,
+    queueWaiting: false,
   };
 }
 
@@ -663,6 +677,10 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
       return { ...state, phase: action.phase, error: null, notice: null };
     case "QUEUED":
       return { ...state, queued: action.queued, error: null };
+    case "QUEUE_NEXT":
+      return { ...state, queueNext: action.next };
+    case "QUEUE_WAITING":
+      return { ...state, queueWaiting: true, chapterLoading: false };
     default:
       return state;
   }
@@ -688,7 +706,9 @@ interface StudyContextValue {
   fetchResult: () => Promise<void>;
   retryAgain: () => void;
   retryLast: () => Promise<void>;
-  completeSession: () => Promise<void>;
+  completeSession: () => Promise<{
+    next: { sessionId: string; chapterTitle: string } | null;
+  }>;
   setNotice: (message: string | null) => void;
   clearNotice: () => void;
   clearError: () => void;
@@ -1232,6 +1252,7 @@ export function StudyProvider({
           recallIndex: number;
           retestQuestions: SessionQuestion[] | null;
           retestIndex: number;
+          queueNext?: { sessionId: string; chapterTitle: string } | null;
         }>(`/sessions/${sessionId}`);
         const chapters = await api<ChapterInfo[]>("/chapters");
         if (token !== loadTokenRef.current) return;
@@ -1252,6 +1273,15 @@ export function StudyProvider({
           return;
         }
         dispatch({ type: "LOAD_OK", chapter });
+        dispatch({ type: "QUEUE_NEXT", next: session.queueNext ?? null });
+        // A queued chapter has been planned but not opened. Every write to it is
+        // refused server-side ("not open for answers"), so the student is shown
+        // that plainly instead of being dropped into a recall screen whose first
+        // submission would come back as a 409.
+        if (session.status === "pending") {
+          dispatch({ type: "QUEUE_WAITING" });
+          return;
+        }
         if (session.recallMode) {
           dispatch({ type: "SET_RECALL_MODE", mode: session.recallMode });
         }
@@ -1453,7 +1483,10 @@ export function StudyProvider({
 
   const completeSession = useCallback(async () => {
     try {
-      await api(`/sessions/${sessionId}/complete`, { method: "POST" });
+      const res = await api<{
+        next: { sessionId: string; chapterTitle: string } | null;
+      }>(`/sessions/${sessionId}/complete`, { method: "POST" });
+      return res;
     } catch (err) {
       reportError(err);
       throw err;
