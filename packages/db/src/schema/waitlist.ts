@@ -133,6 +133,10 @@ export const waitlistSignup = pgTable(
       table.channelVerifiedAt,
       table.testimonialAt,
     ),
+    // The Telegram webhook looks a signup up by chat id on every message, over
+    // a table sized for the full launch wave with JSONB rows — without this,
+    // launch-week chatter means a sequential scan per message.
+    index("waitlist_signup_telegramChatId_idx").on(table.telegramChatId),
   ],
 );
 

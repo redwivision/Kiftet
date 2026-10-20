@@ -27,21 +27,28 @@ export type TopicEntry = {
   page: number | null;
 };
 
-export const textbook = pgTable("textbook", {
-  id: text("id").primaryKey(),
-  ownerId: text("owner_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  subject: text("subject").notNull(),
-  language: text("language").notNull().default("en"),
-  sourceName: text("source_name"),
-  sourceSize: integer("source_size"),
-  toc: jsonb("toc").$type<TextbookTocNode[]>(),
-  createdAt: timestamp("created_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-});
+export const textbook = pgTable(
+  "textbook",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    subject: text("subject").notNull(),
+    language: text("language").notNull().default("en"),
+    sourceName: text("source_name"),
+    sourceSize: integer("source_size"),
+    toc: jsonb("toc").$type<TextbookTocNode[]>(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  // `ownerId` is the app's hottest predicate — nearly every ownership check and
+  // every list endpoint filters on it — so it gets an index before the table has
+  // enough rows for a sequential scan to be felt. The FK does not create one.
+  (table) => [index("textbook_ownerId_idx").on(table.ownerId)],
+);
 
 export const syllabus = pgTable("syllabus", {
   id: text("id").primaryKey(),

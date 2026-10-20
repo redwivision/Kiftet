@@ -383,3 +383,16 @@
     5-minute timer, never read after their minute has passed. The demo
     `/demo/start` gate and the waitlist limiter stay in-memory on purpose: they
     guard cheap, idempotent writes where surviving a restart buys nothing.
+29. **The proxy is trusted explicitly, because `req.ip` is a lie otherwise.**
+    Every per-IP limiter keys on `req.ip`, and Express leaves `req.ip` as the
+    socket address until told to trust the forwarding chain. On a PaaS the
+    socket peer is the edge, so without this setting every visitor shares one
+    rate-limit bucket — demo starts collapse to a handful per minute *for the
+    whole internet*, and the waitlist's per-IP generosity (sized for CGNAT) is
+    spent on the first handful of users. The failure is invisible locally (no
+    proxy) and only appears under a real launch, so the choice is: a configurable
+    `TRUST_PROXY` (default `1` in production, `loopback` in dev) rather than a
+    hardcoded value, a boot log of the resolved setting, and a test that asserts
+    the *result* (`req.ip` from a forwarded header) rather than the parse. Dev
+    defaults to `loopback` on purpose: a direct client cannot spoof its own IP,
+    only a local proxy can.

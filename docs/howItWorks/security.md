@@ -128,6 +128,17 @@ dashboard. The payload carries `resetAt` and `retryAfterSeconds`, and the pill
 counts the wait down in the student's own clock — so "when does it restart?"
 has a number on it instead of the word "soon".
 
+**`req.ip` must be the student's address, not the edge's.** Every per-IP
+limiter — demo starts (2/min/IP), waitlist signups (60/hour/IP) — keys on
+`req.ip`, and behind a PaaS the socket address is the *proxy's*. Express only
+substitutes the forwarded client address once told how many proxies to trust, so
+the server sets `trust proxy` from `TRUST_PROXY` at boot (`lib/trust-proxy.ts`;
+default `1` in production, `loopback` in development). Without it, every visitor
+behind the edge shares one bucket and the whole world is limited as a single
+client — a launch funnel that 429s itself on day one, and one that local testing
+cannot catch because there is no proxy locally. The resolved setting is logged
+at boot so a misconfigured deploy is visible immediately.
+
 **When the limit is hit** the server returns `429 Too Many Requests` with a
 friendly message stating the exact wait and a `Retry-After` header. It also
 notes that already-studied material stays available: a cached guide costs

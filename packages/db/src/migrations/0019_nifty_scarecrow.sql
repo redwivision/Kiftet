@@ -1,0 +1,2 @@
+CREATE INDEX "textbook_ownerId_idx" ON "textbook" USING btree ("owner_id");--> statement-breakpoint
+CREATE INDEX "waitlist_signup_telegramChatId_idx" ON "waitlist_signup" USING btree ("telegram_chat_id");

@@ -134,6 +134,13 @@
       "when": 1792513558179,
       "tag": "0018_same_karen_page",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792524980580,
+      "tag": "0019_nifty_scarecrow",
+      "breakpoints": true
     }
   ]
 }

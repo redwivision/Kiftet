@@ -18,6 +18,7 @@ import {
 import { startAiUsageSweep } from "./lib/ai-quota-store";
 import { startDemoCleanup } from "./lib/demo-cleanup";
 import { requestLogger } from "./lib/http-log";
+import { resolveTrustProxy } from "./lib/trust-proxy";
 import authProvidersRouter from "./routes/auth-providers";
 import demoRouter from "./routes/demo";
 import studyRouter from "./routes/study";
@@ -51,6 +52,21 @@ startAiUsageSweep(getDb());
 
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";
+
+// Where the real client IP comes from. Express only replaces `req.ip` with the
+// left-most `X-Forwarded-For` value once it is told how many proxies to trust;
+// without this every per-IP limiter (demo starts, waitlist signups) keys on the
+// edge's address and the entire internet shares one bucket. That is invisible
+// locally — there is no proxy, so `req.ip` is already correct — and it only
+// appears in production, which is the worst place to discover it.
+//
+// `TRUST_PROXY` accepts a hop count ("1") or an Express trust expression
+// ("loopback", a CIDR). Single-proxy PaaS ⇒ "1"; production defaults to "1"
+// because a PaaS always fronts the container, and development defaults to
+// "loopback" (trust only a local proxy, so a spoofed header from a direct client
+// is ignored). `false` disables trust entirely for a directly-exposed server.
+const trustProxy = resolveTrustProxy(env.TRUST_PROXY, IS_PROD);
+app.set("trust proxy", trustProxy);
 
 // Request log: interesting hits (slow, or 4xx/5xx) always go to stderr, and
 // ordinary successful ones are sampled under a hard lines-per-second ceiling.
@@ -94,18 +110,6 @@ app.all("/api/auth{/*path}", toNodeHandler(auth));
 // Before the auth gate: this is what an anonymous stranger needs in order to
 // see the sign-in page at all.
 app.use("/api", authProvidersRouter);
-app.get("/api/_envdirect", (_req, res) => {
-  try {
-    res.json({
-      gid: process.env.GOOGLE_CLIENT_ID?.slice(0, 8),
-      gsec: process.env.GOOGLE_CLIENT_SECRET?.slice(0, 8),
-      hasg:
-        !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
-    });
-  } catch (e) {
-    res.json({ err: String(e) });
-  }
-});
 
 // The launch waitlist. Before the auth gate — an anonymous stranger is the
 // entire audience — and mounted ahead of the study routes so a Gemini retry
@@ -147,13 +151,6 @@ app.use("/api", (_req, res) => {
 // as a failing health check instead of a 200 while the app is quietly
 // broken. A POOL-less boot already exits before the listener is up, and a
 // pool that can't reach the DB answers 503 within the 5s connect timeout.
-app.get("/api/__env", (_req, res) => {
-  res.json({
-    gid: process.env.GOOGLE_CLIENT_ID?.slice(0, 6),
-    gsec: process.env.GOOGLE_CLIENT_SECRET?.slice(0, 6),
-    ok: !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET,
-  });
-});
 app.get("/health", async (_req, res) => {
   try {
     await getDb().execute(sql`select 1`);
@@ -202,6 +199,13 @@ app.use(errorMiddleware);
 const PORT = Number(process.env.PORT ?? 3000);
 const server = app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
+  // Prove the proxy setting out loud. If this is wrong, every visitor shares one
+  // rate-limit bucket — a failure that is otherwise invisible until the funnel
+  // 429s under load. Seeing the setting and how many forwarded hops arrive at
+  // boot is how a deploy gets diagnosed in seconds instead of hours.
+  console.log(
+    `[boot] trust proxy = ${JSON.stringify(trustProxy)} (TRUST_PROXY=${env.TRUST_PROXY ? "set" : "default"})`,
+  );
 });
 // A request that can't finish in a minute is stuck (or hostile) — cap it so a
 // wedged client can't pin a worker forever. The Gemini guard (20s) and DB

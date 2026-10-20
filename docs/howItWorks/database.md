@@ -11,7 +11,7 @@ tables (the product) and the four **auth tables** (who is signed in).
 
 | Table | What one row means | Key fields |
 |---|---|---|
-| `textbook` | A real school textbook (e.g. Physics) that a **user owns**, including its saved table of contents before any chapters are imported | `ownerId` → user, `title`, `subject`, `language`, `sourceName`, `sourceSize`, `toc` (nested JSON outline) |
+| `textbook` | A real school textbook (e.g. Physics) that a **user owns**, including its saved table of contents before any chapters are imported | `ownerId` → user (indexed — the app's hottest predicate), `title`, `subject`, `language`, `sourceName`, `sourceSize`, `toc` (nested JSON outline) |
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `chapter_objective` | One learning objective the *book itself* states for a chapter | `chapterId`, `objectiveText`, `sortOrder`, `sourceOffset`/`sourceQuote` (anchor into `rawText`), `estimated` (found by the deterministic scan, not the model) |
@@ -146,5 +146,6 @@ the tables are the same names.)
 | `0016_stale_raza` | `study_session.pretest_questions` and `pretest_index` — persistent optional baseline test and progress |
 | `0017_low_genesis` | `study_queue`, plus `study_session.queue_id` / `queue_position` — a planned set of one-chapter sessions walked in order |
 | `0018_same_karen_page` | `ai_usage` — the DB-backed per-user AI request quota (one row per owner per clock-minute) |
+| `0019_nifty_scarecrow` | Indexes on the two hottest unindexed predicates: `textbook.ownerId` and `waitlist_signup.telegramChatId` |
 
 ---
