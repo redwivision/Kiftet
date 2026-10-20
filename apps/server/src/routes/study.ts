@@ -43,6 +43,7 @@ import {
   triageConcepts,
 } from "../ai/gemini";
 import {
+  GUIDE_CONTENT_BUDGET_MS,
   REVIEW_DUE_DAYS,
   STUDY_PLAN_BUDGETS,
   STUDY_PLAN_CONTENT_BUDGET_MS,
@@ -2176,16 +2177,26 @@ router.get("/chapters/:id/guide", async (req, res) => {
   // not stored — otherwise a busy minute would poison the cache and every later
   // visitor would read them as if they had been written properly.
   let throttled = false;
+  // The whole loop shares one wall-clock ceiling. Whatever is left when a
+  // concept comes up is that concept's provider cap, so the last section cannot
+  // overrun the response; once the ceiling is spent the remaining concepts fall
+  // to the lexical skeleton. This is the guide's answer to "the client is gone
+  // and the server is still calling the model".
+  const contentDeadline = Date.now() + GUIDE_CONTENT_BUDGET_MS;
   for (const concept of targets) {
     const key = concept.conceptText.trim().toLowerCase();
     if (cache.has(key)) continue;
-    const skipAi = !(await allowAiRequest(req));
-    if (skipAi) throttled = true;
+    const remainingMs = contentDeadline - Date.now();
+    const skipAi = remainingMs <= 0 || !(await allowAiRequest(req));
+    if (skipAi) {
+      if (remainingMs <= 0) estimated = true;
+      else throttled = true;
+    }
     const section = await ai.generateGuideSection(
       concept.conceptText,
       rawText,
       language,
-      { skipAi, subject: chapterSubjectCache },
+      { skipAi, subject: chapterSubjectCache, timeoutMs: remainingMs },
     );
     if (!skipAi) {
       await storeSection(chapterId, concept.conceptText, language, section);

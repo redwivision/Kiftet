@@ -208,8 +208,12 @@ const server = app.listen(PORT, () => {
   );
 });
 // A request that can't finish in a minute is stuck (or hostile) — cap it so a
-// wedged client can't pin a worker forever. The Gemini guard (20s) and DB
-// query timeouts fire well inside this.
+// wedged client can't pin a worker forever. Every AI fan-out is deliberately
+// bounded *below* this, so a slow model degrades to a fallback answer instead
+// of a dropped socket: the guide loop holds itself to 45s across all concepts
+// and 24s per provider call, the study plan to 18s, and DB queries to 5s on
+// connect. If this cap ever fires, a route's own deadline was wrong — not the
+// model being slow.
 server.requestTimeout = 60_000;
 
 // The platform sends SIGTERM before killing the instance. Let in-flight

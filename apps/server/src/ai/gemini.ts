@@ -401,7 +401,7 @@ export type AiService = {
     conceptText: string,
     chapterText: string,
     language?: ContentLanguage,
-    options?: { skipAi?: boolean; subject?: string },
+    options?: { skipAi?: boolean; subject?: string; timeoutMs?: number },
   ): Promise<GuideSection>;
   /**
    * Diagnostic questions for *targeted* recall: short, low-pressure checks that
@@ -3115,7 +3115,10 @@ export const ai: AiService = {
     // back — a student asking for a chapter should get a chapter — but no
     // provider call is made, so a cold guide cannot quietly spend ten requests
     // behind one click.
-    options: { skipAi?: boolean; subject?: string } = {},
+    // `timeoutMs` caps the provider call for this section to what is left of
+    // the guide's overall wall-clock budget, so one slow section cannot eat the
+    // whole response.
+    options: { skipAi?: boolean; subject?: string; timeoutMs?: number } = {},
   ): Promise<GuideSection> {
     // The anchor is computed, not generated: a model asked for a location in
     // the text invents one, and an invented page number is worse than none.
@@ -3128,6 +3131,7 @@ export const ai: AiService = {
       const raw = await ask(
         SECTION_SYSTEM + outputInstruction(language),
         `CONCEPT TO EXPLAIN:\n${conceptText.trim()}\n\nCHAPTER TEXT (the only source of facts):\n${chapterText.trim()}`,
+        { timeoutMs: options.timeoutMs },
       );
       const data = parseJson<Record<string, unknown>>(raw);
       const what =
