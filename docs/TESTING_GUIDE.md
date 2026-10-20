@@ -1056,6 +1056,11 @@ Automated coverage:
 - `apps/server/src/lib/study-queue.test.ts` verifies the queue's ordering
   rules: tap order wins, an unpositioned row sorts last, ties are stable, and
   "next" is the earliest *pending* chapter — never the one already open.
+- `apps/web/src/lib/scope-status.test.ts` verifies the read-only scope line: a
+  chapter with no real choice says nothing, a null/empty selection reads as the
+  whole chapter, one section is named by the book's own label (position when it
+  is unnumbered), several are counted, and a stale key is counted rather than
+  labelled as a section the chapter no longer has.
 - `bun test --preload ./test-setup.ts` covers the repository test suite.
 
 ### Live smoke: the wiring, on a real server and database
@@ -1141,6 +1146,11 @@ automated unit tests):
     queue and point back, not offer an answer the server would reject. Drop a
     waiting chapter from the card and confirm it disappears; confirm a chapter
     already opened cannot be dropped.
+12. On a narrowed session, reload mid-lesson: the header must keep showing what
+    the round covers ("Section 2.3 only"), and the phase the student was in must
+    come back — not the picker with the scope silently reset. With a baseline
+    prepared, open the recall screen and confirm the scope taps are disabled and
+    the note explains why, rather than a tap that errors.
 
 These checks require a running app, a migrated database and real browser
 interaction. A green test/build suite does not prove them; do not mark them

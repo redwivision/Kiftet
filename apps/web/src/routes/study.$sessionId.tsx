@@ -9,6 +9,7 @@ import {
   PlayCircle,
   Search,
   Square,
+  Target,
   Volume2,
   X,
 } from "lucide-react";
@@ -49,6 +50,7 @@ import {
 import { countWords, findBoundaryEnd, leadingText } from "@/lib/intent";
 import type { ConceptMeta } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
+import { type ScopeStatus, scopeSummary } from "@/lib/scope-status";
 import { shareClosedGapCard } from "@/lib/share-card";
 import {
   type ChecklistRow,
@@ -322,6 +324,14 @@ function StudyScreen({
     navigate("/dashboard");
   };
 
+  // What this round actually covers, read-only, on every phase. The picker
+  // lives on the recall screen and disappears the moment questions exist, so
+  // without this a returning student sees a narrowed chapter and a score about
+  // it with no way to tell what was included. Null when there is nothing worth
+  // saying (a whole-chapter session with a single-section chapter, where the
+  // header's chapter title already says everything).
+  const scopeStatus = scopeSummary(state.scopeUnits, state.scopeKeys);
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
       <LoadingVeil show={state.busy} label={t("loading")} />
@@ -345,6 +355,8 @@ function StudyScreen({
           title={visibleChapterTitle(state.chapter.title).title}
           phase={state.phase}
         />
+
+        {scopeStatus && <ScopeStatusLine {...scopeStatus} />}
 
         <div className="p-6 sm:p-8">
           {state.notice && (
@@ -1218,6 +1230,25 @@ function RecallModeChooser({
   );
 }
 
+function ScopeStatusLine(status: ScopeStatus) {
+  const { t } = useLanguage();
+  const text =
+    status.kind === "whole"
+      ? t("scope-status-whole")
+      : status.kind === "one"
+        ? t("scope-status-one", { label: status.label })
+        : t("scope-status-many", { n: String(status.n) });
+  return (
+    <div className="border-border/60 border-b px-4 py-2.5 sm:px-6 dark:border-white/10">
+      <p className="flex items-center gap-1.5 text-xs">
+        <Target className="size-3.5 shrink-0 text-gold" aria-hidden="true" />
+        <span className="text-muted-foreground">{t("scope-label")}</span>
+        <span className="font-medium text-foreground/90">{text}</span>
+      </p>
+    </div>
+  );
+}
+
 function ScopePicker() {
   const { state, setScope } = useStudy();
   const { t } = useLanguage();
@@ -1225,6 +1256,11 @@ function ScopePicker() {
   // One section is no choice at all, and a missing list means the chapter's
   // checklist could not be read — either way the session stays whole-chapter.
   if (!units || units.length < 2) return null;
+  // The server refuses to change scope once a test is prepared or an answer is
+  // recorded, so the picker must not offer a tap that will 409. `hasPretest`
+  // covers the baseline; `answered`/`questions` cover recall having started.
+  const locked =
+    state.hasPretest || state.questions.length > 0 || state.answered.length > 0;
   const selected = state.scopeKeys ?? [];
   const active = new Set(selected);
   const wholeChapter = selected.length === 0;
@@ -1235,6 +1271,7 @@ function ScopePicker() {
       : t("scope-part", { n: String(index + 1) });
 
   const toggle = (key: string) => {
+    if (locked) return;
     const next = new Set(active);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -1246,19 +1283,27 @@ function ScopePicker() {
   return (
     <fieldset className="space-y-2">
       <legend className="k-label mb-2 block">{t("scope-label")}</legend>
-      <p className="mb-1 text-muted-foreground text-xs leading-5">
-        {t("scope-hint")}
-      </p>
+      {locked ? (
+        <p className="mb-1 text-muted-foreground text-xs leading-5">
+          {t("scope-recorded-note")}
+        </p>
+      ) : (
+        <p className="mb-1 text-muted-foreground text-xs leading-5">
+          {t("scope-hint")}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           aria-pressed={wholeChapter}
+          disabled={locked}
           onClick={() => setScope(null)}
           className={cn(
             "rounded-full border px-3 py-1.5 text-sm transition-colors duration-200",
             wholeChapter
               ? "border-gold/40 bg-gold/10 text-gold"
               : "border-border/60 text-muted-foreground hover:bg-muted/40 dark:border-white/10",
+            locked && "cursor-not-allowed opacity-70",
           )}
         >
           {t("scope-all")}
@@ -1270,12 +1315,14 @@ function ScopePicker() {
               key={unit.key}
               type="button"
               aria-pressed={on}
+              disabled={locked}
               onClick={() => toggle(unit.key)}
               className={cn(
                 "rounded-full border px-3 py-1.5 text-left text-sm transition-colors duration-200",
                 on
                   ? "border-gold/40 bg-gold/10 text-gold"
                   : "border-border/60 text-muted-foreground hover:bg-muted/40 dark:border-white/10",
+                locked && "cursor-not-allowed opacity-70",
               )}
             >
               <span className="block font-medium">{labelFor(unit, index)}</span>

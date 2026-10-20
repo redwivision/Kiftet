@@ -978,6 +978,11 @@ export const en = {
   "scope-part": "Part {n}",
   "scope-ideas": "{n} ideas",
   "scope-picked": "{n} of {total} topics",
+  "scope-status-whole": "Whole chapter",
+  "scope-status-one": "Section {label} only",
+  "scope-status-many": "{n} topics",
+  "scope-recorded-note":
+    "A test is already prepared, so the topic choice is locked for this round. Finish this round, then start a new one to change it.",
   "recall-mode-label": "How do you want to remember?",
   "recall-mode-blurting": "Blurt it out",
   "recall-mode-blurting-desc":
@@ -1893,6 +1898,11 @@ export const am: Record<MessageKey, string> = {
   "scope-part": "ክፍል {n}",
   "scope-ideas": "{n} ሀሳቦች",
   "scope-picked": "ከ{total} ርዕሶች {n}",
+  "scope-status-whole": "ሙሉ ምዕራፍ",
+  "scope-status-one": "ክፍል {label} ብቻ",
+  "scope-status-many": "{n} ርዕሶች",
+  "scope-recorded-note":
+    "ፈተና አስቀድሞ ተዘጋጅቷል፣ ስለዚህ የርዕስ ምርጫ ለዚህ ዙር ተቆልፏል። ይህን ዙር ጨርስ፣ ከዚያ ለመቀየር አዲስ ዙር ጀምር።",
   "recall-mode-label": "እንዴት ማስታወስ ትፈልጋለህ?",
   "recall-mode-blurting": "ብቻ ተናገር",
   "recall-mode-blurting-desc": "የምታስታውሰውን ሁሉ በነጻነት ተናገር ወይም ጻፍ — የጎደለውን ጨምሮ።",
