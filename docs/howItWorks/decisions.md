@@ -420,3 +420,12 @@
     pool becomes a queue. A duplicate model read across instances is wasteful but
     harmless — it costs one shared free-tier call, not correctness — which is the
     right trade against holding connections through slow calls.
+32. **A disconnected client stops the work, not just the response.** A dead
+    request is not the same as a cancelled one: Express finishes the handler
+    even after the socket is gone, so a closed tab would still have the guide
+    generate every remaining concept from the shared provider quota. The loop
+    listens for `req.on("close")` and breaks at the next concept boundary — the
+    in-flight call completes (its result is cached for the next student), only
+    the *next* call is skipped. Breaking at a boundary rather than aborting the
+    current call is deliberate: aborting mid-call wastes the tokens already
+    spent, and the finished section is useful to someone else.

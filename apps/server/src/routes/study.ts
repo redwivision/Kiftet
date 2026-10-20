@@ -2213,7 +2213,16 @@ router.get("/chapters/:id/guide", async (req, res) => {
   // to the lexical skeleton. This is the guide's answer to "the client is gone
   // and the server is still calling the model".
   const contentDeadline = Date.now() + GUIDE_CONTENT_BUDGET_MS;
+  // ...and this is the other half of that answer: if the student's tab is
+  // actually gone, stop rather than generate prose nobody will ever receive.
+  // Checked at concept boundaries, so an in-flight call still finishes and is
+  // cached for the next student — only the *next* call is skipped.
+  let clientGone = false;
+  req.on("close", () => {
+    clientGone = true;
+  });
   for (const concept of targets) {
+    if (clientGone) break;
     const key = concept.conceptText.trim().toLowerCase();
     if (cache.has(key)) continue;
     const remainingMs = contentDeadline - Date.now();
@@ -2246,6 +2255,11 @@ router.get("/chapters/:id/guide", async (req, res) => {
       estimated: section.estimated,
       createdAt: new Date(),
     });
+  }
+  if (clientGone) {
+    console.warn(
+      `[guide] client disconnected during generation; stopped early for chapter ${chapterId}`,
+    );
   }
 
   const sections = triageConcepts(concepts, mastery)
