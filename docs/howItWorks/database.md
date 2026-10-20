@@ -147,5 +147,6 @@ the tables are the same names.)
 | `0017_low_genesis` | `study_queue`, plus `study_session.queue_id` / `queue_position` — a planned set of one-chapter sessions walked in order |
 | `0018_same_karen_page` | `ai_usage` — the DB-backed per-user AI request quota (one row per owner per clock-minute) |
 | `0019_nifty_scarecrow` | Indexes on the two hottest unindexed predicates: `textbook.ownerId` and `waitlist_signup.telegramChatId` |
+| `0020_useful_franklin_richards` | Unique `(chapter_id, sort_order)` on `concept_node` and `chapter_objective` — makes the extraction replace idempotent |
 
 ---

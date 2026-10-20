@@ -135,7 +135,17 @@ export const conceptNode = pgTable(
       .notNull()
       .$defaultFn(() => new Date()),
   },
-  (table) => [index("concept_node_chapterId_idx").on(table.chapterId)],
+  (table) => [
+    index("concept_node_chapterId_idx").on(table.chapterId),
+    // A chapter's checklist is replaced as a unit, never appended to, so a
+    // given sort position exists at most once. The constraint is what makes the
+    // replace idempotent: if two writers ever race the delete-then-insert, the
+    // second insert fails loudly instead of silently doubling every concept.
+    uniqueIndex("concept_node_chapterId_sortOrder_uidx").on(
+      table.chapterId,
+      table.sortOrder,
+    ),
+  ],
 );
 
 /**
@@ -171,7 +181,15 @@ export const chapterObjective = pgTable(
       .notNull()
       .$defaultFn(() => new Date()),
   },
-  (table) => [index("chapter_objective_chapterId_idx").on(table.chapterId)],
+  (table) => [
+    index("chapter_objective_chapterId_idx").on(table.chapterId),
+    // Same reasoning as `concept_node`: objectives are written as a whole unit,
+    // so a duplicated position is a bug the database should refuse.
+    uniqueIndex("chapter_objective_chapterId_sortOrder_uidx").on(
+      table.chapterId,
+      table.sortOrder,
+    ),
+  ],
 );
 
 /**

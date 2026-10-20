@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "chapter_objective_chapterId_sortOrder_uidx" ON "chapter_objective" USING btree ("chapter_id","sort_order");--> statement-breakpoint
+CREATE UNIQUE INDEX "concept_node_chapterId_sortOrder_uidx" ON "concept_node" USING btree ("chapter_id","sort_order");

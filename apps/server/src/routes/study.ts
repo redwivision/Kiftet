@@ -13,7 +13,7 @@ import {
   textbook,
   user,
 } from "@kiftet/db/schema";
-import { and, count, desc, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { type Request, type Response, Router } from "express";
 import { z } from "zod";
 import {
@@ -755,10 +755,17 @@ router.post("/chapters/ingest", async (req, res) => {
   );
 });
 
-// The model reads that are underway, keyed by chapter, so two requests that
-// arrive together for the same un-read chapter share one call instead of
-// spending two from a shared, per-project quota.
+// The model reads that are underway on *this* process, keyed by chapter. Two
+// requests that arrive together on the same instance share one call instead of
+// spending two. This is only a fast-path coalescer: correctness does not depend
+// on it (another instance has its own map), which is why the write below is
+// made idempotent at the database.
 const extractionInFlight = new Map<string, Promise<void>>();
+
+// Advisory-lock namespace for chapter extraction. `pg_advisory_xact_lock` is
+// scoped to the transaction, so the lock releases on commit or rollback without
+// a separate unlock path that a crash could skip.
+const EXTRACTION_LOCK_NAMESPACE = 1729;
 
 /**
  * Bring a chapter's checklist up to date with the model — once.
@@ -776,6 +783,16 @@ const extractionInFlight = new Map<string, Promise<void>>();
  * hand back the deterministic fallback as though it were the model's read: a
  * `degraded` rethrow of `AiBusyError` is caught here and the chapter is left
  * un-stamped so a calmer moment can try again.
+ *
+ * The write is safe under concurrency at any instance count. The model call
+ * happens outside any lock (it can take twenty seconds and must not hold a
+ * connection), then the replace runs in one transaction holding a per-chapter
+ * advisory lock. The lock makes two writers serialize; the `extractedAt`
+ * re-check inside it makes the second one a no-op, so a competing instance's
+ * work is discarded rather than interleaved. The delete-then-insert and the
+ * stamp are in the same transaction, so a crash cannot leave a chapter with no
+ * concepts, and the `(chapter_id, sort_order)` unique constraints turn any
+ * residual duplicate write into a loud failure instead of silent doubling.
  */
 async function ensureChapterExtraction(
   req: Request,
@@ -806,18 +823,36 @@ async function ensureChapterExtraction(
     } catch {
       return;
     }
+    // A fallback read is not worth writing: leave the chapter un-stamped so the
+    // model can be tried again at a calmer moment.
+    if (extraction.estimated) return;
 
     const concepts = mergeConcepts(
       row.topics?.map((topic) => topic.path),
       extraction.concepts,
     );
-    // Replace, do not append: the rows written at import were the topic-only
-    // seed, and this read is the fuller version of the same list.
-    await db().delete(conceptNode).where(eq(conceptNode.chapterId, chapterId));
-    if (concepts.length) {
-      await db()
-        .insert(conceptNode)
-        .values(
+
+    await db().transaction(async (tx) => {
+      // Serialize writers for this chapter. Released automatically when the
+      // transaction ends.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(${EXTRACTION_LOCK_NAMESPACE}, hashtext(${chapterId}))`,
+      );
+      // Re-check under the lock: an instance that won the race has already
+      // stamped the chapter, so this instance's (equally valid) read is
+      // dropped rather than replacing a completed one.
+      const [fresh] = await tx
+        .select({ extractedAt: chapter.extractedAt })
+        .from(chapter)
+        .where(eq(chapter.id, chapterId))
+        .limit(1);
+      if (!fresh || fresh.extractedAt) return;
+
+      // Replace, do not append: the rows written at import were the topic-only
+      // seed, and this read is the fuller version of the same list.
+      await tx.delete(conceptNode).where(eq(conceptNode.chapterId, chapterId));
+      if (concepts.length) {
+        await tx.insert(conceptNode).values(
           concepts.map((c, i) => ({
             id: crypto.randomUUID(),
             chapterId,
@@ -827,15 +862,13 @@ async function ensureChapterExtraction(
             sortOrder: i,
           })),
         );
-    }
+      }
 
-    await db()
-      .delete(chapterObjective)
-      .where(eq(chapterObjective.chapterId, chapterId));
-    if (extraction.objectives.length) {
-      await db()
-        .insert(chapterObjective)
-        .values(
+      await tx
+        .delete(chapterObjective)
+        .where(eq(chapterObjective.chapterId, chapterId));
+      if (extraction.objectives.length) {
+        await tx.insert(chapterObjective).values(
           extraction.objectives.map((o, i) => ({
             id: crypto.randomUUID(),
             chapterId,
@@ -846,16 +879,13 @@ async function ensureChapterExtraction(
             estimated: extraction.estimated,
           })),
         );
-    }
+      }
 
-    // Stamped only on a real read. An estimated (fallback) extraction stays
-    // un-stamped so the next visit can try the model again.
-    if (!extraction.estimated) {
-      await db()
+      await tx
         .update(chapter)
         .set({ extractedAt: new Date() })
         .where(eq(chapter.id, chapterId));
-    }
+    });
   })();
 
   extractionInFlight.set(chapterId, run);

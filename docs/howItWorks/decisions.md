@@ -406,3 +406,17 @@
     `/ready` fails on a `SELECT 1` and also the instant SIGTERM starts a drain.
     One endpoint cannot be both without getting one of them wrong, so the load
     balancer points at `/ready` and monitoring at `/health`.
+31. **A chapter's model read is guarded by the database, not the process.**
+    The replace of a chapter's concepts/objectives is a delete-then-insert, and
+    the only guard was an in-memory `Map` — which coalesces callers within one
+    instance and does nothing between two. So the guard moved to where the
+    contention actually is: a `pg_advisory_xact_lock` on the chapter serializes
+    writers, a re-check of `extractedAt` inside the lock makes the loser a
+    no-op, and the delete/insert/stamp share one transaction so a crash cannot
+    leave a chapter empty. The `Map` remains only as a fast-path that avoids a
+    second provider call on the same instance. The model call stays *outside*
+    the transaction on purpose: it can take twenty seconds, and holding a
+    pooled connection (and the lock) across a network wait is how a five-connection
+    pool becomes a queue. A duplicate model read across instances is wasteful but
+    harmless — it costs one shared free-tier call, not correctness — which is the
+    right trade against holding connections through slow calls.
