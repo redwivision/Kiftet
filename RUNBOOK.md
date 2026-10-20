@@ -165,7 +165,8 @@ Routes this one process owns:
 
 | Path | What | Notes |
 |---|---|---|
-| `/health` | liveness | returns `200 OK` — **probe this, not `/`** |
+| `/health` | liveness | returns `200 OK`, no dependency check — **probe this to know the process is alive** |
+| `/ready` | readiness | `200` when the DB is reachable and the instance is serving; `503` while draining after SIGTERM or if the DB is unreachable — **point the load balancer here** |
 | `/api/*` | API (auth + study loop) | `/api/auth/*` is public; the rest requires a session |
 | `/` + everything else | the web app | SSR + static, only when `NODE_ENV=production` |
 

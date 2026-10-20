@@ -396,3 +396,13 @@
     the *result* (`req.ip` from a forwarded header) rather than the parse. Dev
     defaults to `loopback` on purpose: a direct client cannot spoof its own IP,
     only a local proxy can.
+30. **Liveness and readiness are separate endpoints, because they drive
+    different actions.** A platform does two things with a health signal: it
+    restarts a process that looks dead, and it routes traffic away from an
+    instance that can't serve. Those want opposite answers to "is a dead
+    database a failure?". For restart, no — restarting cannot un-pause Neon and
+    a restart loop only amplifies the outage, so `/health` is dependency-free.
+    For routing, yes — an instance that can't reach the DB should be skipped, so
+    `/ready` fails on a `SELECT 1` and also the instant SIGTERM starts a drain.
+    One endpoint cannot be both without getting one of them wrong, so the load
+    balancer points at `/ready` and monitoring at `/health`.

@@ -52,6 +52,10 @@ startAiUsageSweep(getDb());
 
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";
+// Set the moment SIGTERM arrives: `/ready` flips to 503 so the load balancer
+// stops routing new requests here while the in-flight ones finish. Declared
+// here because the readiness handler reads it at request time.
+let draining = false;
 
 // Where the real client IP comes from. Express only replaces `req.ip` with the
 // left-most `X-Forwarded-For` value once it is told how many proxies to trust;
@@ -144,20 +148,35 @@ app.use("/api", (_req, res) => {
 });
 
 // ── Health ────────────────────────────────────────────────────────────
-// In development "/" returns "OK" so the API-only server is quick to
-// probe. In production "/" belongs to the web app, so monitoring uses
-// `/health` instead. The probe does a real `SELECT 1` against the pool so a
-// dead database (a platform pause, a revoked URL, a network break) shows up
-// as a failing health check instead of a 200 while the app is quietly
-// broken. A POOL-less boot already exits before the listener is up, and a
-// pool that can't reach the DB answers 503 within the 5s connect timeout.
-app.get("/health", async (_req, res) => {
+// Two different questions, answered by two different endpoints, because a
+// platform acts on them very differently:
+//
+//   /health — "is this process alive?" A cheap, dependency-free 200. It must
+//     NOT touch the database: a transient DB blip is not a reason to have the
+//     platform kill and restart a perfectly healthy process (restarting cannot
+//     fix a paused database, and a restart loop just makes the outage louder).
+//
+//   /ready — "should this instance receive traffic right now?" 503 while the
+//     process is draining after SIGTERM (so the load balancer stops sending new
+//     requests during a rolling deploy) and 503 when the database is
+//     unreachable (so traffic shifts to an instance that can actually serve).
+//
+// In development "/" also returns "OK" so the API-only server is quick to probe.
+app.get("/health", (_req, res) => {
+  res.status(200).send("OK");
+});
+
+app.get("/ready", async (_req, res) => {
+  if (draining) {
+    res.status(503).json({ error: "draining" });
+    return;
+  }
   try {
     await getDb().execute(sql`select 1`);
     res.status(200).send("OK");
   } catch (error) {
     console.error(
-      `[health] database ping failed: ${error instanceof Error ? error.message : String(error)}`,
+      `[ready] database ping failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     res.status(503).json({ error: "database_unreachable" });
   }
@@ -220,6 +239,7 @@ server.requestTimeout = 60_000;
 // requests finish, hang up the DB pool, then exit cleanly. If connections
 // won't drain in 10 seconds, force-quit so the redeploy isn't stuck.
 function shutdown(signal: string, code: 0 | 1) {
+  draining = true;
   console.log(`[boot] ${signal} received — draining connections…`);
   server.close(() => {
     void drainDatabase().finally(() => process.exit(code));
