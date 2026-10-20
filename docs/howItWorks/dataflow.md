@@ -271,6 +271,41 @@ offline retry after a lost response does not become a false out-of-order error.
 
 ---
 
+### 5.3d The AI quota — how a call is counted (go-live hardening)
+
+Every AI-backed route spends one call from the owner's per-minute allowance, and
+the counter lives in Postgres (`ai_usage`), not in server memory. One row = one
+owner's calls in one **clock-minute** (`windowStart`, truncated to the minute in
+UTC; `count`). A call is:
+
+```mermaid
+sequenceDiagram
+    participant R as AI route
+    participant Q as consumeAiRequest
+    participant DB as ai_usage
+    R->>Q: consume(userId, limit)
+    Q->>DB: INSERT … ON CONFLICT (user_id, window_start)<br/>DO UPDATE SET count = count + 1<br/>WHERE count < limit RETURNING count
+    alt count < limit, or no row yet
+        DB-->>Q: the new count
+        Q-->>R: allowed = true
+    else bucket already full
+        Note over DB: WHERE fails → zero rows updated,<br/>RETURNING is empty
+        Q->>DB: read the standing count (for the message)
+        Q-->>R: allowed = false (nothing was consumed)
+    end
+```
+
+The check and the increment are **one statement**, and the `WHERE` is evaluated
+against the locked row — so two concurrent requests for the last slot cannot
+both be allowed (the loser updates zero rows). The bucket is a clock-minute, not
+a sliding 60 seconds, so the window is an identity every instance agrees on.
+`GET /api/ai/budget` is a **non-consuming read** of the current bucket; expired
+rows are scratch and are deleted opportunistically on the owner's next call and
+by a 5-minute sweep timer. See [security §10.2](security.md) and
+[decision 28](decisions.md).
+
+---
+
 ### 5.4 Recall — "what do you remember?"
 
 This is the heart of the product. The student speaks out loud; the system

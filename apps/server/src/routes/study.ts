@@ -61,18 +61,17 @@ import {
   type SessionVerdict,
 } from "../ai/retest-verdict";
 import { summarizeStudyScores } from "../ai/study-result";
-import { createRollingWindow } from "../lib/rolling-window";
+import { minuteBucket, quotaState } from "../lib/ai-quota";
+import {
+  consumeAiRequest,
+  pruneAiUsage,
+  readAiUsage,
+} from "../lib/ai-quota-store";
 import { nextQueueSlot, orderedQueueSlots } from "../lib/study-queue";
 import { getDb } from "../services";
 import { DEMO_SEED_TITLE } from "./demo";
 
 const router = Router();
-
-// Bounded per-owner AI windows. The cap is deliberately well above any real
-// student count: at this ceiling a burst of distinct owners is the thing that
-// would otherwise pin memory, and dropping the coldest key under that burst is
-// cheaper than an OOM on the loop itself.
-const aiWindows = createRollingWindow(60_000, 50_000);
 
 // Our per-user allowance is deliberately set BELOW the provider's per-project
 // ceiling. Gemini's free tier is per *project* (~10 req/min, ~1-1.5k req/day),
@@ -90,32 +89,29 @@ function isDemo(req: Request): boolean {
   return Boolean(req.get("x-demo-user-id"));
 }
 
-// Non-consuming read of the current-minute budget for an owner.
-function aiBudgetFor(req: Request) {
-  const owner = ownerId(req);
-  const now = Date.now();
-  const callsThisMinute = aiWindows.count(owner);
-  const limitPerMinute = isDemo(req)
+function aiLimitFor(req: Request): number {
+  return isDemo(req)
     ? AI_REQUESTS_PER_MINUTE.demo
     : AI_REQUESTS_PER_MINUTE.signedIn;
-  const remaining = Math.max(0, limitPerMinute - callsThisMinute);
-  // The window is a rolling 60s filter, not a bucket that empties on the hour,
-  // so "when does it restart" has a real answer: the oldest call in the window
-  // ages out 60s after it happened. Only meaningful when the student is
-  // actually blocked — that's the moment they ask.
-  const oldest = aiWindows.oldestHitAt(owner);
-  const resetAt = oldest === null ? null : oldest + 60_000;
+}
+
+// Non-consuming read of the current-minute budget for an owner. The counter
+// lives in `ai_usage` (one row per owner per clock-minute) rather than in this
+// process, so it is shared across instances and survives a restart — the old
+// in-memory window forgot every count the moment the process recycled, which is
+// exactly when a burst is most likely to slip through.
+async function aiBudgetFor(req: Request) {
+  const owner = ownerId(req);
+  const now = new Date();
+  const callsThisMinute = await readAiUsage(db(), owner, now);
   return {
     demo: isDemo(req),
-    limitPerMinute,
-    callsThisMinute,
-    remaining,
-    windowSeconds: 60,
-    resetAt,
-    retryAfterSeconds:
-      remaining > 0 || resetAt === null
-        ? 0
-        : Math.max(1, Math.ceil((resetAt - now) / 1000)),
+    ...quotaState({
+      count: callsThisMinute,
+      limitPerMinute: aiLimitFor(req),
+      bucket: minuteBucket(now),
+      now: now.getTime(),
+    }),
   };
 }
 
@@ -148,13 +144,20 @@ async function dailyBookUsageFor(req: Request) {
   };
 }
 
-function allowAiRequest(req: Request): boolean {
-  const budget = aiBudgetFor(req);
-  if (budget.remaining <= 0) return false;
-  // `hit` records the call and re-checks the limit, so the read above is only
-  // there to keep the refusal message honest — the two cannot disagree because
-  // both read the same window.
-  return aiWindows.hit(ownerId(req), budget.limitPerMinute);
+// Consume one AI request from the owner's minute, atomically. `consumeAiRequest`
+// does the check and the increment as a single statement, so the answer it
+// returns is the one that counts — a caller that runs concurrently with another
+// cannot both be told "allowed" for the same last slot.
+async function allowAiRequest(req: Request): Promise<boolean> {
+  const owner = ownerId(req);
+  const { allowed } = await consumeAiRequest(db(), owner, aiLimitFor(req));
+  if (allowed) {
+    // Opportunistic cleanup: this owner's older buckets are scratch nobody will
+    // read again. Pruning here keeps the table from accumulating one dead row
+    // per student per minute without a scheduled job.
+    void pruneAiUsage(db(), owner).catch(() => {});
+  }
+  return allowed;
 }
 
 class DailyBookLimitError extends Error {
@@ -225,8 +228,8 @@ function err(
 // the same rolling window the check just used, so it is not a guess either.
 // The reassurance matters: a cached guide costs nothing, so a student who is
 // blocked on generation can still reopen everything they have already read.
-function aiBudgetError(res: Response, req: Request) {
-  const { retryAfterSeconds } = aiBudgetFor(req);
+async function aiBudgetError(res: Response, req: Request) {
+  const { retryAfterSeconds } = await aiBudgetFor(req);
   const wait =
     retryAfterSeconds > 0
       ? `${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"}`
@@ -794,7 +797,7 @@ async function ensureChapterExtraction(
     // A missing chapter, one already read, or a moment with no AI budget left:
     // none of these is the caller's problem to report.
     if (!row || row.extractedAt) return;
-    if (!allowAiRequest(req)) return;
+    if (!(await allowAiRequest(req))) return;
 
     let extraction: ChapterExtraction;
     try {
@@ -867,7 +870,7 @@ async function ensureChapterExtraction(
 // an answer with a number on it instead of "soon".
 router.get("/ai/budget", async (req, res) => {
   const [ai, books] = await Promise.all([
-    Promise.resolve(aiBudgetFor(req)),
+    aiBudgetFor(req),
     dailyBookUsageFor(req),
   ]);
   ok(res, { ...ai, books });
@@ -1037,11 +1040,11 @@ router.post("/textbooks/contents", async (req, res) => {
   const parsed = contentsSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   try {
     return ok(res, await ai.parseContents(parsed.data.pages));
   } catch (error) {
-    if (isAiBusy(error)) return aiBudgetError(res, req);
+    if (isAiBusy(error)) return await aiBudgetError(res, req);
     throw error;
   }
 });
@@ -1070,12 +1073,12 @@ router.post("/textbooks/contents-image", async (req, res) => {
   const parsed = contentsImageSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   try {
     const image: ContentsImage = parsed.data.image;
     return ok(res, await ai.parseImageContents(image));
   } catch (error) {
-    if (isAiBusy(error)) return aiBudgetError(res, req);
+    if (isAiBusy(error)) return await aiBudgetError(res, req);
     throw error;
   }
 });
@@ -1084,11 +1087,11 @@ router.post("/textbooks/title", async (req, res) => {
   const parsed = contentsSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   try {
     return ok(res, await ai.parseTitle(parsed.data.pages));
   } catch (error) {
-    if (isAiBusy(error)) return aiBudgetError(res, req);
+    if (isAiBusy(error)) return await aiBudgetError(res, req);
     throw error;
   }
 });
@@ -1781,7 +1784,7 @@ const recallSchema = z.object({
 });
 
 router.post("/sessions/:id/recall", async (req, res) => {
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   const parsed = recallSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -1853,7 +1856,7 @@ const microlessonSchema = z.object({
 });
 
 router.post("/sessions/:id/microlesson", async (req, res) => {
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   const parsed = microlessonSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -1998,7 +2001,7 @@ router.post("/sessions/:id/plan", async (req, res) => {
   let whyFirstByConcept = new Map<string, string>();
   if (initial.steps.length > 0) {
     const timeoutMs = contentDeadline - Date.now();
-    const skipAi = timeoutMs <= 0 || !allowAiRequest(req);
+    const skipAi = timeoutMs <= 0 || !(await allowAiRequest(req));
     try {
       whyFirstByConcept = await ai.generatePlanWhyFirst(
         chapterRow.rawText,
@@ -2137,7 +2140,7 @@ router.get("/chapters/:id/guide", async (req, res) => {
   for (const concept of targets) {
     const key = concept.conceptText.trim().toLowerCase();
     if (cache.has(key)) continue;
-    const skipAi = !allowAiRequest(req);
+    const skipAi = !(await allowAiRequest(req));
     if (skipAi) throttled = true;
     const section = await ai.generateGuideSection(
       concept.conceptText,
@@ -2222,7 +2225,9 @@ router.get("/chapters/:id/guide", async (req, res) => {
     sections,
     estimated,
     throttled,
-    retryAfterSeconds: throttled ? aiBudgetFor(req).retryAfterSeconds : 0,
+    retryAfterSeconds: throttled
+      ? (await aiBudgetFor(req)).retryAfterSeconds
+      : 0,
     language,
   });
 });
@@ -2257,7 +2262,7 @@ router.post("/sessions/:id/pretest", async (req, res) => {
   if (priorAttempt) {
     return err(res, "A baseline test must come before study answers", 409);
   }
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
 
   const chapterId = session.chapterId;
   const concepts = scopedConcepts(
@@ -2422,7 +2427,7 @@ router.post("/sessions/:id/retest", async (req, res) => {
       .where(eq(studySession.id, req.params.id));
     return ok(res, { questions: session.pretestQuestions });
   }
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
 
   const chapterId = session.chapterId;
   const concepts = scopedConcepts(
@@ -2500,7 +2505,7 @@ const recallQuestionsSchema = z.object({
 });
 
 router.post("/sessions/:id/recall-questions", async (req, res) => {
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   const parsed = recallQuestionsSchema.safeParse(req.body);
   if (!parsed.success) return err(res, firstIssue(parsed.error.issues));
 
@@ -2652,7 +2657,7 @@ router.post("/sessions/:id/recall-questions/answer", async (req, res) => {
     }
   } else {
     // Only an open, spoken answer reaches the model — so only it spends budget.
-    if (!allowAiRequest(req)) return aiBudgetError(res, req);
+    if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
     single = await ai.gradeRecall(parsed.data.transcriptText, subset, subject);
   }
   const score = Math.round(focusScore(single, subset) * 100);
@@ -2818,7 +2823,7 @@ router.post("/sessions/:id/retest/answer", async (req, res) => {
       });
     }
   }
-  if (!allowAiRequest(req)) return aiBudgetError(res, req);
+  if (!(await allowAiRequest(req))) return aiBudgetError(res, req);
   const questions =
     parsed.data.stage === "pretest"
       ? session.pretestQuestions

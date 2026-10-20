@@ -15,6 +15,7 @@ import {
   errorMiddleware,
   installProcessGuards,
 } from "./error-handler";
+import { startAiUsageSweep } from "./lib/ai-quota-store";
 import { startDemoCleanup } from "./lib/demo-cleanup";
 import { requestLogger } from "./lib/http-log";
 import authProvidersRouter from "./routes/auth-providers";
@@ -44,6 +45,9 @@ try {
 // Only reached once the schema has migrated, so the `kind` column the sweep
 // filters on is guaranteed to exist.
 startDemoCleanup();
+// Expired AI-quota buckets are scratch; this collects the ones an owner left
+// behind after spending their last request.
+startAiUsageSweep(getDb());
 
 const app = express();
 const IS_PROD = env.NODE_ENV === "production";

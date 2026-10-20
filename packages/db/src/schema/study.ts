@@ -571,3 +571,43 @@ export const misconceptionHitRelations = relations(
     }),
   }),
 );
+
+// ─── AI request quota, one row per owner per clock-minute ────────────
+// `window_start` is the minute bucket (truncated to the minute, server clock).
+// One row per (owner, minute) rather than one row per call: a call is an
+// increment against `count`, and the unique index is what makes the increment
+// safe to race. The check-and-consume is a single conditional upsert, so two
+// concurrent requests on different server instances cannot both slip past the
+// limit — the previous in-memory rolling window could, and lost its counts on
+// every restart besides.
+//
+// The bucket is a clock-minute, not a sliding 60s: a student who spends their
+// last call at 12:00:59 gets a fresh allowance at 12:01:00, which is a little
+// more generous than the old sliding window at the boundary and much cheaper
+// to reason about across processes. Rows are disposable — the reader/writer
+// prunes buckets older than the window it still cares about.
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").default(0).notNull(),
+  },
+  (table) => [
+    uniqueIndex("ai_usage_user_window_uidx").on(
+      table.userId,
+      table.windowStart,
+    ),
+    index("ai_usage_windowStart_idx").on(table.windowStart),
+  ],
+);
+
+export const aiUsageRelations = relations(aiUsage, ({ one }) => ({
+  user: one(user, {
+    fields: [aiUsage.userId],
+    references: [user.id],
+  }),
+}));

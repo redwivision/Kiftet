@@ -363,3 +363,23 @@
     cannot open two chapters. Plans are capped at 12 chapters — beyond that it
     is a to-do list, not a study plan — and duplicates are deduped rather than
     rejected, because the same chapter twice is a mis-tap, not an error.
+28. **The AI request quota is a DB-backed clock-minute counter, not an
+    in-memory window.** The per-user limit protecting the shared Gemini budget
+    used to live in a process-local `Map` keyed by owner. That was correct for
+    the decision and wrong for everything around it: it reset to zero on every
+    restart (exactly when a burst is most likely to slip through), it could not
+    be shared across instances, and it kept a growing set of keys on the same
+    heap as the study loop. So a call is now one row per owner per minute in
+    `ai_usage`, and the check-and-increment is a **single conditional upsert**
+    (`… DO UPDATE SET count = count + 1 WHERE count < limit`) — the database
+    evaluates the `WHERE` against the locked row, so two concurrent requests for
+    the last slot cannot both win; the loser updates zero rows and is refused.
+    The window is a **clock-minute**, not a sliding 60 seconds: the allowance
+    snaps to the minute boundary, which is marginally more generous at the edge
+    and, far more importantly, is an identity every instance can agree on
+    without shared clock arithmetic. Two consequences worth naming: a refused
+    call consumes nothing (the `WHERE` fails, so no increment), and the rows are
+    pure scratch — swept opportunistically on the owner's next call and by a
+    5-minute timer, never read after their minute has passed. The demo
+    `/demo/start` gate and the waitlist limiter stay in-memory on purpose: they
+    guard cheap, idempotent writes where surviving a restart buys nothing.

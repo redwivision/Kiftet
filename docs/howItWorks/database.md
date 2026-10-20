@@ -7,7 +7,7 @@ A database's design is basically: *what facts do we need to remember, and how do
 they relate?* Kiftet has **fifteen tables** in two families: the eleven **study-domain**
 tables (the product) and the four **auth tables** (who is signed in).
 
-### 6.1 The study domain (12 tables)
+### 6.1 The study domain (13 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
@@ -24,6 +24,7 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `syllabus` | One reference syllabus, e.g. "Biology, Grade 12" (bet 1) | `subject`, `grade`, `source` (`provisional` \| `verified`), `sourceNote` (the audit trail behind `source` — which textbook/syllabus the units were compiled from) |
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
 | `misconception_hit` | One time a grader saw a known misconception surface in a real session (bet 2) | `conceptNodeId` → concept_node, `sessionId`, `userId`; unique `(sessionId, conceptNodeId)` so retries never double-count |
+| `ai_usage` | One owner's AI-call counter for one clock-minute — the DB-backed request quota | `userId` → user, `windowStart` (minute-truncated, UTC), `count`; unique `(userId, windowStart)` is what makes the conditional increment atomic |
 
 A chapter maps to **one** unit in exactly one syllabus via `syllabus_unit` —
 this is the current shape of bet 1 (a chapter is part of a unit). When textbooks
@@ -144,5 +145,6 @@ the tables are the same names.)
 | `0015_plain_sinister_six` | `study_session.scope_keys` — nullable section scope; null means the whole chapter |
 | `0016_stale_raza` | `study_session.pretest_questions` and `pretest_index` — persistent optional baseline test and progress |
 | `0017_low_genesis` | `study_queue`, plus `study_session.queue_id` / `queue_position` — a planned set of one-chapter sessions walked in order |
+| `0018_same_karen_page` | `ai_usage` — the DB-backed per-user AI request quota (one row per owner per clock-minute) |
 
 ---

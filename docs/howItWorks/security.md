@@ -92,11 +92,11 @@ the requested `chapterId` belongs to a textbook owned by that user — returning
 `404` otherwise. Two students sharing a login would still only see one set of
 chapters; two separate accounts see nothing of each other.
 
-### 10.2 AI rate limiting (in-memory)
+### 10.2 AI rate limiting (DB-backed)
 
 Every AI-grading call (`recall`, `microlesson`, `retest`, `retest/answer`) and
-chapter ingest is rate-limited per user per minute, tracked in an in-memory
-`Map`:
+chapter ingest is rate-limited per user per minute, tracked in Postgres
+(`ai_usage` — one row per owner per clock-minute):
 
 - **Demo visitors:** **3 requests / minute** — enough to feel the product,
   stingy enough to protect the Gemini budget.
@@ -106,6 +106,21 @@ chapter ingest is rate-limited per user per minute, tracked in an in-memory
 
 Both numbers sit deliberately *below* Gemini's free-tier per-project ceiling
 (~10/min), because a limit set above the provider's just manufactures 429s.
+
+**The counter lives in the database, not in process memory.** A call is a single
+conditional upsert — `INSERT … ON CONFLICT (user_id, window_start) DO UPDATE SET
+count = count + 1 WHERE count < limit` — so the check and the increment are one
+statement and two requests competing for the last slot cannot both be allowed
+(one of them updates zero rows and is refused). The bucket is a **clock-minute**
+(truncated to the minute in UTC) rather than a sliding 60-second window: the
+allowance refreshes on the minute boundary, which is a little more generous than
+a sliding window at the edge and far cheaper to keep consistent across instances.
+Because the state is a committed row, it **survives a restart and is shared by
+every server instance** — the old in-memory window reset to zero on recycle,
+which is exactly when a burst is most likely to slip past. A refused call
+consumes nothing: the incremented total never includes the request that was
+turned away. Expired buckets are scratch and are swept opportunistically (on the
+owner's next call) and by a timer (`lib/ai-quota-store.ts`, every 5 minutes).
 
 **Every visitor sees their remaining budget**, not only demo ones
 (`GET /api/ai/budget`), as a live "AI calls left this minute" pill on the
@@ -166,10 +181,11 @@ friendly `413`. The web client timeouts a hung request at 30s and translates
 offline / abort failures into "Can't reach Kiftet" messages instead of raw
 `TypeError: Failed to fetch`.
 
-This is the *only* rate limiter; plain reads (chapters, sessions, results) are
-unlimited. The per-minute AI window is in-memory, so the counters reset on
-server restart — this is a safety net, not a billing system (DB-backed quotas
-are the go-live upgrade in [the roadmap](roadmap.md)).
+These are the only rate limiters; plain reads (chapters, sessions, results) are
+unlimited. The per-minute AI window is DB-backed (`ai_usage`), so the counters
+survive a restart and are shared across instances; the demo `/demo/start` gate
+and the waitlist limiter remain in-memory safety nets (see the go-live notes in
+[the roadmap](roadmap.md)).
 
 ### 10.3 Request size limits
 
