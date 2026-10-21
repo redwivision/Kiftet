@@ -9,8 +9,10 @@
       },
       "devDependencies": {
         "@biomejs/biome": "^2.5.12",
+        "@electric-sql/pglite": "0.5.11",
         "@kiftet/config": "workspace:*",
         "@types/bun": "catalog:",
+        "drizzle-orm": "0.45.2",
         "turbo": "^2.10.12",
         "typescript": "catalog:",
         "varlock": "catalog:",
@@ -103,6 +105,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@electric-sql/pglite": "^0.5.11",
         "@kiftet/config": "workspace:*",
         "@types/pg": "^8.15.4",
         "drizzle-kit": "^0.31.10",
@@ -394,6 +397,8 @@
     "@dotenvx/primitives": ["@dotenvx/primitives@0.8.0", "", {}, "sha512-VYJy0uhFm9zTJ1TxBaW/pA8bjbOM/OttaNMwZ1RHG4JKyRG7DhSdiqD1ipQoAyoD22olUtxbP78W9xY3Wd11bg=="],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
+
+    "@electric-sql/pglite": ["@electric-sql/pglite@0.5.11", "", {}, "sha512-SWuqsTjA4DDWqgZ05PC1RJaq8e00p5KACxbqaikDFQ8dIGA0SLRzuPniky7IW+q/c5RDNMdEXwv7mFBWIx9Hxw=="],
 
     "@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 

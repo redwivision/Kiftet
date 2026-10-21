@@ -1,10 +1,10 @@
-import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync } from "node:fs";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 
 import type { DatabaseConfig } from "./config";
+import { findMigrationsDir as findMigrationsDirShared } from "./migrations-dir";
 import {
   DEFAULT_CONNECT_RETRIES,
   DEFAULT_CONNECT_TIMEOUT_MS,
@@ -66,23 +66,7 @@ function sslFor(url: string) {
 // bundled (tsdown → apps/server/dist) this module is inlined, so
 // "next to the module" no longer points at the SQL files — walk back to
 // the repo root and resolve the source path instead.
-function findMigrationsDir(): string {
-  const candidates = [
-    join(import.meta.dirname, "migrations"),
-    join(import.meta.dirname, "../../../packages/db/src/migrations"),
-    join(import.meta.dirname, "../../packages/db/src/migrations"),
-  ];
-  const found = candidates.find(
-    (dir) =>
-      existsSync(dir) && readdirSync(dir).some((file) => file.endsWith(".sql")),
-  );
-  if (!found) {
-    throw new Error(
-      `Migrations folder not found. Tried: ${candidates.join(", ")}`,
-    );
-  }
-  return found;
-}
+const findMigrationsDir = findMigrationsDirShared;
 
 // ─── Connection budget ───────────────────────────────────────────────
 // Pure arithmetic lives in pool-config.ts so it can be tested without a

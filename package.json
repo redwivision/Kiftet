@@ -58,8 +58,10 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
+    "@electric-sql/pglite": "0.5.11",
     "@kiftet/config": "workspace:*",
     "@types/bun": "catalog:",
+    "drizzle-orm": "0.45.2",
     "turbo": "^2.10.12",
     "typescript": "catalog:",
     "varlock": "catalog:"

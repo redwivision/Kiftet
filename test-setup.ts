@@ -11,7 +11,13 @@
  * DATABASE_URL is a localhost placeholder that must never be dialled; any test
  * that actually needs a database has to say so and provision one.
  */
+// Neutralize EVERY provider key, not just Gemini. `anyAiAvailable()` is true if
+// either provider is configured, so a leftover real GROQ_API_KEY (loaded from
+// apps/server/.env when a test runs with that cwd) would flip the AI path on and
+// make a "unit" test reach the network. Both placeholders make it false, so
+// tests always take the deterministic fallback.
 process.env.GEMINI_API_KEY ??= "placeholder-gemini-api-key";
+process.env.GROQ_API_KEY ??= "placeholder-groq-api-key";
 process.env.DATABASE_URL ??= "postgresql://localhost:5432/kiftet_test_absent";
 process.env.DATABASE_URL_DIRECT ??= process.env.DATABASE_URL;
 process.env.BETTER_AUTH_SECRET ??= "test-secret-not-used-in-tests";

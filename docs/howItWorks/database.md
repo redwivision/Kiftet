@@ -176,4 +176,24 @@ the tables are the same names.)
 | `0020_useful_franklin_richards` | Unique `(chapter_id, sort_order)` on `concept_node` and `chapter_objective` — makes the extraction replace idempotent |
 | `0021_messy_hobgoblin` | `ai_admission` — the shared leaky bucket + circuit breaker state, one row per provider, so every instance draws on one provider allowance |
 
+### How the schema is tested
+Two layers, and they check different things:
+
+- **Pure helpers** (`apps/server/src/ai/*.test.ts`, `src/lib/*.test.ts`) — the
+  arithmetic and parsing that carries no SQL, run without a database.
+- **A real database, in-process** (`apps/server/src/test/`) — the launch path
+  (ingest → session → answer → result) and the DB-backed pieces (`ai_usage`,
+  `ai_admission`) run against **PGlite**, Postgres compiled to WASM, via
+  `createTestDb()` (`packages/db/src/test-db.ts`). No network, no secrets, and
+  the migrations applied are the repository's own `.sql` files — so a schema
+  change that never became a migration fails in the test exactly as it would in
+  production. The harness (`apps/server/src/test/harness.ts`) mounts the real
+  routers and auth middleware on a real socket, so tests see HTTP status codes
+  and JSON, not a mocked handler.
+
+What this layer *cannot* prove: behaviour that needs **two live connections** —
+the extraction advisory lock, and the cross-instance serialization of the
+admission bucket. PGlite is one connection, so those stay verified by a live
+check against Neon (see the roadmap rows), not here.
+
 ---

@@ -27,6 +27,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
     "@kiftet/config": "workspace:*",
     "@types/pg": "^8.15.4",
     "drizzle-kit": "^0.31.10",

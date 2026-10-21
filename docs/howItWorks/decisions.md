@@ -480,3 +480,20 @@
     you need to count 500s by route, a free-text line stops being enough. The
     fixed field set is deliberately narrow; a log store is one of the easiest
     places for a secret to leak, so anything sensitive stays out of it.
+
+36. **Integration tests run against Postgres in the process, not a mock.** The
+    launch path is mostly SQL, and a mock or an in-memory stand-in would agree
+    with whatever the code assumes — it cannot catch a unique index with the
+    wrong columns or a cascade that deletes too much, which is exactly what
+    breaks in production. PGlite (Postgres compiled to WASM) runs the
+    repository's own migration files in-process, so those tests need no network
+    and no secrets and still fail on a schema change that never became a
+    migration. The server is mounted for real — the actual routers and auth
+    middleware on a real socket, driven with `fetch` — because a 500 from the
+    shared error handler is part of what a client sees. Two boundaries are
+    stated rather than papered over: PGlite is a single connection, so anything
+    needing two (the extraction advisory lock, cross-instance bucket
+    serialization) is **not** proven here and stays a live check against Neon;
+    and placeholder provider keys force the deterministic fallback, so no test
+    reaches an AI provider. `@electric-sql/pglite` is a dev-only dependency, and
+    `__setDbForTests` is the one production-code seam it needs.

@@ -26,13 +26,29 @@ const waitlistDb = createDb(env, {
     WAITLIST_POOL_MAX,
 });
 
+/**
+ * Test seam: point `getDb()` at an in-process database (PGlite) so integration
+ * tests can exercise the real SQL — foreign keys, `ON CONFLICT`, transactions,
+ * the advisory lock around extraction — without a network or secrets. Mirrors
+ * `__setAdmissionStoreForTests`. Only tests call this.
+ */
+let override: Database | null = null;
+
 export function getDb(): Database {
-  return db;
+  return override ?? db;
 }
 
 /** Only the waitlist routes may use this. Anything else belongs on `getDb`. */
 export function getWaitlistDb(): Database {
   return waitlistDb;
+}
+
+export function __setDbForTests(next: unknown): void {
+  override = (next as Database | null) ?? null;
+}
+
+export function __resetDbForTests(): void {
+  override = null;
 }
 
 export const auth = createConfiguredAuth(env, db);
