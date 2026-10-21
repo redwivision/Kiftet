@@ -25,6 +25,7 @@ tables (the product) and the four **auth tables** (who is signed in).
 | `syllabus_unit` | One unit in a syllabus, e.g. "Unit 3 — Genetics" | `syllabusId`, `unitNumber`, `title`, `description`, `sortOrder` |
 | `misconception_hit` | One time a grader saw a known misconception surface in a real session (bet 2) | `conceptNodeId` → concept_node, `sessionId`, `userId`; unique `(sessionId, conceptNodeId)` so retries never double-count |
 | `ai_usage` | One owner's AI-call counter for one clock-minute — the DB-backed request quota | `userId` → user, `windowStart` (minute-truncated, UTC), `count`; unique `(userId, windowStart)` is what makes the conditional increment atomic |
+| `ai_admission` | The **shared** AI admission state — one row per provider, so every instance draws on the same per-project allowance | `provider` (pk), `tokens` (fractional leaky bucket), `lastRefillAt`, `consecutiveFailures`, `openUntil` (null = breaker closed), and the admitted/shed counters |
 
 A chapter maps to **one** unit in exactly one syllabus via `syllabus_unit` —
 this is the current shape of bet 1 (a chapter is part of a unit). When textbooks
@@ -148,5 +149,6 @@ the tables are the same names.)
 | `0018_same_karen_page` | `ai_usage` — the DB-backed per-user AI request quota (one row per owner per clock-minute) |
 | `0019_nifty_scarecrow` | Indexes on the two hottest unindexed predicates: `textbook.ownerId` and `waitlist_signup.telegramChatId` |
 | `0020_useful_franklin_richards` | Unique `(chapter_id, sort_order)` on `concept_node` and `chapter_objective` — makes the extraction replace idempotent |
+| `0021_messy_hobgoblin` | `ai_admission` — the shared leaky bucket + circuit breaker state, one row per provider, so every instance draws on one provider allowance |
 
 ---

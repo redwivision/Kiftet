@@ -1,10 +1,12 @@
 import { relations } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
   jsonb,
   pgTable,
+  real,
   text,
   timestamp,
   unique,
@@ -636,3 +638,34 @@ export const aiUsageRelations = relations(aiUsage, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// ─── Shared AI admission state, one row per provider ─────────────────
+// The provider's free-tier quota is per *project* and shared by every student
+// and every server instance, so the leaky bucket that guards it must be shared
+// too — two instances each holding their own bucket would together admit twice
+// the real allowance and manufacture the 429s the bucket exists to prevent. The
+// circuit breaker is shared for the same reason: a provider that is failing is
+// failing for everyone, and one instance reopening the circuit it can't see is
+// how a global outage gets treated as a local one.
+//
+// Two rows total (gemini, groq). All transitions are atomic read-modify-write
+// inside a transaction holding `SELECT … FOR UPDATE` on the row, so the token
+// check-and-consume and the breaker update are race-free across instances. The
+// concurrency cap is deliberately NOT here: it bounds one instance's own load,
+// and a per-instance cap times the instance count is a fine global bound.
+export const aiAdmission = pgTable("ai_admission", {
+  provider: text("provider").primaryKey(),
+  // Fractional: the bucket refills continuously, so a student who waits 12s of
+  // a 5/min allowance gets 1/5 of a token back, not nothing until the minute.
+  tokens: real("tokens").notNull(),
+  lastRefillAt: timestamp("last_refill_at", { withTimezone: true }).notNull(),
+  consecutiveFailures: integer("consecutive_failures").default(0).notNull(),
+  // Null when the circuit is closed; a timestamp while it is open.
+  openUntil: timestamp("open_until", { withTimezone: true }),
+  admitted: bigint("admitted", { mode: "number" }).default(0).notNull(),
+  shedBusy: bigint("shed_busy", { mode: "number" }).default(0).notNull(),
+  shedSaturated: bigint("shed_saturated", { mode: "number" })
+    .default(0)
+    .notNull(),
+  shedCircuit: bigint("shed_circuit", { mode: "number" }).default(0).notNull(),
+});

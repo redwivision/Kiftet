@@ -427,5 +427,23 @@
     listens for `req.on("close")` and breaks at the next concept boundary — the
     in-flight call completes (its result is cached for the next student), only
     the *next* call is skipped. Breaking at a boundary rather than aborting the
-    current call is deliberate: aborting mid-call wastes the tokens already
-    spent, and the finished section is useful to someone else.
+     current call is deliberate: aborting mid-call wastes the tokens already
+     spent, and the finished section is useful to someone else.
+
+33. **The AI allowance is shared state in the database, not per-process
+    memory.** The leaky bucket and circuit breaker guard a provider quota that
+    is per-*project* and therefore shared by every instance and every student.
+    Held in process memory, two instances would each admit a full bucket and
+    together spend twice the real allowance, and a provider failing for one
+    instance would stay "healthy" for the other. Both transitions now happen in
+    Postgres (`ai_admission`, one row per provider): the token check-and-consume
+    is a read-modify-write inside a transaction holding `SELECT … FOR UPDATE`,
+    which serializes concurrent consumers so exactly the allowance is admitted —
+    verified at 3 of 5 concurrent consumers admitted from a 3/min bucket. The
+    arithmetic is a pure module (`admission-state.ts`) shared by the DB store
+    and an in-memory test backend. The **concurrency cap stays per-process** on
+    purpose: a per-instance cap multiplied by instance count is a legitimate
+    global bound, and a cross-instance wait queue would need polling Postgres
+    for a place in line — poor fit and worse latency than simply refusing. When
+    the store is unreachable the call is refused (`store-unavailable`) rather
+    than allowed: with a shared quota you cannot fail open and still be safe.

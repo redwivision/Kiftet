@@ -1,4 +1,13 @@
 import { env } from "../env.server";
+import {
+  type AdmissionConfig,
+  type AdmissionState,
+  applyOutcome,
+  refillTokens,
+  secondsUntilCircuitCloses,
+  secondsUntilToken,
+} from "./admission-state";
+import { consumeAdmission, settleAdmission } from "./admission-store";
 
 /**
  * Global admission control for the AI seam.
@@ -12,25 +21,30 @@ import { env } from "../env.server";
  * third, because they answer three separate questions and confusing them is
  * what produces an outage that looks like a bug:
  *
- *  1. **A leaky bucket** — how many calls this process may make to THAT
- *     provider in total. This and the free tier are the only capacity we
- *     actually have: the tier is per *project* and shared by every student,
- *     so N students at 8 req/min each is not 8N of capacity, it is a shared
- *     pool that empties. Admitting work we cannot serve is what manufactures
- *     429s, and a 429 inside `ask` costs a full retry budget before it
- *     becomes a fallback (or a handover to the second provider).
+ *  1. **A leaky bucket** — how many calls may be made to THAT provider in
+ *     total. This and the free tier are the only capacity we actually have: the
+ *     tier is per *project* and shared by every student, so N students at 8
+ *     req/min each is not 8N of capacity, it is a shared pool that empties.
+ *     Admitting work we cannot serve is what manufactures 429s, and a 429
+ *     inside `ask` costs a full retry budget before it becomes a fallback (or a
+ *     handover to the second provider). Because the pool is global, the bucket
+ *     lives in Postgres (`admission-store.ts`), not in this process — two
+ *     instances with private buckets would together admit twice the allowance.
  *
  *  2. **A concurrency cap** — shared, not one pool per provider: a real
  *     student request occupies one slot whether Gemini or Groq ends up
  *     answering it. Bounds memory and stops the retry ladder from multiplying
- *     load precisely when a provider is least able to absorb it.
+ *     load precisely when a provider is least able to absorb it. This one is
+ *     deliberately *per process*: it bounds one instance's own load, and a
+ *     per-instance cap times the instance count is a fine global bound.
  *
- *  3. **A circuit breaker** — per provider. When a provider is persistently
- *     failing, stop calling it and hand the ladder to the other one. Without
- *     this, a Gemini quota storm holds every request open for the whole retry
- *     budget; enough of those and the process is doing nothing but waiting for
- *     a provider that has already said no. The per-provider half of the design
- *     is what lets Gemini collapse without taking Groq with it.
+ *  3. **A circuit breaker** — per provider, and shared (in Postgres, with the
+ *     bucket). When a provider is persistently failing, stop calling it and
+ *     hand the ladder to the other one. Without this, a Gemini quota storm
+ *     holds every request open for the whole retry budget; enough of those and
+ *     the process is doing nothing but waiting for a provider that has already
+ *     said no. A provider failing for us is failing for every instance, so the
+ *     breaker is central too.
  *
  * Every refusal raises `AiBusyError`. That is deliberate and it is the whole
  * point of the distinction from falling through to the deterministic fallback:
@@ -50,7 +64,11 @@ export const AI_PROVIDERS: readonly AiProvider[] = ["gemini", "groq"];
 /** Why admission refused. Carried on the error so the HTTP layer can pick an
  *  honest status and so telemetry can separate "we shed load on purpose"
  *  from "the provider broke". */
-export type AdmissionReason = "circuit-open" | "provider-busy" | "saturated";
+export type AdmissionReason =
+  | "circuit-open"
+  | "provider-busy"
+  | "saturated"
+  | "store-unavailable";
 
 export class AiBusyError extends Error {
   constructor(
@@ -89,36 +107,34 @@ const PER_MINUTE: Record<AiProvider, number> = {
   groq: positive(env.AI_GROQ_PER_MINUTE, 20),
 };
 
-// ── 1. Leaky bucket (per provider) ────────────────────────────────────
-//
-// Capacity equals one minute of allowance, because "a whole minute's worth
-// arriving at once" is the realistic burst shape (a Telegram link hits, or a
-// class finishes a lesson at the same minute) and the tokens are there to
-// absorb exactly that. Refill is continuous rather than per-minute so a
-// student who waits 20 seconds gets 1/3 of a call's worth, instead of nothing
-// until the top of the minute — which is what made the old rolling window feel
-// arbitrary to students asking "when does it restart?".
-//
-// Backdated to `lastRefillAt` on first use so a process that boots and sits
-// idle for an hour does not wake up with a full bucket plus an hour of credit.
+function configFor(provider: AiProvider): AdmissionConfig {
+  return {
+    perMinute: PER_MINUTE[provider],
+    circuitFailures: CIRCUIT_FAILURES,
+    circuitCooldownMs: CIRCUIT_COOLDOWN_MS,
+  };
+}
 
-type Gate = {
-  perMinute: number;
-  tokens: number;
-  lastRefillAt: number;
-  consecutiveFailures: number;
-  openUntil: number;
+// ── Process-local mirror ──────────────────────────────────────────────
+//
+// The database is the source of truth for every admission *decision*. This tiny
+// mirror exists only so telemetry (`admissionSnapshot`, called synchronously on
+// the health and telemetry routes) does not have to be async or hit the
+// database: it is refreshed from the state each decision writes back. It can be
+// a few hundred milliseconds stale across instances, which is exactly right for
+// monitoring and never consulted for a decision.
+
+type Mirror = AdmissionState & {
   admitted: number;
   shedBusy: number;
   shedSaturated: number;
   shedCircuit: number;
 };
 
-function createGate(perMinute: number): Gate {
+function freshMirror(provider: AiProvider): Mirror {
   const now = Date.now();
   return {
-    perMinute,
-    tokens: perMinute,
+    tokens: PER_MINUTE[provider],
     lastRefillAt: now,
     consecutiveFailures: 0,
     openUntil: 0,
@@ -129,43 +145,20 @@ function createGate(perMinute: number): Gate {
   };
 }
 
-const gates: Record<AiProvider, Gate> = {
-  gemini: createGate(PER_MINUTE.gemini),
-  groq: createGate(PER_MINUTE.groq),
+const mirrors: Record<AiProvider, Mirror> = {
+  gemini: freshMirror("gemini"),
+  groq: freshMirror("groq"),
 };
 
-function refill(gate: Gate, now: number): void {
-  if (now === gate.lastRefillAt) return;
-  const elapsedMinutes = (now - gate.lastRefillAt) / 60_000;
-  if (elapsedMinutes <= 0) return;
-  gate.tokens = Math.min(
-    gate.perMinute,
-    gate.tokens + elapsedMinutes * gate.perMinute,
-  );
-  gate.lastRefillAt = now;
+function refreshMirror(provider: AiProvider, state: AdmissionState): void {
+  const mirror = mirrors[provider];
+  mirror.tokens = state.tokens;
+  mirror.lastRefillAt = state.lastRefillAt;
+  mirror.consecutiveFailures = state.consecutiveFailures;
+  mirror.openUntil = state.openUntil;
 }
 
-function tokensAvailable(gate: Gate, now: number): number {
-  refill(gate, now);
-  return gate.tokens;
-}
-
-function takeToken(gate: Gate, now: number): boolean {
-  if (tokensAvailable(gate, now) < 1) return false;
-  gate.tokens -= 1;
-  return true;
-}
-
-/** Seconds until the bucket holds a whole token again — the honest answer to
- *  "try again in…?" rather than a fixed "in a minute". */
-function secondsUntilToken(gate: Gate, now: number): number {
-  refill(gate, now);
-  const missing = 1 - gate.tokens;
-  if (missing <= 0) return 0;
-  return Math.max(1, Math.ceil((missing / gate.perMinute) * 60));
-}
-
-// ── 2. Concurrency cap (shared) ───────────────────────────────────────
+// ── 2. Concurrency cap (shared, per process) ──────────────────────────
 //
 // A counting semaphore with FIFO waiters. Not a timeout-bounded queue on
 // purpose: waiting is only worthwhile if a slot is genuinely coming, and a
@@ -208,36 +201,6 @@ function acquireSlot(waitMs: number): Promise<boolean> {
   });
 }
 
-// ── 3. Circuit breaker (per provider) ─────────────────────────────────
-//
-// `consecutiveFailures` counts *transient* provider failures only — a
-// non-retryable 400 is the request's problem, not the provider's, and must
-// not open the circuit for every other student. A success resets it.
-//
-// Half-open admits exactly one probe. If the probe succeeds the circuit closes;
-// if it fails the cooldown restarts. That is the difference between "we try
-// the provider occasionally and stay healthy" and "every student gets one
-// failed call per cooldown window forever".
-
-function circuitOpen(gate: Gate, now: number): boolean {
-  return now < gate.openUntil;
-}
-
-function secondsUntilCircuitCloses(gate: Gate, now: number): number {
-  return Math.max(1, Math.ceil((gate.openUntil - now) / 1000));
-}
-
-function recordSuccess(gate: Gate): void {
-  gate.consecutiveFailures = 0;
-  gate.openUntil = 0;
-}
-
-function recordFailure(gate: Gate, now: number): void {
-  gate.consecutiveFailures += 1;
-  if (gate.consecutiveFailures < CIRCUIT_FAILURES) return;
-  gate.openUntil = now + CIRCUIT_COOLDOWN_MS;
-}
-
 // ── Telemetry ─────────────────────────────────────────────────────────
 //
 // One snapshot per provider, merged by the caller rather than kept separate,
@@ -248,26 +211,33 @@ function recordFailure(gate: Gate, now: number): void {
 /** One snapshot per provider, so "who stopped us?" stays a per-provider
  *  story and both halves show up in the merged telemetry route. */
 function providerSnapshot(provider: AiProvider) {
-  const gate = gates[provider];
+  const mirror = mirrors[provider];
   const now = Date.now();
-  const isOpen = circuitOpen(gate, now);
+  const isOpen = now < mirror.openUntil;
+  const config = configFor(provider);
+  // The mirror's tokens are only advanced when this process makes a decision,
+  // so refill for display the same way a decision would.
+  const refilled = Math.max(
+    0,
+    Math.min(config.perMinute, refillTokens(mirror, now, config.perMinute)),
+  );
   return {
-    perMinuteLimit: gate.perMinute,
+    perMinuteLimit: config.perMinute,
     maxConcurrent: MAX_CONCURRENT,
-    tokensAvailable: Number(tokensAvailable(gate, now).toFixed(2)),
+    tokensAvailable: Number(refilled.toFixed(2)),
     inFlight,
     queued: waiters.length,
     circuitOpen: isOpen,
-    circuitOpensUntil: isOpen ? new Date(gate.openUntil).toISOString() : null,
-    consecutiveFailures: gate.consecutiveFailures,
+    circuitOpensUntil: isOpen ? new Date(mirror.openUntil).toISOString() : null,
+    consecutiveFailures: mirror.consecutiveFailures,
     /** Admitted because the bucket had a token and a slot was free. */
-    admitted: gate.admitted,
+    admitted: mirror.admitted,
     /** Refused because the bucket was empty — the honest ceiling. */
-    shedBusy: gate.shedBusy,
+    shedBusy: mirror.shedBusy,
     /** Refused because every slot was taken and none freed in time. */
-    shedSaturated: gate.shedSaturated,
+    shedSaturated: mirror.shedSaturated,
     /** Refused because THAT provider's circuit was open. */
-    shedCircuit: gate.shedCircuit,
+    shedCircuit: mirror.shedCircuit,
   };
 }
 
@@ -285,22 +255,51 @@ export function allAdmissionSnapshots() {
   };
 }
 
-/** Test seam: reset every gate's state so a case can drive a bucket and a
- *  breaker from a known starting point, on any provider. */
+/** Test seam: reset every mirror and the semaphore so a case can drive a
+ *  bucket and a breaker from a known starting point, on any provider. */
 export function __resetAdmissionForTests(): void {
   for (const provider of AI_PROVIDERS) {
-    const gate = gates[provider];
-    gate.tokens = gate.perMinute;
-    gate.lastRefillAt = Date.now();
-    gate.consecutiveFailures = 0;
-    gate.openUntil = 0;
-    gate.admitted = 0;
-    gate.shedBusy = 0;
-    gate.shedSaturated = 0;
-    gate.shedCircuit = 0;
+    mirrors[provider] = freshMirror(provider);
   }
   inFlight = 0;
   waiters.length = 0;
+}
+
+/**
+ * Test seam: replace the database-backed store with an in-memory one, so unit
+ * tests that drive the AI seam (and therefore admission) do not need a live
+ * Postgres. `null` restores the real store. The in-memory backend uses the same
+ * pure arithmetic, so it exercises the real decision logic — only the storage
+ * moves.
+ */
+let storeOverride: {
+  consume: typeof consumeAdmission;
+  settle: typeof settleAdmission;
+} | null = null;
+
+export function __setAdmissionStoreForTests(
+  override: {
+    consume: typeof consumeAdmission;
+    settle: typeof settleAdmission;
+  } | null,
+): void {
+  storeOverride = override;
+}
+
+function consume(provider: AiProvider, config: AdmissionConfig) {
+  return storeOverride
+    ? storeOverride.consume(provider, config)
+    : consumeAdmission(provider, config);
+}
+
+function settle(
+  provider: AiProvider,
+  outcome: AiOutcome,
+  config: AdmissionConfig,
+) {
+  return storeOverride
+    ? storeOverride.settle(provider, outcome, config)
+    : settleAdmission(provider, outcome, config);
 }
 
 // ── The gate ──────────────────────────────────────────────────────────
@@ -329,46 +328,66 @@ export type AiOutcome =
 /**
  * Admit one call to one provider, or refuse it.
  *
- * Order matters: the provider's circuit is checked before its bucket so an
- * open circuit costs no tokens, and the bucket before the semaphore so we
- * never hold a slot we have no quota to use. The semaphore is only acquired
- * once the token is spent, so the two limits can't deadlock against each
- * other.
+ * Order matters: the provider's circuit and bucket are checked together in one
+ * locked database transaction so an open circuit costs no tokens and the bucket
+ * is never over-spent across instances; the concurrency slot is then acquired
+ * only once the token is spent, so the two limits can't deadlock against each
+ * other and no slot is held without quota to use it.
  */
 export async function admitAiCall(
   provider: AiProvider = "gemini",
   maxWaitMs = WAIT_MS,
 ): Promise<AiAdmission> {
-  const gate = gates[provider];
-  const now = Date.now();
+  const config = configFor(provider);
 
-  if (circuitOpen(gate, now)) {
-    gate.shedCircuit += 1;
-    throw new AiBusyError("circuit-open", secondsUntilCircuitCloses(gate, now));
+  let decision: Awaited<ReturnType<typeof consumeAdmission>>;
+  try {
+    decision = await consume(provider, config);
+  } catch {
+    // A database we cannot read must not become an open door: refuse, exactly
+    // as an open circuit would, rather than admitting an unbounded call.
+    mirrors[provider].shedCircuit += 1;
+    throw new AiBusyError("store-unavailable", 2);
   }
+  refreshMirror(provider, decision.state);
 
-  if (!takeToken(gate, now)) {
-    gate.shedBusy += 1;
-    throw new AiBusyError("provider-busy", secondsUntilToken(gate, now));
+  if (decision.kind === "refuse") {
+    if (decision.reason === "circuit-open") mirrors[provider].shedCircuit += 1;
+    else mirrors[provider].shedBusy += 1;
+    throw new AiBusyError(decision.reason, decision.retryAfterSeconds);
   }
 
   const gotSlot = await acquireSlot(Math.min(WAIT_MS, Math.max(0, maxWaitMs)));
   if (!gotSlot) {
-    gate.shedSaturated += 1;
+    // The token was already consumed; a shed here costs the student nothing
+    // extra and is recorded so "saturated" is distinguishable from "busy".
+    mirrors[provider].shedSaturated += 1;
     throw new AiBusyError("saturated", 2);
   }
 
-  gate.admitted += 1;
+  mirrors[provider].admitted += 1;
 
   return {
     settle(outcome) {
       releaseSlot();
-      if (outcome === "success") recordSuccess(gate);
-      // `caller-error` is deliberately inert: it neither opens the breaker nor
-      // clears the streak. A request we sent badly says nothing about whether
-      // the next request will work, and resetting on it would let a single
-      // 400 close a circuit that was correctly open.
-      else if (outcome === "provider-failure") recordFailure(gate, Date.now());
+      // Update the telemetry mirror *synchronously* from the same pure
+      // arithmetic the store applies, so `admissionSnapshot`/`providerHealth`
+      // read the breaker immediately after a settle rather than a microtask
+      // later. The store write then reconciles the authoritative shared row;
+      // the mirror is telemetry only, so an optimistic update is correct here.
+      refreshMirror(
+        provider,
+        applyOutcome(mirrors[provider], outcome, Date.now(), config),
+      );
+      // The counter changes too, but mirrors count admissions/sheds, not
+      // outcomes, so nothing else to update.
+      void settle(provider, outcome, config).then((next) => {
+        if (next) refreshMirror(provider, next);
+      });
     },
   };
 }
+
+// Re-exported for callers that want the shared arithmetic (telemetry copy,
+// tests) without reaching into the store.
+export { secondsUntilCircuitCloses, secondsUntilToken };
