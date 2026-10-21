@@ -128,6 +128,45 @@ happens twice. It is best-effort: if the model is busy or throttled the request
 still succeeds with the topic-only checklist, and a deterministic fallback is
 never stamped as a real read, so a later visit retries the model.
 
+#### 5.2.1 How the contents reader decides
+
+The reader is a **stack of fallbacks**, cheapest first, and it is *measured*
+rather than assumed. `apps/web/src/lib/toc.ts` holds the pure part — given the
+page text, decide what the structure is — and `apps/web/src/lib/textbook.ts`
+drives it.
+
+| Layer | What it uses | When it runs |
+|---|---|---|
+| 1. Embedded outline | the PDF's own bookmarks | always tried first; free |
+| 2. Printed contents page | the text layer, parsed by `contentsFromPages` | when there is no outline |
+| 3. OCR contents | Tesseract on the front-matter pages | when the text layer is unreadable |
+| 4. Model transcript | a vision/transcript read of the contents image | when the OCR parse yields nothing usable |
+| 5. Heading scan | `segmentsForOcrBook` — running headers become units | last resort |
+| 6. **Ask the student** | the page-range picker, by hand | when even the scan cannot be trusted |
+
+Two properties are deliberate and are what make the reader safe to build a
+planner on:
+
+- **It declines rather than invents.** A page that is not a contents page
+  (an exercise page, a body page) is refused, and a book with no readable
+  contents produces *nothing* rather than a plausible-looking structure. A
+  wrong structure is worse than no structure, because the whole plan is built
+  on it.
+- **It is measured against real books.** `toc-corpus.test.ts` replays the real
+  front-matter text of the three textbooks in `docs/` through the exact reader
+  the app runs; `toc-universal.test.ts` covers the shapes those three books
+  happen not to have — leader styles, Amharic and Afaan Oromoo contents, roman
+  page numbers, three-level nesting, and the pages that must be refused. Both
+  corpora are fixtures, so the claim is checked on every test run.
+
+A printed page number may be arabic or **roman** — front matter is routinely
+numbered `i`–`xx`, so "Unit 1 Introduction to Biology ix" is a real line in a
+real book. The roman form is accepted only where a title precedes it and the
+token actually reads as a numeral, because the roman letters `c`, `i`, `l`, `m`,
+`v`, `x` are also the letters ordinary words end in — a looser rule reads the
+end of "… cell" as a page number and turns body prose into a contents. See
+[decision 38](decisions.md).
+
 ---
 
 ### 5.3 Starting a study session

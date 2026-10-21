@@ -497,3 +497,37 @@
     and placeholder provider keys force the deterministic fallback, so no test
     reaches an AI provider. `@electric-sql/pglite` is a dev-only dependency, and
     `__setDbForTests` is the one production-code seam it needs.
+
+37. **The contents reader is measured against real books, and its reach is
+    bounded — honestly.** "Reads any book" cannot be true and is not claimed:
+    some PDFs are image-only scans with no contents page at all, and no reader
+    recovers a structure the book never states. What is achievable, and what we
+    build for, is **never leaving the student stuck** — the reader either reads
+    the structure or guides the student to confirm it. Two things follow.
+    First, the reader is *measured*: a generated corpus replays the real
+    front-matter text of the textbooks in `docs/` through the exact reader the
+    app runs, and a hand-written corpus covers the shapes those three books
+    happen not to have (leader styles, Amharic and Afaan Oromoo contents, roman
+    page numbers, three-level nesting, and the exercise and body pages that must
+    be *refused*). "Works on the books we have" is a checked claim, not a
+    feeling. Second, the reader is *conservative by design*: when it cannot
+    establish a structure it declines rather than inventing one, and a declined
+    read is a signal to ask the student, not to guess silently. A wrong
+    structure is worse than no structure, because the whole plan is built on
+    it.
+
+38. **A roman page number is only a page number where a title precedes it.**
+    Front matter is frequently numbered in roman numerals ("Unit 1 Introduction
+    to Biology ix"), and an arabic-only tail read that line as no entry at all:
+    the unit was dropped and the next unit's title absorbed the orphaned topic
+    lines, so a book with roman front matter lost its first unit. The obvious
+    fix — accept roman letters wherever an arabic page number is accepted — is
+    a trap, because `c`, `i`, `l`, `m`, `v` and `x` are all roman letters: a
+    looser rule reads the end of an ordinary word ("… cell") as a page number
+    and turns ordinary body prose into a contents. So the roman form is
+    confined to the two *entry* patterns, where a title always precedes the
+    trailing token, and is additionally required to be a numeral that actually
+    reads as one. The generic "does this line end in a page number" probe stays
+    arabic-only, because it asks the question of arbitrary lines where the
+    title-then-token context does not exist. This one change is what the corpus
+    case `roman-page-numbers` now locks.

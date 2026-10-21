@@ -402,6 +402,33 @@ export const UNIVERSAL_CONTENTS_CASES: UniversalContentsCase[] = [
     ],
     expect: null,
   },
+  {
+    id: "roman-page-numbers",
+    note: "Front matter numbered in roman numerals: 'Unit 1 Introduction to Biology ix'. The arabic-only tail used to refuse the unit line, so the unit was dropped and the next unit's title absorbed the orphaned topic lines.",
+    pages: [
+      "CONTENTS\nUnit 1 Introduction to Biology ix\n1.1 What is biology x\n1.2 Life processes xi\nUnit 2 Cells 1\n2.1 Cell structure 2\n2.2 Cell division 5",
+    ],
+    expect: [
+      {
+        unit: 1,
+        title: "Introduction to Biology",
+        page: 9,
+        topics: [
+          { path: "1.1", title: "What is biology", page: 10 },
+          { path: "1.2", title: "Life processes", page: 11 },
+        ],
+      },
+      {
+        unit: 2,
+        title: "Cells",
+        page: 1,
+        topics: [
+          { path: "2.1", title: "Cell structure", page: 2 },
+          { path: "2.2", title: "Cell division", page: 5 },
+        ],
+      },
+    ],
+  },
 ];
 
 export const UNIVERSAL_DETECTION_CASES: UniversalDetectionCase[] = [
@@ -446,5 +473,11 @@ export const UNIVERSAL_DETECTION_CASES: UniversalDetectionCase[] = [
     note: 'A contents page whose first line is an entry called "Review Questions" — it ends in a page number, so the back-matter guard must not refuse it.',
     text: "Review Questions 55\nUnit 4 Ecology 57\n4.1 Food webs 58\n4.2 Energy flow 60",
     expect: true,
+  },
+  {
+    id: "prose-ending-in-roman-letters",
+    note: "Body prose whose lines end in words spelled from roman letters — 'cell', 'civic' — must not read as a contents. The roman page-number form is confined to a trailing token after a title, never a suffix of a word.",
+    text: "The cell\nThe smallest living unit is the cell\nEvery tissue is built from many a cell\nMitosis makes two cells from one cell",
+    expect: false,
   },
 ];

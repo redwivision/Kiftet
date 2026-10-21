@@ -53,8 +53,27 @@ export type TocChapter = {
 // A dotted number, tolerating the ways OCR spaces it out: "2.1", "2.1.",
 // "6.2.4.", and the "6.1. 2" where the renderer split one number in two.
 const NUMBER_SOURCE = String.raw`\d+(?:\s*\.\s*\d+)*\s*\.?`;
+/**
+ * A printed page number at the end of a contents line.
+ *
+ * Arabic numerals are the common case, but the front matter of these textbooks
+ * — and of a great many books — numbers its introductory units in *roman*
+ * numerals, so a contents can read "Unit 1 Introduction to Biology ix". That
+ * line used to parse as nothing: the arabic-only tail refused it, the unit was
+ * dropped, and the next unit's title absorbed the orphaned line.
+ *
+ * The roman form is deliberately confined to this trailing position, where a
+ * title always precedes it, and is capped short — front matter runs `i`–`xx`,
+ * never a long sequence. Both restrictions matter: `c`, `i`, `l`, `m`, `v`, `x`
+ * are all roman letters, so a looser rule reads the end of an ordinary word —
+ * "cell … cell" — as a page number and turns body prose into a contents. The
+ * generic `endsWithPageNumber` probe stays arabic-only for the same reason; it
+ * asks the question of arbitrary lines, where the title-then-token context does
+ * not exist.
+ */
+const PAGE_SOURCE = String.raw`\d{1,3}|[IVXLCDMivxlcdm]{1,5}`;
 const SECTION_RE = new RegExp(
-  String.raw`^(${NUMBER_SOURCE})\s+(.+?)\s+(\d{1,3})$`,
+  String.raw`^(${NUMBER_SOURCE})\s+(.+?)\s+(${PAGE_SOURCE})$`,
 );
 /**
  * How a unit introduces itself.
@@ -72,7 +91,7 @@ const UNIT_WORD =
 /** A unit's own number: an integer, a dotted integer ("2.1"), or a roman numeral. */
 const UNIT_NUM = String.raw`\d{1,3}(?:\s*\.\s*\d+)*|[IVXLCDM]{1,7}`;
 const UNIT_RE = new RegExp(
-  String.raw`^(?:${UNIT_WORD})\s+(${UNIT_NUM})\s*[:.\-\u2013\u2014]?\s*(.+?)\s+(\d{1,3})$`,
+  String.raw`^(?:${UNIT_WORD})\s+(${UNIT_NUM})\s*[:.\-\u2013\u2014]?\s*(.+?)\s+(${PAGE_SOURCE})$`,
   "i",
 );
 const STARTS_LIKE_ENTRY_RE = new RegExp(String.raw`^${NUMBER_SOURCE}\s+\S`);
@@ -113,6 +132,21 @@ function parseUnitNumber(token: string): number | null {
     const n = Number(token.split(".")[0]);
     return Number.isInteger(n) && n >= 1 ? n : null;
   }
+  return romanToInt(token);
+}
+
+/**
+ * A captured trailing page number as an integer, in either numeral system.
+ *
+ * Arabic passes straight through. A roman numeral is read by the same
+ * `romanToInt` the unit number uses, so "ix" → 9. A roman candidate that does
+ * not actually read as a numeral — the letters `cell` at the end of an ordinary
+ * title, say — returns null, and the caller refuses the line rather than
+ * inventing an entry. A printed page number is informational here (the reader
+ * anchors the *PDF* page elsewhere), so a null is a refusal, not a zero.
+ */
+function parsePageNumber(token: string): number | null {
+  if (/^\d/.test(token)) return Number(token);
   return romanToInt(token);
 }
 
@@ -201,17 +235,21 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
     if (!titleLooksReal(unit[2])) return false;
     const number = parseUnitNumber(unit[1]);
     if (number === null) return false;
+    const page = parsePageNumber(unit[3]);
+    if (page === null) return false;
     into.push({
       kind: "unit",
       unit: number,
       title: tidyTitle(unit[2]),
-      page: Number(unit[3]),
+      page,
     });
     return true;
   }
   const section = line.match(SECTION_RE);
   if (section) {
     if (!titleLooksReal(section[2])) return false;
+    const page = parsePageNumber(section[3]);
+    if (page === null) return false;
     const path = section[1]
       .replace(/\s*\.\s*/g, ".")
       .replace(/\.$/, "")
@@ -222,7 +260,7 @@ function takeEntry(line: string, into: TocEntry[]): boolean {
       kind: "section",
       path,
       title: tidyTitle(section[2]),
-      page: Number(section[3]),
+      page,
     });
     return true;
   }
