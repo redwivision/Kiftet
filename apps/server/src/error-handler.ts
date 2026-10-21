@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { isAiBusy } from "./ai/admission";
 import { env } from "./env.server";
+import { log } from "./lib/log";
 import { getDb, getWaitlistDb } from "./services";
 
 type BodyParserError = {
@@ -18,7 +19,7 @@ type BodyParserError = {
 // the student, not the developer.
 export function errorMiddleware(
   error: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ): void {
@@ -56,7 +57,14 @@ export function errorMiddleware(
   }
 
   const message = error instanceof Error ? error.message : String(error);
-  console.error("[error] unhandled request error:", error);
+  log("error", {
+    event: "unhandled_error",
+    requestId: (req as { requestId?: string }).requestId,
+    method: req.method,
+    path: req.originalUrl,
+    reason: error instanceof Error ? error.name : typeof error,
+    msg: `unhandled request error: ${message}`,
+  });
   res.status(500).json({
     error:
       env.NODE_ENV === "development"

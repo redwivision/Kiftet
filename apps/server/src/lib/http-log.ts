@@ -1,3 +1,5 @@
+import { type LogFields, log } from "./log";
+
 /**
  * Request logging that survives being hit by a viral link.
  *
@@ -143,14 +145,30 @@ export function createRequestLog(
  * Mounted first in the middleware chain so it also wraps the health handlers:
  * if the platform probes a path and gets anything but 200, the log shows which
  * one and what answered it. That is how we see what the PaaS is probing.
+ *
+ * The line is JSON (see lib/log.ts) carrying the request id set by
+ * `requestIdMiddleware`, so this line and any error the same request produced
+ * can be joined by id.
  */
-export function requestLogger(state: RequestLogState = createRequestLog()) {
+export function requestLogger(
+  state: RequestLogState = createRequestLog(),
+  emit: (level: "info" | "warn" | "error", fields: LogFields) => void = log,
+) {
   return function logRequest(
-    req: { method: string; originalUrl: string },
+    req: {
+      method: string;
+      originalUrl: string;
+      requestId?: string;
+    },
     res: { statusCode: number; on: (e: string, f: () => void) => void },
     next: () => void,
   ): void {
     const start = performance.now();
+    // Capture the path now: `req.path` is mutated by layer mounting, so by the
+    // time `finish` fires it may show the handler-relative path (/nope) rather
+    // than what the client asked for (/api/nope). originalUrl is stable.
+    const method = req.method;
+    const url = req.originalUrl;
     res.on("finish", () => {
       const ms = Math.round(performance.now() - start);
       const status = res.statusCode;
@@ -159,9 +177,16 @@ export function requestLogger(state: RequestLogState = createRequestLog()) {
       // Dropped lines are not counted here — `tryReserve` counts them, so
       // there is exactly one place that knows how many were lost.
       if (!state.tryReserve(interesting ? "interesting" : "ordinary")) return;
-      console.error(
-        `[http] ${req.method} ${req.originalUrl} ${status} ${ms}ms`,
-      );
+      const level = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
+      emit(level, {
+        event: "http",
+        requestId: req.requestId,
+        method,
+        path: url,
+        status,
+        durationMs: ms,
+        msg: `${method} ${url} ${status} ${ms}ms`,
+      });
     });
     next();
   };

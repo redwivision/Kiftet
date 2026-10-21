@@ -238,5 +238,21 @@ order after a page reload.
 | `VITE_SERVER_URL` not set in production | loud console.error on client, API calls fail visibly |
 | `CORS_ORIGIN` wrong or missing | every login silently fails (cookie never attaches) |
 
+### 10.7 Log injection and request correlation
+
+Every request is stamped with an id — adopted from an inbound `X-Request-Id`
+(so one id spans the edge and the app) or minted fresh — echoed back in the
+`X-Request-Id` response header, and attached to every log line the request
+produces. A header is attacker input, so the inbound value is only adopted if
+it is short (≤ 200 chars) and made of safe ASCII: a newline in a request id
+would forge log entries, and an enormous one is a log-flood lever. A value that
+fails the check is discarded and replaced, never sanitized-in-place — the id is
+a correlation token, so a forged one costs correlation, not correctness.
+
+Log lines are one JSON object each, so a log collector can filter and count
+without a per-message parser, and `JSON.stringify` guarantees a value can never
+break a line in two. Anything that could carry a secret stays out of the fixed
+field set (a log store is one of the easiest places for a token to leak).
+
 ---
 

@@ -520,6 +520,13 @@ bun run --cwd apps/server telegram:testimonials -- --dry-run
 | Offline page on every load | web app can't reach the API *or* no network | check §9.1 health; check the client's connectivity |
 | Server boots but locals see 500s while you don't | node/bun version drift | `nvm use` to 22.23.2, `bun install`, restart |
 | varlock/env errors after pulling | `.env.schema` changed | `bun run env:generate` then rebuild |
+| "Something went wrong on our side" with no detail | an unhandled 500 | find the request's id in `X-Request-Id` (response header, or the browser's network tab), then grep the logs for that id — the access line and the `unhandled_error` line share it |
+
+**Logs are one JSON object per line.** Filter by `event` (`http`,
+`unhandled_error`) and group by `path`/`status`; every line for one request
+carries the same `requestId`. Ordinary successful requests are sampled and every
+line is rate-ceiled (see `apps/server/src/lib/http-log.ts`) — a quiet log during
+a flood is the ceiling working, and it reports how many lines it dropped.
 
 When you take corrective action, update this table, then re-run §9.
 

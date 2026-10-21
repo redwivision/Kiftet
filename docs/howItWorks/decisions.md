@@ -466,3 +466,17 @@
     idle-client `error` handler was added at the same time because node-postgres
     throws on an unhandled pool error, so a backend dying while idle would take
     the whole process down for something the pool already recovers from.
+
+35. **A request id is adopted, not trusted — and logs are JSON.** Correlation
+    across a request's lines needs one id, so the id is taken from the inbound
+    `X-Request-Id` when present (one id spans the edge and the app) and minted
+    when absent, echoed in the response so a student can report it. But a header
+    is attacker input and this value goes into every log line the request
+    emits, so it is only adopted if it is short and boring (≤ 200 chars, safe
+    ASCII). A forged value is **replaced, not sanitized**: an id is a
+    correlation token, so the cost of rejecting a bad one is a lost correlation,
+    while the cost of accepting a newline is forged log entries. Log lines
+    became one JSON object each for the same reason the id exists — the moment
+    you need to count 500s by route, a free-text line stops being enough. The
+    fixed field set is deliberately narrow; a log store is one of the easiest
+    places for a secret to leak, so anything sensitive stays out of it.

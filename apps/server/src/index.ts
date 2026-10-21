@@ -18,6 +18,7 @@ import {
 import { startAiUsageSweep } from "./lib/ai-quota-store";
 import { startDemoCleanup } from "./lib/demo-cleanup";
 import { requestLogger } from "./lib/http-log";
+import { requestIdMiddleware } from "./lib/request-id";
 import { resolveTrustProxy } from "./lib/trust-proxy";
 import authProvidersRouter from "./routes/auth-providers";
 import demoRouter from "./routes/demo";
@@ -71,6 +72,10 @@ let draining = false;
 // is ignored). `false` disables trust entirely for a directly-exposed server.
 const trustProxy = resolveTrustProxy(env.TRUST_PROXY, IS_PROD);
 app.set("trust proxy", trustProxy);
+
+// Request id first, so the access line below — and anything an error handler
+// later logs — can be joined by a single id. See lib/request-id.ts.
+app.use(requestIdMiddleware());
 
 // Request log: interesting hits (slow, or 4xx/5xx) always go to stderr, and
 // ordinary successful ones are sampled under a hard lines-per-second ceiling.
