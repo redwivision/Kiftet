@@ -427,9 +427,10 @@ export const en = {
   "toc-fallback-guessed":
     "We couldn't find this book's contents page, so this list is guessed from the page headings.",
   "toc-fallback-unreadable":
-    "We found this book's contents on page {page}, but couldn't read it reliably, so the list below is guessed from the page headings. To set the chapters yourself, open the Pages tab.",
+    "We found this book's contents on page {page}, but couldn't read it reliably, so the list below is guessed from the page headings.",
   "toc-fallback-refused":
     "The AI reader did not return a chapter list: {reason} The list below is therefore guessed from the page headings.",
+  "toc-fallback-fix": "Set the chapters yourself",
   "hierarchy-report-label": "What we read from this book",
   "hierarchy-report-source": "Read from",
   "hierarchy-report-contents": "Contents page",
@@ -1412,9 +1413,10 @@ export const am: Record<MessageKey, string> = {
   "toc-fallback-guessed":
     "የመጽሐፉን የይዘት ገጽ ማግኘት አልቻልንም፤ ስለዚህ ይህ ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው።",
   "toc-fallback-unreadable":
-    "የመጽሐፉን የይዘት ገጽ በገጽ {page} ላይ አግኝተናል፣ ነገር ግን በአስተማማኝ ሁኔታ ማንበብ አልቻልንም፤ ስለዚህ ከታች ያለው ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው። ምዕራፎቹን እራስዎ ለማስተካከል የገጾች ትር ይክፈቱ።",
+    "የመጽሐፉን የይዘት ገጽ በገጽ {page} ላይ አግኝተናል፣ ነገር ግን በአስተማማኝ ሁኔታ ማንበብ አልቻልንም፤ ስለዚህ ከታች ያለው ዝርዝር ከገጾቹ ራስጌዎች በግምት የተሰራ ነው።",
   "toc-fallback-refused":
     "የ AI አንባቢው የምዕራፍ ዝርዝር አልመለሰም፡ {reason} ስለዚህ ከታች ያለው ዝርዝር በግምት ከገጾቹ ራስጌዎች የተሰራ ነው።",
+  "toc-fallback-fix": "ምዕራፎቹን እራስዎ ይምረጡ",
   "hierarchy-report-label": "ከዚህ መጽሐፍ የተነበበው",
   "hierarchy-report-source": "ከየት ተነብቷል",
   "hierarchy-report-contents": "የይዘት ገጽ",

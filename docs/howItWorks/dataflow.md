@@ -144,6 +144,13 @@ drives it.
 | 5. Heading scan | `segmentsForOcrBook` — running headers become units | last resort |
 | 6. **Ask the student** | the page-range picker, by hand | when even the scan cannot be trusted |
 
+The last layer is the one that makes the promise true. A notice that says "this
+list is guessed" and leaves the student there is a dead end; the notice carries
+a **"Set the chapters yourself"** action that puts the student straight on the
+Pages tab, where typing the numbers printed in their own book always works.
+The Pages tab is the only layer that assumes nothing about the book, which is
+why it is both the first tab and the fallback.
+
 Two properties are deliberate and are what make the reader safe to build a
 planner on:
 

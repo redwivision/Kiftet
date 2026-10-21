@@ -13,7 +13,7 @@ import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { HierarchyReport } from "@/components/hierarchy-report";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
-import { TocPicker } from "@/components/toc-picker";
+import { TocPicker, type View } from "@/components/toc-picker";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
@@ -1122,6 +1122,13 @@ function AddTextbook({
   pickedJobs: TocJob[];
 }) {
   const { t } = useLanguage();
+  // Which tab the picker is showing. Left undefined, the picker picks its own
+  // default (Pages first, because typing a range always works). The state
+  // exists so the fallback notice can take the student straight to the Pages
+  // tab: when the reader could not read the structure, saying "open the Pages
+  // tab" and leaving them to hunt for it is the difference between a guided
+  // fix and a dead end.
+  const [pickerView, setPickerView] = useState<View | undefined>(undefined);
   // The conceptual subjects we can actually plan against. "Something else" is
   // available, but a custom subject floats no study plan yet, so it is offered
   // last and quietly.
@@ -1281,6 +1288,17 @@ function AddTextbook({
                   </pre>
                 </details>
               ) : null}
+              {pagesAvailable ? (
+                <div className="mt-2">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setPickerView("pages")}
+                  >
+                    {t("toc-fallback-fix")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -1320,6 +1338,8 @@ function AddTextbook({
           onPageOneAtChange={onPageOneAtChange}
           pageCount={pageCount}
           pagesAvailable={pagesAvailable}
+          view={pickerView}
+          onViewChange={setPickerView}
         />
 
         <HierarchyReport report={report} className="mt-3" />

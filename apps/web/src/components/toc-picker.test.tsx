@@ -219,3 +219,36 @@ test("a unit already in the library is ticked for the student, not hidden", () =
   expect(unit).toContain('checked=""');
   expect(unit).toContain('disabled=""');
 });
+
+test("the caller can put the student on the Pages tab", () => {
+  // The guided path after a failed read: the notice says the structure was
+  // guessed, and the student must be one click from setting the chapters by
+  // hand. That means the tab has to be *controllable* from outside — a notice
+  // that only says "open the Pages tab" leaves a student hunting for a tab.
+  const html = renderToStaticMarkup(
+    <TocPicker
+      toc={toc}
+      selection={new Set()}
+      onToggle={() => {}}
+      onSelectAll={() => {}}
+      onClear={() => {}}
+      stageFor={() => "queued"}
+      isImported={() => false}
+      importing={false}
+      pagesAvailable
+      pageCount={120}
+      view="pages"
+    />,
+  );
+  // The Pages panel is the one on screen, and it is the one that asks for the
+  // numbers the student can see in their own book.
+  expect(html).toContain('id="toc-panel-pages"');
+  expect(html).toContain("Add a page range");
+  // The tab that is showing says so, so the pair is not merely present but
+  // correctly wired.
+  expect(html).toContain('id="toc-tab-pages" aria-selected="true"');
+  // Every tab points at a panel that exists: a dangling aria-controls is a
+  // tab that navigates nowhere for a screen reader.
+  expect(html).toContain('id="toc-panel-checklist"');
+  expect(html).toContain('id="toc-panel-contents"');
+});

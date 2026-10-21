@@ -56,9 +56,21 @@ export type TocPickerProps = Omit<ViewProps, "index"> & {
   pageCount?: number;
   /** False for pasted text, which has no pages to choose from. */
   pagesAvailable?: boolean;
+  /**
+   * Which tab is showing, when the caller wants to decide.
+   *
+   * The picker's own default puts Pages first, because typing a range always
+   * works while reading the book's contents is a detection that can fail. But
+   * when the reader *has* failed — the structure was guessed, or the contents
+   * could not be read — the student needs to be one click from setting the
+   * chapters by hand, and a notice that merely says "open the Pages tab"
+   * makes them hunt for a tab. With this prop the caller can take them there.
+   */
+  view?: View;
+  onViewChange?: (view: View) => void;
 };
 
-type View = "pages" | "checklist" | "contents";
+export type View = "pages" | "checklist" | "contents";
 
 /** Every id in the tree, units and topics alike, for Expand All. */
 function allIds(nodes: ImportTocNode[]): string[] {
@@ -116,14 +128,21 @@ export function TocPicker({
   onPageOneAtChange = () => {},
   pageCount = 0,
   pagesAvailable = false,
+  view: controlledView,
+  onViewChange,
 }: TocPickerProps) {
   const { t } = useLanguage();
   // Pages lead: typing a range always works, while reading the book's own
   // contents is a detection that can fail. The contents tabs stay for the books
   // where it works, marked Beta until it earns more trust.
-  const [view, setView] = useState<View>(
+  const [ownView, setOwnView] = useState<View>(
     pagesAvailable ? "pages" : "checklist",
   );
+  const view = controlledView ?? ownView;
+  const setView = (next: View) => {
+    setOwnView(next);
+    onViewChange?.(next);
+  };
   const index = useMemo(() => indexToc(toc), [toc]);
   const jobs = useMemo(() => tocJobs(toc, selection), [toc, selection]);
   const rangeJobs = useMemo(
@@ -238,41 +257,54 @@ export function TocPicker({
         ))}
       </div>
 
-      {view === "pages" && pagesAvailable ? (
-        <PagesView
-          ranges={pageRanges}
-          onAdd={onAddRange}
-          onUpdate={onUpdateRange}
-          onRemove={onRemoveRange}
-          pageOneAt={pageOneAt}
-          onPageOneAtChange={onPageOneAtChange}
-          pageCount={pageCount}
-          importing={importing}
-        />
-      ) : toc.length === 0 ? (
-        <p className="py-6 text-center text-muted-foreground text-sm">
-          {t("toc-empty")}
-        </p>
-      ) : (
-        <>
-          <div
-            role="tabpanel"
-            id="toc-panel-checklist"
-            aria-labelledby="toc-tab-checklist"
-            hidden={view !== "checklist"}
-          >
-            <ChecklistView {...shared} />
-          </div>
-          <div
-            role="tabpanel"
-            id="toc-panel-contents"
-            aria-labelledby="toc-tab-contents"
-            hidden={view !== "contents"}
-          >
-            <ContentsView {...shared} />
-          </div>
-        </>
-      )}
+      {/*
+        All three panels stay in the markup and are hidden rather than
+        unmounted, so every tab's `aria-controls` points at something that
+        exists, and the selection state survives a tab change. The Pages panel
+        used to be the exception — it was rendered bare, with no id at all —
+        so the tab pointed at nothing.
+      */}
+      {pagesAvailable ? (
+        <div
+          role="tabpanel"
+          id="toc-panel-pages"
+          aria-labelledby="toc-tab-pages"
+          hidden={view !== "pages"}
+        >
+          <PagesView
+            ranges={pageRanges}
+            onAdd={onAddRange}
+            onUpdate={onUpdateRange}
+            onRemove={onRemoveRange}
+            pageOneAt={pageOneAt}
+            onPageOneAtChange={onPageOneAtChange}
+            pageCount={pageCount}
+            importing={importing}
+          />
+        </div>
+      ) : null}
+      <div
+        role="tabpanel"
+        id="toc-panel-checklist"
+        aria-labelledby="toc-tab-checklist"
+        hidden={view !== "checklist"}
+      >
+        {toc.length === 0 ? (
+          <p className="py-6 text-center text-muted-foreground text-sm">
+            {t("toc-empty")}
+          </p>
+        ) : (
+          <ChecklistView {...shared} />
+        )}
+      </div>
+      <div
+        role="tabpanel"
+        id="toc-panel-contents"
+        aria-labelledby="toc-tab-contents"
+        hidden={view !== "contents"}
+      >
+        {toc.length === 0 ? null : <ContentsView {...shared} />}
+      </div>
     </div>
   );
 }

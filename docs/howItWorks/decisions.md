@@ -531,3 +531,14 @@
     arabic-only, because it asks the question of arbitrary lines where the
     title-then-token context does not exist. This one change is what the corpus
     case `roman-page-numbers` now locks.
+
+39. **A failed read must end in a question, not a dead end.** The reader's last
+    layer is the student: the Pages tab, where they type the numbers printed in
+    their own book, which works for any book because it assumes nothing about
+    the book. A notice that only says "this list is guessed" leaves the student
+    in front of a structure they are told not to trust, with no route to a
+    structure they do. So the fallback notice carries an action — "Set the
+    chapters yourself" — that puts them on the Pages tab directly; the tab has
+    to be *controllable* from outside for that to be one click rather than a
+    hunt. The wording was changed to match: the notice no longer instructs the
+    student to open a tab they are about to be moved to.
