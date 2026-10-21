@@ -292,6 +292,10 @@ verify via §9.5.
 | `CORS_ORIGIN` | comma-separated trusted origins (same-origin in combined mode) | browser blocks every POST; login appears to loop on 401 |
 | `DATABASE_URL` | **pooled** Neon string (hostname has `-pooler`) | server crashes on boot |
 | `DATABASE_URL_DIRECT` | **unpooled** Neon string (no `-pooler`) | migrations fall back to pooled (still works) or fail on session ops |
+| `DB_POOL_MAX` | `5` (main pool); lower it if running many instances | more per-instance connections than the pooler's per-user pool → requests queue in PgBouncer (up to 120s) then error |
+| `DB_WAITLIST_POOL_MAX` | `2` (waitlist pool) | a busy app delays waitlist signups behind other queries |
+| `DB_CONNECT_TIMEOUT_MS` | `15000` | set too low → the first request after a Neon cold start fails |
+| `DB_CONNECT_RETRIES` | `6` | set to `1` → a boot migration against a suspended Neon compute fails instead of waking it |
 | `GEMINI_API_KEY` | real key from Google AI Studio | grading returns empty placeholders; lessons fall back to templates |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | both, from Google Cloud Console | Google button hidden (only one half = not a provider) |
 | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | both, from Meta app settings | Facebook button hidden (only one half = not a provider) |

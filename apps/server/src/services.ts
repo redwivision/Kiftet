@@ -20,7 +20,11 @@ const db = createDb(env);
  * or a queue: the fix is two lines of pool configuration.
  */
 const WAITLIST_POOL_MAX = 2;
-const waitlistDb = createDb(env, { max: WAITLIST_POOL_MAX });
+const waitlistDb = createDb(env, {
+  max:
+    Number.parseInt(String(env.DB_WAITLIST_POOL_MAX ?? ""), 10) ||
+    WAITLIST_POOL_MAX,
+});
 
 export function getDb(): Database {
   return db;

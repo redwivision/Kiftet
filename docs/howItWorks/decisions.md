@@ -447,3 +447,22 @@
     for a place in line — poor fit and worse latency than simply refusing. When
     the store is unreachable the call is refused (`store-unavailable`) rather
     than allowed: with a shared quota you cannot fail open and still be safe.
+
+34. **The connection budget is bounded, tunable, and patient — and only the
+    connection is ever retried.** Neon scales a compute to zero after 5 minutes
+    idle, so the first request after a quiet spell pays a cold start; a
+    5-second connect timeout with no retry failed that request for a database
+    that was perfectly healthy. And the DB-backed admission store added a
+    transaction per AI call, so a burst could exhaust the five-connection main
+    pool — the pool is now env-tunable (`DB_POOL_MAX`, `DB_WAITLIST_POOL_MAX`)
+    so `(pool sizes) × instances` can be kept under the pooler's per-user pool,
+    where exceeding it means a 120s wait then an error. The connect timeout
+    rose to 15s (`DB_CONNECT_TIMEOUT_MS`) and boot migrations retry the
+    connection up to `DB_CONNECT_RETRIES` with exponential backoff and jitter.
+    Two deliberate limits: **only the connection is retried, never a query** —
+    replaying a write double-charges a student, and a retried read is best left
+    to the caller that knows it is safe; and retries are bounded, so a truly
+    dead network fails before the 60s request ceiling rather than hanging. An
+    idle-client `error` handler was added at the same time because node-postgres
+    throws on an unhandled pool error, so a backend dying while idle would take
+    the whole process down for something the pool already recovers from.

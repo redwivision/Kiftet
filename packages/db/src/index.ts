@@ -5,6 +5,12 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 
 import type { DatabaseConfig } from "./config";
+import {
+  DEFAULT_CONNECT_RETRIES,
+  DEFAULT_CONNECT_TIMEOUT_MS,
+  DEFAULT_POOL_MAX,
+  intFrom,
+} from "./pool-config";
 import * as schema from "./schema";
 
 function hostOf(url: string): string | null {
@@ -78,30 +84,79 @@ function findMigrationsDir(): string {
   return found;
 }
 
+// ─── Connection budget ───────────────────────────────────────────────
+// Pure arithmetic lives in pool-config.ts so it can be tested without a
+// database; this module only wires it into node-postgres.
+//
+// A backend that dies while idle (Neon restart, network drop) surfaces as an
+// `error` event on the pool, not on a query. node-postgres documents that an
+// unhandled pool `error` throws — which would take the whole process down for a
+// problem the pool already knows how to recover from. Log it and let the pool
+// replace the dead client.
+function attachPoolErrorHandler(pool: pg.Pool, name: string): void {
+  pool.on("error", (error) => {
+    console.error(
+      `[kiftet:db] idle client error on the ${name} pool (recovering): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  });
+}
+
+// A Neon compute scales to zero after 5 minutes idle; the next connection pays
+// the cold start (a few hundred ms typically, more under load or distance) and
+// the pooler may queue the transaction briefly. Neon's own guidance is a raised
+// timeout plus bounded retries with backoff — but only the *connection* is
+// retried here, never a query: replaying a statement is how you double-charge
+// a student. Used where a retry is safe and idempotent (boot migrations).
+export async function connectWithRetry(
+  pool: pg.Pool,
+  attempts = DEFAULT_CONNECT_RETRIES,
+  baseDelayMs = 400,
+): Promise<pg.PoolClient> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await pool.connect();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        // Exponential backoff with full jitter, so a fleet waking one cold
+        // database does not retry in lockstep and stampede it again.
+        const ceiling = baseDelayMs * 2 ** attempt;
+        const delay = Math.random() * ceiling;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError ?? "could not connect to the database"));
+}
+
 // The application handle: a warm node-postgres pool (small because Neon caps
 // connections per endpoint) wrapped by Drizzle. Timeouts keep a paused Neon
 // database (scale-to-zero) or a dead network from hanging a request forever —
 // the pool gives up on a slow connect/query instead of blocking the worker.
 // This stays synchronous to build — no I/O happens until a query runs.
-/** `max` is the client-side ceiling on concurrent queries. Neon caps
- *  connections per endpoint, which is why it is small — but it also means the
- *  five slots are a *shared* resource: an in-flight AI request and a waitlist
- *  signup compete for the same five. `max` is exposed so a critical write path
- *  can be given its own pool rather than queueing behind someone else's read.
- */
 export function createDb(env: DatabaseConfig, options: { max?: number } = {}) {
+  const url = requireDbUrl(
+    env.DATABASE_URL,
+    "DATABASE_URL",
+    env.NODE_ENV ?? "development",
+  );
   const pool = new pg.Pool({
-    connectionString: requireDbUrl(
-      env.DATABASE_URL,
-      "DATABASE_URL",
-      env.NODE_ENV ?? "development",
+    connectionString: url,
+    max: options.max ?? intFrom(env.DB_POOL_MAX, DEFAULT_POOL_MAX),
+    ssl: sslFor(url),
+    connectionTimeoutMillis: intFrom(
+      env.DB_CONNECT_TIMEOUT_MS,
+      DEFAULT_CONNECT_TIMEOUT_MS,
     ),
-    max: options.max ?? 5,
-    ssl: sslFor(env.DATABASE_URL),
-    connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
     query_timeout: 15_000,
   });
+  attachPoolErrorHandler(pool, "main");
   return drizzle(pool, { schema });
 }
 
@@ -129,13 +184,24 @@ export async function migrateDb(env: DatabaseConfig): Promise<void> {
     connectionString: url,
     max: 1,
     ssl: sslFor(url),
-    connectionTimeoutMillis: 5_000,
+    connectionTimeoutMillis: intFrom(
+      env.DB_CONNECT_TIMEOUT_MS,
+      DEFAULT_CONNECT_TIMEOUT_MS,
+    ),
   };
   const pool = new pg.Pool(poolOptions);
   const lockPool = new pg.Pool(poolOptions);
+  attachPoolErrorHandler(pool, "migration");
+  attachPoolErrorHandler(lockPool, "migration-lock");
   let held: pg.PoolClient | null = null;
   try {
-    held = await lockPool.connect();
+    // A cold boot is the most likely place to meet a suspended Neon compute,
+    // and migrating is idempotent under the advisory lock — so this is the one
+    // place a bounded connect retry is unambiguously safe.
+    held = await connectWithRetry(
+      lockPool,
+      intFrom(env.DB_CONNECT_RETRIES, DEFAULT_CONNECT_RETRIES),
+    );
     await held.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     const db = drizzle(pool, { schema });
     const migrationsDir = findMigrationsDir();

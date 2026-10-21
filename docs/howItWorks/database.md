@@ -104,6 +104,31 @@ database). The schema language is ~90% identical, so the swap is cheap.
 `DATABASE_URL_DIRECT`); local dev can still point at SQLite (or Neon) freely —
 the app itself doesn't care.
 
+**How many connections one instance holds.** Every live connection is a shared
+resource inside the process and a claim on the database's connection budget.
+Neon's pooled endpoint multiplexes up to 10,000 *client* connections, but caps
+*active transactions* per user/per database at 90% of the compute's
+`max_connections` — and a request over that line waits in PgBouncer up to
+`query_wait_timeout` (120s) before erroring, which reads to a student as a hang.
+So the app keeps its own pools deliberately small and queues locally, where a
+wait is cheap:
+
+| Pool | Default | Env | Serves |
+| --- | --- | --- | --- |
+| main | 5 | `DB_POOL_MAX` | SSR, auth, the study loop, AI-backed queries |
+| waitlist | 2 | `DB_WAITLIST_POOL_MAX` | the waitlist write, so a signup never queues behind an AI retry ladder |
+
+Live connections per instance = the two above = **7 by default**, so keep
+`7 × (instance count)` under the pooler's per-user pool. Two more knobs decide
+patience rather than size: `DB_CONNECT_TIMEOUT_MS` (default **15s**) is how long
+to wait for the first connection — Neon scales to zero after 5 minutes idle and
+waking the compute adds a few hundred ms, more under load, so 5s (node-postgres'
+default) failed the first request after idle; and `DB_CONNECT_RETRIES` (default
+**6**) is a bounded boot-time retry with exponential backoff and jitter. Only the
+*connection* is retried, never a query: replaying a statement is how you
+double-charge a student. All four are read at boot; see
+`packages/db/src/pool-config.ts` and `RUNBOOK.md`.
+
 ### Migrations — the schema's change history
 When the schema changes, Drizzle **generates** a SQL file describing the exact
 change (`packages/db/src/migrations/*.sql`). Running them upgrades a real
