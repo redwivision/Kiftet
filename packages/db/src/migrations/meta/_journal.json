@@ -155,6 +155,13 @@
       "when": 1792527885090,
       "tag": "0021_messy_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792604647161,
+      "tag": "0022_useful_husk",
+      "breakpoints": true
     }
   ]
 }

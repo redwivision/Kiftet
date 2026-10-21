@@ -142,6 +142,7 @@ Full checklist, verification steps, and the incident playbook: see **[`RUNBOOK.m
 - **[`STRATEGY.md`](docs/STRATEGY.md)** — positioning, the defensibility ladder ("a study guide is not a company"), the subject boundary, and go-to-market: the Grade 12 student in the last 90 days, and the syllabus/misconception/mastery moat that ChatGPT can't replicate.
 - **[`SYLLABUS.md`](docs/SYLLABUS.md)** — the core defensible asset: the official MoE unit structure, period allocations that make prioritisation a fact rather than a guess, the Grade 9–12 expansion plan, and why we don't yet claim computational subjects.
 - **[`PRD.md`](docs/PRD.md)** — product requirements, the market case, sponsor integrations.
+- **[`DAILY_PLANNER.md`](docs/DAILY_PLANNER.md)** — the adaptive daily planner: where the student is, how much past they want reviewed, the exam countdown, and the build order.
 - **[`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)** — architecture and data model.
 - **[`DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)** — the visual identity: monochrome — ivory `#F2EFE9` on black `#0A0B0D`, the open-ring mark, type and UI principles.
 - **[`TESTING_GUIDE.md`](docs/TESTING_GUIDE.md)** — end-to-end verification of every phase.

@@ -151,6 +151,51 @@ export const conceptNode = pgTable(
 );
 
 /**
+ * Where the student says they are in a book.
+ *
+ * School is already under way when a student installs the app, so "start at
+ * Unit 1" is the wrong default and no planner can be honest without asking.
+ * The position is per book rather than per student because a student with a
+ * biology book and an economics book is in two places at once — and a book is
+ * the same thing as a subject here, which is the grain the per-subject agent
+ * will work at.
+ *
+ * It lives in its own table rather than on `textbook` for two reasons. A book
+ * is a thing; where the student is in it is the student's state, and the two
+ * have different lifetimes. And a `textbook` column pointing at a `chapter`
+ * would make the two tables reference each other, which is a circle the
+ * schema cannot type and the database need not have.
+ *
+ * The section is stored as the book's own printed path ("3.2"), not as a
+ * reference to a `concept_node`: the deferred model read deletes and
+ * re-inserts those rows, so a reference to one would be broken by the very act
+ * of reading the chapter. The printed path never changes, because the book
+ * never changes.
+ */
+export const studyPosition = pgTable(
+  "study_position",
+  {
+    id: text("id").primaryKey(),
+    textbookId: text("textbook_id")
+      .notNull()
+      .references(() => textbook.id, { onDelete: "cascade" }),
+    chapterId: text("chapter_id").references(() => chapter.id, {
+      onDelete: "cascade",
+    }),
+    topicPath: text("topic_path"),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    // One position per book. A book has exactly one owner, so the book's id is
+    // enough to say whose position it is.
+    uniqueIndex("study_position_textbookId_uidx").on(table.textbookId),
+  ],
+);
+
+/**
  * One of a chapter's stated learning objectives — "describe photosynthesis",
  * "explain the role of chlorophyll".
  *

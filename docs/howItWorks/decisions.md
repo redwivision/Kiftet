@@ -542,3 +542,37 @@
     to be *controllable* from outside for that to be one click rather than a
     hunt. The wording was changed to match: the notice no longer instructs the
     student to open a tab they are about to be moved to.
+
+40. **The planner asks where the student is, because "Unit 1" is a lie.**
+    School is already under way when a student installs the app, so there is no
+    honest default for where they are, and a planner built on one would be
+    confidently wrong every single morning. The answer is asked for, and it is
+    stored — but *how* it is stored is a product decision, not a schema one.
+    Three things follow from it.
+    **(1) The position is per book, not per student.** A student with a biology
+    book and an economics book is in two places at once; one "current chapter"
+    on the user row would have to lie about one of them. A book is also the same
+    thing as a subject here, which is the grain the per-subject agent will
+    eventually work at, so the position is already stored where that agent will
+    want it.
+    **(2) The position is its own table, not a column on `textbook`.** A book
+    is a thing; where the student is in it is the student's state, and the two
+    have different lifetimes. There is also a hard technical reason: a
+    `textbook` column pointing at a `chapter` makes the two tables reference
+    each other, which is a circle the TypeScript schema cannot type and the
+    database need not have. A `study_position` row with a foreign key to each
+    breaks it, and the unique index on `textbookId` states the rule plainly —
+    one position per book, because a student is in one place in a book.
+    **(3) The section is stored as the book's own printed path, not as a
+    reference to a concept.** The book's contents line ("3.2") never changes,
+    because the book never changes. A `concept_node` reference would not: the
+    deferred model read deletes and re-inserts those rows, so the reference
+    would be broken by the very act of reading the chapter — and a position
+    that silently reverts is worse than no position.
+    The student's *review* preference rides alongside it, on the user row,
+    because it is a habit rather than a place: `none`, `light` or `heavy`. The
+    defaults are honest in both directions — `light` review, because a student
+    who has said nothing is more likely to want some review than none, and
+    twenty minutes, because twenty is a *default* and the student changes it.
+    Asking is a one-time act: `placementDismissed` records that the student
+    said "not now" so the question is never asked twice.

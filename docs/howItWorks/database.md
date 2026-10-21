@@ -4,14 +4,16 @@
 
 
 A database's design is basically: *what facts do we need to remember, and how do
-they relate?* Kiftet has **fifteen tables** in two families: the eleven **study-domain**
-tables (the product) and the four **auth tables** (who is signed in).
+they relate?* Kiftet has **twenty-one tables** in two families: the sixteen
+**study-domain** tables (the product) and the five **account tables** (who is
+signed in, and who is waiting to be).
 
-### 6.1 The study domain (13 tables)
+### 6.1 The study domain (16 tables)
 
 | Table | What one row means | Key fields |
 |---|---|---|
 | `textbook` | A real school textbook (e.g. Physics) that a **user owns**, including its saved table of contents before any chapters are imported | `ownerId` → user (indexed — the app's hottest predicate), `title`, `subject`, `language`, `sourceName`, `sourceSize`, `toc` (nested JSON outline) |
+| `study_position` | **Where the student says they are in one book** — the "I am at Unit 3, section 3.2" answer the daily planner is built on | `textbookId` → textbook (unique — one position per book), nullable `chapterId` → chapter, `topicPath` (the section as the *book* prints it, e.g. `"3.2"`), `updatedAt` |
 | `chapter` | One chapter in that textbook, with its text | `textbookId`, `unitId` → syllabus_unit (nullable, the chapter-to-syllabus map), `title`, `rawText` |
 | `concept_node` | One object in the chapter's concept checklist — a concept OR a known common misconception | `chapterId`, `conceptText`, `isMisconception`, `weight` (1–5) |
 | `chapter_objective` | One learning objective the *book itself* states for a chapter | `chapterId`, `objectiveText`, `sortOrder`, `sourceOffset`/`sourceQuote` (anchor into `rawText`), `estimated` (found by the deterministic scan, not the model) |
@@ -55,27 +57,38 @@ owners are checked when a session starts (`POST /sessions/start` refuses chapter
 that aren't yours). Two students can never see each other's material — there's
 no "list all rows" anywhere in the API anymore. See the [authentication sector](auth.md).
 
-### 6.2 The auth tables (4 tables)
+### 6.2 The auth tables (5 tables)
 
 *These tables exist because Better Auth created them (`packages/db/src/schema/auth.ts`). You should never need to touch them, but it helps to know what they hold:*
 
 | Table | One row = | Key fields |
 |---|---|---|
-| `user` | One account | `id`, `name`, `email` (unique), `emailVerified`, `createdAt` |
+| `user` | One account | `id`, `name`, `email` (unique), `emailVerified`, `kind` (`student`/`demo`), `reviewPreference` (`none`/`light`/`heavy`), nullable `examDate` (a calendar date), `dailyMinutes` (default 20), `placementDismissed`, `createdAt` |
 | `session` | One logged-in browser | `token` (the hashed session cookie value), `expiresAt`, `userId`, `ipAddress`, `userAgent` |
 | `account` | One credential set / provider link | `userId`, `providerId`, `password` (hashed), `accessToken`, `refreshToken` |
 | `verification` | One short-lived verification code | `identifier`, `value`, `expiresAt` |
+| `waitlist_signup` | One person waiting for an invite (see the [launch funnel](roadmap.md)) | `phone`, `activationToken`, `channelVerifiedAt`, `testimonialSentAt` |
 
 The password is stored **hashed** (never in plain text) inside `account.password`.
 "Deleting an account cascades": because `user.id` is referenced with
 `ON DELETE CASCADE`, removing a user automatically removes their sessions,
-accounts, textbooks, chapters, study sessions, and attempts.
+accounts, textbooks, chapters, study positions, study sessions, and attempts.
+
+The four `user` columns beyond the account itself are the **student's study
+preferences**, and they are the only things about a student the product knows
+before it has watched them study: how much of the past they want brought back
+(`reviewPreference`), the exam they are preparing for (`examDate`, a plain
+calendar date because an exam is a day), how long a study day usually is
+(`dailyMinutes`, twenty by default and never a rule), and whether they have
+already been asked where they are (`placementDismissed`, so the question is
+asked once).
 
 ### Relationships (the arrows between tables)
 
 ```
 textbook 1 ──── n chapter 1 ──── n concept_node
      │                   │  └─── n chapter_objective
+     ├─── 1 ──── n study_position ──── n chapter
      └─── owner ── n     └─── n study_session 1 ──── n attempt
      user 1 ──── n session
      user 1 ──── n account
@@ -86,6 +99,8 @@ textbook 1 ──── n chapter 1 ──── n concept_node
 - One chapter can appear in many study sessions; one session has one recall
   attempt and one score per retest answer.
 - One user owns many textbooks and can have many open sessions.
+- One textbook has **at most one** study position — a student is in one place
+  in a book, and moving on replaces the position rather than adding a second.
 
 These "1-to-many" links are stored by a foreign key: a column holding another
 table's row id, e.g. `concept_node.chapter_id`. A **foreign key** is just a
@@ -175,6 +190,7 @@ the tables are the same names.)
 | `0019_nifty_scarecrow` | Indexes on the two hottest unindexed predicates: `textbook.ownerId` and `waitlist_signup.telegramChatId` |
 | `0020_useful_franklin_richards` | Unique `(chapter_id, sort_order)` on `concept_node` and `chapter_objective` — makes the extraction replace idempotent |
 | `0021_messy_hobgoblin` | `ai_admission` — the shared leaky bucket + circuit breaker state, one row per provider, so every instance draws on one provider allowance |
+| `0022_useful_husk` | `study_position` — where the student says they are in each book; plus `user.review_preference`, `user.exam_date`, `user.daily_minutes` and `user.placement_dismissed` |
 
 ### How the schema is tested
 Two layers, and they check different things:

@@ -7,6 +7,9 @@ All routes live behind `/api`:
 
 | Method & path | What it does | Phase |
 |---|---|---|
+| `GET /api/placement` | The student's study preferences (review preference, exam date, day length) and their books with the printed sections inside each chapter — the state the daily planner is built on | 0/planner 1 |
+| `PUT /api/placement/preferences` | Set the review preference (`none`/`light`/`heavy`), the exam date (a calendar date), the day length in minutes, or that the student has declined to be asked | 0/planner 1 |
+| `PUT /api/placement/position` | Say which chapter and section of which book the student is in; refuses another student's book, a chapter from another book, and a section the book does not have | 0/planner 1 |
 | `POST /api/chapters/ingest` | Store a textbook chapter; optional `topics` seed the checklist from the book's contents. The model read is deferred to first use (no AI spent here) | 0 (skeleton) |
 | `GET /api/chapters` | List all chapters | 0 |
 | `GET /api/chapters/:id/concepts` | View a chapter's concept checklist; reads the chapter with the model once if it has not been read yet | 0 |

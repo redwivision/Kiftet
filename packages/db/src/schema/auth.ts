@@ -1,7 +1,9 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -19,6 +21,20 @@ import {
 export const USER_KINDS = ["student", "demo"] as const;
 export type UserKind = (typeof USER_KINDS)[number];
 
+/**
+ * How much of the past the student wants to review.
+ *
+ * Review is a question, not a default to impose: a student who wants to press
+ * on new material should not be handed yesterday's gaps every morning. The
+ * student says, and the plan follows.
+ *
+ * - `none` — no review at all, until an exam date gives it a reason.
+ * - `light` — a short review of what is nearly forgotten.
+ * - `heavy` — a real review block, with more of the past brought back.
+ */
+export const REVIEW_PREFERENCES = ["none", "light", "heavy"] as const;
+export type ReviewPreference = (typeof REVIEW_PREFERENCES)[number];
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -26,6 +42,44 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   kind: text("kind", { enum: USER_KINDS }).default("student").notNull(),
+  /**
+   * How much past material the student wants brought back.
+   *
+   * `light` is the default because a student who has said nothing is more
+   * likely to want a little review than none, and because the plan can turn it
+   * off the moment they say so.
+   */
+  reviewPreference: text("review_preference", {
+    enum: REVIEW_PREFERENCES,
+  })
+    .default("light")
+    .notNull(),
+  /**
+   * The exam this student is preparing for, if they have told us.
+   *
+   * It is what turns review on for someone who chose none: with a date on the
+   * calendar, forgetting something has a consequence, and the plan says so. It
+   * is also what makes "how much is left" answerable.
+   *
+   * A calendar date, not a timestamp. An exam is a day, and the student counts
+   * the days left from their own midnight — storing a time of day would mean
+   * one of two answers is always slightly wrong.
+   */
+  examDate: date("exam_date", { mode: "string" }),
+  /**
+   * The default length of a study day, in minutes.
+   *
+   * Twenty is a default, not a rule: the student changes it, and the Today
+   * screen can change it for a single day without changing the habit.
+   */
+  dailyMinutes: integer("daily_minutes").default(20).notNull(),
+  /**
+   * Whether the student has declined to say where they are.
+   *
+   * Placement is asked once, and the answer is that asking again is nagging.
+   * The student can set it later from Settings.
+   */
+  placementDismissed: boolean("placement_dismissed").default(false).notNull(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

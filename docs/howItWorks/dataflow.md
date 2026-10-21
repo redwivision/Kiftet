@@ -176,6 +176,64 @@ end of "… cell" as a page number and turns body prose into a contents. See
 
 ---
 
+### 5.2b Placement — "where am I in my book?" (planner step 1)
+
+The daily planner is the thing a student is actually buying, and it cannot be
+honest without one input the app did not have: **where they are in their
+book.** School is already under way when a student installs the app, so "Unit 1"
+is a lie, and a plan built on a lie is confidently wrong every morning. So the
+app asks — once — and gives the answer a home.
+
+The question has two halves, and they are asked together because a student who
+is midway through Unit 3 and wants their past reviewed is describing one plan,
+not two settings:
+
+```mermaid
+flowchart LR
+  A["1 · student opens<br/>the planner"] --> B["2 · GET /placement<br/>{ preferences, books }"]
+  B --> C["3 · student picks<br/>chapter + section"]
+  C --> D["4 · PUT /placement/position<br/>{ textbookId, chapterId, topicPath }"]
+  D --> E["5 · student says how<br/>much past they want"]
+  E --> F["6 · PUT /placement/preferences<br/>{ reviewPreference, examDate, dailyMinutes }"]
+  F --> G["7 · stored · the plan<br/>reads it back"]
+```
+
+> **Trace:** read the state → set the place → set the habit → stored.
+
+```
+Sending:   { textbookId, chapterId, topicPath }
+Receiving: { textbookId, chapterId, topicPath }
+Data kept: study_position (1 row per book) · user (review_preference,
+            exam_date, daily_minutes, placement_dismissed)
+```
+
+Three decisions shape the shape of this flow, and each of them is a product
+decision before it is a schema one:
+
+- **The position is per book.** A student with a biology book and an economics
+  book is in two places at once; a single "current chapter" on the user row
+  would have to lie about one of them. A book is also the same thing as a
+  subject here — the grain the per-subject agent will eventually work at.
+- **The section is stored as the book's own printed path** ("3.2"), taken from
+  the chapter's saved contents lines. Not a reference to a `concept_node`: the
+  deferred model read deletes and re-inserts those rows, so the reference would
+  be broken by the very act of reading the chapter.
+- **Twenty minutes is a default, and review is a question.** `dailyMinutes`
+  starts at 20 and the student changes it. `reviewPreference` is `none`,
+  `light` or `heavy`, and starts at `light` because a student who has said
+  nothing is likelier to want some review than none. An `examDate` is a plain
+  calendar date — an exam is a day, and the days left are counted from the
+  student's own midnight.
+
+Everything is refused rather than guessed: another student's book, a chapter
+from a different book, a section the book does not have, and a date that does
+not exist. The question is asked once — `placementDismissed` records that the
+student said "not now", so it is never asked twice.
+
+See [decision 40](decisions.md).
+
+---
+
 ### 5.3 Starting a study session
 
 Here's the order when a student picks a chapter:
@@ -925,6 +983,9 @@ that works:
 |---|---|---|---|
 | `POST /api/auth/*` | Sign-in / sign-up / session | no | yes (auth tables) |
 | `GET /api/chapters` | Dashboard | no | no |
+| `GET /api/placement` | Planner (preferences + the student's books and their printed sections) | no | no |
+| `PUT /api/placement/preferences` | Planner (review preference, exam date, day length) | no | yes (update) |
+| `PUT /api/placement/position` | Planner (which chapter and section the student is in) | no | yes |
 | `GET /api/chapters/:id/concepts` | (view only) | no | no |
 | `GET /api/chapters/:id/objectives` | (view only) | no | no |
 | `POST /api/chapters/ingest` | Admin / seed | yes | yes |
