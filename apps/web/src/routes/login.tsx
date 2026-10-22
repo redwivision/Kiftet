@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router";
 import ForgotPasswordForm from "@/components/forgot-password-form";
 import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
@@ -18,7 +19,10 @@ export function meta(_args: Route.MetaArgs) {
 type View = "sign-in" | "sign-up" | "forgot";
 
 export default function Login() {
-  const [view, setView] = useState<View>("sign-in");
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<View>(() =>
+    searchParams.get("signup") === "1" ? "sign-up" : "sign-in",
+  );
   const toSignIn = () => setView("sign-in");
 
   if (view === "forgot") {

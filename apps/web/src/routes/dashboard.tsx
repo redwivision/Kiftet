@@ -428,20 +428,20 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {session && (
+        <TodayPlan
+          key={planRevision}
+          onStartChapter={(chapterId) => void start(chapterId)}
+          starting={starting !== null}
+        />
+      )}
+
       {session && !placementSettled && (
         <PlacementPrompt
           onSettled={() => {
             setPlacementSettled(true);
             setPlanRevision((revision) => revision + 1);
           }}
-        />
-      )}
-
-      {session && (
-        <TodayPlan
-          key={planRevision}
-          onStartChapter={(chapterId) => void start(chapterId)}
-          starting={starting !== null}
         />
       )}
 
@@ -452,7 +452,7 @@ export default function Dashboard() {
             {t("demo-banner")}
           </p>
           <Link
-            to="/login"
+            to="/login?signup=1"
             className="font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
           >
             {t("create-free-account")}

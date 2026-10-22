@@ -21,9 +21,9 @@ export const en = {
   "select-language": "Select language",
 
   // ── Study loop steps (the four pills) ─────────────────────────
-  "step-speak": "Speak",
+  "step-speak": "Recall",
   "step-diagnose": "What's missing",
-  "step-relearn": "Short lesson",
+  "step-relearn": "Your plan",
   "step-retest": "Test",
 
   // ── Session header / framing ──────────────────────────────────
@@ -274,15 +274,48 @@ export const en = {
 
   // ── Dashboard chrome ─────────────────────────────────────────
   "study-room": "Your study room",
-  "dash-title": "Pick a chapter, then speak.",
+  "dash-title": "What should you study next?",
   "dash-text":
-    "Each chapter takes the same four steps: say what you remember, see what's missing, read the short lesson, then test yourself. You'll see how much you knew after the first step, and again at the end.",
+    "Your plan points to the next chapter. Continue a round already in progress, or choose a chapter from your books below.",
   "study-by-syllabus": "Study by unit",
   "add-textbook": "Add your textbook",
-  "demo-label": "Live demo",
+  "demo-label": "Sample session",
   "demo-banner":
-    " — this study room isn't saved to an account. Sign up to keep your progress.",
+    " — this sample room is temporary. Create an account to save your next study rounds.",
+  "demo-result-title": "Keep studying with your own account",
+  "demo-result-text":
+    "This sample was temporary. Create a free account before your next round to save your study progress.",
   "create-free-account": "Create a free account",
+  "plans-link": "See plans",
+  "plans-eyebrow": "Clear choices",
+  "plans-title": "Study first. Decide later.",
+  "plans-description":
+    "Try Kiftet's real study loop before making any commitment. Here is what is available now and what is still being planned.",
+  "plans-status-label": "A note before you choose",
+  "plans-status-title": "There is no paid plan to buy today.",
+  "plans-status-body":
+    "Kiftet is available to use now. Premium features and pricing are not finalized, and we will share both clearly before accepting payment.",
+  "plans-available": "Available now",
+  "plans-free-title": "Kiftet",
+  "plans-free-description":
+    "Use the core study tools today. Create an account to keep your study history.",
+  "plans-free-feature-loop":
+    "Recall, gap diagnosis, a book-linked study plan, and retest",
+  "plans-free-feature-roadmap":
+    "A personal plan that prioritizes the ideas you need to revisit",
+  "plans-free-feature-books":
+    "Bring your own textbooks and choose the chapters you study",
+  "plans-free-feature-progress":
+    "Keep your study sessions and progress with your account",
+  "plans-free-cta": "Try the sample",
+  "plans-not-ready": "In planning",
+  "plans-premium-title": "Kiftet Premium",
+  "plans-premium-description":
+    "We are still deciding what belongs in a paid plan. We will publish its features and price before asking anyone to pay.",
+  "plans-premium-cta": "Get launch updates",
+  "plans-no-charge": "Joining the list does not charge you.",
+  "plans-transparency":
+    "No checkout is active yet. This page is a preview, not a purchase flow.",
   "ai-calls-minute": "AI requests available this minute:",
   "of-left": "{remaining} of {limitPerMinute} still available",
   "budget-out": " — you've used them all. Wait a moment and try again.",
@@ -612,7 +645,8 @@ export const en = {
   "demo-geo-c-4": "Why the Danakil Depression is so hot",
   "demo-geo-c-5": "Ethiopia's drainage basins",
   "hero-h1": "It looks familiar. Can you explain it?",
-  "hero-cta": "Start with one round — no account",
+  "hero-cta": "Try the prepared sample",
+  "hero-dashboard-cta": "Open my study room",
   "hero-proof": "Past papers ask if you're right. Kiftet asks why.",
   "intro-line": "It listens. It finds what's missing.",
   "hero-chip-free": "Free to start",
@@ -628,16 +662,32 @@ export const en = {
   "hero-film-replay": "Replay",
   "hero-film-improved": "One round of the loop — and that gap is closing.",
   "hero-film-caption":
-    "One minute of speaking, and you can see exactly what's missing.",
+    "A sample answer becomes a clear picture of what is known and what still needs work.",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
-  "no-account": "Ready to use it for real?",
+  "no-account": "No account needed. Start with the prepared sample.",
   "stat-87a":
     "of the {count} students who sat the 2026 exam were still failed by the system — in the best result the country has recorded.",
   "stat-87b": "{schools} schools had zero students pass.",
   "stat-absent":
     "Students weren't absent. They sat through the classes. What's missing isn't exposure — it's knowing, before the exam, which specific ideas didn't really stick.",
   "loop-title": "Four steps. One loop. Only your gaps.",
+  "preview-eyebrow": "Explore the sample",
+  "preview-title": "See what happens in a study round",
+  "preview-choose-step": "Choose a study step to preview",
+  "preview-recall-title": "Start with what you remember",
+  "preview-recall-body":
+    "Explain the chapter in your own words. In the sample session, you can type or reveal a prepared answer.",
+  "preview-diagnose-title": "Find the ideas that need work",
+  "preview-diagnose-body":
+    "Kiftet compares your answer with the chapter and shows what you explained, missed, or mixed up.",
+  "preview-plan-title": "Get a plan for your gaps",
+  "preview-plan-body":
+    "Follow a short, prioritized roadmap back to the relevant ideas in your book. The optional generated lesson is still in beta.",
+  "preview-retest-title": "Check what changed",
+  "preview-retest-body":
+    "Answer again to see what improved and what still needs another look.",
+  "preview-try": "Try the prepared study session",
   "voice-title": "Voice isn't a feature. It's the mechanism.",
   "voice-1":
     "Explaining something out loud is how the underlying learning technique actually works. There's nowhere to hide off-screen — there's no option, no answer key, just what you can produce. That honesty is the diagnosis.",
@@ -666,7 +716,7 @@ export const en = {
   "byob-gold": "is",
   "byob-b": " the study room.",
   "byob-1":
-    "Upload the book you're actually studying — the one that matches your syllabus — and Kiftet reads its table of contents and turns each chapter into its own say-it-out-loud → see-what's-missing → short lesson → test round.",
+    "Upload the book you're actually studying — the one that matches your syllabus — and Kiftet reads its table of contents so you can choose a chapter, find your gaps, follow a plan back through the book, and test yourself again.",
   "byob-2":
     "The file is read on your device. Only the text is sent, chapter by chapter, so a whole book never becomes one heavy upload — it works on the school's wifi.",
   "preview-on-book": "Preview it on your book",
@@ -1102,9 +1152,9 @@ export const am: Record<MessageKey, string> = {
   "select-language": "ቋንቋ ምረጥ",
 
   // ── Study loop steps (the four pills) ─────────────────────────
-  "step-speak": "ተናገር",
+  "step-speak": "አስታውስ",
   "step-diagnose": "መርምር",
-  "step-relearn": "እንደገና ተማር",
+  "step-relearn": "እቅድህ",
   "step-retest": "ድጋሚ ፈተና",
 
   // ── Session header / framing ──────────────────────────────────
@@ -1337,14 +1387,42 @@ export const am: Record<MessageKey, string> = {
 
   // ── Dashboard chrome ─────────────────────────────────────────
   "study-room": "የጥናት ክፍሉ",
-  "dash-title": "ምዕራፍ ምረጥ፣ ከዚያም ተናገር።",
-  "dash-text":
-    "እያንዳንዱ ምዕራፍ ተመሳሳይ ዑደት ያሄዳል — አስታውስ፣ መርምር፣ እንደገና ተማር፣ ድጋሚ ፈትን። ሽፋንህን ከእያንዳንዱ ማስታወስ በኋላ እና በመጨረሻም ታያለህ።",
+  "dash-title": "ቀጥሎ ምን ማጥናት አለብህ?",
+  "dash-text": "እቅድህ ቀጣዩን ምዕራፍ ያሳያል። ቀድሞ የጀመርከውን ቀጥል ወይም ከመጽሐፍትህ ውስጥ ምዕራፍ ምረጥ።",
   "study-by-syllabus": "በስርአተ-ትምህርት ጥናት",
   "add-textbook": "የመማሪያ መጽሐፍህን ጨምር",
-  "demo-label": "የቀጥታ ማሳያ",
-  "demo-banner": " — ይህ የጥናት ክፍል በመለያ አልተቀመጠም። እድገትህን ለማስቀመጥ መለያ ፍጠር።",
+  "demo-label": "የማሳያ ክፍለ ጊዜ",
+  "demo-banner": " — ይህ የማሳያ ክፍል ጊዜያዊ ነው። ቀጣይ የጥናት ክፍለ ጊዜዎችህን ለማስቀመጥ መለያ ፍጠር።",
+  "demo-result-title": "በራስህ መለያ ጥናትህን ቀጥል",
+  "demo-result-text":
+    "ይህ ማሳያ ጊዜያዊ ነው። የጥናት እድገትህን ለማስቀመጥ ከቀጣዩ ክፍለ ጊዜህ በፊት ነፃ መለያ ፍጠር።",
   "create-free-account": "ነፃ መለያ ፍጠር",
+  "plans-link": "የክፍያ እቅዶችን ተመልከት",
+  "plans-eyebrow": "ግልጽ ምርጫዎች",
+  "plans-title": "መጀመሪያ አጥና። ውሳኔህን በኋላ አድርግ።",
+  "plans-description":
+    "ምንም ቃል ከመግባትህ በፊት የኪፍተትን እውነተኛ የጥናት ዑደት ሞክር። አሁን ያለውና እየታቀደ ያለው ይህ ነው።",
+  "plans-status-label": "ከመምረጥህ በፊት ማስታወሻ",
+  "plans-status-title": "ዛሬ የሚገዛ የተከፋይ እቅድ የለም።",
+  "plans-status-body":
+    "ኪፍተትን አሁን መጠቀም ትችላለህ። የPremium ባህሪያትና ዋጋ ገና አልተወሰኑም፤ ክፍያ ከመቀበላችን በፊት ሁለቱንም በግልጽ እናሳውቃለን።",
+  "plans-available": "አሁን ይገኛል",
+  "plans-free-title": "ኪፍተት",
+  "plans-free-description":
+    "ዋና ዋና የጥናት መሳሪያዎችን አሁን ተጠቀም። የጥናት ታሪክህን ለማስቀመጥ መለያ ፍጠር።",
+  "plans-free-feature-loop":
+    "ማስታወስ፣ ክፍተት መለየት፣ በመጽሐፍ ላይ የተመሰረተ የጥናት እቅድና ድጋሚ ፈተና",
+  "plans-free-feature-roadmap": "እንደገና ማየት ያለብህን ሀሳቦች ቅድሚያ የሚሰጥ የግል እቅድ",
+  "plans-free-feature-books": "የራስህን መጽሐፍት አምጣና የምታጠናቸውን ምዕራፎች ምረጥ",
+  "plans-free-feature-progress": "የጥናት ክፍለ ጊዜዎችህንና እድገትህን በመለያህ አስቀምጥ",
+  "plans-free-cta": "ማሳያውን ሞክር",
+  "plans-not-ready": "በዕቅድ ላይ",
+  "plans-premium-title": "ኪፍተት Premium",
+  "plans-premium-description":
+    "በተከፋይ እቅድ ውስጥ ምን እንደሚካተት እየወሰንን ነው። ማንንም ክፍያ ከመጠየቃችን በፊት ባህሪያቱንና ዋጋውን እናሳውቃለን።",
+  "plans-premium-cta": "የምርቃት ዜና ተቀበል",
+  "plans-no-charge": "ዝርዝሩን መቀላቀል ክፍያ አያስከፍልም።",
+  "plans-transparency": "የክፍያ ሂደት ገና አልተከፈተም። ይህ ገጽ ቅድመ እይታ ነው፣ የግዢ ሂደት አይደለም።",
   "ai-calls-minute": "በዚህ ደቂቃ የ AI ጥያቄዎች ይቀራሉ:",
   "of-left": "{remaining} ከ {limitPerMinute} ቀርተዋል",
   "budget-out": " — ሁሉም ተጠቅመዋል። ትንሽ ጠብቅተን እና እንደገና ሞክር።",
@@ -1657,7 +1735,8 @@ export const am: Record<MessageKey, string> = {
   "demo-geo-c-4": "የዳናኪል ዝቅተኛ አካባቢ በጣም ሞቃታማ የሆነበት ምክንያት",
   "demo-geo-c-5": "የኢትዮጵያ የውሃ ተፋሰሶች",
   "hero-h1": "የሚታወቅ ይመስላል። ግን ማስረዳት ትችላለህ?",
-  "hero-cta": "በአንድ ዙር ጀምር — መለያ ሳያስፈልግ",
+  "hero-cta": "ዝግጁውን ማሳያ ሞክር",
+  "hero-dashboard-cta": "የጥናት ክፍሌን ክፈት",
   "hero-proof": "የድሮ ፈተና ጥያቄዎች ትክክል መሆንህን ይጠይቃሉ። ክፍተት ግን «ለምን?» ይጠይቃል።",
   "intro-line": "ያዳምጣል። የጎደለውን ያገኛል።",
   "hero-chip-free": "ለመጀመር ነፃ",
@@ -1671,16 +1750,31 @@ export const am: Record<MessageKey, string> = {
   "hero-film-miss": "ውሃ ያመነጫል ብለሃል። ግን ውሃን ይጠቀማል — ብዙዎች የሚሳሳቱበት ተቃራኒው።",
   "hero-film-replay": "እንደገና ተመልከት",
   "hero-film-improved": "አንድ ዙር ዑደት በኋላ — ያ ክፍተት እየተዘጋ ነው።",
-  "hero-film-caption": "የአንድ ደቂቃ ንግግር፣ እና የጎደለውን በትክክል ማየት ትችላለህ።",
+  "hero-film-caption": "የማሳያ መልስ የምታውቀውንና አሁንም መስራት ያለብህን በግልጽ ያሳያል።",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
-  "no-account": "በእውነት መጠቀም ዝግጁ ነህ?",
+  "no-account": "ለማሳያው መለያ አያስፈልግም። ዝግጁውን ምዕራፍ ጀምር።",
   "stat-87a":
     "የ2026 ፈተናን ከተፈተኑት {count} ተማሪዎች ውስጥ አሁንም በስርዓቱ ወድቀዋል — አገሪቱ በመዘገበችው ምርጥ ውጤትም ቢሆን።",
   "stat-87b": "{schools} ትምህርት ቤቶች ውስጥ አንድም ተማሪ አላለፈም።",
   "stat-absent":
     "ተማሪዎቹ አልቀሩም። ትምህርታቸውን ተከታትለዋል። የጎደለው የትምህርት አጋጣሚ አይደለም — ከፈተናው በፊት የትኞቹ ሀሳቦች እንዳልተረጋገጡ ማወቅ ነው።",
   "loop-title": "አራት እርምጃዎች። አንድ ዑደት። የራስህ ክፍተቶች ብቻ።",
+  "preview-eyebrow": "ማሳያውን ተመልከት",
+  "preview-title": "በአንድ የጥናት ዙር ምን እንደሚፈጠር እይ",
+  "preview-choose-step": "ለማየት የጥናት እርምጃ ምረጥ",
+  "preview-recall-title": "በምታስታውሰው ጀምር",
+  "preview-recall-body":
+    "ምዕራፉን በራስህ ቃላት አስረዳ። በማሳያው መልስህን መጻፍ ወይም የተዘጋጀውን መልስ ማየት ትችላለህ።",
+  "preview-diagnose-title": "ሊሻሻሉ የሚገቡ ሀሳቦችን አግኝ",
+  "preview-diagnose-body":
+    "ኪፍተት መልስህን ከምዕራፉ ጋር ያነጻጽራል፤ ያብራራኸውን፣ ያመለጠህንና ያሳሳትከውን ያሳያል።",
+  "preview-plan-title": "ለክፍተቶችህ እቅድ አግኝ",
+  "preview-plan-body":
+    "በመጽሐፍህ ውስጥ ወዳሉ አስፈላጊ ሀሳቦች የሚመራ አጭር እቅድ ተከተል። በAI የሚዘጋጀው ተጨማሪ ትምህርት አሁንም በቤታ ላይ ነው።",
+  "preview-retest-title": "ምን እንደተለወጠ ፈትሽ",
+  "preview-retest-body": "ለሁለተኛ ጊዜ መልስ ስጥና ምን እንደተሻሻለና እንደገና ማየት ያለብህን እይ።",
+  "preview-try": "ዝግጁውን የጥናት ክፍለ ጊዜ ሞክር",
   "voice-title": "ድምጽ ባህሪ አይደለም። ዘዴው ነው።",
   "voice-1":
     "የትምህርት ዘዴው በተጨባጭ የሚሰራው ጮክ ብለህ በማስረዳት ነው። ከስክሪኑ ውጭ የምትደበቅበት ቦታ የለም — አማራጭ የለም፣ የመልስ ቁልፍ የለም፣ የምትፈጥረው ብቻ ነው። ያ እውነተኝነት ምርመራው ነው።",
@@ -1708,7 +1802,7 @@ export const am: Record<MessageKey, string> = {
   "byob-gold": "ነው",
   "byob-b": " የጥናት ክፍሉ።",
   "byob-1":
-    "በትክክል የምታጠናውን መጽሐፍ ጫን — ከስርአተ-ትምህርትህ ጋር የሚስማማውን — ኪፍተት የይዘቱን ማውጫ ያነባል እና እያንዳንዱን ክፍል የራሱ አስታውስ → መርምር → እንደገና ተማር → ድጋሚ ፈትን ዑደት ያደርገዋል።",
+    "በትክክል የምታጠናውን መጽሐፍ ጫን — ከስርአተ-ትምህርትህ ጋር የሚስማማውን — ኪፍተት የይዘቱን ማውጫ ያነባል። ምዕራፍ ምረጥ፣ ክፍተቶችህን አግኝ፣ በመጽሐፉ ውስጥ የሚመራ እቅድ ተከተልና እንደገና ፈትሽ።",
   "byob-2":
     "ፋይሉ በመሣሪያህ ላይ ይነበባል። ጽሑፉ ብቻ ነው የሚላከው፣ ምዕራፍ በምዕራፍ — ስለዚህ ሙሉ መጽሐፍ በአንድ ጊዜ ከባድ አፕሎድ አይሆንም። በትምህርት ቤት ኢንተርኔትም ይሰራል።",
   "preview-on-book": "በመጽሐፍህ ላይ ሞከረህ ተመልከት",

@@ -1,6 +1,8 @@
-import { apiUrl } from "@/lib/api";
+import { ApiError, api, apiUrl } from "@/lib/api";
 
 const KEY = "kiftet-demo-user";
+const SAMPLE_TEXTBOOK = "Biology — Cell Biology";
+const SAMPLE_CHAPTER = "Cell Structure and Function";
 
 export function getDemoUser(): string | null {
   if (typeof window === "undefined") return null;
@@ -50,6 +52,42 @@ export async function startDemo(): Promise<string> {
   const { userId } = (await res.json()) as { userId: string };
   setDemoUser(userId);
   return userId;
+}
+
+async function createSampleSession(): Promise<string> {
+  const chapters =
+    await api<{ id: string; title: string; textbookTitle: string }[]>(
+      "/chapters",
+    );
+  const sample = chapters.find(
+    (chapter) =>
+      chapter.title === SAMPLE_CHAPTER &&
+      chapter.textbookTitle === SAMPLE_TEXTBOOK,
+  );
+  if (!sample) {
+    throw new ApiError(
+      404,
+      "The prepared sample isn't available right now. Please try again.",
+    );
+  }
+
+  const { sessionId } = await api<{ sessionId: string }>("/sessions/start", {
+    method: "POST",
+    body: JSON.stringify({ chapterId: sample.id, recallMode: "blurting" }),
+  });
+  return sessionId;
+}
+
+export async function startDemoStudy(): Promise<string> {
+  await startDemo();
+  try {
+    return await createSampleSession();
+  } catch (error) {
+    if (!(error instanceof ApiError) || !error.demoExpired) throw error;
+    clearDemoUser();
+    await startDemo();
+    return createSampleSession();
+  }
 }
 
 /**

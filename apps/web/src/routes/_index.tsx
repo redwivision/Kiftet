@@ -11,7 +11,6 @@ import {
   RefreshCcw,
   ScanSearch,
   Search,
-  Volume2,
 } from "lucide-react";
 import { motion } from "motion/react";
 import {
@@ -28,7 +27,8 @@ import { useLanguage } from "@/components/language-provider";
 import type { MasteryLevel } from "@/components/study-provider";
 import WaitlistForm from "@/components/waitlist-form";
 import { apiError } from "@/lib/api";
-import { setDemoUser, startDemo } from "@/lib/demo";
+import { authClient } from "@/lib/auth-client";
+import { startDemoStudy } from "@/lib/demo";
 import { type ConceptMeta, weightedMastery } from "@/lib/mastery";
 import type { MessageKey } from "@/lib/messages";
 import { useOnScreen } from "@/lib/on-screen";
@@ -51,12 +51,19 @@ export function meta(_args: Route.MetaArgs) {
 const LOOP = [
   { stepKey: "step-speak", Icon: Mic },
   { stepKey: "step-diagnose", Icon: ScanSearch },
-  { stepKey: "step-relearn", Icon: Volume2 },
+  { stepKey: "step-relearn", Icon: BookText },
   { stepKey: "step-retest", Icon: RefreshCcw },
 ] as const satisfies readonly {
   stepKey: MessageKey;
   Icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 }[];
+
+const LOOP_PREVIEW = [
+  { titleKey: "preview-recall-title", bodyKey: "preview-recall-body" },
+  { titleKey: "preview-diagnose-title", bodyKey: "preview-diagnose-body" },
+  { titleKey: "preview-plan-title", bodyKey: "preview-plan-body" },
+  { titleKey: "preview-retest-title", bodyKey: "preview-retest-body" },
+] as const satisfies readonly { titleKey: MessageKey; bodyKey: MessageKey }[];
 
 const PASS_RATES = [
   { year: "2023", rate: "3.2%" },
@@ -254,7 +261,7 @@ export default function Home() {
   const diff = useOnScreen<HTMLElement>();
   const cta = useOnScreen<HTMLElement>();
   const { t } = useLanguage();
-  const { launch, pending, failure } = useDemoLaunch();
+  const { launch, pending, disabled, failure, signedIn } = useDemoLaunch();
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
@@ -280,10 +287,12 @@ export default function Home() {
             <Button
               size="lg"
               onClick={launch}
-              disabled={pending}
+              disabled={disabled}
               className="w-full font-medium sm:w-auto"
             >
-              {pending ? t("demo-setting-up") : t("hero-cta")}
+              {pending
+                ? t("demo-setting-up")
+                : t(signedIn ? "hero-dashboard-cta" : "hero-cta")}
             </Button>
             <a
               href="#how"
@@ -291,6 +300,12 @@ export default function Home() {
             >
               {t("how-loop-works")}
             </a>
+            <Link
+              to="/plans"
+              className="text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+            >
+              {t("plans-link")}
+            </Link>
           </div>
 
           {failure && (
@@ -326,6 +341,12 @@ export default function Home() {
           <p className="max-w-md text-balance text-center text-muted-foreground text-sm leading-6">
             {t("hero-film-caption")}
           </p>
+          <LoopPreview
+            onLaunch={launch}
+            disabled={disabled}
+            pending={pending}
+            signedIn={signedIn}
+          />
         </div>
       </section>
 
@@ -596,15 +617,13 @@ export default function Home() {
         <div className="mt-7 flex justify-center">
           <DemoButton variant="primary" size="lg" />
         </div>
-        <p className="mt-6 text-muted-foreground text-sm">
-          {t("no-account")}{" "}
-          <Link
-            to="/dashboard"
-            className="font-medium text-gold underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
-          >
-            {t("start-closing")}
-          </Link>
-        </p>
+        <p className="mt-6 text-muted-foreground text-sm">{t("no-account")}</p>
+        <Link
+          to="/plans"
+          className="mt-2 inline-block font-medium text-foreground text-sm underline underline-offset-4"
+        >
+          {t("plans-link")}
+        </Link>
 
         <div className="mx-auto mt-8 max-w-md text-left">
           <Disclosure summary={t("waitlist-chip")} id="waitlist">
@@ -639,6 +658,80 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+function LoopPreview({
+  onLaunch,
+  disabled,
+  pending,
+  signedIn,
+}: {
+  onLaunch: () => void;
+  disabled: boolean;
+  pending: boolean;
+  signedIn: boolean;
+}) {
+  const { t } = useLanguage();
+  const [activeStep, setActiveStep] = useState(0);
+  const step = LOOP_PREVIEW[activeStep] ?? LOOP_PREVIEW[0];
+
+  return (
+    <section
+      aria-label={t("preview-title")}
+      className="surface w-full max-w-md space-y-4 border-gold/25 p-4 sm:p-5"
+    >
+      <div>
+        <p className="k-label">{t("preview-eyebrow")}</p>
+        <h2 className="mt-1 font-display font-semibold text-lg tracking-tight">
+          {t("preview-title")}
+        </h2>
+      </div>
+      <fieldset className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <legend className="sr-only">{t("preview-choose-step")}</legend>
+        {LOOP.map(({ stepKey, Icon }, i) => (
+          <button
+            key={stepKey}
+            type="button"
+            aria-pressed={activeStep === i}
+            onClick={() => setActiveStep(i)}
+            className={cn(
+              "flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2",
+              activeStep === i
+                ? "border-gold/50 bg-gold/10 text-foreground"
+                : "border-border/70 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+            {t(stepKey)}
+          </button>
+        ))}
+      </fieldset>
+      <motion.div
+        key={step.titleKey}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        aria-live="polite"
+        className="inner-surface min-h-24 p-4"
+      >
+        <h3 className="font-medium text-foreground text-sm">
+          {t(step.titleKey)}
+        </h3>
+        <p className="mt-1 text-muted-foreground text-sm leading-6">
+          {t(step.bodyKey)}
+        </p>
+      </motion.div>
+      <Button
+        className="w-full justify-center"
+        onClick={onLaunch}
+        disabled={disabled}
+      >
+        {pending
+          ? t("demo-setting-up")
+          : t(signedIn ? "hero-dashboard-cta" : "preview-try")}
+      </Button>
+    </section>
   );
 }
 
@@ -861,23 +954,34 @@ function FaqSection() {
 
 function useDemoLaunch() {
   const navigate = useNavigate();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
   const launch = async () => {
+    if (sessionPending) return;
+    if (session) {
+      navigate("/dashboard", { viewTransition: true });
+      return;
+    }
     setPending(true);
     setFailure(null);
     try {
-      const userId = await startDemo();
-      setDemoUser(userId);
-      navigate("/dashboard", { viewTransition: true });
+      const sessionId = await startDemoStudy();
+      navigate(`/study/${sessionId}`, { viewTransition: true });
     } catch (error) {
       setFailure(apiError(error));
       setPending(false);
     }
   };
 
-  return { launch, pending, failure };
+  return {
+    launch,
+    pending,
+    disabled: pending || sessionPending,
+    failure,
+    signedIn: Boolean(session),
+  };
 }
 
 function DemoButton({
@@ -889,7 +993,7 @@ function DemoButton({
   size?: "lg";
   className?: string;
 }) {
-  const { launch, pending, failure } = useDemoLaunch();
+  const { launch, pending, disabled, failure, signedIn } = useDemoLaunch();
   const { t } = useLanguage();
 
   return (
@@ -898,14 +1002,16 @@ function DemoButton({
         size={size}
         variant={variant === "primary" ? "default" : "outline"}
         onClick={launch}
-        disabled={pending}
+        disabled={disabled}
         className="w-full font-medium sm:w-auto"
       >
         {pending
           ? t("demo-setting-up")
-          : variant === "primary"
-            ? t("demo-start")
-            : t("demo-try")}
+          : signedIn
+            ? t("hero-dashboard-cta")
+            : variant === "primary"
+              ? t("demo-start")
+              : t("demo-try")}
       </Button>
       {failure && (
         <p role="alert" className="text-rust text-xs">

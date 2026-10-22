@@ -1,4 +1,4 @@
-import { Button } from "@kiftet/ui/components/button";
+import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { Textarea } from "@kiftet/ui/components/textarea";
 import { cn } from "@kiftet/ui/lib/utils";
 import {
@@ -182,7 +182,7 @@ export function meta(_args: Route.MetaArgs) {
     {
       name: "description",
       content:
-        "Say what you remember, see what's missing, read the short lesson, then test yourself.",
+        "Recall what you know, see what's missing, follow a plan through your book, then test yourself again.",
     },
   ];
 }
@@ -345,17 +345,11 @@ function StudyScreen({
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
       <LoadingVeil show={state.busy} label={t("loading")} />
       {demo && (
-        <div className="surface mb-6 flex flex-wrap items-center justify-between gap-3 border p-4 text-sm">
+        <div className="surface mb-6 border p-4 text-sm">
           <p className="text-muted-foreground">
             <span className="font-medium text-gold">{t("demo-label")}</span>
             {t("demo-banner")}
           </p>
-          <Link
-            to="/login"
-            className="font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
-          >
-            {t("create-free-account")}
-          </Link>
         </div>
       )}
       <div className="surface overflow-hidden">
@@ -445,11 +439,42 @@ function StudyScreen({
                 onNext={done}
               />
             )}
+            {state.phase === "result" && demo && state.result && (
+              <DemoAccountPrompt />
+            )}
             {state.phase === "result" && <AddToHomeHint />}
           </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function DemoAccountPrompt() {
+  const { t } = useLanguage();
+  return (
+    <section className="surface mt-6 space-y-3 border-gold/30 bg-gold/[0.06] p-5">
+      <div className="space-y-1">
+        <h2 className="font-display font-semibold text-lg tracking-tight">
+          {t("demo-result-title")}
+        </h2>
+        <p className="text-muted-foreground text-sm leading-6">
+          {t("demo-result-text")}
+        </p>
+      </div>
+      <Link
+        to="/login?signup=1"
+        className={buttonVariants({ className: "w-full sm:w-auto" })}
+      >
+        {t("create-free-account")}
+      </Link>
+      <Link
+        to="/plans"
+        className="block w-fit text-muted-foreground text-sm underline underline-offset-4"
+      >
+        {t("plans-link")}
+      </Link>
+    </section>
   );
 }
 
