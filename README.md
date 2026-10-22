@@ -25,21 +25,33 @@ already use instead of starting with a generic question bank.
 
 ## How it works
 
-1. Choose a chapter and explain what you remember, by voice or text.
-2. Kiftet compares your explanation with the chapter and points out concepts
-   that need more work.
-3. Review a short lesson focused on those concepts.
-4. Try a new set of questions to check what has improved.
+Kiftet guides each study session through four steps:
 
-The goal is to spend less time repeating what you already know and more time
-on what still needs practice.
+1. **Recall what you know.** Choose open recall, targeted questions, or both.
+   Depending on your choice, answer aloud or use multiple choice, fill-in-the-
+   blank, or your own words.
+2. **See what needs work.** Kiftet checks your answers concept by concept. Your
+   results distinguish ideas you understand, partly understand, have mixed up,
+   or have not covered—not just a single score.
+3. **Get a roadmap for your gaps.** Your study plan puts the most important
+   misunderstandings first, gives each gap a useful next action, and points to
+   the matching passage in your own book. Mark steps as you work, and follow
+   relevant YouTube or Google searches when you need another explanation. This
+   step is a guided plan, not a generated lesson.
+4. **Check what changed.** Retest with new questions focused on the gaps, then
+   compare your understanding before and after.
+
+An optional generated classic lesson is available as a **beta** feature; it is
+separate from the main study plan.
 
 ## What you can do
 
 - Study chapters from your textbook or the available syllabus.
-- Get feedback about specific concepts, rather than only a score.
-- Review a short, focused lesson and check your progress with a retest.
-- Use voice or switch to typing when speaking isn’t convenient.
+- See your progress for individual concepts, including common misconceptions.
+- Follow a personalized study plan with prioritized gaps, next actions, book
+  references, useful search links, and steps you can mark complete.
+- Retest with fresh questions and compare your understanding before and after.
+- Import your own textbook; PDF reading and OCR happen on your device.
 - Continue studying across sessions and devices with an account.
 - See a daily study plan based on your progress and preferences.
 
