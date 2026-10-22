@@ -23,6 +23,7 @@ import { resolveTrustProxy } from "./lib/trust-proxy";
 import authProvidersRouter from "./routes/auth-providers";
 import demoRouter from "./routes/demo";
 import placementRouter from "./routes/placement";
+import planRouter from "./routes/plan";
 import studyRouter from "./routes/study";
 import syllabusRouter from "./routes/syllabus";
 import telegramRouter from "./routes/telegram";
@@ -148,6 +149,7 @@ app.use("/api/demo", demoRouter);
 app.use("/api", requireAuth, studyRouter);
 app.use("/api", requireAuth, syllabusRouter);
 app.use("/api", requireAuth, placementRouter);
+app.use("/api", requireAuth, planRouter);
 
 // Unknown /api paths should answer JSON, not an HTML page.
 app.use("/api", (_req, res) => {

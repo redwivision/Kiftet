@@ -6,9 +6,9 @@
 ## The product, in one sentence
 
 > A student says where they are in their book and how much they want their
-> past brought back, and the app turns that into **today's** plan — one review
-> and one new concept, twenty minutes by default — with a countdown to the
-> exam that gives the review a reason.
+> past brought back, and the app turns that into **today's** plan — one next
+> learning target and a review block sized to the student's preference and day,
+> twenty minutes by default — with a countdown to the exam.
 
 ## The one input the app did not have
 
@@ -56,8 +56,12 @@ and because the plan can turn it off the moment they say so.
 almost anybody can keep. The student changes it, and the Today screen can
 change it for one day without changing the habit.
 
-**A day is one review and one new concept.** Not a backlog. The point of a
-daily plan is that it ends, and that tomorrow's is not a debt.
+**A day is one new learning target and a bounded review block.** The review
+preference asks for none, one, or up to three ideas; the length of the day
+caps that at one item under 30 minutes, two under 60, and three from 60 minutes
+on. An exam date turns review back on at the light level when the student had
+asked for none. This is not a backlog: the point of a daily plan is that it
+ends, and that tomorrow's is not a debt.
 
 **Priority starts with weakness, not with the table of contents.** The order
 the planner reaches for past material is the order the student is weakest in.
@@ -85,9 +89,9 @@ default.
 - **A spaced-repetition engine.** The old `/review-due` is a flat two-day
   rule. A real schedule is a later step, and it will be built on the same
   mastery history the planner reads.
-- **Anything that spends AI to decide what to study.** The plan is
-  deterministic. The only model-written line is the *why this is yours* one,
-  which already has a deterministic fallback.
+- **Anything that spends AI to decide what to study.** The daily plan is
+  deterministic: it reads the student's position and recorded mastery, then
+  applies explicit review rules. It does not ask a model to choose the work.
 
 ## The build order
 
@@ -95,10 +99,10 @@ default.
 |---|---|---|
 | 0 | The contents reader is measured, reaches roman front matter, and never strands the student | ✅ shipped |
 | 1 | Placement: the app asks where the student is, and remembers the answer | ✅ shipped |
-| 2 | The mastery history and the scheduling policies, as pure functions | next |
-| 3 | `GET /api/plan/today` — the plan itself | next |
-| 4 | The exam date, and the countdown that goes with it | next |
-| 5 | The Today surface on the dashboard, with the manual queue kept as the fallback | next |
+| 2 | The mastery history and the scheduling policies, as pure functions | ✅ shipped |
+| 3 | `GET /api/plan/today` — the plan itself | ✅ shipped |
+| 4 | The exam date, and the countdown that goes with it | ✅ shipped |
+| 5 | The Today surface on the dashboard, with the manual queue kept as the fallback | ✅ shipped |
 
 ## Where this lives in the repo
 

@@ -1056,6 +1056,30 @@ export const en = {
   "settings-study-title": "Your study",
   "settings-study-text":
     "Where you are in your books, how much of the past you want brought back, and how long a study day is.",
+  "today-plan-label": "Your day",
+  "today-plan-title": "Today's plan",
+  "today-plan-minutes": "{n} minutes today",
+  "today-plan-book": "Working in {title}",
+  "today-plan-no-position":
+    "Set where you are in your book to make a plan that starts in the right place.",
+  "today-plan-set-position": "Set my position",
+  "today-plan-learn": "Learn next",
+  "today-plan-learn-needs-position":
+    "Set where you are in your book to plan the next material.",
+  "today-plan-review": "Bring back",
+  "today-plan-review-preference": "A little of your past, as you asked.",
+  "today-plan-review-exam": "Review is included because your exam is coming.",
+  "today-plan-start-learn": "Start this chapter",
+  "today-plan-start-review": "Review this chapter",
+  "today-plan-no-review": "Nothing is due for review today.",
+  "today-plan-chapter-done":
+    "You've reached the end of this chapter. Update your position when you move on.",
+  "today-plan-error": "Today's plan couldn't load: {error}",
+  "today-exam-date": "Exam date: {date}",
+  "today-exam-days": "{n} days until your exam",
+  "today-exam-one-day": "Your exam is tomorrow",
+  "today-exam-today": "Your exam is today",
+  "today-exam-past": "Your exam date has passed",
   "loading-ellipsis": "Loading…",
 } as const;
 
@@ -2014,6 +2038,28 @@ export const am: Record<MessageKey, string> = {
   "settings-study-title": "ጥናትህ",
   "settings-study-text":
     "በመጽሐፍህ ውስጥ የምት፣ ከፍተኛ ዘነድ ስፈረት ብዙ እንደምትፈልግ እና የጥናት ቀን ልብ ማለት ከፍተኛ ነው።",
+  "today-plan-label": "የዛሬ ጥናት",
+  "today-plan-title": "የዛሬ እቅድ",
+  "today-plan-minutes": "ዛሬ {n} ደቂቃ",
+  "today-plan-book": "የምትማረው {title}",
+  "today-plan-no-position": "እቅዱ በትክክለኛው ቦታ እንዲጀምር በመጽሐፍህ ውስጥ ያለህን ቦታ አስቀምጥ።",
+  "today-plan-set-position": "ቦታዬን አስቀምጥ",
+  "today-plan-learn": "ቀጥሎ ተማር",
+  "today-plan-learn-needs-position":
+    "ቀጣዩን ትምህርት ለማቀድ በመጽሐፍህ ውስጥ ያለህን ቦታ አስቀምጥ።",
+  "today-plan-review": "ያለፈውን አስታውስ",
+  "today-plan-review-preference": "እንደጠየቅኸው ከያለፈው ትንሽ እንመልሳለን።",
+  "today-plan-review-exam": "ፈተናህ ስለሚቀርብ ድግግሞሽ ተካትቷል።",
+  "today-plan-start-learn": "ይህን ምዕራፍ ጀምር",
+  "today-plan-start-review": "ይህን ምዕራፍ ድገም",
+  "today-plan-no-review": "ዛሬ ለመድገም የደረሰ ነገር የለም።",
+  "today-plan-chapter-done": "የዚህን ምዕራፍ መጨረሻ ደርሰሃል። ወደ ቀጣዩ ሲሄድህ ቦታህን አዘምን።",
+  "today-plan-error": "የዛሬ እቅድ አልተጫነም፦ {error}",
+  "today-exam-date": "የፈተና ቀን፦ {date}",
+  "today-exam-days": "እስከ ፈተናህ {n} ቀን ቀርቷል",
+  "today-exam-one-day": "ፈተናህ ነገ ነው",
+  "today-exam-today": "ፈተናህ ዛሬ ነው",
+  "today-exam-past": "የፈተና ቀንህ አልፏል",
   "loading-ellipsis": "በመጫን ላይ…",
 };
 

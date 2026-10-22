@@ -25,6 +25,7 @@ import { requestLogger } from "../lib/http-log";
 import { requestIdMiddleware } from "../lib/request-id";
 import demoRouter from "../routes/demo";
 import placementRouter from "../routes/placement";
+import planRouter from "../routes/plan";
 import studyRouter from "../routes/study";
 import { __resetDbForTests, __setDbForTests } from "../services";
 
@@ -48,6 +49,7 @@ export async function startTestServer(): Promise<TestServer> {
   app.use("/api/demo", demoRouter);
   app.use("/api", requireAuth, studyRouter);
   app.use("/api", requireAuth, placementRouter);
+  app.use("/api", requireAuth, planRouter);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "not_found" });
   });

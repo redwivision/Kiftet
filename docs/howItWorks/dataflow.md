@@ -252,6 +252,39 @@ See [decision 40](decisions.md).
 
 ---
 
+### 5.2c The daily plan — "what do I do today?" (planner steps 2–5)
+
+The dashboard asks for the plan after sign-in. `GET /plan/today` reads the
+student's saved position, study preferences and recent non-pretest mastery
+history, then applies pure scheduling rules. The current book is the one with
+the most recently updated position; if none has been placed, the most recently
+studied book is shown as context but the plan does not pretend to know where
+the student is.
+
+```mermaid
+flowchart LR
+  A["1 · dashboard"] --> B["2 · GET /plan/today"]
+  B --> C["3 · read position +<br/>preferences + mastery"]
+  C --> D["4 · choose next book section<br/>and due review ideas"]
+  D --> E["5 · Today card +<br/>exam countdown"]
+  E --> F["6 · start a chapter<br/>or use the manual queue"]
+```
+
+The plan is deterministic and does not call an AI provider. It advances by the
+book's own contents order, ranks due review ideas by mastery weakness and
+staleness, and gives the active book a tie-break among equally weak ideas.
+Review is absent when the student chose "none" and has no exam date; an exam
+date brings it back at the light level and the card says why. Otherwise the
+student's review preference sets the number of ideas, capped by the length of
+the study day. The exam countdown compares local calendar dates, not elapsed
+24-hour periods.
+
+The Today card is additive: the existing chapter grid and manual study queue
+remain available as the student's fallback. Starting an item opens the
+existing chapter study loop, rather than inventing a second session type.
+
+---
+
 ### 5.3 Starting a study session
 
 Here's the order when a student picks a chapter:
@@ -1004,6 +1037,7 @@ that works:
 | `GET /api/placement` | Planner (preferences + the student's books and their printed sections) | no | no |
 | `PUT /api/placement/preferences` | Planner (review preference, exam date, day length) | no | yes (update) |
 | `PUT /api/placement/position` | Planner (which chapter and section the student is in) | no | yes |
+| `GET /api/plan/today` | Dashboard Today card (next learning target, due reviews, exam countdown) | no | no |
 | `GET /api/chapters/:id/concepts` | (view only) | no | no |
 | `GET /api/chapters/:id/objectives` | (view only) | no | no |
 | `POST /api/chapters/ingest` | Admin / seed | yes | yes |

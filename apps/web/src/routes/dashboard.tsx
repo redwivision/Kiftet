@@ -8,6 +8,7 @@ import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
 import { PlacementPrompt } from "@/components/placement-prompt";
 import type { ChapterInfo } from "@/components/study-provider";
+import { TodayPlan } from "@/components/today-plan";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
@@ -137,6 +138,8 @@ export default function Dashboard() {
   const [queuePicks, setQueuePicks] = useState<string[]>([]);
   const [queueBusy, setQueueBusy] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [placementSettled, setPlacementSettled] = useState(false);
+  const [planRevision, setPlanRevision] = useState(0);
 
   // The wait is the whole point of showing the number, so it counts down in the
   // open instead of saying "a moment" and leaving the student to guess. It
@@ -296,15 +299,15 @@ export default function Dashboard() {
     return counts;
   }, [chapters]);
 
-  const start = async (chapter: ChapterInfo) => {
-    setStarting(chapter.id);
+  const start = async (chapterId: string) => {
+    setStarting(chapterId);
     setError(null);
     try {
       const { sessionId } = await api<{ sessionId: string }>(
         "/sessions/start",
         {
           method: "POST",
-          body: JSON.stringify({ chapterId: chapter.id }),
+          body: JSON.stringify({ chapterId }),
         },
       );
       navigate(`/study/${sessionId}`, { replace: true });
@@ -425,7 +428,22 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {session && <PlacementPrompt />}
+      {session && !placementSettled && (
+        <PlacementPrompt
+          onSettled={() => {
+            setPlacementSettled(true);
+            setPlanRevision((revision) => revision + 1);
+          }}
+        />
+      )}
+
+      {session && (
+        <TodayPlan
+          key={planRevision}
+          onStartChapter={(chapterId) => void start(chapterId)}
+          starting={starting !== null}
+        />
+      )}
 
       {!session && getDemoUser() && (
         <div className="surface mb-8 flex animate-border-fade flex-wrap items-center justify-between gap-3 border p-4 text-sm">
@@ -465,7 +483,7 @@ export default function Dashboard() {
             <Button
               className="w-full sm:w-auto"
               disabled={starting === chapters[0].id}
-              onClick={() => start(chapters[0])}
+              onClick={() => start(chapters[0].id)}
             >
               {starting === chapters[0].id
                 ? t("opening-ellipsis")
@@ -717,7 +735,7 @@ export default function Dashboard() {
                     picking={queuePlanning}
                     pickOrder={queuePicks.indexOf(chapter.id)}
                     onStart={() =>
-                      queuePlanning ? togglePick(chapter.id) : start(chapter)
+                      queuePlanning ? togglePick(chapter.id) : start(chapter.id)
                     }
                   />
                   <ChapterHistory last={last} />
