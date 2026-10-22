@@ -101,6 +101,20 @@ export default function UserMenu() {
             {session.user.email}
           </DropdownMenuItem>
           <DropdownMenuItem
+            render={
+              // A <Link> rather than a navigate() call, so the browser treats
+              // it as a real link: middle-click and "open in new tab" work,
+              // and it is one tab stop rather than two.
+              <Link
+                to="/settings"
+                className="flex cursor-pointer items-center gap-2"
+              />
+            }
+          >
+            {t("settings-study-title")}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
             variant="destructive"
             onClick={() => {
               authClient.signOut({

@@ -230,6 +230,24 @@ from a different book, a section the book does not have, and a date that does
 not exist. The question is asked once — `placementDismissed` records that the
 student said "not now", so it is never asked twice.
 
+**Where the question lives.** A short card on the dashboard
+(`components/placement-prompt.tsx`), and a full screen for changing the answer
+later (`routes/settings.tsx`, reachable from the account menu and the mobile
+"More" sheet). The card is shown only when the question can be answered: a
+student with no book has nowhere to be placed, and a book that has been imported
+but not yet ingested has no chapter to point at — so the card stays away until
+there is one. That decision is one pure function, `shouldAskPlacement`
+(`lib/placement.ts`), and it is tested rather than trusted.
+
+The chapter and section lists are the book's own words: the chapter list is the
+book's imported chapters, and the section list is the book's own printed
+contents lines, so "3.2" in the picker is the "3.2" on the page. A book read
+from a manual page range has no printed sections, and then the section control
+is simply not offered — a choice the book cannot back is worse than no choice.
+How much of the past to bring back is three buttons rather than a dropdown,
+because each one is a different promise and "none" means something quite
+different from "heavy".
+
 See [decision 40](decisions.md).
 
 ---

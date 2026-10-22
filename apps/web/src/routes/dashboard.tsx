@@ -6,6 +6,7 @@ import { ConceptGraph } from "@/components/concept-graph";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
+import { PlacementPrompt } from "@/components/placement-prompt";
 import type { ChapterInfo } from "@/components/study-provider";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -423,6 +424,8 @@ export default function Dashboard() {
           )}
         </div>
       </header>
+
+      {session && <PlacementPrompt />}
 
       {!session && getDemoUser() && (
         <div className="surface mb-8 flex animate-border-fade flex-wrap items-center justify-between gap-3 border p-4 text-sm">

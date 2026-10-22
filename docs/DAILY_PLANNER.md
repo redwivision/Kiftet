@@ -94,7 +94,7 @@ default.
 | Step | What it is | Status |
 |---|---|---|
 | 0 | The contents reader is measured, reaches roman front matter, and never strands the student | ✅ shipped |
-| 1 | Placement: the app asks where the student is, and remembers the answer | ✅ shipped (server) · UI in progress |
+| 1 | Placement: the app asks where the student is, and remembers the answer | ✅ shipped |
 | 2 | The mastery history and the scheduling policies, as pure functions | next |
 | 3 | `GET /api/plan/today` — the plan itself | next |
 | 4 | The exam date, and the countdown that goes with it | next |

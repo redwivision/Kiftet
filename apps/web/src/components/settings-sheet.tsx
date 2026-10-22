@@ -11,6 +11,7 @@ import {
 } from "@kiftet/ui/components/drawer";
 import { cn } from "@kiftet/ui/lib/utils";
 import { Check } from "lucide-react";
+import { Link } from "react-router";
 
 import { useLanguage } from "@/components/language-provider";
 import { OPTIONS } from "@/components/language-switcher";
@@ -45,11 +46,9 @@ export function SettingsSheet({
                 aria-hidden="true"
                 className="mx-auto h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/30"
               />
-
               <DrawerTitle className="sr-only">
                 {t("settings-title")}
               </DrawerTitle>
-
               <section className="space-y-3">
                 <p className="k-label">{t("ink-for-the-room")}</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -95,7 +94,6 @@ export function SettingsSheet({
                   })}
                 </div>
               </section>
-
               <section className="space-y-3">
                 <p className="k-label">{t("select-language")}</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -134,12 +132,28 @@ export function SettingsSheet({
                   })}
                 </div>
               </section>
-
+              {/* Where the student is, and how they want their past treated.
+                  The theme and the language are set once and forgotten; this
+                  changes as the term moves on, so it gets a link to its own
+                  screen rather than a row of controls here. */}
+              <DrawerClose
+                render={
+                  <Link
+                    to="/settings"
+                    className={cn(
+                      buttonVariants({ variant: "outline" }),
+                      "w-full",
+                    )}
+                  />
+                }
+              >
+                {t("settings-study-title")}
+              </DrawerClose>
               <DrawerClose
                 className={cn(buttonVariants({ variant: "outline" }), "w-full")}
               >
                 {t("done")}
-              </DrawerClose>
+              </DrawerClose>{" "}
             </DrawerContent>
           </DrawerPopup>
         </DrawerViewport>

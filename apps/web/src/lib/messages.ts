@@ -1015,6 +1015,48 @@ export const en = {
   "targeted-mcq-instruction": "Tap the best answer.",
   "targeted-fill-blank-instruction": "Type the missing word or phrase.",
   "targeted-short-instruction": "Say or type your answer in your own words.",
+
+  // ── Placement (where are you) ─────────────────────────────────
+  "placement-label": "Your study",
+  "placement-title": "Where are you right now?",
+  "placement-text":
+    "School is already under way, so we can't guess. Tell us the chapter you're on and how much of the past you want brought back.",
+  "placement-book": "Book",
+  "placement-chapter": "Chapter",
+  "placement-chapter-choose": "Choose a chapter",
+  "placement-section": "Section",
+  "placement-section-whole": "The whole chapter",
+  "placement-review-title": "How much should we bring back?",
+  "placement-review-hint":
+    "This is yours to change. Until you set an exam date, “none” means we won't mention review at all.",
+  "placement-review-none": "None",
+  "placement-review-light": "Light",
+  "placement-review-heavy": "Heavy",
+  "placement-review-none-note":
+    "Only new material, until you give me an exam date.",
+  "placement-review-light-note": "A little of what is nearly forgotten.",
+  "placement-review-heavy-note":
+    "A real review block, with more of the past brought back.",
+  "placement-minutes-title": "How long is a study day?",
+  "placement-minutes": "{n} minutes",
+  "placement-exam-title": "When is your exam?",
+  "placement-exam-note":
+    "Optional. With a date, we can show the days left and make review worth your time.",
+  "placement-save": "Save",
+  "placement-later": "Not now",
+  "placement-saved": "Saved.",
+  "placement-save-failed": "That didn't save. Try again.",
+  "placement-where-title": "Where you are in each book",
+  "placement-where-text":
+    "A student halfway through a term is somewhere else now. Change it here whenever you move on.",
+  "placement-save-position": "Save this position",
+  "placement-current": "Your current position.",
+  "placement-no-chapters":
+    "This book has no chapters yet. Import its chapters first, then you can place yourself in it.",
+  "settings-study-title": "Your study",
+  "settings-study-text":
+    "Where you are in your books, how much of the past you want brought back, and how long a study day is.",
+  "loading-ellipsis": "Loading…",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1934,6 +1976,45 @@ export const am: Record<MessageKey, string> = {
   "targeted-mcq-instruction": "ተገቢውን መልስ ምረጥ።",
   "targeted-fill-blank-instruction": "የጎደለውን ቃል ወይም ሐረግ ጻፍ።",
   "targeted-short-instruction": "መልስህን በራስህ ቃላት ተናገር ወይም ጻፍ።",
+
+  // ── Placement (where are you) ─────────────────────────────────
+  "placement-label": "ጥናትህ",
+  "placement-title": "አሁን ያለህ የት ነው?",
+  "placement-text":
+    "ትምህርት ተጀምሯል፣ ስለዚህ በእርግጠት መገምገም አንችልም። የምህ ላይ የሚሆን ምዕራፍ እና ከፍተኛ ዘነድ ስፈረት እንዴት እንደምትፈልግ ንገረን።",
+  "placement-book": "መጽሐፍ",
+  "placement-chapter": "ምዕራፍ",
+  "placement-chapter-choose": "ምዕራፍ ምረጥ",
+  "placement-section": "ክፍል",
+  "placement-section-whole": "ሙሉ ምዕራፉ",
+  "placement-review-title": "ከፍተኛ ዘነድ ስፈረት ብዙ እንደምን እንደምትፈልግ?",
+  "placement-review-hint":
+    "ይህ ለካህ ነው፤ ማለትን ትችላለህ። የፈተና ቀን ካልጠበቀህ እስከዚህ «ምንም» ባለህ በማለት ግን በመነስበር ላይ አንጠበቅም።",
+  "placement-review-none": "ምንም",
+  "placement-review-light": "ትንሽ",
+  "placement-review-heavy": "ብዙ",
+  "placement-review-none-note": "አዲስ ትምህርት ብቻ፤ የፈተና ቀን ካልሰጨምርኝ።",
+  "placement-review-light-note": "የተረሳ ዘነድ ትንሽ ከመምጣት።",
+  "placement-review-heavy-note": "ከፍተኛ ዘነድ በብዙ የሚመጣ ትንሽ አይደለም የቅርጫ ጊዜ።",
+  "placement-minutes-title": "የጥናት ቀን ልብ ማለት ከፍተኛ ነው?",
+  "placement-minutes": "{n} ደቂቃዎች",
+  "placement-exam-title": "ፈተናዎ መቼ ነው?",
+  "placement-exam-note":
+    "አማራጭ ነው። ቀን ካለህ ቀሩን የሚቀሩ ቀናትን ማሳየትና እንደምን እንደምትረጋግጥ ማድረግ እንችላለን።",
+  "placement-save": "አስቀምጥ",
+  "placement-later": "አሁን አይደለም",
+  "placement-saved": "ተቀምጧል።",
+  "placement-save-failed": "አልተቀረጠም። እንደገና ሞክር።",
+  "placement-where-title": "በእያንዳንዱ መጽሐፍ ውስጥ የምት",
+  "placement-where-text":
+    "ተማሪ የሩብ መንግሥት ላይ የደረሰ ከነበር አሁን ሌላ ቦታ ላይ ነው። ሲቀየርህ አለተንረብ እንደምትደርግ እዚህ ቀይረው።",
+  "placement-save-position": "ይህን እድል አስቀምጥ",
+  "placement-current": "የአሁኑ እድልህ።",
+  "placement-no-chapters": "ይህ መጽሐፍ ገና ምዕራፎች የለውም። በመጀመርህ መጽሐፍ ላይ መሁን ትችላለህ።",
+  "settings-study-title": "ጥናትህ",
+  "settings-study-text":
+    "በመጽሐፍህ ውስጥ የምት፣ ከፍተኛ ዘነድ ስፈረት ብዙ እንደምትፈልግ እና የጥናት ቀን ልብ ማለት ከፍተኛ ነው።",
+  "loading-ellipsis": "በመጫን ላይ…",
 };
 
 export const messages: Record<Language, Record<MessageKey, string>> = {
