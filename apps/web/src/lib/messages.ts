@@ -292,9 +292,9 @@ export const en = {
   "plans-description":
     "Try Kiftet's real study loop before making any commitment. Here is what is available now and what is still being planned.",
   "plans-status-label": "A note before you choose",
-  "plans-status-title": "There is no paid plan to buy today.",
+  "plans-status-title": "Beta access is available by personal quote.",
   "plans-status-body":
-    "Kiftet is available to use now. Premium features and pricing are not finalized, and we will share both clearly before accepting payment.",
+    "Message us to confirm what beta access currently includes and its exact price. Never pay based on an old or assumed offer.",
   "plans-available": "Available now",
   "plans-free-title": "Kiftet",
   "plans-free-description":
@@ -308,14 +308,18 @@ export const en = {
   "plans-free-feature-progress":
     "Keep your study sessions and progress with your account",
   "plans-free-cta": "Try the sample",
-  "plans-not-ready": "In planning",
+  "plans-not-ready": "Beta · one-time 30-day access",
   "plans-premium-title": "Kiftet Premium",
   "plans-premium-description":
-    "We are still deciding what belongs in a paid plan. We will publish its features and price before asking anyone to pay.",
-  "plans-premium-cta": "Get launch updates",
-  "plans-no-charge": "Joining the list does not charge you.",
+    "Beta access lasts 30 days from payment verification and does not renew automatically. Confirm the current offer and exact price with us before you transfer.",
+  "plans-telebirr-label": "Telebirr number",
+  "plans-payment-note":
+    "First message us to confirm what beta access includes, its duration, and the exact ETB amount. Only then transfer via Telebirr and send the receipt here. We will review it and activate access manually; do not transfer before our confirmation.",
+  "plans-premium-cta": "Request a beta quote by SMS",
+  "plans-no-charge":
+    "No automatic renewal. Ask us to renew when your 30 days end.",
   "plans-transparency":
-    "No checkout is active yet. This page is a preview, not a purchase flow.",
+    "Beta payments and activation are handled manually. There is no in-app checkout or automatic receipt verification yet.",
   "ai-calls-minute": "AI requests available this minute:",
   "of-left": "{remaining} of {limitPerMinute} still available",
   "budget-out": " — you've used them all. Wait a moment and try again.",
@@ -1403,9 +1407,9 @@ export const am: Record<MessageKey, string> = {
   "plans-description":
     "ምንም ቃል ከመግባትህ በፊት የኪፍተትን እውነተኛ የጥናት ዑደት ሞክር። አሁን ያለውና እየታቀደ ያለው ይህ ነው።",
   "plans-status-label": "ከመምረጥህ በፊት ማስታወሻ",
-  "plans-status-title": "ዛሬ የሚገዛ የተከፋይ እቅድ የለም።",
+  "plans-status-title": "የቤታ መግቢያ በግል ዋጋ ይገኛል።",
   "plans-status-body":
-    "ኪፍተትን አሁን መጠቀም ትችላለህ። የPremium ባህሪያትና ዋጋ ገና አልተወሰኑም፤ ክፍያ ከመቀበላችን በፊት ሁለቱንም በግልጽ እናሳውቃለን።",
+    "የቤታ መጠቀሚያው አሁን ምን እንደሚያካትትና ትክክለኛ ዋጋውን ለማረጋገጥ መልዕክት ላክልን። በቀድሞ ወይም በግምት ዋጋ ክፍያ አትፈጽም።",
   "plans-available": "አሁን ይገኛል",
   "plans-free-title": "ኪፍተት",
   "plans-free-description":
@@ -1416,13 +1420,17 @@ export const am: Record<MessageKey, string> = {
   "plans-free-feature-books": "የራስህን መጽሐፍት አምጣና የምታጠናቸውን ምዕራፎች ምረጥ",
   "plans-free-feature-progress": "የጥናት ክፍለ ጊዜዎችህንና እድገትህን በመለያህ አስቀምጥ",
   "plans-free-cta": "ማሳያውን ሞክር",
-  "plans-not-ready": "በዕቅድ ላይ",
+  "plans-not-ready": "ቤታ · የአንድ ጊዜ የ30 ቀን መጠቀሚያ",
   "plans-premium-title": "ኪፍተት Premium",
   "plans-premium-description":
-    "በተከፋይ እቅድ ውስጥ ምን እንደሚካተት እየወሰንን ነው። ማንንም ክፍያ ከመጠየቃችን በፊት ባህሪያቱንና ዋጋውን እናሳውቃለን።",
-  "plans-premium-cta": "የምርቃት ዜና ተቀበል",
-  "plans-no-charge": "ዝርዝሩን መቀላቀል ክፍያ አያስከፍልም።",
-  "plans-transparency": "የክፍያ ሂደት ገና አልተከፈተም። ይህ ገጽ ቅድመ እይታ ነው፣ የግዢ ሂደት አይደለም።",
+    "የቤታ መጠቀሚያው ክፍያ ከተረጋገጠበት ቀን ጀምሮ ለ30 ቀናት ይቆያል፤ በራስ-ሰር አይታደስም። ከማስተላለፍህ በፊት የአሁኑን አቅርቦትና ትክክለኛ ዋጋ ከእኛ ጋር አረጋግጥ።",
+  "plans-telebirr-label": "የቴሌብር ቁጥር",
+  "plans-payment-note":
+    "መጀመሪያ የቤታ መጠቀሚያው ምን እንደሚያካትት፣ ለስንት ጊዜ እንደሚቆይና ትክክለኛው የብር መጠን ምን እንደሆነ ለማረጋገጥ መልዕክት ላክልን። ከዚያ ብቻ በቴሌብር ክፈልና ደረሰኙን እዚህ ላክ። በእጅ እንመረምረዋለን፤ ከእኛ ማረጋገጫ በፊት ክፍያ አትፈጽም።",
+  "plans-premium-cta": "የቤታ ዋጋ በSMS ጠይቅ",
+  "plans-no-charge": "በራስ-ሰር አይታደስም። 30 ቀናቱ ሲያበቁ እንድናድስልህ ጠይቅ።",
+  "plans-transparency":
+    "የቤታ ክፍያና ማንቃት በእጅ ይከናወናሉ። በመተግበሪያው ውስጥ ክፍያ መፈጸም ወይም ደረሰኝን በራስ-ሰር ማረጋገጥ እስካሁን አይቻልም።",
   "ai-calls-minute": "በዚህ ደቂቃ የ AI ጥያቄዎች ይቀራሉ:",
   "of-left": "{remaining} ከ {limitPerMinute} ቀርተዋል",
   "budget-out": " — ሁሉም ተጠቅመዋል። ትንሽ ጠብቅተን እና እንደገና ሞክር።",

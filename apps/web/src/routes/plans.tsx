@@ -103,14 +103,25 @@ export default function Plans() {
             <p className="mt-3 text-muted-foreground text-sm leading-6">
               {t("plans-premium-description")}
             </p>
+            <div className="mt-6 border-t pt-5">
+              <p className="text-muted-foreground text-sm">
+                {t("plans-telebirr-label")}
+              </p>
+              <p className="mt-1 font-medium text-lg tracking-wide">
+                +251968099678
+              </p>
+              <p className="mt-3 text-muted-foreground text-sm leading-6">
+                {t("plans-payment-note")}
+              </p>
+            </div>
           </div>
           <div className="mt-auto pt-8">
-            <Link
-              to="/#waitlist"
+            <a
+              href="sms:+251968099678"
               className={cn(buttonVariants(), "w-full justify-center")}
             >
               {t("plans-premium-cta")}
-            </Link>
+            </a>
             <p className="mt-3 text-center text-muted-foreground text-xs leading-5">
               {t("plans-no-charge")}
             </p>
