@@ -29,6 +29,8 @@ export const healthUrl = () => `${serverRoot}/health`;
 // before they render "not found".
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string | null;
+  readonly retryAfterSeconds: number | null;
   /**
    * True when the server refused a request with 401 while this browser was
    * carrying a demo id — i.e. the demo room has been cleared (they expire after
@@ -38,11 +40,19 @@ export class ApiError extends Error {
    */
   readonly demoExpired: boolean;
 
-  constructor(status: number, message: string, demoExpired = false) {
+  constructor(
+    status: number,
+    message: string,
+    demoExpired = false,
+    code: string | null = null,
+    retryAfterSeconds: number | null = null,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.demoExpired = demoExpired;
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -124,10 +134,13 @@ export async function api<T = unknown>(
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const message = body.error ?? statusMessage(res.status);
+      const retryAfter = Number(res.headers.get("Retry-After"));
       throw new ApiError(
         res.status,
         message,
         res.status === 401 && demoUser !== null,
+        typeof body.code === "string" ? body.code : null,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
       );
     }
     return res.json() as Promise<T>;

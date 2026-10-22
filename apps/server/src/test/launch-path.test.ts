@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-
+import { consumeAiRequest } from "../lib/ai-quota-store";
 import {
   asUser,
   seedChapter,
@@ -77,6 +77,34 @@ describe("launch path against a real database", () => {
     expect(resultRes.status).toBe(200);
     const result = (await resultRes.json()) as { before: unknown };
     expect(result).toHaveProperty("before");
+  });
+
+  test("an exhausted study quota returns a clear code and retry window", async () => {
+    const { userId } = await seedChapter(server.db);
+    const now = new Date();
+    for (let i = 0; i < 3; i += 1) {
+      await consumeAiRequest(
+        server.db as unknown as Parameters<typeof consumeAiRequest>[0],
+        userId,
+        3,
+        now,
+      );
+    }
+
+    const call = asUser(server.baseUrl, userId);
+    const res = await call("/api/sessions/unneeded/recall", {
+      method: "POST",
+      body: JSON.stringify({ transcriptText: "My answer" }),
+    });
+    const body = (await res.json()) as {
+      code: string;
+      error: string;
+    };
+
+    expect(res.status).toBe(429);
+    expect(body.code).toBe("AI_QUOTA_EXCEEDED");
+    expect(body.error).toContain("Wait");
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
   });
 
   test("every response carries a request id", async () => {

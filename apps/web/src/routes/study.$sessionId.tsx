@@ -250,6 +250,15 @@ function StudyScreen({
   const { t } = useLanguage();
   const { state, retryAgain, retryLast, completeSession, clearError } =
     useStudy();
+  const [quotaNow, setQuotaNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!state.quotaResetAt) return;
+    const id = setInterval(() => setQuotaNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [state.quotaResetAt]);
+  const quotaSeconds = state.quotaResetAt
+    ? Math.max(0, Math.ceil((state.quotaResetAt - quotaNow) / 1000))
+    : null;
   // `demo` is threaded down from the route so a signed-in student is never
   // dressed as a visitor: the banner and the no-effort sample-answer on-ramp
   // belong to the anonymous room only.
@@ -384,13 +393,28 @@ function StudyScreen({
           {state.demoExpired ? (
             <DemoExpiredNotice />
           ) : state.error ? (
-            <div className="mb-5 rounded-2xl border border-rust/40 bg-rust/10 px-4 py-3 text-sm">
+            <div
+              role="alert"
+              className="mb-5 rounded-2xl border border-rust/40 bg-rust/10 px-4 py-3 text-sm"
+            >
               <p className="mb-1 font-medium text-rust">
-                {t("something-went-wrong")}
+                {state.quotaResetAt
+                  ? t("quota-limit-title")
+                  : t("something-went-wrong")}
               </p>
-              <p className="text-muted-foreground">{state.error}</p>
+              <p className="text-muted-foreground">
+                {quotaSeconds === null
+                  ? state.error
+                  : quotaSeconds > 0
+                    ? t("quota-limit-message", { seconds: quotaSeconds })
+                    : t("quota-limit-ready")}
+              </p>
               <div className="mt-2 flex gap-2">
-                <Button size="sm" onClick={() => void retryLast()}>
+                <Button
+                  size="sm"
+                  disabled={quotaSeconds !== null && quotaSeconds > 0}
+                  onClick={() => void retryLast()}
+                >
                   {t("retry")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={clearError}>

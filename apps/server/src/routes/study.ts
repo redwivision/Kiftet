@@ -229,18 +229,30 @@ function err(
 // the same rolling window the check just used, so it is not a guess either.
 // The reassurance matters: a cached guide costs nothing, so a student who is
 // blocked on generation can still reopen everything they have already read.
-async function aiBudgetError(res: Response, req: Request) {
+async function aiBudgetError(
+  res: Response,
+  req: Request,
+  cause: "quota" | "provider" = "quota",
+) {
+  if (cause === "provider") {
+    res.setHeader("Retry-After", "5");
+    return res.status(503).json({
+      code: "AI_SERVICE_BUSY",
+      error:
+        "The AI service is busy right now. Wait a moment and try again — anything you've already studied stays available.",
+    });
+  }
+
   const { retryAfterSeconds } = await aiBudgetFor(req);
   const wait =
     retryAfterSeconds > 0
       ? `${retryAfterSeconds} second${retryAfterSeconds === 1 ? "" : "s"}`
       : "a moment";
   res.setHeader("Retry-After", String(Math.max(1, retryAfterSeconds)));
-  return err(
-    res,
-    `You've used all your AI requests for this minute. Wait ${wait} and try again — anything you've already studied stays available.`,
-    429,
-  );
+  res.status(429).json({
+    code: "AI_QUOTA_EXCEEDED",
+    error: `You've used all your AI requests for this minute. Wait ${wait} and try again — anything you've already studied stays available.`,
+  });
 }
 
 // Zod's default messages are written for developers ("Invalid input: expected
@@ -1075,7 +1087,7 @@ router.post("/textbooks/contents", async (req, res) => {
   try {
     return ok(res, await ai.parseContents(parsed.data.pages));
   } catch (error) {
-    if (isAiBusy(error)) return await aiBudgetError(res, req);
+    if (isAiBusy(error)) return await aiBudgetError(res, req, "provider");
     throw error;
   }
 });
@@ -1109,7 +1121,7 @@ router.post("/textbooks/contents-image", async (req, res) => {
     const image: ContentsImage = parsed.data.image;
     return ok(res, await ai.parseImageContents(image));
   } catch (error) {
-    if (isAiBusy(error)) return await aiBudgetError(res, req);
+    if (isAiBusy(error)) return await aiBudgetError(res, req, "provider");
     throw error;
   }
 });
@@ -1122,7 +1134,7 @@ router.post("/textbooks/title", async (req, res) => {
   try {
     return ok(res, await ai.parseTitle(parsed.data.pages));
   } catch (error) {
-    if (isAiBusy(error)) return await aiBudgetError(res, req);
+    if (isAiBusy(error)) return await aiBudgetError(res, req, "provider");
     throw error;
   }
 });

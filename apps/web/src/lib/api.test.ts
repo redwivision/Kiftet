@@ -52,3 +52,46 @@ test("only a 401 while a demo identity is attached marks the demo as expired", a
     }
   }
 });
+
+test("AI quota errors expose their retry window to the study screen", async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const previousFetch = globalThis.fetch;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: { getItem: () => null } },
+  });
+  globalThis.fetch = new Proxy(previousFetch, {
+    apply: () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: "AI_QUOTA_EXCEEDED",
+            error: "Quota reached",
+          }),
+          {
+            status: 429,
+            headers: {
+              "Content-Type": "application/json",
+              "Retry-After": "17",
+            },
+          },
+        ),
+      ),
+  });
+
+  try {
+    await expect(api("/sessions/test/recall")).rejects.toMatchObject({
+      status: 429,
+      code: "AI_QUOTA_EXCEEDED",
+      retryAfterSeconds: 17,
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousWindow) {
+      Object.defineProperty(globalThis, "window", previousWindow);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+  }
+});

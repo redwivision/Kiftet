@@ -235,6 +235,7 @@ export type StudyState = {
   attempts: number;
   busy: boolean;
   error: string | null;
+  quotaResetAt: number | null;
   demoExpired: boolean;
   notice: string | null;
   // One submission is parked in the outbox awaiting a connection. The study
@@ -259,7 +260,12 @@ export type StudyAction =
   | { type: "LOAD_OK"; chapter: ChapterInfo }
   | { type: "LOAD_NOT_FOUND" }
   | { type: "BUSY"; busy: boolean }
-  | { type: "ERROR"; message: string | null; demoExpired?: boolean }
+  | {
+      type: "ERROR";
+      message: string | null;
+      demoExpired?: boolean;
+      quotaResetAt?: number | null;
+    }
   | { type: "NOTICE"; message: string | null }
   | { type: "RECALL"; gaps: Gaps }
   | { type: "RECALL_FULL"; gaps: Gaps }
@@ -343,6 +349,7 @@ function initialState(_sessionId: string): StudyState {
     attempts: 0,
     busy: false,
     error: null,
+    quotaResetAt: null,
     demoExpired: false,
     notice: null,
     queued: null,
@@ -480,6 +487,7 @@ function reducer(state: StudyState, action: StudyAction): StudyState {
       return {
         ...state,
         error: action.message,
+        quotaResetAt: action.message ? (action.quotaResetAt ?? null) : null,
         demoExpired: action.demoExpired ?? false,
       };
     case "NOTICE":
@@ -743,10 +751,17 @@ export function StudyProvider({
   const reportError = useCallback((err: unknown) => {
     const demoExpired = err instanceof ApiError && err.demoExpired;
     if (demoExpired) clearDemoUser();
+    const quotaResetAt =
+      err instanceof ApiError &&
+      err.code === "AI_QUOTA_EXCEEDED" &&
+      err.retryAfterSeconds !== null
+        ? Date.now() + err.retryAfterSeconds * 1000
+        : null;
     dispatch({
       type: "ERROR",
       message: apiError(err),
       demoExpired,
+      quotaResetAt,
     });
   }, []);
 

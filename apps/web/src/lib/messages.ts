@@ -283,11 +283,16 @@ export const en = {
   "demo-banner":
     " — this study room isn't saved to an account. Sign up to keep your progress.",
   "create-free-account": "Create a free account",
-  "ai-calls-minute": "Voice answers left this minute:",
+  "ai-calls-minute": "AI requests available this minute:",
   "of-left": "{remaining} of {limitPerMinute} still available",
   "budget-out": " — you've used them all. Wait a moment and try again.",
   "budget-out-in": " — you've used them all. You can send more in {time}.",
   "budget-careful": " — almost used up.",
+  "quota-limit-title": "Study request limit reached",
+  "quota-limit-message":
+    "You've used all AI study requests for this minute. Try again in {seconds} seconds. Anything already saved stays safe.",
+  "quota-limit-ready":
+    "Your request limit has reset. You can retry now. Anything already saved stays safe.",
   "new-textbooks-today": "New textbooks today:",
   "textbooks-max": "{n} max (demo)",
   "textbooks-used-of": "{used} of {n} used",
@@ -1340,11 +1345,16 @@ export const am: Record<MessageKey, string> = {
   "demo-label": "የቀጥታ ማሳያ",
   "demo-banner": " — ይህ የጥናት ክፍል በመለያ አልተቀመጠም። እድገትህን ለማስቀመጥ መለያ ፍጠር።",
   "create-free-account": "ነፃ መለያ ፍጠር",
-  "ai-calls-minute": "በዚህ ደቂቃ የ AI ጥሪዎች:",
+  "ai-calls-minute": "በዚህ ደቂቃ የ AI ጥያቄዎች ይቀራሉ:",
   "of-left": "{remaining} ከ {limitPerMinute} ቀርተዋል",
   "budget-out": " — ሁሉም ተጠቅመዋል። ትንሽ ጠብቅተን እና እንደገና ሞክር።",
   "budget-out-in": " — ሁሉም ተጠቅመዋል። በ {time} ይመለሳል።",
   "budget-careful": " — በቅርብ ተሟልቷል።",
+  "quota-limit-title": "የጥናት ጥያቄ ገደብ ደርሷል",
+  "quota-limit-message":
+    "የዚህ ደቂቃ የAI ጥናት ጥያቄዎች ተጠቅመዋል። እባክዎ ከ {seconds} ሰከንድ በኋላ ይሞክሩ። አስቀድመው የተቀመጠው ሥራዎ ደህና ነው።",
+  "quota-limit-ready":
+    "የጥያቄ ገደብዎ ታድሷል። አሁን እንደገና መሞከር ይችላሉ። አስቀድመው የተቀመጠው ሥራዎ ደህና ነው።",
   "new-textbooks-today": "ዛሬ አዲስ መጽሐፎች:",
   "textbooks-max": "{n} ቢበዛ (ማሳያ)",
   "textbooks-used-of": "ከ {n} ውስጥ {used} ተጠቅመዋል",
