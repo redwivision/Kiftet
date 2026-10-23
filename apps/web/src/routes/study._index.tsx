@@ -18,7 +18,7 @@ import {
   getCachedChapters,
 } from "@/lib/store";
 import { visibleChapterTitle } from "@/lib/textbook";
-import type { Route } from "./+types/study";
+import type { Route } from "./+types/study._index";
 
 export function meta(_args: Route.MetaArgs) {
   return [

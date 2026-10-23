@@ -298,14 +298,21 @@ function StudyScreen({
     return (
       <main className="mx-auto grid w-full max-w-md content-center gap-4 px-6 py-24 text-center">
         <h1 className="font-display font-semibold text-2xl text-foreground tracking-tight">
-          {t("session-missing")}
+          {state.error ? t("something-went-wrong") : t("session-missing")}
         </h1>
         <p className="text-muted-foreground text-sm">
-          {t("session-missing-body")}
+          {state.error ?? t("session-missing-body")}
         </p>
-        <Button variant="outline" onClick={() => navigate("/dashboard")}>
-          {t("back-to-chapters")}
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          {state.error ? (
+            <Button onClick={() => window.location.reload()}>
+              {t("try-again")}
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={() => navigate("/dashboard")}>
+            {t("back-to-chapters")}
+          </Button>
+        </div>
       </main>
     );
   }
