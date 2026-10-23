@@ -37,7 +37,10 @@ import {
   useStudy,
 } from "@/components/study-provider";
 import { VoiceRing } from "@/components/voice-ring";
+import { useOnline } from "@/hooks/use-online";
+import { useReconnectGrace } from "@/hooks/use-reconnect-grace";
 import { useVoiceSession } from "@/hooks/use-voice-session";
+import { canContinueOffline } from "@/lib/account-hint";
 import { ApiError, api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { getDemoUser, isDemoVisitor } from "@/lib/demo";
@@ -198,19 +201,23 @@ const STEPS = [
 
 export default function StudyRoute({ params }: Route.ComponentProps) {
   const { data: session, isPending } = authClient.useSession();
+  const online = useOnline();
+  const reconnecting = useReconnectGrace(online);
   // Only the *first* session resolution may show the gate. A background refresh
   // (a BroadcastChannel event, a rare refetch) must not unmount the study loop
   // and replay its loader — the loop owns its own loading state.
   const openedRef = useRef(false);
   if (!isPending) openedRef.current = true;
-  if (isPending && !openedRef.current) {
+  const offlineAccount = canContinueOffline(online);
+  const canStay = offlineAccount || reconnecting;
+  if (isPending && !openedRef.current && !canStay) {
     return (
       <main className="mx-auto grid min-h-64 place-items-center px-6 py-24 text-muted-foreground">
         <InkSettling />
       </main>
     );
   }
-  if (!session && !getDemoUser()) {
+  if (!session && !getDemoUser() && !canStay) {
     return <NavigateToLogin />;
   }
   // A demo room is a signed-out stranger trying the product. A signed-in
@@ -1535,7 +1542,9 @@ function GapsPhase({ startHereConcept }: { startHereConcept?: string }) {
       }
       setMeta(next);
     };
-    api<ChecklistRow[]>(`/chapters/${chapterId}/concepts`)
+    api<ChecklistRow[]>(`/chapters/${chapterId}/concepts`, {
+      timeoutMs: 60_000,
+    })
       .then((rows) => {
         if (cancelled) return;
         adopt(rows);

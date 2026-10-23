@@ -36,11 +36,14 @@ function getServerUrl(): string {
   return "http://localhost:3000";
 }
 
-console.log("[auth-client] baseURL will resolve from:", getServerUrl());
 export const authClient = createAuthClient({
   // better-auth derives its route-matching base from this URL's path, so the
   // public auth path must equal the server-side mount (/api/auth everywhere)
   baseURL: new URL("/api/auth", getServerUrl()).toString(),
+  // A session read is a small request. Don't let it hang for a browser-default
+  // eternity on a weak connection — resolve it (or fail) in time for the route
+  // to render its own cached state.
+  fetchOptions: { timeout: 10_000 },
   // better-auth refetches the session whenever the tab/window becomes visible
   // again, and flips the atom's `isPending` back to true while it does so. On a
   // spot with no signed-in user (the demo room), that re-mounts the study route

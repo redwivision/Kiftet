@@ -5,6 +5,9 @@ import { Link, useNavigate } from "react-router";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
 import type { ChapterInfo } from "@/components/study-provider";
+import { useOnline } from "@/hooks/use-online";
+import { useReconnectGrace } from "@/hooks/use-reconnect-grace";
+import { canContinueOffline } from "@/lib/account-hint";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
@@ -31,6 +34,8 @@ export default function Study() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const online = useOnline();
+  const reconnecting = useReconnectGrace(online);
   const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
   const [query, setQuery] = useState("");
   const [queueMode, setQueueMode] = useState(false);
@@ -41,9 +46,34 @@ export default function Study() {
   const [demoExpired, setDemoExpired] = useState(false);
   const [offlineList, setOfflineList] = useState(false);
 
+  // The saved list is local and instant. Render it while the live request is
+  // in flight; a failure below flips `offlineList` so the room stays honest.
   useEffect(() => {
+    let cancelled = false;
+    void getCachedChapters().then((cached) => {
+      if (cancelled || !cached?.length) return;
+      setChapters(
+        (current) =>
+          current ??
+          cached.map(({ id, title, subject, textbookTitle, unitId }) => ({
+            id,
+            title,
+            subject,
+            textbookTitle,
+            unitId,
+          })),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const offlineAccount = canContinueOffline(online);
+    const canStay = offlineAccount || reconnecting;
     if (sessionPending) return;
-    if (!session && !getDemoUser()) {
+    if (!session && !getDemoUser() && !canStay) {
       navigate("/login", { replace: true });
       return;
     }
@@ -91,7 +121,7 @@ export default function Study() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, session, sessionPending]);
+  }, [navigate, online, reconnecting, session, sessionPending]);
 
   const filteredChapters = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();

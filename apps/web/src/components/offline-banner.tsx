@@ -3,6 +3,7 @@ import { CloudOff, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "@/components/language-provider";
 import { useOnline } from "@/hooks/use-online";
+import { probeNow } from "@/lib/connectivity";
 import { flushOutbox, subscribeOutbox } from "@/lib/outbox";
 
 // Bet 3 (STRATEGY.md): honest connectivity surfacing, site-wide.
@@ -58,6 +59,14 @@ export function OfflineBanner() {
 
   const retry = async () => {
     setSyncing(true);
+    // A manual retry is the student telling us the connection is back. Check
+    // that claim first instead of letting the known-offline fast-fail bounce
+    // the queue straight back.
+    const reachable = await probeNow(true);
+    if (!reachable) {
+      setSyncing(false);
+      return;
+    }
     const remaining = await flushOutbox().catch(() => 0);
     setSyncing(remaining > 0);
     setPending(remaining);

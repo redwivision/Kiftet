@@ -7,6 +7,9 @@ import { useLanguage } from "@/components/language-provider";
 import { PlacementPrompt } from "@/components/placement-prompt";
 import type { ChapterInfo } from "@/components/study-provider";
 import { TodayPlan } from "@/components/today-plan";
+import { useOnline } from "@/hooks/use-online";
+import { useReconnectGrace } from "@/hooks/use-reconnect-grace";
+import { canContinueOffline } from "@/lib/account-hint";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
@@ -104,6 +107,8 @@ function countdown(resetAt: number | null, now: number): string {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const online = useOnline();
+  const reconnecting = useReconnectGrace(online);
   const { t } = useLanguage();
   const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
   // Bet 3: the chapter list came from the phone's cache, not the server — flag
@@ -146,19 +151,60 @@ export default function Dashboard() {
       })
     : "";
 
+  // Paint the saved chapter list before the network answers. On a slow
+  // connection this is the difference between a populated dashboard and a
+  // spinner; the live request below replaces it as soon as it lands, and the
+  // offline flag is only raised if that request actually fails.
+  useEffect(() => {
+    let cancelled = false;
+    void getCachedChapters().then((cached) => {
+      if (cancelled || !cached?.length) return;
+      setChapters(
+        (current) =>
+          current ??
+          cached.map(({ id, title, subject, textbookTitle, unitId }) => ({
+            id,
+            title,
+            subject,
+            textbookTitle,
+            unitId,
+          })),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Every visitor gets the pill, not just demo ones. The server already
   // answers for signed-in students — the check used to short-circuit on demo
   // and leave the only people who can actually run out of the only screen that
   // would have told them. A count that refreshes is also the difference
   // between "the app is broken" and "I'm out of requests".
+  //
+  // A hidden tab has no one reading the count, so it doesn't poll. Coming back
+  // to the tab refreshes once instead of firing every missed tick at once.
   useEffect(() => {
-    const poll = () =>
+    let cancelled = false;
+    const poll = () => {
+      if (document.visibilityState === "hidden") return;
       api<AiBudget>("/ai/budget")
-        .then(setBudget)
+        .then((next) => {
+          if (!cancelled) setBudget(next);
+        })
         .catch(() => {});
+    };
     poll();
     const id = setInterval(poll, 15_000);
-    return () => clearInterval(id);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // Once a real session exists the demo identity has done its job, so drop it.
@@ -170,11 +216,15 @@ export default function Dashboard() {
   }, [session]);
 
   useEffect(() => {
-    if (!sessionPending && !session && !getDemoUser()) {
+    const offlineAccount = canContinueOffline(online);
+    const canStay = offlineAccount || reconnecting;
+    if (!sessionPending && !session && !getDemoUser() && !canStay) {
       navigate("/login");
       return;
     }
-    if (sessionPending || (!session && !getDemoUser())) return;
+    if (sessionPending || (!session && !getDemoUser() && !canStay)) {
+      return;
+    }
     let cancelled = false;
     // Bet 2: the national misconception map. Show the wrong turns that
     // cleared the k-anonymity floor for the subject the student reads most
@@ -253,7 +303,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, session, sessionPending]);
+  }, [navigate, online, reconnecting, session, sessionPending]);
 
   const start = async (chapterId: string) => {
     setStarting(chapterId);

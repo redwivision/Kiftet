@@ -13,6 +13,9 @@ import { NavigationProgress } from "./components/navigation-progress";
 import { ThemeProvider } from "./components/theme-provider";
 import { useIsAppRoute } from "./lib/app-nav";
 
+const FONT_CSS_URL =
+  "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400..700&family=Noto+Sans+Ethiopic:wght@400..700&display=swap";
+
 export const links: Route.LinksFunction = () => [
   // id so the study loop can swap the SVG icon's href as the student moves
   // through the phases (see lib/tab-chrome.ts). The .ico stays as the
@@ -35,12 +38,19 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
+    id: "font-css",
     // Constrained on purpose — weak wifi has no budget for fonts nobody
     // uses. Fraunces + Inter load variable but only in the ranges that
     // actually appear (400–700, no italics); Ethiopic stays in the same
     // sheet, and Google's unicode-range means its WOFF2 only downloads
     // once an Amharic glyph shows up on screen.
-    href: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400..700&family=Noto+Sans+Ethiopic:wght@400..700&display=swap",
+    //
+    // `media=print` keeps this third-party sheet off the render-blocking
+    // path. The inline script below flips it to `all` when it arrives; the
+    // fonts already use `display=swap`, so text paints in the fallback face
+    // immediately instead of waiting on Google.
+    href: FONT_CSS_URL,
+    media: "print",
   },
 ];
 
@@ -165,6 +175,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
         <Meta />
         <Links />
+        <noscript>
+          <link rel="stylesheet" href={FONT_CSS_URL} />
+        </noscript>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var l=document.getElementById("font-css");if(!l)return;function on(){l.media="all"}if(l.sheet){on()}else{l.addEventListener("load",on,{once:true})}})()`,
+          }}
+        />
       </head>
       <body>
         {/* The providers live here rather than inside <App/> so the error

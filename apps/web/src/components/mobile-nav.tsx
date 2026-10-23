@@ -41,6 +41,7 @@ export function MobileNav() {
             <li key={to} className="flex-1">
               <NavLink
                 to={to}
+                prefetch="intent"
                 end={end}
                 aria-label={t(labelKey)}
                 className={({ isActive }) =>

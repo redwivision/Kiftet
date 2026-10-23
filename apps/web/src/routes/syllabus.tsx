@@ -5,6 +5,9 @@ import { Link, useNavigate } from "react-router";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
+import { useOnline } from "@/hooks/use-online";
+import { useReconnectGrace } from "@/hooks/use-reconnect-grace";
+import { canContinueOffline } from "@/lib/account-hint";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
@@ -70,6 +73,8 @@ type SyllabusDetail = {
 export default function Syllabus() {
   const navigate = useNavigate();
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const online = useOnline();
+  const reconnecting = useReconnectGrace(online);
   const { t } = useLanguage();
 
   const [catalog, setCatalog] = useState<SyllabusRow[] | null>(null);
@@ -99,11 +104,15 @@ export default function Syllabus() {
       navigate("/dashboard", { replace: true });
       return;
     }
-    if (!sessionPending && !session && !getDemoUser()) {
+    const offlineAccount = canContinueOffline(online);
+    const canStay = offlineAccount || reconnecting;
+    if (!sessionPending && !session && !getDemoUser() && !canStay) {
       navigate("/login");
       return;
     }
-    if (sessionPending || (!session && !getDemoUser())) return;
+    if (sessionPending || (!session && !getDemoUser() && !canStay)) {
+      return;
+    }
     let cancelled = false;
     api<SyllabusRow[]>("/syllabus")
       .then(async (rows) => {
@@ -131,7 +140,7 @@ export default function Syllabus() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, reportApiError, session, sessionPending]);
+  }, [navigate, online, reconnecting, reportApiError, session, sessionPending]);
 
   const current = useMemo(
     () =>

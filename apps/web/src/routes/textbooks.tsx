@@ -15,6 +15,9 @@ import { HierarchyReport } from "@/components/hierarchy-report";
 import { useLanguage } from "@/components/language-provider";
 import { MasteryRing } from "@/components/mastery-ring";
 import { TocPicker, type View } from "@/components/toc-picker";
+import { useOnline } from "@/hooks/use-online";
+import { useReconnectGrace } from "@/hooks/use-reconnect-grace";
+import { canContinueOffline } from "@/lib/account-hint";
 import { ApiError, api, apiError } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser, getDemoUser } from "@/lib/demo";
@@ -128,6 +131,8 @@ function pageOneAtForOffset(offset: number | null): string {
 export default function Textbooks() {
   const navigate = useNavigate();
   const { data: auth, isPending: sessionPending } = authClient.useSession();
+  const online = useOnline();
+  const reconnecting = useReconnectGrace(online);
   const { t } = useLanguage();
   const [textbooks, setTextbooks] = useState<LibraryTextbook[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -180,13 +185,15 @@ export default function Textbooks() {
   }, [reportApiError]);
 
   useEffect(() => {
-    if (!sessionPending && !auth && !getDemoUser()) {
+    const offlineAccount = canContinueOffline(online);
+    const canStay = offlineAccount || reconnecting;
+    if (!sessionPending && !auth && !getDemoUser() && !canStay) {
       navigate("/login");
       return;
     }
-    if (sessionPending || (!auth && !getDemoUser())) return;
+    if (sessionPending || (!auth && !getDemoUser() && !canStay)) return;
     fetchLibrary();
-  }, [auth, sessionPending, navigate, fetchLibrary]);
+  }, [auth, online, reconnecting, sessionPending, navigate, fetchLibrary]);
 
   // Chunks that already exist under a textbook with this exact title are
   // skipped on import — that's what makes re-entering the flow a resume.

@@ -18,6 +18,7 @@ import {
   cacheChecklist,
   cacheQuestions,
   cacheStudyPlan,
+  getCachedChapters,
   getCachedQuestions,
   getCachedStudyPlan,
 } from "@/lib/store";
@@ -797,6 +798,7 @@ export function StudyProvider({
           api<{ gaps: Gaps }>(`/sessions/${sessionId}/recall`, {
             method: "POST",
             body: JSON.stringify({ transcriptText: text, attemptId }),
+            timeoutMs: 45_000,
           })
             .then(({ gaps }) => {
               if (gaps.missing.length === 0) {
@@ -887,7 +889,11 @@ export function StudyProvider({
         () =>
           api<{ questions: SessionQuestion[] }>(
             `/sessions/${sessionId}/recall-questions`,
-            { method: "POST", body: JSON.stringify(body) },
+            {
+              method: "POST",
+              body: JSON.stringify(body),
+              timeoutMs: 45_000,
+            },
           ).then(({ questions }) =>
             dispatch({
               type: "RECALL_QUESTIONS",
@@ -919,6 +925,7 @@ export function StudyProvider({
                 questionIndex: currentQuestion,
                 attemptId,
               }),
+              timeoutMs: 45_000,
             },
           )
             .then(({ score, gaps: answerGaps, merged }) =>
@@ -993,6 +1000,7 @@ export function StudyProvider({
         : "";
       void api<Guide>(
         `/chapters/${chapterId}/guide?language=${lang}&${masteryQuery(gaps)}${scopeParam}`,
+        { timeoutMs: 30_000 },
       )
         .then((guide) => {
           if (!guide.sections?.length) return;
@@ -1030,6 +1038,7 @@ export function StudyProvider({
               budgetMinutes,
               language: lang,
             }),
+            timeoutMs: 60_000,
           });
           dispatch({ type: "PLAN", plan });
           await cacheStudyPlan({
@@ -1079,6 +1088,7 @@ export function StudyProvider({
             misconceptions: gaps.misconceptions,
             language: lang,
           }),
+          timeoutMs: 45_000,
         })
           .then(({ questions }) => {
             const normalized = questions.map(toSessionQuestion);
@@ -1135,6 +1145,7 @@ export function StudyProvider({
                 misconceptions: [],
                 language: lang,
               }),
+              timeoutMs: 45_000,
             },
           ).then(({ questions }) =>
             dispatch({
@@ -1180,6 +1191,7 @@ export function StudyProvider({
                 attemptId,
                 stage: questionStage,
               }),
+              timeoutMs: 45_000,
             },
           )
             .then(({ score, gaps: answerGaps }) =>
@@ -1255,7 +1267,11 @@ export function StudyProvider({
     dispatch({ type: "LOAD_START" });
     (async () => {
       try {
-        const session = await api<{
+        // The session and the chapter list are independent. Waiting for one
+        // before asking for the other doubled the opening time on a slow link,
+        // which read as a freeze. If the list can't be reached, the local copy
+        // is enough to open the chapter the session already names.
+        const sessionPromise = api<{
           chapterId: string;
           status: string;
           attempts: SessionAttemptRow[];
@@ -1268,19 +1284,44 @@ export function StudyProvider({
           retestQuestions: SessionQuestion[] | null;
           retestIndex: number;
           queueNext?: { sessionId: string; chapterTitle: string } | null;
-        }>(`/sessions/${sessionId}`);
-        const chapters = await api<ChapterInfo[]>("/chapters");
+        }>(`/sessions/${sessionId}`, { timeoutMs: 20_000 });
+        const chaptersPromise = api<ChapterInfo[]>("/chapters")
+          .then((rows) => ({ rows, fromCache: false }))
+          .catch(async (error: unknown) => {
+            if (!(error instanceof ApiError) || error.status !== 0) throw error;
+            const cached = await getCachedChapters();
+            if (!cached?.length) throw error;
+            return {
+              rows: cached.map(
+                ({ id, title, subject, textbookTitle, unitId }) => ({
+                  id,
+                  title,
+                  subject,
+                  textbookTitle,
+                  unitId,
+                }),
+              ),
+              fromCache: true,
+            };
+          });
+        const [session, chapterList] = await Promise.all([
+          sessionPromise,
+          chaptersPromise,
+        ]);
+        const chapters = chapterList.rows;
         if (token !== loadTokenRef.current) return;
-        void cacheChapters(
-          chapters.map(({ id, title, subject, textbookTitle, unitId }) => ({
-            id,
-            title,
-            subject,
-            textbookTitle,
-            unitId,
-            cachedAt: Date.now(),
-          })),
-        );
+        if (!chapterList.fromCache) {
+          void cacheChapters(
+            chapters.map(({ id, title, subject, textbookTitle, unitId }) => ({
+              id,
+              title,
+              subject,
+              textbookTitle,
+              unitId,
+              cachedAt: Date.now(),
+            })),
+          );
+        }
         const chapter =
           chapters.find((c) => c.id === session.chapterId) ?? null;
         if (!chapter) {
@@ -1311,13 +1352,17 @@ export function StudyProvider({
         });
         // Pre-cache this chapter's checklist for offline study. Non-fatal:
         // the gaps view re-fetches and caches it too.
-        void api<ChecklistRow[]>(`/chapters/${chapter.id}/concepts`)
+        void api<ChecklistRow[]>(`/chapters/${chapter.id}/concepts`, {
+          timeoutMs: 60_000,
+        })
           .then((rows) => void cacheChecklist(chapter.id, rows))
           .catch(() => {});
         // The chapter's selectable sections, for the scope picker. Non-fatal:
         // without them the picker simply does not appear and the session stays
         // whole-chapter.
-        void api<{ units: ScopeUnit[] }>(`/chapters/${chapter.id}/units`)
+        void api<{ units: ScopeUnit[] }>(`/chapters/${chapter.id}/units`, {
+          timeoutMs: 60_000,
+        })
           .then(({ units }) => {
             if (token !== loadTokenRef.current) return;
             dispatch({ type: "SCOPE_UNITS", units });

@@ -4,6 +4,7 @@ import { migrateDb } from "@kiftet/db";
 import { ensureDefaultSyllabus } from "@kiftet/db/seed";
 import { createRequestListener } from "@react-router/node";
 import { toNodeHandler } from "better-auth/node";
+import compression from "compression";
 import cors from "cors";
 import { sql } from "drizzle-orm";
 import express from "express";
@@ -87,6 +88,11 @@ app.use(requestIdMiddleware());
 // into a Telegram channel is enough traffic to make the logging the outage; see
 // lib/http-log.ts.
 app.use(requestLogger());
+
+// Compress JSON and SSR HTML on the way out. On a weak mobile link this is the
+// cheapest large win: the study payloads are text, and gzip typically removes
+// 70–80% of their bytes. Mounted before static so hashed JS/CSS get it too.
+app.use(compression());
 
 // Health-check tolerance: platforms ping different readiness paths, and a 404
 // on an unknown probe path reads as a failed check even when the app is fine.
@@ -210,7 +216,28 @@ if (IS_PROD) {
     "../../web/build/server/index.js",
   );
 
-  app.use(express.static(webClientDir));
+  app.use(
+    express.static(webClientDir, {
+      setHeaders(res, filePath) {
+        // Vite hashes every asset filename, so a year-long immutable cache is
+        // safe and is what makes a repeat visit load from disk instead of the
+        // network. The service worker, manifest and offline page keep their
+        // old names and must be revalidated or a deploy can never reach them.
+        const path = filePath.slice(webClientDir.length).replaceAll("\\", "/");
+        if (path.startsWith("/assets/")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (
+          /^\/(sw\.js|registerSW\.js|manifest\.webmanifest|offline\.html)$/.test(
+            path,
+          )
+        ) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=3600");
+        }
+      },
+    }),
+  );
 
   const webBuild = await import(pathToFileURL(webServerEntry).href);
   app.use(createRequestListener({ build: webBuild, mode: env.NODE_ENV }));

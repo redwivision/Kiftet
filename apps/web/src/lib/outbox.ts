@@ -93,6 +93,9 @@ export async function flushOutbox(): Promise<number> {
       await api(path, {
         method: "POST",
         body: JSON.stringify({ ...item.payload, attemptId: item.attemptId }),
+        // These are graded server-side and can legitimately take a while; a
+        // read-sized deadline would drop work that is still being marked.
+        timeoutMs: 45_000,
       });
       await removeOutbox(item.id);
     } catch (error) {

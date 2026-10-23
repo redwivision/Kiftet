@@ -11,9 +11,16 @@ import {
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { cn } from "@kiftet/ui/lib/utils";
 import { User } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
 import { useLanguage } from "@/components/language-provider";
+import { useOnline } from "@/hooks/use-online";
+import {
+  forgetAccount,
+  hasAccountHint,
+  rememberAccount,
+} from "@/lib/account-hint";
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser } from "@/lib/demo";
 
@@ -22,6 +29,34 @@ export default function UserMenu() {
   const location = useLocation();
   const { t } = useLanguage();
   const { data: session, isPending } = authClient.useSession();
+  const online = useOnline();
+  const retriedSessionRef = useRef(false);
+
+  // Remember that this browser has an account so offline routes can keep
+  // rendering their cached room instead of bouncing to /login.
+  useEffect(() => {
+    if (session) rememberAccount();
+  }, [session]);
+
+  // Coming back online with a remembered account but an empty atom means the
+  // offline load never got its session. Ask once per online transition; a real
+  // sign-out still ends up null and the routes redirect on the next render.
+  useEffect(() => {
+    if (!online) {
+      retriedSessionRef.current = false;
+      return;
+    }
+    if (
+      isPending ||
+      session ||
+      !hasAccountHint() ||
+      retriedSessionRef.current
+    ) {
+      return;
+    }
+    retriedSessionRef.current = true;
+    void authClient.getSession();
+  }, [online, isPending, session]);
 
   if (isPending) {
     // Sized to match the waitlist pill it stands in for, at both widths — a
@@ -126,6 +161,7 @@ export default function UserMenu() {
                     // study room after sign-out and the student lands back in
                     // the demo instead of being signed out. Sign-in and sign-up
                     // already clear it; this was the one path that didn't.
+                    forgetAccount();
                     clearDemoUser();
                     navigate("/");
                   },

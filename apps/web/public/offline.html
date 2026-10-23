@@ -82,14 +82,61 @@
       <h1>You are offline</h1>
       <p>
         The study room needs a connection — the diagnosis runs on the network.
-        Get back online, then try again. Nothing you studied is lost.
+        Reconnect and this page will take you back automatically. Nothing you
+        studied is lost.
       </p>
       <a href="/" id="retry">Try again</a>
+      <p id="status" role="status" aria-live="polite"></p>
     </main>
     <script>
-      window.addEventListener("online", () => {
-        location.reload();
-      });
+      (() => {
+        var retry = document.getElementById("retry");
+        var status = document.getElementById("status");
+        var checking = false;
+
+        function reachable() {
+          if (checking) return Promise.resolve(false);
+          checking = true;
+          status.textContent = "Checking the connection…";
+          var controller = new AbortController();
+          var timeout = setTimeout(() => {
+            controller.abort();
+          }, 5000);
+          return fetch("/health", {
+            cache: "no-store",
+            headers: { accept: "text/plain" },
+            signal: controller.signal,
+          })
+            .then((res) => res.ok)
+            .catch(() => false)
+            .then((ok) => {
+              clearTimeout(timeout);
+              checking = false;
+              if (ok) {
+                status.textContent = "Back online — reloading…";
+                location.reload();
+              } else {
+                status.textContent =
+                  "Still offline. This page keeps trying on its own.";
+              }
+              return ok;
+            });
+        }
+
+        retry.addEventListener("click", (event) => {
+          event.preventDefault();
+          void reachable();
+        });
+        window.addEventListener("online", () => {
+          void reachable();
+        });
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") void reachable();
+        });
+        setInterval(() => {
+          if (document.visibilityState === "visible") void reachable();
+        }, 8000);
+      })();
     </script>
   </body>
 </html>

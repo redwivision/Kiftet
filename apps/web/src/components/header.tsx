@@ -70,6 +70,7 @@ export default function Header() {
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <NavLink
             to={isApp ? "/dashboard" : "/"}
+            prefetch="intent"
             className="min-w-0 shrink rounded-full focus:outline-none focus-visible:outline-2 focus-visible:outline-gold/80"
           >
             <Brand />
@@ -85,6 +86,7 @@ export default function Header() {
               <NavLink
                 key={to}
                 to={to}
+                prefetch="intent"
                 end={to === "/" || to === "/dashboard"}
                 aria-label={t(labelKey)}
                 className={({ isActive }) =>

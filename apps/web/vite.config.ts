@@ -29,10 +29,21 @@ export default defineConfig({
       workbox: {
         navigateFallback: null,
         runtimeCaching: [
+          // Navigations: try the network, but don't let a weak link hold the
+          // launch screen hostage. After 4s — or immediately when offline —
+          // serve the last rendered shell, which then fetches its own data and
+          // shows cached chapters while it waits. A page that has never been
+          // visited falls back to the honest offline page.
           {
             urlPattern: ({ request }) => request.mode === "navigate",
-            handler: "NetworkOnly",
-            options: { precacheFallback: { fallbackURL: "offline.html" } },
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "kiftet-pages",
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+              precacheFallback: { fallbackURL: "offline.html" },
+            },
           },
           // The webfonts are the brand's strongest asset, and until this rule
           // existed nothing cached them: offline, the app shell loaded from the
