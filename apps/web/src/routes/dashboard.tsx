@@ -367,7 +367,7 @@ export default function Dashboard() {
         <TodayPlan
           key={planRevision}
           onStartChapter={(chapterId) => void start(chapterId)}
-          starting={starting !== null}
+          starting={starting}
         />
       )}
 

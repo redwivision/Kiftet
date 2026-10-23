@@ -1149,6 +1149,7 @@ export const en = {
   "today-plan-review-exam": "Review is included because your exam is coming.",
   "today-plan-start-learn": "Start this chapter",
   "today-plan-start-review": "Review this chapter",
+  "starting-study": "Starting…",
   "today-plan-no-review": "Nothing is due for review today.",
   "today-plan-chapter-done":
     "You've reached the end of this chapter. Update your position when you move on.",
@@ -2201,6 +2202,7 @@ export const am: Record<MessageKey, string> = {
   "today-plan-review-exam": "ፈተናህ ስለሚቀርብ ድግግሞሽ ተካትቷል።",
   "today-plan-start-learn": "ይህን ምዕራፍ ጀምር",
   "today-plan-start-review": "ይህን ምዕራፍ ድገም",
+  "starting-study": "በመጀመር ላይ…",
   "today-plan-no-review": "ዛሬ ለመድገም የደረሰ ነገር የለም።",
   "today-plan-chapter-done": "የዚህን ምዕራፍ መጨረሻ ደርሰሃል። ወደ ቀጣዩ ሲሄድህ ቦታህን አዘምን።",
   "today-plan-error": "የዛሬ እቅድ አልተጫነም፦ {error}",

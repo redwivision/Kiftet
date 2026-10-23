@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { __overrideProviderForTests } from "../ai/gemini";
 import { consumeAiRequest } from "../lib/ai-quota-store";
 import {
   asUser,
@@ -77,6 +78,58 @@ describe("launch path against a real database", () => {
     expect(resultRes.status).toBe(200);
     const result = (await resultRes.json()) as { before: unknown };
     expect(result).toHaveProperty("before");
+  });
+
+  test("starting a session does not wait for chapter extraction", async () => {
+    const { userId, chapterId } = await seedChapter(server.db, {
+      extracted: false,
+    });
+    const previousGroqKey = process.env.GROQ_API_KEY;
+    let releaseExtraction = () => {};
+    let extractionStarted = () => {};
+    const extractionGate = new Promise<void>((resolve) => {
+      releaseExtraction = resolve;
+    });
+    const extractionStartedSignal = new Promise<void>((resolve) => {
+      extractionStarted = resolve;
+    });
+
+    process.env.GROQ_API_KEY = "test-key";
+    __overrideProviderForTests("groq", async () => {
+      extractionStarted();
+      await extractionGate;
+      return JSON.stringify({
+        items: [{ conceptText: "Photosynthesis", weight: 1 }],
+      });
+    });
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const startRes = await Promise.race([
+        asUser(server.baseUrl, userId)("/api/sessions/start", {
+          method: "POST",
+          body: JSON.stringify({ chapterId }),
+        }),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("session start waited for extraction")),
+            2_000,
+          );
+        }),
+      ]);
+
+      expect(startRes.status).toBe(201);
+      await extractionStartedSignal;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      releaseExtraction();
+      __overrideProviderForTests("groq", null);
+      if (previousGroqKey === undefined) {
+        delete process.env.GROQ_API_KEY;
+      } else {
+        process.env.GROQ_API_KEY = previousGroqKey;
+      }
+    }
   });
 
   test("an exhausted study quota returns a clear code and retry window", async () => {

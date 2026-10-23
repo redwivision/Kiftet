@@ -1268,10 +1268,6 @@ router.post("/sessions/start", async (req, res) => {
     .limit(1);
   if (!chapterExists.length) return err(res, "Chapter not found", 404);
 
-  // The session is about to need a real checklist; if this chapter has not been
-  // read yet, read it now, before the student is dropped into recall.
-  await ensureChapterExtraction(req, chapterId);
-
   await db()
     .insert(studySession)
     .values({
@@ -1280,6 +1276,16 @@ router.post("/sessions/start", async (req, res) => {
       userId: userId ?? null,
       recallMode,
     });
+
+  // Chapter extraction can require several sequential model calls. It enriches
+  // the checklist, but should not keep the student waiting to enter recall.
+  void ensureChapterExtraction(req, chapterId).catch((error) => {
+    console.error("[study] background chapter extraction failed", {
+      chapterId,
+      requestId: (req as { requestId?: string }).requestId,
+      error,
+    });
+  });
 
   ok(res, { sessionId }, 201);
 });

@@ -15,7 +15,7 @@ export function TodayPlan({
   starting,
 }: {
   onStartChapter: (chapterId: string) => void;
-  starting: boolean;
+  starting: string | null;
 }) {
   const [reload, setReload] = useState(0);
 
@@ -36,7 +36,7 @@ function TodayPlanContent({
 }: {
   onRetry: () => void;
   onStartChapter: (chapterId: string) => void;
-  starting: boolean;
+  starting: string | null;
 }) {
   const { lang, t } = useLanguage();
   const [plan, setPlan] = useState<TodayPlanData | null>(null);
@@ -173,10 +173,12 @@ function TodayPlanContent({
               <Button
                 className="mt-4"
                 size="sm"
-                disabled={starting}
+                disabled={starting !== null}
                 onClick={() => onStartChapter(learn.chapterId)}
               >
-                {t("today-plan-start-learn")}
+                {starting === learn.chapterId
+                  ? t("starting-study")
+                  : t("today-plan-start-learn")}
               </Button>
             </>
           ) : (
@@ -218,10 +220,12 @@ function TodayPlanContent({
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={starting}
+                      disabled={starting !== null}
                       onClick={() => onStartChapter(item.chapterId)}
                     >
-                      {t("today-plan-start-review")}
+                      {starting === item.chapterId
+                        ? t("starting-study")
+                        : t("today-plan-start-review")}
                     </Button>
                   </li>
                 ))}
