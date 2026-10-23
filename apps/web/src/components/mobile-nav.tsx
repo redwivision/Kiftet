@@ -13,8 +13,8 @@ import type { MessageKey } from "@/lib/messages";
    rests, and the theme + language controls — crowded as icon buttons up top —
    move into a sheet behind "More". */
 const TABS = [
-  { to: "/", labelKey: "nav-home", Icon: House, end: true },
-  { to: "/dashboard", labelKey: "nav-study", Icon: BookOpen, end: false },
+  { to: "/dashboard", labelKey: "nav-home", Icon: House, end: true },
+  { to: "/study", labelKey: "nav-study", Icon: BookOpen, end: false },
   { to: "/textbooks", labelKey: "nav-books", Icon: BookText, end: false },
 ] as const satisfies readonly {
   to: string;
@@ -24,7 +24,7 @@ const TABS = [
 }[];
 
 const TAB_CLASS =
-  "flex min-h-14 w-full flex-col items-center justify-center gap-0.5 px-1 py-1.5 font-medium text-[0.78rem] transition-colors duration-200 active:bg-muted/50";
+  "flex min-h-14 w-full flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 font-medium text-[0.72rem] transition-[transform,color,background-color,box-shadow] duration-200 active:scale-[0.94] focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-[-2px] motion-reduce:transition-none motion-reduce:active:scale-100";
 
 export function MobileNav() {
   const { t } = useLanguage();
@@ -46,7 +46,9 @@ export function MobileNav() {
                 className={({ isActive }) =>
                   cn(
                     TAB_CLASS,
-                    isActive ? "text-gold" : "text-muted-foreground",
+                    isActive
+                      ? "bg-foreground text-background shadow-sm"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )
                 }
               >
@@ -54,8 +56,8 @@ export function MobileNav() {
                   <>
                     <span
                       className={cn(
-                        "grid h-7 place-items-center rounded-full px-4 transition-colors duration-200",
-                        isActive && "bg-gold/12 text-gold",
+                        "grid h-7 place-items-center rounded-full px-4 transition-transform duration-200",
+                        isActive && "scale-105",
                       )}
                     >
                       <Icon className="size-5" aria-hidden="true" />

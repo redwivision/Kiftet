@@ -1,12 +1,13 @@
-import { Button } from "@kiftet/ui/components/button";
+import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { Textarea } from "@kiftet/ui/components/textarea";
+import { cn } from "@kiftet/ui/lib/utils";
 import { ChevronDown } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ConceptGraph } from "@/components/concept-graph";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
@@ -724,14 +725,24 @@ export default function Textbooks() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-      <header className="mb-8 max-w-2xl space-y-2">
-        <p className="k-label">{t("your-textbooks")}</p>
-        <h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
-          {t("byob-title-full")}
-        </h1>
-        <p className="text-muted-foreground text-sm leading-6">
-          {t("textbooks-text")}
-        </p>
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl space-y-2">
+          <p className="k-label">{t("your-textbooks")}</p>
+          <h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">
+            {t("byob-title-full")}
+          </h1>
+          <p className="text-muted-foreground text-sm leading-6">
+            {t("textbooks-text")}
+          </p>
+        </div>
+        {textbooks && textbooks.length > 0 && (
+          <Link
+            to="/study"
+            className={cn(buttonVariants(), "w-full sm:w-auto")}
+          >
+            {t("browse-chapters")}
+          </Link>
+        )}
       </header>
 
       {loadError && !textbooks ? (
@@ -824,7 +835,7 @@ export default function Textbooks() {
                               if (chapter) startChapter(chapter.id);
                             }}
                           >
-                            {t("start-review")}
+                            {t("study-this-chapter")}
                           </Button>
                         )}
                       </div>
@@ -850,7 +861,7 @@ export default function Textbooks() {
                                   size="xs"
                                   onClick={() => startChapter(chapter.id)}
                                 >
-                                  {t("start-review")}
+                                  {t("study-this-chapter")}
                                 </Button>
                               </li>
                             );

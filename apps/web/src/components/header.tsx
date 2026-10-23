@@ -1,5 +1,5 @@
 import { cn } from "@kiftet/ui/lib/utils";
-import { BookOpen, House } from "lucide-react";
+import { BookOpen, BookText, House } from "lucide-react";
 import type { ComponentType } from "react";
 import { NavLink } from "react-router";
 
@@ -34,15 +34,21 @@ function Brand() {
   );
 }
 
-// A phone has 343px to work with once the page gutter is paid, and the header
-// has to hold a brand, two nav links and three controls inside it. Measured at
-// 14px Inter that is roughly 456px of content — so the row used to overflow and
-// the controls sat on top of the nav links. Both text runs yield instead of the
-// brand, because both are repeats of something already on screen: the link's
-// own accessible name and the account name inside the menu that opens from it.
-const NAV = [
+// The app uses three compact destinations on desktop and moves them into the
+// phone's thumb zone below `sm`. Public pages keep their own simpler nav.
+const APP_NAV = [
+  { to: "/dashboard", labelKey: "nav-home", Icon: House },
+  { to: "/study", labelKey: "nav-study", Icon: BookOpen },
+  { to: "/textbooks", labelKey: "nav-books", Icon: BookText },
+] as const satisfies readonly {
+  to: string;
+  labelKey: string;
+  Icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+}[];
+
+const PUBLIC_NAV = [
   { to: "/", labelKey: "nav-home", Icon: House },
-  { to: "/dashboard", labelKey: "nav-study", Icon: BookOpen },
+  { to: "/plans", labelKey: "nav-plans", Icon: BookOpen },
 ] as const satisfies readonly {
   to: string;
   labelKey: string;
@@ -51,10 +57,8 @@ const NAV = [
 
 export default function Header() {
   const { t } = useLanguage();
-  // In the study room the links and the theme/language controls live in the
-  // bottom bar and its sheet on phones, so the header sheds them below `sm`
-  // rather than showing two homes for the same destination. Off the app
-  // (landing, auth) nothing changes.
+  // App navigation moves to the bottom bar on phones; public pages keep the
+  // landing and plans links in the header.
   const isApp = useIsAppRoute();
 
   return (
@@ -65,7 +69,7 @@ export default function Header() {
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <NavLink
-            to="/"
+            to={isApp ? "/dashboard" : "/"}
             className="min-w-0 shrink rounded-full focus:outline-none focus-visible:outline-2 focus-visible:outline-gold/80"
           >
             <Brand />
@@ -73,29 +77,29 @@ export default function Header() {
           <nav
             aria-label={t("nav-primary")}
             className={cn(
-              "flex shrink items-center gap-0.5 sm:gap-1",
+              "flex shrink items-center gap-0.5 rounded-full border border-border/70 bg-background/60 p-1 shadow-sm sm:gap-1",
               isApp && "max-sm:hidden",
             )}
           >
-            {NAV.map(({ to, labelKey, Icon }) => (
+            {(isApp ? APP_NAV : PUBLIC_NAV).map(({ to, labelKey, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
-                end={to === "/"}
+                end={to === "/" || to === "/dashboard"}
                 aria-label={t(labelKey)}
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 rounded-full px-2 py-1.5 text-sm transition-colors duration-200 sm:px-3 ${
+                  `group flex min-h-10 items-center gap-2 rounded-full px-2.5 py-2 font-medium text-sm transition-[transform,color,background-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 sm:px-3 ${
                     isActive
-                      ? "bg-gold/12 font-medium text-gold"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                      ? "bg-foreground text-background shadow-sm"
+                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                   }`
                 }
               >
                 <Icon
-                  className="size-4 shrink-0 sm:hidden"
+                  className="size-4 shrink-0 transition-transform duration-200 group-hover:scale-110"
                   aria-hidden="true"
                 />
-                <span className="hidden sm:inline">{t(labelKey)}</span>
+                <span>{t(labelKey)}</span>
               </NavLink>
             ))}
           </nav>

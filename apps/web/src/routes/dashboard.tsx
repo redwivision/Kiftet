@@ -1,11 +1,9 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
-import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ConceptGraph } from "@/components/concept-graph";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
-import { MasteryRing } from "@/components/mastery-ring";
 import { PlacementPrompt } from "@/components/placement-prompt";
 import type { ChapterInfo } from "@/components/study-provider";
 import { TodayPlan } from "@/components/today-plan";
@@ -18,12 +16,11 @@ import {
   cacheChapters,
   getCachedChapters,
 } from "@/lib/store";
-import { visibleChapterTitle } from "@/lib/textbook";
 import type { Route } from "./+types/dashboard";
 
 export function meta(_args: Route.MetaArgs) {
   return [
-    { title: "Your chapters — Kiftet" },
+    { title: "Home — Kiftet" },
     {
       name: "description",
       content:
@@ -54,13 +51,6 @@ type ActiveQueue = {
   queueId: string | null;
   items: QueueItem[];
   done: number;
-};
-
-type ReviewDue = {
-  chapterId: string;
-  chapterTitle: string;
-  concept: string;
-  lastCheckedAt: string;
 };
 
 type AiBudget = {
@@ -119,9 +109,7 @@ export default function Dashboard() {
   // Bet 3: the chapter list came from the phone's cache, not the server — flag
   // it so the room never pretends a saved list is live data.
   const [offlineList, setOfflineList] = useState(false);
-  const [history, setHistory] = useState<SessionHistory[]>([]);
-  const [reviewsDue, setReviewsDue] = useState<ReviewDue[]>([]);
-  const [reviewError, setReviewError] = useState(false);
+  const [history, setHistory] = useState<SessionHistory[] | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [demoExpired, setDemoExpired] = useState(false);
@@ -130,13 +118,6 @@ export default function Dashboard() {
     null,
   );
   const [queue, setQueue] = useState<ActiveQueue | null>(null);
-  // Planning a queue is a mode, not a dialog: the chapters grid is already the
-  // place where chapters are chosen, so picking several uses the same cards.
-  const [queuePlanning, setQueuePlanning] = useState(false);
-  // The order the student tapped matters — it is the order they will study —
-  // so this is an array, and the badge on each card is its position in it.
-  const [queuePicks, setQueuePicks] = useState<string[]>([]);
-  const [queueBusy, setQueueBusy] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [placementSettled, setPlacementSettled] = useState(false);
   const [planRevision, setPlanRevision] = useState(0);
@@ -256,15 +237,12 @@ export default function Dashboard() {
         }
         if (!cancelled) setError(apiError(err));
       });
-    // Most recent study sessions (server returns newest first) so each
-    // chapter card can show what the last run did.
+    // Recent sessions power the home screen's continue card.
     api<SessionHistory[]>("/sessions")
       .then((rows) => {
         if (!cancelled) setHistory(rows);
       })
-      .catch(() => {
-        // Non-fatal: cards just render without a history line.
-      });
+      .catch(() => {});
     api<ActiveQueue>("/sessions/queue")
       .then((active) => {
         if (!cancelled) setQueue(active.queueId ? active : null);
@@ -272,32 +250,10 @@ export default function Dashboard() {
       .catch(() => {
         // Non-fatal: without it the dashboard simply offers no queue card.
       });
-    api<ReviewDue[]>("/review-due")
-      .then((rows) => {
-        if (cancelled) return;
-        setReviewsDue(rows);
-        setReviewError(false);
-      })
-      .catch(() => {
-        if (!cancelled) setReviewError(true);
-      });
     return () => {
       cancelled = true;
     };
   }, [navigate, session, sessionPending]);
-
-  const lastFor = (chapterId: string): SessionHistory | undefined =>
-    history.find((h) => h.chapterId === chapterId);
-  const sectionCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const chapter of chapters ?? []) {
-      const title = visibleChapterTitle(chapter.title);
-      if (title.section === null) continue;
-      const key = `${chapter.textbookTitle}\u0000${title.title}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return counts;
-  }, [chapters]);
 
   const start = async (chapterId: string) => {
     setStarting(chapterId);
@@ -324,43 +280,6 @@ export default function Dashboard() {
     }
   };
 
-  const togglePick = (chapterId: string) => {
-    setQueuePicks((picks) =>
-      picks.includes(chapterId)
-        ? picks.filter((id) => id !== chapterId)
-        : [...picks, chapterId],
-    );
-  };
-
-  const cancelPlanning = () => {
-    setQueuePlanning(false);
-    setQueuePicks([]);
-    setQueueError(null);
-  };
-
-  const planQueue = async () => {
-    if (queuePicks.length === 0) return;
-    setQueueBusy(true);
-    setQueueError(null);
-    try {
-      const res = await api<{
-        queueId: string;
-        sessions: { sessionId: string }[];
-      }>("/sessions/queue", {
-        method: "POST",
-        body: JSON.stringify({ chapterIds: queuePicks }),
-      });
-      const first = res.sessions[0]?.sessionId;
-      setQueuePlanning(false);
-      setQueuePicks([]);
-      if (first) navigate(`/study/${first}`);
-      else setQueueBusy(false);
-    } catch (err) {
-      setQueueError(apiError(err));
-      setQueueBusy(false);
-    }
-  };
-
   const dropFromQueue = async (sessionId: string) => {
     if (!queue) return;
     const before = queue;
@@ -379,8 +298,10 @@ export default function Dashboard() {
     }
   };
 
-  const openRound = history.find((h) => h.status === "in_progress");
-  const neverStudied = history.length === 0;
+  const openRound = history?.find((h) => h.status === "in_progress");
+  const completedRounds =
+    history?.filter((h) => h.status === "completed") ?? [];
+  const latestCompleted = completedRounds[0];
 
   if (demoExpired) {
     return (
@@ -404,15 +325,29 @@ export default function Dashboard() {
         </div>
         <div className="grid w-full gap-2 sm:w-auto sm:shrink-0 sm:auto-cols-max sm:grid-flow-col sm:items-center">
           <Link
-            to="/textbooks"
+            to={chapters && chapters.length === 0 ? "/textbooks" : "/study"}
             className={buttonVariants({
-              variant: chapters && chapters.length > 0 ? "outline" : "default",
+              variant: "default",
               size: "default",
               className: "w-full sm:w-auto",
             })}
           >
-            {t("add-textbook")}
+            {chapters && chapters.length === 0
+              ? t("add-textbook")
+              : t("browse-chapters")}
           </Link>
+          {chapters && chapters.length > 0 && (
+            <Link
+              to="/textbooks"
+              className={buttonVariants({
+                variant: "outline",
+                size: "default",
+                className: "w-full sm:w-auto",
+              })}
+            >
+              {t("manage-books")}
+            </Link>
+          )}
           {SYLLABUS_ENABLED && chapters && chapters.length > 0 && (
             <Link
               to="/syllabus"
@@ -460,36 +395,52 @@ export default function Dashboard() {
         </div>
       )}
 
-      {chapters && chapters.length > 0 && (openRound || neverStudied) && (
+      {openRound && (
         <section className="surface mb-8 flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <h2 className="font-display font-semibold text-xl tracking-tight">
-              {openRound ? t("continue-where") : t("start-first-chapter")}
+              {t("continue-where")}
             </h2>
             <p className="max-w-md text-muted-foreground text-sm leading-6">
-              {openRound
-                ? t("continue-where-text")
-                : t("start-first-chapter-text")}
+              {t("continue-where-text")}
             </p>
           </div>
-          {openRound ? (
-            <Link
-              to={`/study/${openRound.id}`}
-              className={buttonVariants({ className: "w-full sm:w-auto" })}
-            >
-              {t("resume-round")}
-            </Link>
-          ) : (
-            <Button
-              className="w-full sm:w-auto"
-              disabled={starting === chapters[0].id}
-              onClick={() => start(chapters[0].id)}
-            >
-              {starting === chapters[0].id
-                ? t("opening-ellipsis")
-                : t("first-chapter-cta")}
-            </Button>
-          )}
+          <Link
+            to={`/study/${openRound.id}`}
+            className={buttonVariants({ className: "w-full sm:w-auto" })}
+          >
+            {t("resume-round")}
+          </Link>
+        </section>
+      )}
+
+      {history !== null && (
+        <section className="surface mb-8 flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="space-y-1">
+            <p className="k-label">{t("home-progress")}</p>
+            <h2 className="font-display font-semibold text-lg tracking-tight">
+              {t("home-completed-count", { n: completedRounds.length })}
+            </h2>
+            <p className="text-muted-foreground text-sm leading-6">
+              {latestCompleted &&
+              latestCompleted.before !== null &&
+              latestCompleted.after !== null
+                ? t("home-latest-score", {
+                    before: latestCompleted.before,
+                    after: latestCompleted.after,
+                  })
+                : t("home-progress-note")}
+            </p>
+          </div>
+          <Link
+            to="/study"
+            className={buttonVariants({
+              variant: "outline",
+              className: "w-full sm:w-auto",
+            })}
+          >
+            {t("browse-chapters")}
+          </Link>
         </section>
       )}
 
@@ -639,18 +590,6 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {chapters === null && !error && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
-            // The first card carries the view-transition name on its ring: when
-            // the demo launches from the landing page the hero ring needs a
-            // destination to morph into, and this is the ring that is on screen
-            // the instant this route paints.
-            <ChapterCardSkeleton key={i} morph={i === 0} />
-          ))}
-        </div>
-      )}
-
       {offlineList && (
         <div className="inner-surface mb-6 border border-rust/40 px-4 py-3 text-sm">
           <p className="font-medium text-rust">{t("offline-saved")}</p>
@@ -658,12 +597,6 @@ export default function Dashboard() {
             {t("offline-saved-text")}
           </p>
         </div>
-      )}
-
-      {reviewError && (
-        <p className="mb-4 text-muted-foreground text-xs">
-          {t("review-due-error")}
-        </p>
       )}
 
       {chapters && chapters.length === 0 && (
@@ -684,249 +617,24 @@ export default function Dashboard() {
       )}
 
       {chapters && chapters.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-muted-foreground text-sm">
-            {t("queue-plan-hint")}
-          </p>
-          <Button
-            variant={queuePlanning ? "outline" : "default"}
-            size="sm"
-            onClick={() =>
-              queuePlanning ? cancelPlanning() : setQueuePlanning(true)
-            }
-          >
-            {queuePlanning ? t("queue-cancel") : t("queue-plan")}
-          </Button>
-        </div>
-      )}
-
-      {chapters && chapters.length > 0 && (
-        <ul className="grid gap-4 pb-24 md:grid-cols-2">
-          {chapters.map((chapter, i) => {
-            const last = lastFor(chapter.id);
-            const chapterTitle = visibleChapterTitle(chapter.title);
-            const sectionCount =
-              sectionCounts.get(
-                `${chapter.textbookTitle}\u0000${chapterTitle.title}`,
-              ) ?? 1;
-            const title =
-              chapterTitle.section === null
-                ? chapterTitle.title
-                : `${chapterTitle.title} · ${t("study-section", {
-                    n: chapterTitle.section,
-                    total: sectionCount,
-                  })}`;
-            return (
-              <li
-                key={chapter.id}
-                className="animate-fade-up"
-                style={{ animationDelay: `${i * 0.06}s` }}
-              >
-                <div className="space-y-2">
-                  <ChapterCard
-                    chapter={chapter}
-                    title={title}
-                    starting={starting === chapter.id}
-                    percent={last?.after ?? 0}
-                    reviewDue={reviewsDue.find(
-                      (item) => item.chapterId === chapter.id,
-                    )}
-                    morph={i === 0 && !queuePlanning}
-                    picking={queuePlanning}
-                    pickOrder={queuePicks.indexOf(chapter.id)}
-                    onStart={() =>
-                      queuePlanning ? togglePick(chapter.id) : start(chapter.id)
-                    }
-                  />
-                  <ChapterHistory last={last} />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {queuePlanning && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-border/70 border-t bg-panel/95 backdrop-blur-sm dark:border-white/10">
-          <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-            <p className="min-w-0 text-sm">
-              {queuePicks.length === 0
-                ? t("queue-pick-none")
-                : queuePicks.length === 1
-                  ? t("queue-pick-count-one")
-                  : t("queue-pick-count", { n: queuePicks.length })}
+        <section className="surface flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="k-label">{t("browse-chapters")}</p>
+            <h2 className="font-display font-semibold text-xl tracking-tight">
+              {t("chapter-count", { n: chapters.length })}
+            </h2>
+            <p className="text-muted-foreground text-sm leading-6">
+              {t("home-study-prompt")}
             </p>
-            <span className="flex shrink-0 items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={cancelPlanning}>
-                {t("queue-cancel")}
-              </Button>
-              <Button
-                size="sm"
-                disabled={queuePicks.length === 0 || queueBusy}
-                onClick={() => void planQueue()}
-              >
-                {queueBusy ? t("opening-ellipsis") : t("queue-start")}
-              </Button>
-            </span>
           </div>
-        </div>
+          <Link
+            to="/study"
+            className={buttonVariants({ className: "w-full sm:w-auto" })}
+          >
+            {t("browse-chapters")}
+          </Link>
+        </section>
       )}
     </main>
-  );
-}
-
-/** The chapters grid's loading state. It mirrors the real card's shape — and
- *  its top-right ring is the landing hero's morph destination — so the wait
- *  reads as the room arriving rather than a wall of grey boxes. */
-function ChapterCardSkeleton({ morph = false }: { morph?: boolean }) {
-  return (
-    <div className="w-full rounded-3xl border border-border/70 bg-panel/80 p-6 backdrop-blur-sm dark:border-white/10">
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full space-y-2.5">
-          <Skeleton className="h-3 w-24 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
-          <Skeleton className="h-6 w-3/4 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
-        </div>
-        <span className="flex shrink-0 items-center gap-2">
-          <MasteryRing
-            percent={0}
-            size={30}
-            className={morph ? "[view-transition-name:kiftet-ring]" : undefined}
-          />
-          <Skeleton className="h-7 w-20 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
-        </span>
-      </div>
-      <Skeleton className="mt-4 h-4 w-1/2 rounded-lg bg-muted/60 dark:bg-white/[0.05]" />
-      <Skeleton className="mt-5 h-3 w-2/3 rounded-full bg-muted/60 dark:bg-white/[0.05]" />
-    </div>
-  );
-}
-
-function ChapterCard({
-  chapter,
-  title,
-  starting,
-  percent,
-  reviewDue,
-  morph = false,
-  picking = false,
-  pickOrder = -1,
-  onStart,
-}: {
-  chapter: ChapterInfo;
-  title: string;
-  starting: boolean;
-  percent: number;
-  reviewDue?: ReviewDue;
-  morph?: boolean;
-  /** Queue-planning mode: tapping the card picks it instead of starting it. */
-  picking?: boolean;
-  /** This chapter's position in the queue being planned, or -1. */
-  pickOrder?: number;
-  onStart: () => void;
-}) {
-  const { t } = useLanguage();
-  const picked = picking && pickOrder >= 0;
-  return (
-    <button
-      type="button"
-      onClick={onStart}
-      disabled={starting}
-      aria-pressed={picking ? picked : undefined}
-      className={`group w-full rounded-3xl border bg-panel/80 p-6 text-left backdrop-blur-sm transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-gold/45 hover:shadow-[0_20px_50px_-24px_rgba(242,239,233,0.18)] focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 dark:border-white/10 ${
-        picked
-          ? "border-gold/60 shadow-[0_20px_50px_-24px_rgba(242,239,233,0.22)]"
-          : "border-border/70"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1.5">
-          <p className="font-medium text-[0.78rem] text-gold">
-            {chapter.subject}
-          </p>
-          <h2 className="font-display font-semibold text-foreground text-xl tracking-tight sm:text-2xl">
-            {title}
-          </h2>
-        </div>
-        <span className="flex shrink-0 items-center gap-2">
-          <MasteryRing
-            percent={percent}
-            size={30}
-            className={morph ? "[view-transition-name:kiftet-ring]" : undefined}
-          />
-          <span className="rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.78rem] text-gold opacity-90 transition-opacity group-hover:opacity-100">
-            {starting
-              ? t("opening-ellipsis")
-              : picking
-                ? picked
-                  ? t("queue-picked", { n: pickOrder + 1 })
-                  : t("queue-add")
-                : t("start-review")}
-          </span>
-        </span>
-      </div>
-
-      <p className="mt-3 text-muted-foreground text-sm">
-        {chapter.textbookTitle}
-      </p>
-
-      {reviewDue && (
-        <p className="mt-3 inline-flex rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 text-gold text-xs">
-          {t("review-due", { concept: reviewDue.concept })}
-        </p>
-      )}
-
-      <p className="mt-5 font-medium text-foreground/90 text-xs">
-        {t("card-promise")}
-      </p>
-    </button>
-  );
-}
-
-function ChapterHistory({ last }: { last?: SessionHistory }) {
-  const { t } = useLanguage();
-  if (!last) return null;
-  const minutes =
-    typeof last.durationMs === "number"
-      ? Math.round(last.durationMs / 60000)
-      : null;
-  const duration =
-    minutes == null
-      ? ""
-      : minutes < 1
-        ? t("under-a-minute")
-        : minutes === 1
-          ? t("minute", { n: minutes })
-          : t("minutes", { n: minutes });
-
-  if (last.status === "in_progress") {
-    return (
-      <div className="flex items-center justify-between px-1 text-[0.78rem] text-muted-foreground">
-        <span>{t("session-open")}</span>
-        <Link
-          to={`/study/${last.id}`}
-          className="font-medium text-gold underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
-        >
-          {t("resume")}
-        </Link>
-      </div>
-    );
-  }
-
-  const deltaText =
-    last.before != null && last.after != null && last.delta != null
-      ? `${last.before}% → ${last.after}%${
-          last.delta > 0
-            ? ` · +${last.delta}%`
-            : last.delta < 0
-              ? ` · ${last.delta}%`
-              : ""
-        }`
-      : t("completed");
-
-  return (
-    <p className="px-1 text-[0.78rem] text-muted-foreground">
-      {t("last-session", { delta: deltaText })}
-      {duration ? ` · ${duration}` : ""}
-    </p>
   );
 }
