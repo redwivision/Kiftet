@@ -260,6 +260,7 @@ export type StudyAction =
   | { type: "LOAD_START" }
   | { type: "LOAD_OK"; chapter: ChapterInfo }
   | { type: "LOAD_NOT_FOUND" }
+  | { type: "LOAD_FAILED" }
   | { type: "BUSY"; busy: boolean }
   | {
       type: "ERROR";
@@ -472,16 +473,24 @@ function languageLabel(
 function reducer(state: StudyState, action: StudyAction): StudyState {
   switch (action.type) {
     case "LOAD_START":
-      return { ...state, chapterLoading: true, sessionNotFound: false };
+      return {
+        ...state,
+        chapterLoading: true,
+        sessionNotFound: false,
+        error: null,
+      };
     case "LOAD_OK":
       return {
         ...state,
         chapterLoading: false,
         chapter: action.chapter,
         queued: null,
+        error: null,
       };
     case "LOAD_NOT_FOUND":
       return { ...state, chapterLoading: false, sessionNotFound: true };
+    case "LOAD_FAILED":
+      return { ...state, chapterLoading: false };
     case "BUSY":
       return { ...state, busy: action.busy };
     case "ERROR":
@@ -1496,6 +1505,7 @@ export function StudyProvider({
         if (err instanceof ApiError && err.status === 404) {
           dispatch({ type: "LOAD_NOT_FOUND" });
         } else {
+          dispatch({ type: "LOAD_FAILED" });
           if (err instanceof ApiError && err.status === 0) {
             offlineHitRef.current = true;
           }
