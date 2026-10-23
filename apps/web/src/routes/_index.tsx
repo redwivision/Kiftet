@@ -1,6 +1,7 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { cn } from "@kiftet/ui/lib/utils";
 import {
+  ArrowRight,
   BookText,
   Bot,
   Check,
@@ -19,7 +20,7 @@ import {
   type ReactNode,
   useState,
 } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate } from "react-router";
 import { BrandMark, BrandSignature } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
 import { HeroFilm } from "@/components/hero-film";
@@ -263,6 +264,10 @@ export default function Home() {
   const { t } = useLanguage();
   const { launch, pending, disabled, failure, signedIn } = useDemoLaunch();
 
+  if (signedIn) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
       {/* ── Hero: the promise, and the demo one tap away ──────── */}
@@ -273,36 +278,50 @@ export default function Home() {
             <Words text={t("hero-h1")} />
           </h1>
 
+          <div
+            className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
+            style={{ "--kft-i": "220ms" } as CSSProperties}
+          >
+            <Link
+              to="/login?signup=1"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64",
+              )}
+            >
+              {t("hero-signup-cta")}
+              <ArrowRight className="size-5" aria-hidden="true" />
+            </Link>
+          </div>
+
           <p
             className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg"
-            style={{ "--kft-i": "220ms" } as CSSProperties}
+            style={{ "--kft-i": "320ms" } as CSSProperties}
           >
             {t("hero-line")}
           </p>
 
           <div
             className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
-            style={{ "--kft-i": "320ms" } as CSSProperties}
+            style={{ "--kft-i": "400ms" } as CSSProperties}
           >
             <Button
-              size="lg"
+              variant="outline"
               onClick={launch}
               disabled={disabled}
-              className="w-full font-medium sm:w-auto"
+              className="w-full sm:w-auto"
             >
-              {pending
-                ? t("demo-setting-up")
-                : t(signedIn ? "hero-dashboard-cta" : "hero-cta")}
+              {pending ? t("demo-setting-up") : t("hero-cta")}
             </Button>
             <a
               href="#how"
-              className="text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+              className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
             >
               {t("how-loop-works")}
             </a>
             <Link
               to="/plans"
-              className="text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+              className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
             >
               {t("plans-link")}
             </Link>
@@ -316,7 +335,7 @@ export default function Home() {
 
           <ul
             className="kft-rise flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground text-sm"
-            style={{ "--kft-i": "400ms" } as CSSProperties}
+            style={{ "--kft-i": "480ms" } as CSSProperties}
           >
             {HERO_CHIPS.map((key) => (
               <li key={key} className="flex items-center gap-1.5">
@@ -328,7 +347,7 @@ export default function Home() {
 
           <p
             className="kft-rise max-w-xl font-medium text-foreground text-sm sm:text-base"
-            style={{ "--kft-i": "480ms" } as CSSProperties}
+            style={{ "--kft-i": "560ms" } as CSSProperties}
           >
             {t("hero-proof")}
           </p>
