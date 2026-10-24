@@ -270,9 +270,18 @@ export default function Home() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-3 pb-20 sm:px-6 lg:px-8">
-      {/* ── Hero: the promise, and the demo one tap away ──────── */}
-      <section className="grid gap-10 pt-6 pb-12 sm:pt-10 sm:pb-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
-        <div ref={hero.ref} className={cn("space-y-6", hero.shown && "kft-in")}>
+      {/* ── Hero: the promise, and the demo one tap away ────────
+          On phones the film leads — it is the product speaking — followed by
+          the CTAs; the written copy and the loop preview follow below. On
+          desktop the two halves sit side by side, as before. */}
+      <section className="grid gap-10 pt-6 pb-12 sm:pt-10 sm:pb-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:gap-x-12 lg:gap-y-4">
+        <div
+          ref={hero.ref}
+          className={cn(
+            "order-2 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1",
+            hero.shown && "kft-in",
+          )}
+        >
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />
             <span className="sr-only">{t("hero-h1")}</span>
@@ -378,14 +387,21 @@ export default function Home() {
           </p>
         </div>
 
-        {/* The product, performing: the open ring hears an answer and turns it
-            into a diagnosis of exactly what the student cannot explain. */}
-        <div className="flex flex-col items-center gap-4">
+        {/* The product, performing — first on a phone. The open ring hears an
+            answer and turns it into a diagnosis of exactly what the student
+            cannot explain. */}
+        <div className="order-1 flex flex-col items-center gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
           <HeroFilm className="w-full max-w-md" />
           <p className="max-w-md text-balance text-center text-muted-foreground text-sm leading-6">
             {t("hero-film-caption")}
           </p>
+        </div>
+
+        {/* The loop preview closes the hero on a phone — under the read — but
+            stays under the film on desktop. */}
+        <div className="order-3 flex justify-center lg:order-none lg:col-start-2 lg:row-start-2">
           <LoopPreview
+            className="w-full max-w-md"
             onLaunch={launch}
             disabled={disabled}
             pending={pending}
@@ -746,11 +762,13 @@ export default function Home() {
 }
 
 function LoopPreview({
+  className,
   onLaunch,
   disabled,
   pending,
   signedIn,
 }: {
+  className?: string;
   onLaunch: () => void;
   disabled: boolean;
   pending: boolean;
@@ -763,7 +781,10 @@ function LoopPreview({
   return (
     <section
       aria-label={t("preview-title")}
-      className="surface w-full max-w-md space-y-4 border-gold/25 p-4 sm:p-5"
+      className={cn(
+        "surface w-full max-w-md space-y-4 border-gold/25 p-4 sm:p-5",
+        className,
+      )}
     >
       <div>
         <p className="k-label">{t("preview-eyebrow")}</p>

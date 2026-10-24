@@ -90,7 +90,7 @@ export default function Header() {
                 end={to === "/" || to === "/dashboard"}
                 aria-label={t(labelKey)}
                 className={({ isActive }) =>
-                  `group flex min-h-9 items-center gap-2 rounded-full px-2 py-1.5 font-medium text-sm transition-[transform,color,background-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 sm:min-h-10 sm:px-3 ${
+                  `group relative flex min-h-11 items-center gap-2 rounded-full px-2.5 font-medium text-sm transition-[transform,color,background-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 sm:min-h-10 sm:px-3 ${
                     isActive
                       ? "bg-foreground text-background shadow-sm"
                       : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"

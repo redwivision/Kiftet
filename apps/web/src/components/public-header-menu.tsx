@@ -35,7 +35,7 @@ export function PublicHeaderMenu() {
         variant="ghost"
         aria-label={t("nav-more")}
         onClick={() => setOpen(true)}
-        className="sm:hidden"
+        className="size-11 sm:hidden"
       >
         <Menu className="size-4" aria-hidden="true" />
       </Button>
