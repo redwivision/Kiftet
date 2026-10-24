@@ -273,23 +273,6 @@ export default function Home() {
       {/* ── Hero: the promise, and the demo one tap away ──────── */}
       <section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
         <div ref={hero.ref} className={cn("space-y-6", hero.shown && "kft-in")}>
-          {!signedIn && (
-            <div
-              className="kft-rise flex items-center justify-end"
-              style={{ "--kft-i": "120ms" } as CSSProperties}
-            >
-              <Link
-                to="/login"
-                className={cn(
-                  buttonVariants({ variant: "ghost", size: "sm" }),
-                  "font-medium",
-                )}
-              >
-                {t("auth-signin-cta")}
-              </Link>
-            </div>
-          )}
-
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />
             <Words text={t("hero-h1")} />
