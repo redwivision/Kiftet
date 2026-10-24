@@ -31,16 +31,21 @@ export function FirstLoadIntro() {
     } catch {
       /* private mode — it will simply play again next load, which is fine. */
     }
-    const leave = setTimeout(() => setLeaving(true), 1100);
-    const done = setTimeout(() => {
-      root.removeAttribute("data-intro");
-      // Release the hero film only once the overlay is fully gone, so its
-      // opening beat never plays behind the veil.
-      signalIntroDone();
-    }, 1400);
+    const start = setTimeout(() => {
+      const leave = setTimeout(() => setLeaving(true), 1100);
+      const done = setTimeout(() => {
+        root.removeAttribute("data-intro");
+        // Release the hero film only once the overlay is fully gone, so its
+        // opening beat never plays behind the veil.
+        signalIntroDone();
+      }, 1400);
+      return () => {
+        clearTimeout(leave);
+        clearTimeout(done);
+      };
+    }, 4);
     return () => {
-      clearTimeout(leave);
-      clearTimeout(done);
+      clearTimeout(start);
     };
   }, []);
 
