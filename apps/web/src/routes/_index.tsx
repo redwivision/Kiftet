@@ -1001,7 +1001,7 @@ function FaqSection() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("faq-search-placeholder")}
           aria-label={t("faq-search-placeholder")}
-          className="w-full rounded-full border border-border bg-background/60 py-2.5 pr-4 pl-10 text-foreground text-sm outline-none transition-colors duration-200 placeholder:text-muted-foreground focus-visible:border-gold/50 focus-visible:ring-2 focus-visible:ring-gold/20"
+          className="w-full rounded-full border border-border bg-background/60 py-2.5 pr-4 pl-10 text-base text-foreground outline-none transition-colors duration-200 placeholder:text-muted-foreground focus-visible:border-gold/50 focus-visible:ring-2 focus-visible:ring-gold/20 sm:text-sm"
         />
       </div>
 

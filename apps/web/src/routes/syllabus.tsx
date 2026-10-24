@@ -587,7 +587,7 @@ function UnitSelect({
       disabled={saving}
       aria-label={t("map-aria")}
       onChange={(e) => onChange(e.target.value || null)}
-      className="max-w-full rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-[0.78rem] text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50 sm:max-w-[16rem]"
+      className="max-w-full rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-base text-foreground outline-none focus-visible:outline-2 focus-visible:outline-gold focus-visible:outline-offset-2 disabled:opacity-50 sm:max-w-[16rem] sm:text-[0.78rem]"
     >
       <option value="">{t("no-unit")}</option>
       {units.map((u) => (

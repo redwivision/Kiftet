@@ -1456,7 +1456,7 @@ function AddTextbook({
                 setSubjectChoice(chosen);
                 if (chosen !== "_custom") setSubject(chosen);
               }}
-              className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30"
+              className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-base outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 md:text-[0.95rem] dark:bg-input/30"
             >
               <option value="" disabled>
                 {t("subject-choose")}
@@ -1501,7 +1501,7 @@ function AddTextbook({
             id="book-language"
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30"
+            className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-base outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 md:text-[0.95rem] dark:bg-input/30"
           >
             <option value="en">{t("lang-en")}</option>
             <option value="am">{t("lang-am")}</option>

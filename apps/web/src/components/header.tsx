@@ -8,19 +8,20 @@ import { useIsAppRoute } from "@/lib/app-nav";
 import { BrandMark } from "./brand-mark";
 import { LanguageSwitcher } from "./language-switcher";
 import { OfflineBanner } from "./offline-banner";
+import { PublicHeaderMenu } from "./public-header-menu";
 import { ThemeSwitcher } from "./theme-switcher";
 import UserMenu from "./user-menu";
 
 function Brand() {
   const { t } = useLanguage();
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
+    <div className="flex items-center gap-1.5 sm:gap-3">
       <BrandMark
-        size={32}
+        size={28}
         className="shrink-0 rounded-full ring-1 ring-gold/40 sm:size-[36px]"
       />
       <div className="min-w-0 leading-tight">
-        <div className="font-display font-semibold text-[0.98rem] text-foreground tracking-tight sm:text-[1.06rem]">
+        <div className="font-display font-semibold text-[0.95rem] text-foreground tracking-tight sm:text-[1.06rem]">
           Kiftet
         </div>
         {/* The tagline is the widest thing in the brand block, and at 320px
@@ -66,7 +67,7 @@ export default function Header() {
     // before the room system existed, so every one of the eight tinted rooms
     // inherited a header that belonged to none of them.
     <header className="safe-area-top sticky top-0 z-30 border-border/70 border-b bg-panel/85 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-2 sm:py-3 sm:gap-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <NavLink
             to={isApp ? "/dashboard" : "/"}
@@ -80,6 +81,7 @@ export default function Header() {
             className={cn(
               "flex shrink items-center gap-0.5 rounded-full border border-border/70 bg-background/60 p-1 shadow-sm sm:gap-1",
               isApp && "max-sm:hidden",
+              !isApp && "max-sm:hidden",
             )}
           >
             {(isApp ? APP_NAV : PUBLIC_NAV).map(({ to, labelKey, Icon }) => (
@@ -108,12 +110,17 @@ export default function Header() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <span className={cn(isApp && "max-sm:hidden")}>
+          <span
+            className={cn(isApp && "max-sm:hidden", !isApp && "max-sm:hidden")}
+          >
             <LanguageSwitcher />
           </span>
-          <span className={cn(isApp && "max-sm:hidden")}>
+          <span
+            className={cn(isApp && "max-sm:hidden", !isApp && "max-sm:hidden")}
+          >
             <ThemeSwitcher />
           </span>
+          {!isApp && <PublicHeaderMenu />}
           <UserMenu />
         </div>
       </div>

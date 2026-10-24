@@ -275,7 +275,7 @@ export default function Study() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t("study-search-placeholder")}
           aria-label={t("study-search-placeholder")}
-          className="h-12 w-full rounded-full border border-border bg-background/70 pr-4 pl-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-foreground/50 focus-visible:ring-2 focus-visible:ring-foreground/10"
+          className="h-12 w-full rounded-full border border-border bg-background/70 pr-4 pl-11 text-base outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-foreground/50 focus-visible:ring-2 focus-visible:ring-foreground/10 sm:text-sm"
         />
       </label>
 

@@ -48,7 +48,7 @@ export function PositionPicker({
   const topics = chapter?.topics ?? [];
 
   const selectClass =
-    "h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30";
+    "h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-base md:text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30";
 
   return (
     <div className="space-y-4">
@@ -230,7 +230,7 @@ export function DayLengthPicker({
           id={`${idPrefix}-minutes`}
           value={String(value)}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30"
+          className="h-11 w-full appearance-none rounded-full border border-input bg-card/60 px-4 text-base outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 md:text-[0.95rem] dark:bg-input/30"
         >
           {[10, 15, 20, 30, 45, 60, 90].map((minutes) => (
             <option key={minutes} value={String(minutes)}>
@@ -273,7 +273,7 @@ export function ExamDatePicker({
           type="date"
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value || null)}
-          className="h-11 w-full rounded-full border border-input bg-card/60 px-4 text-[0.95rem] outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 dark:bg-input/30"
+          className="h-11 w-full rounded-full border border-input bg-card/60 px-4 text-base outline-none transition-[color,border-color] duration-200 focus-visible:border-gold/50 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 md:text-[0.95rem] dark:bg-input/30"
         />
       </div>
       <p className="text-muted-foreground text-xs leading-5">

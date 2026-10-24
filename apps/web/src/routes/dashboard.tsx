@@ -577,7 +577,7 @@ export default function Dashboard() {
                       title: item.chapterTitle,
                     })}
                     title={t("queue-remove", { title: item.chapterTitle })}
-                    className="shrink-0 rounded-full px-2 text-muted-foreground transition-colors duration-200 hover:text-rust"
+                    className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-muted/70 hover:text-rust"
                     onClick={() => void dropFromQueue(item.sessionId)}
                   >
                     ×

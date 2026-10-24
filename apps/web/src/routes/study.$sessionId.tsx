@@ -356,7 +356,7 @@ function StudyScreen({
   const scopeStatus = scopeSummary(state.scopeUnits, state.scopeKeys);
 
   return (
-      <main className="mx-auto w-full max-w-3xl px-3 py-6 sm:px-6 sm:py-10">
+    <main className="mx-auto w-full max-w-3xl px-3 py-6 sm:px-6 sm:py-10">
       <LoadingVeil show={state.busy} label={t("loading")} />
       {demo && (
         <div className="surface mb-6 border p-4 text-sm">
@@ -1602,7 +1602,7 @@ function GapsPhase({ startHereConcept }: { startHereConcept?: string }) {
           <legend className="font-medium text-muted-foreground text-sm">
             {t("plan-budget-question")}
           </legend>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {([10, 20, 40] as const).map((minutes) => (
               <button
                 key={minutes}
