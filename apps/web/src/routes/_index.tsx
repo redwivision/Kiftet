@@ -163,20 +163,20 @@ const DIFF = [
    survives the scroll to the CTA is the one that stops the click. */
 const FAQ = [
   { q: "faq-what-q", a: "faq-what-a" },
+  { q: "faq-different-q", a: "faq-different-a" },
   { q: "faq-speak-q", a: "faq-speak-a" },
+  { q: "faq-free-q", a: "faq-free-a" },
   { q: "faq-syllabus-q", a: "faq-syllabus-a" },
   { q: "faq-amharic-q", a: "faq-amharic-a" },
   { q: "faq-offline-q", a: "faq-offline-a" },
-  { q: "faq-different-q", a: "faq-different-a" },
+  { q: "faq-textbook-q", a: "faq-textbook-a" },
   { q: "faq-aiwrong-q", a: "faq-aiwrong-a" },
   { q: "faq-data-q", a: "faq-data-a" },
   { q: "faq-voice-q", a: "faq-voice-a" },
-  { q: "faq-textbook-q", a: "faq-textbook-a" },
   { q: "faq-phone-q", a: "faq-phone-a" },
   { q: "faq-install-q", a: "faq-install-a" },
-  { q: "faq-free-q", a: "faq-free-a" },
-  { q: "faq-instructor-q", a: "faq-instructor-a" },
   { q: "faq-exam-q", a: "faq-exam-a" },
+  { q: "faq-instructor-q", a: "faq-instructor-a" },
   { q: "faq-waitlist-q", a: "faq-waitlist-a" },
 ] as const satisfies readonly { q: MessageKey; a: MessageKey }[];
 
@@ -184,10 +184,10 @@ const FAQ = [
    live one tap away. A wall of sixteen is what stops the read. */
 const FAQ_TOP_KEYS: readonly MessageKey[] = [
   "faq-what-q",
-  "faq-free-q",
-  "faq-offline-q",
   "faq-different-q",
-  "faq-amharic-q",
+  "faq-free-q",
+  "faq-speak-q",
+  "faq-offline-q",
 ];
 
 /* Reveals a string word-by-word: each word slides up and straightens out of
@@ -273,6 +273,23 @@ export default function Home() {
       {/* ── Hero: the promise, and the demo one tap away ──────── */}
       <section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
         <div ref={hero.ref} className={cn("space-y-6", hero.shown && "kft-in")}>
+          {!signedIn && (
+            <div
+              className="kft-rise flex items-center justify-end"
+              style={{ "--kft-i": "120ms" } as CSSProperties}
+            >
+              <Link
+                to="/login"
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "font-medium",
+                )}
+              >
+                {t("auth-signin-cta")}
+              </Link>
+            </div>
+          )}
+
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />
             <Words text={t("hero-h1")} />
@@ -282,16 +299,42 @@ export default function Home() {
             className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
             style={{ "--kft-i": "220ms" } as CSSProperties}
           >
-            <Link
-              to="/login?signup=1"
-              className={cn(
-                buttonVariants({ size: "lg" }),
-                "min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64",
-              )}
+            {signedIn ? (
+              <Link
+                to="/dashboard"
+                className={cn(
+                  buttonVariants({ size: "lg" }),
+                  "min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64",
+                )}
+              >
+                {t("hero-dashboard-cta")}
+                <ArrowRight className="size-5" aria-hidden="true" />
+              </Link>
+            ) : (
+              <Link
+                to="/login?signup=1"
+                className={cn(
+                  buttonVariants({ size: "lg" }),
+                  "min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64",
+                )}
+              >
+                {t("hero-signup-cta")}
+                <ArrowRight className="size-5" aria-hidden="true" />
+              </Link>
+            )}
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={launch}
+              disabled={disabled}
+              className="w-full sm:w-auto"
             >
-              {t("hero-signup-cta")}
-              <ArrowRight className="size-5" aria-hidden="true" />
-            </Link>
+              {pending
+                ? t("demo-setting-up")
+                : signedIn
+                  ? t("hero-dashboard-cta")
+                  : t("hero-cta")}
+            </Button>
           </div>
 
           <p
@@ -305,14 +348,15 @@ export default function Home() {
             className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
             style={{ "--kft-i": "400ms" } as CSSProperties}
           >
-            <Button
-              variant="outline"
-              onClick={launch}
-              disabled={disabled}
-              className="w-full sm:w-auto"
+            <a
+              href="#waitlist"
+              className={cn(
+                buttonVariants({ variant: "ghost" }),
+                "w-full sm:w-auto",
+              )}
             >
-              {pending ? t("demo-setting-up") : t("hero-cta")}
-            </Button>
+              {t("hero-join-cta")}
+            </a>
             <a
               href="#how"
               className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
@@ -375,9 +419,39 @@ export default function Home() {
         ref={how.ref}
         className={cn("scroll-mt-24 pt-16", how.shown && "kft-in")}
       >
-        <h2 className="font-display font-semibold text-2xl tracking-[-0.02em] sm:text-3xl">
-          {t("loop-title")}
-        </h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="k-label">{t("how-loop-works")}</p>
+            <h2 className="mt-2 font-display font-semibold text-2xl tracking-[-0.02em] sm:text-3xl">
+              {t("loop-title")}
+            </h2>
+            <p className="mt-2 max-w-2xl text-muted-foreground text-sm leading-6 sm:text-base">
+              {t("hero-line")}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/login?signup=1"
+              className={cn(buttonVariants({ size: "sm" }))}
+            >
+              {t("hero-signup-cta")}
+            </Link>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={launch}
+              disabled={disabled}
+            >
+              {pending ? t("demo-setting-up") : t("hero-cta")}
+            </Button>
+            <a
+              href="#waitlist"
+              className={cn(buttonVariants({ size: "sm", variant: "ghost" }))}
+            >
+              {t("hero-join-cta")}
+            </a>
+          </div>
+        </div>
         <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {LOOP.map(({ stepKey, Icon }, i) => (
             <li
@@ -637,12 +711,22 @@ export default function Home() {
           <DemoButton variant="primary" size="lg" />
         </div>
         <p className="mt-6 text-muted-foreground text-sm">{t("no-account")}</p>
-        <Link
-          to="/plans"
-          className="mt-2 inline-block font-medium text-foreground text-sm underline underline-offset-4"
-        >
-          {t("plans-link")}
-        </Link>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/plans"
+            className="font-medium text-foreground text-sm underline underline-offset-4"
+          >
+            {t("plans-link")}
+          </Link>
+          {!signedIn && (
+            <Link
+              to="/login"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              {t("auth-signin-cta")}
+            </Link>
+          )}
+        </div>
 
         <div className="mx-auto mt-8 max-w-md text-left">
           <Disclosure summary={t("waitlist-chip")} id="waitlist">

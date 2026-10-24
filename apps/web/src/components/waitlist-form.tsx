@@ -219,6 +219,19 @@ export default function WaitlistForm() {
         <p className="text-muted-foreground">
           {t("waitlist-wave", { wave: status.wave })}
         </p>
+        <p className="text-muted-foreground">
+          Join our community — it's the fastest way in.{" "}
+          {status.channelUrl ? (
+            <a
+              href={status.channelUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-gold underline underline-offset-4"
+            >
+              {t("hero-join-cta")}
+            </a>
+          ) : null}
+        </p>
 
         {/* Exactly one thing left to do, ever. The server decides which, so
             this can't drift from the eligibility rule it claims to show. */}

@@ -31,13 +31,13 @@ export function FirstLoadIntro() {
     } catch {
       /* private mode — it will simply play again next load, which is fine. */
     }
-    const leave = setTimeout(() => setLeaving(true), 1500);
+    const leave = setTimeout(() => setLeaving(true), 1100);
     const done = setTimeout(() => {
       root.removeAttribute("data-intro");
       // Release the hero film only once the overlay is fully gone, so its
       // opening beat never plays behind the veil.
       signalIntroDone();
-    }, 1850);
+    }, 1400);
     return () => {
       clearTimeout(leave);
       clearTimeout(done);
@@ -61,10 +61,10 @@ export function FirstLoadIntro() {
           {Array.from({ length: 5 }).map((_, i) => (
             <span
               key={i}
-              className="w-[3px] animate-hero-wave rounded-full bg-gold/60"
+              className="w-[3px] animate-hero-wave rounded-full bg-gold/70"
               style={{
-                height: `${8 + ((i * 5) % 14)}px`,
-                animationDelay: `${(i % 5) * 120}ms`,
+                height: `${10 + ((i * 4) % 12)}px`,
+                animationDelay: `${(i % 5) * 90}ms`,
                 transformOrigin: "center",
               }}
             />
@@ -74,13 +74,13 @@ export function FirstLoadIntro() {
       <div className="space-y-1.5">
         <p
           className="animate-fade-up font-display font-semibold text-2xl tracking-tight"
-          style={{ animationDelay: "0.35s" }}
+          style={{ animationDelay: "0.25s" }}
         >
           Kiftet
         </p>
         <p
           className="animate-fade-up text-muted-foreground text-sm"
-          style={{ animationDelay: "0.8s" }}
+          style={{ animationDelay: "0.6s" }}
         >
           {t("intro-line")}
         </p>

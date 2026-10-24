@@ -38,7 +38,7 @@ export function KiftetLoader({
         stroke="currentColor"
         strokeWidth={8}
         strokeLinecap="round"
-        className="text-gold/20"
+        className="text-gold/15"
       />
       <g className="loader-nib animate-mark-travel text-gold">
         <path
@@ -47,7 +47,7 @@ export function KiftetLoader({
           strokeWidth={8}
           strokeLinecap="round"
           pathLength={1}
-          strokeDasharray="0.22 1"
+          strokeDasharray="0.18 1"
         />
       </g>
     </svg>

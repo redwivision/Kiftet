@@ -66,3 +66,4 @@ temp
 
 # Stray tool session dumps that land at the repo root
 /session-ses_*.md
+LAUNCH_CHECKLIST.md
