@@ -2,7 +2,9 @@ import { Button } from "@kiftet/ui/components/button";
 import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { useForm } from "@tanstack/react-form";
-import { useNavigate } from "react-router";
+import { Download } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -14,6 +16,11 @@ import { useLanguage } from "./language-provider";
 import Loader from "./loader";
 import SocialButtons from "./social-buttons";
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
 export default function SignInForm({
   onSwitchToSignUp,
   onForgotPassword,
@@ -24,6 +31,26 @@ export default function SignInForm({
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { isPending } = authClient.useSession();
+  const [searchParams] = useSearchParams();
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const justSignedUp = searchParams.get("signup") === "1" || searchParams.get("justsignedup") === "1";
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    await deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  };
 
   const form = useForm({
     defaultValues: {
@@ -78,6 +105,31 @@ export default function SignInForm({
         </Button>
       }
     >
+      {justSignedUp && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-gold/40 bg-panel/90 p-3">
+          <img
+            src="/logo-mark.png"
+            alt=""
+            className="size-10 rounded-xl ring-1 ring-gold/40 bg-[#0A0B0D]"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-sm">Install Kiftet</p>
+            <p className="text-muted-foreground text-xs">
+              Add to home screen for faster access
+            </p>
+          </div>
+          {deferredPrompt ? (
+            <Button size="sm" onClick={handleInstall} type="button">
+              <Download className="size-3.5" />
+              Install
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" type="button">
+              Install
+            </Button>
+          )}
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();

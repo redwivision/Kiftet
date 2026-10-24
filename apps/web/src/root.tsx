@@ -10,6 +10,7 @@ import Header from "./components/header";
 import { LanguageProvider, useLanguage } from "./components/language-provider";
 import { MobileNav } from "./components/mobile-nav";
 import { NavigationProgress } from "./components/navigation-progress";
+import { PWAInstallPrompt } from "./components/pwa-install-prompt";
 import { ThemeProvider } from "./components/theme-provider";
 import { useIsAppRoute } from "./lib/app-nav";
 
@@ -212,6 +213,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <SkipLink />
             <FirstLoadIntro />
             {children}
+            <PWAInstallPrompt />
             <Toaster />
             <ScrollRestoration />
             <Scripts />

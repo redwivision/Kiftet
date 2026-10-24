@@ -1,6 +1,6 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ConceptGraph } from "@/components/concept-graph";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
@@ -20,6 +20,12 @@ import {
   getCachedChapters,
 } from "@/lib/store";
 import type { Route } from "./+types/dashboard";
+import { Download } from "lucide-react";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -106,10 +112,31 @@ function countdown(resetAt: number | null, now: number): string {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const online = useOnline();
   const reconnecting = useReconnectGrace(online);
   const { t } = useLanguage();
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const justSignedUp =
+    searchParams.get("justsignedup") === "1" || searchParams.get("signup") === "1";
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    await deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  };
   const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
   // Bet 3: the chapter list came from the phone's cache, not the server — flag
   // it so the room never pretends a saved list is live data.
@@ -363,6 +390,31 @@ export default function Dashboard() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
+      {justSignedUp && (
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-gold/40 bg-panel/95 p-3 shadow-[0_20px_60px_-30px_rgba(212,175,106,0.8)] backdrop-blur-xl">
+          <img
+            src="/logo-mark.png"
+            alt=""
+            className="size-10 rounded-xl ring-1 ring-gold/40 bg-[#0A0B0D]"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-sm">Install Kiftet</p>
+            <p className="text-muted-foreground text-xs">
+              Add to home screen for faster access
+            </p>
+          </div>
+          {deferredPrompt ? (
+            <Button size="sm" onClick={handleInstall}>
+              <Download className="size-3.5" />
+              Install
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline">
+              Install
+            </Button>
+          )}
+        </div>
+      )}
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 max-w-2xl space-y-2">
           <p className="k-label">{t("study-room")}</p>

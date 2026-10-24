@@ -49,7 +49,7 @@ export function PWAInstallPrompt() {
         <img
           src="/logo-mark.png"
           alt=""
-          className="size-10 rounded-xl ring-1 ring-gold/40"
+          className="size-10 rounded-xl ring-1 ring-gold/40 bg-[#0A0B0D]"
         />
         <div className="min-w-0 flex-1">
           <p className="font-medium text-sm">Install Kiftet</p>
