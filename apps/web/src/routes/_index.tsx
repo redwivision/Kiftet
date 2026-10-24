@@ -275,56 +275,54 @@ export default function Home() {
         <div ref={hero.ref} className={cn("space-y-6", hero.shown && "kft-in")}>
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />
-            <Words text={t("hero-h1")} />
+            <span className="sr-only">{t("hero-h1")}</span>
           </h1>
 
           <div
             className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
             style={{ "--kft-i": "220ms" } as CSSProperties}
           >
-            {signedIn ? (
-              <Link
-                to="/dashboard"
-                className={cn(
-                  buttonVariants({ size: "lg" }),
-                  "min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64",
-                )}
-              >
-                {t("hero-dashboard-cta")}
-                <ArrowRight className="size-5" aria-hidden="true" />
-              </Link>
-            ) : (
-              <Link
-                to="/login?signup=1"
-                className={cn(
-                  buttonVariants({ size: "lg" }),
-                  "min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64",
-                )}
-              >
-                {t("hero-signup-cta")}
-                <ArrowRight className="size-5" aria-hidden="true" />
-              </Link>
-            )}
             <Button
-              variant="outline"
               size="lg"
               onClick={launch}
               disabled={disabled}
-              className="w-full sm:w-auto"
+              className="min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64"
             >
               {pending
                 ? t("demo-setting-up")
                 : signedIn
                   ? t("hero-dashboard-cta")
                   : t("hero-cta")}
+              <ArrowRight className="size-5" aria-hidden="true" />
             </Button>
+            {signedIn ? (
+              <Link
+                to="/dashboard"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "lg" }),
+                  "w-full sm:w-auto",
+                )}
+              >
+                {t("hero-dashboard-cta")}
+              </Link>
+            ) : (
+              <Link
+                to="/login?signup=1"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "lg" }),
+                  "w-full sm:w-auto",
+                )}
+              >
+                {t("hero-signup-cta")}
+              </Link>
+            )}
           </div>
 
           <p
             className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg"
             style={{ "--kft-i": "320ms" } as CSSProperties}
           >
-            {t("hero-line")}
+            {t("hero-h1")}{" "}{t("hero-line")}
           </p>
 
           <div

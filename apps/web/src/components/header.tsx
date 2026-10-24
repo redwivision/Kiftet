@@ -80,8 +80,6 @@ export default function Header() {
             aria-label={t("nav-primary")}
             className={cn(
               "flex shrink items-center gap-0.5 rounded-full border border-border/70 bg-background/60 p-1 shadow-sm sm:gap-1",
-              isApp && "max-sm:hidden",
-              !isApp && "max-sm:hidden",
             )}
           >
             {(isApp ? APP_NAV : PUBLIC_NAV).map(({ to, labelKey, Icon }) => (
@@ -92,7 +90,7 @@ export default function Header() {
                 end={to === "/" || to === "/dashboard"}
                 aria-label={t(labelKey)}
                 className={({ isActive }) =>
-                  `group flex min-h-10 items-center gap-2 rounded-full px-2.5 py-2 font-medium text-sm transition-[transform,color,background-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 sm:px-3 ${
+                  `group flex min-h-9 items-center gap-2 rounded-full px-2 py-1.5 font-medium text-sm transition-[transform,color,background-color,box-shadow] duration-200 focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 sm:min-h-10 sm:px-3 ${
                     isActive
                       ? "bg-foreground text-background shadow-sm"
                       : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
@@ -103,21 +101,17 @@ export default function Header() {
                   className="size-4 shrink-0 transition-transform duration-200 group-hover:scale-110"
                   aria-hidden="true"
                 />
-                <span>{t(labelKey)}</span>
+                <span className="hidden sm:inline">{t(labelKey)}</span>
               </NavLink>
             ))}
           </nav>
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <span
-            className={cn(isApp && "max-sm:hidden", !isApp && "max-sm:hidden")}
-          >
+          <span className="hidden sm:inline">
             <LanguageSwitcher />
           </span>
-          <span
-            className={cn(isApp && "max-sm:hidden", !isApp && "max-sm:hidden")}
-          >
+          <span className="hidden sm:inline">
             <ThemeSwitcher />
           </span>
           {!isApp && <PublicHeaderMenu />}

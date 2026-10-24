@@ -1,5 +1,5 @@
 import { cn } from "@kiftet/ui/lib/utils";
-import { BookOpen, BookText, Ellipsis, House } from "lucide-react";
+import { BookText, Ellipsis } from "lucide-react";
 import type { ComponentType } from "react";
 import { useState } from "react";
 import { NavLink } from "react-router";
@@ -13,8 +13,6 @@ import type { MessageKey } from "@/lib/messages";
    rests, and the theme + language controls — crowded as icon buttons up top —
    move into a sheet behind "More". */
 const TABS = [
-  { to: "/dashboard", labelKey: "nav-home", Icon: House, end: true },
-  { to: "/study", labelKey: "nav-study", Icon: BookOpen, end: false },
   { to: "/textbooks", labelKey: "nav-books", Icon: BookText, end: false },
 ] as const satisfies readonly {
   to: string;
