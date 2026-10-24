@@ -269,9 +269,9 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-6xl px-3 pb-20 sm:px-6 lg:px-8">
       {/* ── Hero: the promise, and the demo one tap away ──────── */}
-      <section className="grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
+      <section className="grid gap-10 pt-6 pb-12 sm:pt-10 sm:pb-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-12">
         <div ref={hero.ref} className={cn("space-y-6", hero.shown && "kft-in")}>
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />

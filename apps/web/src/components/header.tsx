@@ -14,13 +14,13 @@ import UserMenu from "./user-menu";
 function Brand() {
   const { t } = useLanguage();
   return (
-    <div className="flex items-center gap-2.5 sm:gap-3">
+    <div className="flex items-center gap-2 sm:gap-3">
       <BrandMark
-        size={36}
-        className="shrink-0 rounded-full ring-1 ring-gold/40"
+        size={32}
+        className="shrink-0 rounded-full ring-1 ring-gold/40 sm:size-[36px]"
       />
       <div className="min-w-0 leading-tight">
-        <div className="font-display font-semibold text-[1.06rem] text-foreground tracking-tight">
+        <div className="font-display font-semibold text-[0.98rem] text-foreground tracking-tight sm:text-[1.06rem]">
           Kiftet
         </div>
         {/* The tagline is the widest thing in the brand block, and at 320px
@@ -66,7 +66,7 @@ export default function Header() {
     // before the room system existed, so every one of the eight tinted rooms
     // inherited a header that belonged to none of them.
     <header className="safe-area-top sticky top-0 z-30 border-border/70 border-b bg-panel/85 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-3 py-2 sm:py-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-5">
           <NavLink
             to={isApp ? "/dashboard" : "/"}

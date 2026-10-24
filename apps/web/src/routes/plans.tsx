@@ -28,7 +28,7 @@ export default function Plans() {
   const { t } = useLanguage();
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+    <main className="mx-auto w-full max-w-5xl px-3 py-8 sm:px-6 sm:py-16 lg:px-8">
       <header className="mx-auto max-w-2xl space-y-3 text-center">
         <p className="k-label">{t("plans-eyebrow")}</p>
         <h1 className="font-display font-semibold text-3xl tracking-[-0.03em] sm:text-5xl">

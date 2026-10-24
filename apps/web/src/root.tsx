@@ -235,7 +235,7 @@ export default function App() {
         id="main-content"
         className={cn(
           "flex-1",
-          isApp && "max-sm:pb-[calc(3.5rem_+_env(safe-area-inset-bottom))]",
+          isApp && "max-sm:pb-[calc(4rem_+_env(safe-area-inset-bottom))]",
         )}
         tabIndex={-1}
       >

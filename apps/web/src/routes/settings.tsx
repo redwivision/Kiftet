@@ -121,7 +121,7 @@ export default function Settings() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-3xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <header className="mb-8 space-y-2">
         <p className="k-label">{t("placement-label")}</p>
         <h1 className="font-display font-semibold text-3xl tracking-[-0.02em] sm:text-4xl">

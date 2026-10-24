@@ -279,7 +279,7 @@ function StudyScreen({
 
   if (state.demoExpired) {
     return (
-      <main className="mx-auto w-full max-w-md px-4 py-24">
+      <main className="mx-auto w-full max-w-md px-3 py-16 sm:px-4 sm:py-24">
         <DemoExpiredNotice />
       </main>
     );
@@ -356,7 +356,7 @@ function StudyScreen({
   const scopeStatus = scopeSummary(state.scopeUnits, state.scopeKeys);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+      <main className="mx-auto w-full max-w-3xl px-3 py-6 sm:px-6 sm:py-10">
       <LoadingVeil show={state.busy} label={t("loading")} />
       {demo && (
         <div className="surface mb-6 border p-4 text-sm">

@@ -213,14 +213,14 @@ export default function Syllabus() {
 
   if (demoExpired) {
     return (
-      <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
         <DemoExpiredNotice />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <header className="mb-8 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="max-w-2xl space-y-2">

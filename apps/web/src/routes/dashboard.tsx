@@ -355,14 +355,14 @@ export default function Dashboard() {
 
   if (demoExpired) {
     return (
-      <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
         <DemoExpiredNotice />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 max-w-2xl space-y-2">
           <p className="k-label">{t("study-room")}</p>
