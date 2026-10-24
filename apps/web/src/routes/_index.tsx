@@ -17,13 +17,14 @@ import { motion } from "motion/react";
 import {
   type ComponentType,
   type CSSProperties,
+  useEffect,
   type ReactNode,
   useState,
 } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { BrandMark, BrandSignature } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
-import { HeroFilm } from "@/components/hero-film";
+import { HeroFilm, OPEN_ARC } from "@/components/hero-film";
 import { useLanguage } from "@/components/language-provider";
 import type { MasteryLevel } from "@/components/study-provider";
 import WaitlistForm from "@/components/waitlist-form";
@@ -257,6 +258,7 @@ function Disclosure({
 
 export default function Home() {
   const hero = useOnScreen<HTMLDivElement>();
+  const heroLead = useOnScreen<HTMLDivElement>();
   const how = useOnScreen<HTMLElement>();
   const stats = useOnScreen<HTMLElement>();
   const diff = useOnScreen<HTMLElement>();
@@ -270,15 +272,45 @@ export default function Home() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-3 pb-20 sm:px-6 lg:px-8">
-      {/* ── Hero: the promise, and the demo one tap away ────────
-          On phones the film leads — it is the product speaking — followed by
-          the CTAs; the written copy and the loop preview follow below. On
-          desktop the two halves sit side by side, as before. */}
+      {/* ── Hero: the promise, and the demo one tap away ───────
+          On phones the first view needs no scroll: a pocket-sized listening
+          ring, one line of invitation, and the actions. The film's full story
+          follows below for anyone who scrolls. Desktop keeps the two-column
+          hero: copy left, film right. */}
       <section className="grid gap-10 pt-6 pb-12 sm:pt-10 sm:pb-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:gap-x-12 lg:gap-y-4">
+        {/* The phone's first screen: the brand's open ring breathing around a
+            mic, the question a student hears, and the two actions. All inside
+            the first view — kft-in lives on this container so the prompt and
+            the CTAs rise in with it. */}
+        <div
+          ref={heroLead.ref}
+          className={cn(
+            "order-1 flex flex-col items-center gap-5 lg:hidden",
+            heroLead.shown && "kft-in",
+          )}
+        >
+          <HeroSayRing />
+          <p
+            className="kft-rise max-w-[14rem] text-center font-medium text-foreground text-sm leading-6"
+            style={{ "--kft-i": "160ms" } as CSSProperties}
+          >
+            {t("hero-lead-p")}
+          </p>
+          <HeroCtas
+            className="w-full"
+            delay="260ms"
+            launch={launch}
+            pending={pending}
+            disabled={disabled}
+            signedIn={signedIn}
+            failure={failure}
+          />
+        </div>
+
         <div
           ref={hero.ref}
           className={cn(
-            "order-2 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1",
+            "order-3 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1",
             hero.shown && "kft-in",
           )}
         >
@@ -287,45 +319,15 @@ export default function Home() {
             <span className="sr-only">{t("hero-h1")}</span>
           </h1>
 
-          <div
-            className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
-            style={{ "--kft-i": "220ms" } as CSSProperties}
-          >
-            <Button
-              size="lg"
-              onClick={launch}
-              disabled={disabled}
-              className="min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64"
-            >
-              {pending
-                ? t("demo-setting-up")
-                : signedIn
-                  ? t("hero-dashboard-cta")
-                  : t("hero-cta")}
-              <ArrowRight className="size-5" aria-hidden="true" />
-            </Button>
-            {signedIn ? (
-              <Link
-                to="/dashboard"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "lg" }),
-                  "w-full sm:w-auto",
-                )}
-              >
-                {t("hero-dashboard-cta")}
-              </Link>
-            ) : (
-              <Link
-                to="/login?signup=1"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "lg" }),
-                  "w-full sm:w-auto",
-                )}
-              >
-                {t("hero-signup-cta")}
-              </Link>
-            )}
-          </div>
+          <HeroCtas
+            className="hidden lg:flex"
+            delay="220ms"
+            launch={launch}
+            pending={pending}
+            disabled={disabled}
+            signedIn={signedIn}
+            failure={failure}
+          />
 
           <p
             className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg"
@@ -361,12 +363,6 @@ export default function Home() {
             </Link>
           </div>
 
-          {failure && (
-            <p role="alert" className="text-rust text-sm">
-              {failure}
-            </p>
-          )}
-
           <ul
             className="kft-rise flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground text-sm"
             style={{ "--kft-i": "480ms" } as CSSProperties}
@@ -387,10 +383,11 @@ export default function Home() {
           </p>
         </div>
 
-        {/* The product, performing — first on a phone. The open ring hears an
+        {/* The product, performing — the first thing under the actions on a
+            phone, and the right column on desktop. The open ring hears an
             answer and turns it into a diagnosis of exactly what the student
             cannot explain. */}
-        <div className="order-1 flex flex-col items-center gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
+        <div className="order-2 flex flex-col items-center gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
           <HeroFilm className="w-full max-w-md" />
           <p className="max-w-md text-balance text-center text-muted-foreground text-sm leading-6">
             {t("hero-film-caption")}
@@ -399,7 +396,7 @@ export default function Home() {
 
         {/* The loop preview closes the hero on a phone — under the read — but
             stays under the film on desktop. */}
-        <div className="order-3 flex justify-center lg:order-none lg:col-start-2 lg:row-start-2">
+        <div className="order-4 flex justify-center lg:order-none lg:col-start-2 lg:row-start-2">
           <LoopPreview
             className="w-full max-w-md"
             onLaunch={launch}
@@ -758,6 +755,139 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+/* The phone hero's pocket visual: the brand's open ring — the gap — draws
+   itself around a mic that breathes. The film's first beat, shrunk to a size
+   that shares the first view with the actions instead of pushing them down.
+   The full film follows below for anyone who scrolls. */
+function HeroSayRing() {
+  const on = useOnScreen<HTMLDivElement>();
+  const [reduce, setReduce] = useState(false);
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduce(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReduce(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  return (
+    <div
+      ref={on.ref}
+      className={cn(
+        "relative grid size-24 place-items-center",
+        on.shown && "kft-in",
+      )}
+    >
+      <svg
+        aria-hidden="true"
+        fill="none"
+        viewBox="0 0 100 100"
+        className="absolute inset-0 size-full text-gold"
+      >
+        <motion.path
+          d={OPEN_ARC}
+          stroke="currentColor"
+          strokeWidth={4}
+          strokeLinecap="round"
+          initial={false}
+          animate={{ pathLength: on.shown ? 1 : 0 }}
+          transition={{ duration: reduce ? 0 : 0.9, ease: "easeOut" }}
+        />
+      </svg>
+      <span
+        aria-hidden="true"
+        className="absolute size-14 animate-breathe rounded-full bg-gold/15 motion-reduce:animate-none"
+      />
+      <span
+        aria-hidden="true"
+        className="relative grid size-12 place-items-center rounded-full border-2 border-gold/50 bg-night-raised text-gold"
+      >
+        <Mic className="size-5" />
+      </span>
+    </div>
+  );
+}
+
+/* The hero's actions, shared between the phone's first view and the desktop
+   column, so the copy can never drift apart between the two layouts. */
+function HeroCtas({
+  className,
+  delay = "220ms",
+  launch,
+  pending,
+  disabled,
+  signedIn,
+  failure,
+}: {
+  className?: string;
+  delay?: string;
+  launch: () => void | Promise<void>;
+  pending: boolean;
+  disabled: boolean;
+  signedIn: boolean;
+  failure: string | null;
+}) {
+  const { t } = useLanguage();
+
+  return (
+    <>
+      <div
+        className={cn(
+          "kft-rise flex w-full flex-col gap-3 sm:flex-row sm:items-center",
+          className,
+        )}
+        style={{ "--kft-i": delay } as CSSProperties}
+      >
+        <Button
+          size="lg"
+          onClick={launch}
+          disabled={disabled}
+          className="min-h-14 w-full justify-between px-6 font-semibold text-base sm:w-auto sm:min-w-64"
+        >
+          {pending
+            ? t("demo-setting-up")
+            : signedIn
+              ? t("hero-dashboard-cta")
+              : t("hero-cta")}
+          <ArrowRight className="size-5" aria-hidden="true" />
+        </Button>
+        {signedIn ? (
+          <Link
+            to="/dashboard"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "lg" }),
+              "w-full sm:w-auto",
+            )}
+          >
+            {t("hero-dashboard-cta")}
+          </Link>
+        ) : (
+          <Link
+            to="/login?signup=1"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "lg" }),
+              "w-full sm:w-auto",
+            )}
+          >
+            {t("hero-signup-cta")}
+          </Link>
+        )}
+      </div>
+      {failure && (
+        <p role="alert" className="text-rust text-sm">
+          {failure}
+        </p>
+      )}
+    </>
   );
 }
 

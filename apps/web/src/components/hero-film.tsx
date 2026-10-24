@@ -35,8 +35,9 @@ import { useOnScreen } from "@/lib/on-screen";
  */
 
 /* The 288° arc — the ring with a 72° segment missing. Same geometry as
-   BrandMark, inlined here so it can draw itself with motion's pathLength. */
-const OPEN_ARC = "M 93.46 43.12 A 44 44 0 1 1 56.88 6.54";
+   BrandMark, inlined here so it can draw itself with motion's pathLength.
+   Exported for the mobile hero's pocket version of this same beat. */
+export const OPEN_ARC = "M 93.46 43.12 A 44 44 0 1 1 56.88 6.54";
 
 /* One real Biology 12 checklist, and the levels a spoken recall lands on.
    Concept names reuse the landing's own keys so the film and the product can
