@@ -34,7 +34,9 @@ export default function SignInForm({
   const [searchParams] = useSearchParams();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const justSignedUp = searchParams.get("signup") === "1" || searchParams.get("justsignedup") === "1";
+  const justSignedUp =
+    searchParams.get("signup") === "1" ||
+    searchParams.get("justsignedup") === "1";
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -110,7 +112,7 @@ export default function SignInForm({
           <img
             src="/logo-mark.png"
             alt=""
-            className="size-10 rounded-xl ring-1 ring-gold/40 bg-[#0A0B0D]"
+            className="size-10 rounded-xl bg-[#0A0B0D] ring-1 ring-gold/40"
           />
           <div className="min-w-0 flex-1">
             <p className="font-medium text-sm">Install Kiftet</p>

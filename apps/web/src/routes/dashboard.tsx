@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
+import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ConceptGraph } from "@/components/concept-graph";
@@ -20,7 +21,6 @@ import {
   getCachedChapters,
 } from "@/lib/store";
 import type { Route } from "./+types/dashboard";
-import { Download } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -120,7 +120,8 @@ export default function Dashboard() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const justSignedUp =
-    searchParams.get("justsignedup") === "1" || searchParams.get("signup") === "1";
+    searchParams.get("justsignedup") === "1" ||
+    searchParams.get("signup") === "1";
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -395,7 +396,7 @@ export default function Dashboard() {
           <img
             src="/logo-mark.png"
             alt=""
-            className="size-10 rounded-xl ring-1 ring-gold/40 bg-[#0A0B0D]"
+            className="size-10 rounded-xl bg-[#0A0B0D] ring-1 ring-gold/40"
           />
           <div className="min-w-0 flex-1">
             <p className="font-medium text-sm">Install Kiftet</p>

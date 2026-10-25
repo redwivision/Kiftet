@@ -17,8 +17,8 @@ import { motion } from "motion/react";
 import {
   type ComponentType,
   type CSSProperties,
-  useEffect,
   type ReactNode,
+  useEffect,
   useState,
 } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
@@ -334,7 +334,7 @@ export default function Home() {
             className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg lg:hidden"
             style={{ "--kft-i": "320ms" } as CSSProperties}
           >
-            {t("hero-h1")}{" "}{t("hero-line")}
+            {t("hero-h1")} {t("hero-line")}
           </p>
 
           <div className="lg:mt-auto lg:space-y-6">
