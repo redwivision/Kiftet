@@ -310,17 +310,17 @@ export default function Home() {
         <div
           ref={hero.ref}
           className={cn(
-            "order-3 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col",
+            "order-3 space-y-4 lg:order-none lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:justify-between",
             hero.shown && "kft-in",
           )}
         >
-          <h1 className="relative isolate font-bold font-display text-5xl text-foreground leading-[1.0] tracking-[-0.06em] sm:text-6xl lg:flex lg:flex-1 lg:items-center lg:pb-6">
+          <h1 className="relative isolate font-bold font-display text-6xl text-foreground leading-[0.98] tracking-[-0.07em] sm:text-7xl lg:text-8xl xl:text-9xl">
             <span aria-hidden="true" className="halo" />
             <span className="sr-only">{t("hero-h1")}</span>
             <span className="relative">{t("hero-h1")}</span>
           </h1>
 
-          <div className="space-y-2.5 lg:mt-auto lg:pb-0">
+          <div className="space-y-2 lg:mt-6">
             <HeroCtas
               className="hidden lg:flex"
               delay="220ms"
