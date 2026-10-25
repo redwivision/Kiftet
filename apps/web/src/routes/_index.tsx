@@ -310,17 +310,17 @@ export default function Home() {
         <div
           ref={hero.ref}
           className={cn(
-            "order-3 space-y-4 lg:order-none lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:justify-between lg:space-y-0",
+            "order-3 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col",
             hero.shown && "kft-in",
           )}
         >
-          <h1 className="relative isolate font-bold font-display text-5xl text-foreground leading-[1.02] tracking-[-0.04em] sm:text-6xl lg:flex lg:flex-1 lg:items-center">
+          <h1 className="relative isolate font-bold font-display text-5xl text-foreground leading-[1.0] tracking-[-0.06em] sm:text-6xl lg:flex lg:flex-1 lg:items-center lg:pb-6">
             <span aria-hidden="true" className="halo" />
             <span className="sr-only">{t("hero-h1")}</span>
             <span className="relative">{t("hero-h1")}</span>
           </h1>
 
-          <div className="space-y-4 lg:mt-8">
+          <div className="space-y-2.5 lg:mt-auto lg:pb-0">
             <HeroCtas
               className="hidden lg:flex"
               delay="220ms"
@@ -338,9 +338,9 @@ export default function Home() {
               {t("hero-h1")} {t("hero-line")}
             </p>
 
-            <div className="lg:space-y-4">
+            <div className="space-y-3">
               <div
-                className="kft-rise flex flex-col gap-2 sm:flex-row sm:items-center"
+                className="kft-rise flex flex-col gap-1.5 sm:flex-row sm:items-center"
                 style={{ "--kft-i": "400ms" } as CSSProperties}
               >
                 <a
@@ -354,24 +354,24 @@ export default function Home() {
                 </a>
                 <a
                   href="#how"
-                  className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+                  className="py-1.5 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
                 >
                   {t("how-loop-works")}
                 </a>
                 <Link
                   to="/plans"
-                  className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+                  className="py-1.5 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
                 >
                   {t("plans-link")}
                 </Link>
               </div>
 
               <ul
-                className="kft-rise flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground text-sm"
+                className="kft-rise flex flex-wrap gap-x-4 gap-y-1.5 text-muted-foreground text-sm"
                 style={{ "--kft-i": "480ms" } as CSSProperties}
               >
                 {HERO_CHIPS.map((key) => (
-                  <li key={key} className="flex items-center gap-1.5">
+                  <li key={key} className="flex items-center gap-1">
                     <Check className="size-4 text-gold" aria-hidden="true" />
                     {t(key)}
                   </li>
