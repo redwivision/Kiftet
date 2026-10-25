@@ -310,13 +310,14 @@ export default function Home() {
         <div
           ref={hero.ref}
           className={cn(
-            "order-3 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1",
+            "order-3 space-y-6 lg:order-none lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col",
             hero.shown && "kft-in",
           )}
         >
           <h1 className="relative isolate font-display font-semibold text-4xl text-foreground leading-[1.06] tracking-[-0.03em] sm:text-5xl sm:leading-[1.05]">
             <span aria-hidden="true" className="halo" />
             <span className="sr-only">{t("hero-h1")}</span>
+            <span className="relative">{t("hero-h1")}</span>
           </h1>
 
           <HeroCtas
@@ -330,57 +331,59 @@ export default function Home() {
           />
 
           <p
-            className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg"
+            className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg lg:hidden"
             style={{ "--kft-i": "320ms" } as CSSProperties}
           >
             {t("hero-h1")}{" "}{t("hero-line")}
           </p>
 
-          <div
-            className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
-            style={{ "--kft-i": "400ms" } as CSSProperties}
-          >
-            <a
-              href="#waitlist"
-              className={cn(
-                buttonVariants({ variant: "ghost" }),
-                "w-full sm:w-auto",
-              )}
+          <div className="lg:mt-auto lg:space-y-6">
+            <div
+              className="kft-rise flex flex-col gap-3 sm:flex-row sm:items-center"
+              style={{ "--kft-i": "400ms" } as CSSProperties}
             >
-              {t("hero-join-cta")}
-            </a>
-            <a
-              href="#how"
-              className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+              <a
+                href="#waitlist"
+                className={cn(
+                  buttonVariants({ variant: "ghost" }),
+                  "w-full sm:w-auto",
+                )}
+              >
+                {t("hero-join-cta")}
+              </a>
+              <a
+                href="#how"
+                className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+              >
+                {t("how-loop-works")}
+              </a>
+              <Link
+                to="/plans"
+                className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+              >
+                {t("plans-link")}
+              </Link>
+            </div>
+
+            <ul
+              className="kft-rise flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground text-sm"
+              style={{ "--kft-i": "480ms" } as CSSProperties}
             >
-              {t("how-loop-works")}
-            </a>
-            <Link
-              to="/plans"
-              className="py-2 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
+              {HERO_CHIPS.map((key) => (
+                <li key={key} className="flex items-center gap-1.5">
+                  <Check className="size-4 text-gold" aria-hidden="true" />
+                  {t(key)}
+                </li>
+              ))}
+            </ul>
+
+            <p
+              className="kft-rise max-w-xl font-medium text-foreground text-sm sm:text-base"
+              style={{ "--kft-i": "560ms" } as CSSProperties}
             >
-              {t("plans-link")}
-            </Link>
+              {t("hero-proof")}
+            </p>
           </div>
-
-          <ul
-            className="kft-rise flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground text-sm"
-            style={{ "--kft-i": "480ms" } as CSSProperties}
-          >
-            {HERO_CHIPS.map((key) => (
-              <li key={key} className="flex items-center gap-1.5">
-                <Check className="size-4 text-gold" aria-hidden="true" />
-                {t(key)}
-              </li>
-            ))}
-          </ul>
-
-          <p
-            className="kft-rise max-w-xl font-medium text-foreground text-sm sm:text-base"
-            style={{ "--kft-i": "560ms" } as CSSProperties}
-          >
-            {t("hero-proof")}
-          </p>
         </div>
 
         {/* The product, performing — the first thing under the actions on a

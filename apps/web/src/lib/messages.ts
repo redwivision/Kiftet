@@ -666,7 +666,7 @@ export const en = {
   "demo-geo-c-3": "The Western and Eastern lowlands",
   "demo-geo-c-4": "Why the Danakil Depression is so hot",
   "demo-geo-c-5": "Ethiopia's drainage basins",
-  "hero-h1": "It looks familiar. Can you explain it?",
+  "hero-h1": "make studying manageable",
   "hero-signup-cta": "Create your free account",
   "hero-cta": "Try it — no account",
   "hero-join-cta": "Join us",
@@ -678,6 +678,7 @@ export const en = {
   "hero-chip-account": "No account needed",
   "hero-chip-phone": "Works on any phone",
   "hero-chip-audio": "Your audio isn't stored",
+  "hero-main-text": "make studying manageable",
   "hero-film-prompt": "Say what you remember about photosynthesis.",
   "hero-film-said":
     "Photosynthesis uses sunlight and chlorophyll to turn carbon dioxide into glucose — and it produces water and oxygen.",
