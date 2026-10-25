@@ -1782,7 +1782,7 @@ export const am: Record<MessageKey, string> = {
   "demo-geo-c-3": "የምዕራብና የምስራቅ ቆላማ አካባቢዎች",
   "demo-geo-c-4": "የዳናኪል ዝቅተኛ አካባቢ በጣም ሞቃታማ የሆነበት ምክንያት",
   "demo-geo-c-5": "የኢትዮጵያ የውሃ ተፋሰሶች",
-  "hero-h1": "የሚታወቅ ይመስላል። ግን ማስረዳት ትችላለህ?",
+  "hero-h1": "ጥናት ማስተዳደር ቀላል ያድርጉ",
   "hero-signup-cta": "ነፃ መለያ ፍጠር",
   "hero-cta": "ሞክር — መለያ አያስፈልግም",
   "hero-join-cta": "አብረን እንቀላቀል",
@@ -1794,6 +1794,7 @@ export const am: Record<MessageKey, string> = {
   "hero-chip-account": "መለያ አያስፈልግም",
   "hero-chip-phone": "በየትኛውም ስልክ ይሰራል",
   "hero-chip-audio": "ድምጽህ አይቀመጥም",
+  "hero-main-text": "ጥናት ማስተዳደር ቀላል ያድርጉ",
   "hero-film-prompt": "ስለ ፎቶሲንቴሲስ የምታስታውሰውን ተናገር።",
   "hero-film-said":
     "ፎቶሲንቴሲስ ብርሃንና ክሎሮፊልን ተጠቅሞ ካርቦን ዳይኦክሳይድን ወደ ግሉኮስ ይለውጣል — ውሃና ኦክስጅንም ያመነጫል።",
