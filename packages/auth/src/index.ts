@@ -164,7 +164,7 @@ export function createAuth(
     advanced: {
       // Resolve the real client IP so auth rate limiting keys per user
       // instead of collapsing to one shared bucket when served behind
-      // Cloudflare (every EthioDeploy project sits behind it). These are
+      // Cloudflare (most PaaS projects sit behind it). These are
       // Cloudflare's published edge ranges — refresh occasionally from
       // https://www.cloudflare.com/ips-v4 and /ips-v6.
       ipAddress: {

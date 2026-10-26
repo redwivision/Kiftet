@@ -15,7 +15,7 @@ This is the *operations* document. For *how the code works* read
 | Piece | What it is | Runs where |
 |---|---|---|
 | `apps/web` | The app users see — React Router + Tailwind + PWA (installable, offline fallback) + Voxide voice agent | served by `apps/server` in prod (§6) |
-| `apps/server` | The **one production process** — Express API (Better Auth sessions, the study loop, Gemini grading, rate limiting) **plus** the built web app (SSR + static) in `NODE_ENV=production` | Any Bun/Node host (EthioDeploy today) |
+| `apps/server` | The **one production process** — Express API (Better Auth sessions, the study loop, Gemini grading, rate limiting) **plus** the built web app (SSR + static) in `NODE_ENV=production` | Any Bun/Node host (your PaaS host today) |
 | `packages/db` | Drizzle schema + migrations on **Neon Postgres** (`pg` driver; pooled string for traffic, direct string for migrations) | same box as the API |
 | `packages/auth` | Better Auth configuration | part of `apps/server` |
 | `packages/ui` | Shared shadcn-style components | build-time only |
@@ -34,7 +34,7 @@ Neon console and are set as env vars on the host. See §6.4.
   22.23.2 in `.nvmrc`. Run `nvm use` (or `fnm use`) before any non-trivial
   work — the local shell may be on an older Node.
 - **Bun ≥ 1.4.2** — `bun install` at the repo root installs everything.
-- Accounts: **EthioDeploy** (hosts the combined service), **Neon** (the
+- Accounts: **your PaaS host** (hosts the combined service), **Neon** (the
   Postgres database — connection strings in §6.4), **Google AI Studio**
   (Gemini key), **Voxide** (optional — voice; pages fall back to
   typing/browser speech).
@@ -148,7 +148,7 @@ running, re-apply it: **repo → Settings → Branches → Add rule** (or
 
 In production the Express server **also serves the built web app** — API,
 SSR pages, static assets, and the PWA all behind one process and one domain.
-This is the layout EthioDeploy needs (one service per project), and it makes
+This is the layout your PaaS host needs (one service per project), and it makes
 cookies and CORS a non-issue because everything is same-origin.
 
 Build then start, from the repo root:
@@ -173,13 +173,13 @@ Routes this one process owns:
 In local development you don't use this process — `bun run dev:server` and
 `bun run dev:web` run the two dev servers separately.
 
-**EthioDeploy / PaaS host notes**
+**your PaaS host / PaaS host notes**
 
 - Build command: `bun install && bun run build`
 - Start command: `bun run start`
 - Set the full env set from §8.2 on this service — including the same-origin
   values: `BETTER_AUTH_URL` and `CORS_ORIGIN` are both just
-  `https://<your-site>.ethiodeploy.com`.
+  `https://<your-domain>.com`.
 - **The container disk is recycled on every deploy — and that's fine now.**
   All data lives in Neon Postgres (§6.4), so redeploys are stateless and safe.
 
@@ -253,7 +253,7 @@ revert to the split layout (§7) — in combined mode the client talks to the
 same origin automatically and `VITE_SITE_URL` is the sole nice-to-have (it
 makes link-preview images absolute; on the combined service use the same
 origin your site already is). Example values below use
-`https://kiftet.ethiodeploy.com`.
+`https://kiftet.com`.
 
 **Do not commit real secrets.** The `.env.schema` files carry dev-only
 placeholders so local builds pass with no `.env` files; every one of them
@@ -288,7 +288,7 @@ verify via §9.5.
 |---|---|---|
 | `NODE_ENV` | `production` | HTTPS-only cookies off, verbose errors exposed |
 | `BETTER_AUTH_SECRET` | random string ≥ 32 chars | every login 500s / sessions rejected |
-| `BETTER_AUTH_URL` | the site's public URL (same-origin in combined mode, e.g. `https://kiftet.ethiodeploy.com`) | session cookie points at the wrong domain |
+| `BETTER_AUTH_URL` | the site's public URL (same-origin in combined mode, e.g. `https://kiftet.com`) | session cookie points at the wrong domain |
 | `CORS_ORIGIN` | comma-separated trusted origins (same-origin in combined mode) | browser blocks every POST; login appears to loop on 401 |
 | `DATABASE_URL` | **pooled** Neon string (hostname has `-pooler`) | server crashes on boot |
 | `DATABASE_URL_DIRECT` | **unpooled** Neon string (no `-pooler`) | migrations fall back to pooled (still works) or fail on session ops |
@@ -396,7 +396,7 @@ why the bot must be an **admin**: join events are delivered to admins only.
 **Preflight (read-only; safe to run any time):**
 
 ```bash
-bun run --cwd apps/server telegram:webhook:check -- --url=https://kiftet.ethiodeploy.com
+bun run --cwd apps/server telegram:webhook:check -- --url=https://kiftet.com
 ```
 
 Exit code is `0` only if every check passed.
@@ -417,7 +417,7 @@ Exit code is `0` only if every check passed.
 **Register the webhook — only after the code is actually deployed:**
 
 ```bash
-bun run --cwd apps/server telegram:webhook -- --url=https://kiftet.ethiodeploy.com
+bun run --cwd apps/server telegram:webhook -- --url=https://kiftet.com
 ```
 
 `--url` is not optional in practice. Without it the script uses
@@ -430,7 +430,7 @@ switched off. The script warns loudly when the origin is local.
 > `/api/telegram/hook`.** If it does not, Telegram receives a non-2xx response
 > and retries the same update for 24 hours. Probe it first:
 > ```bash
-> curl -i -X POST https://kiftet.ethiodeploy.com/api/telegram/hook \
+> curl -i -X POST https://kiftet.com/api/telegram/hook \
 >   -H 'content-type: application/json' -d '{}'
 > ```
 > A `403` or `503` JSON means the route exists and is checking its secret.
@@ -551,3 +551,39 @@ When you take corrective action, update this table, then re-run §9.
   decisions, glossary.
 - **What to test by hand** — `docs/TESTING_GUIDE.md`.
 - **Humans and environments** — this runbook.
+
+## 14. Deploying to Cloudflare (Recommended)
+
+Kiftet is a monorepo with a React Router app and an Express API that can run together in one process. For Cloudflare, there are two common patterns:
+
+### Option A: Cloudflare Pages + Workers (split) — most flexible
+1. **Deploy the web app to Cloudflare Pages** (React Router build). 
+   - Build command: `bun run build --filter web`
+   - Output directory: `apps/web/build/client`
+   - Set `VITE_SERVER_URL` to your Workers API URL
+2. **Deploy the API to Cloudflare Workers** using `wrangler`.
+   - The Express server needs adaptation for Workers runtime (or use Hono). Alternatively use `@cloudflare/workers-node` or a Workers-compatible adapter.
+   - Set all env vars from §8.2 as Worker secrets/bindings
+   - Configure CORS to allow your Pages domain
+
+### Option B: Cloudflare Containers / One worker service (simpler)
+If you want to keep the "one process serves API + web" model:
+1. Use [Cloudflare Containers](https://developers.cloudflare.com/containers/) or deploy the Docker image (if available)
+2. Build command: `bun install && bun run build`
+3. Start command: `bun run start`
+4. Set env vars in the container/worker config
+5. Point your domain via Cloudflare DNS
+
+### Quick setup steps
+1. Install Wrangler: `bun add -g wrangler` or `npm i -g wrangler`
+2. Login: `wrangler login`
+3. Create a Pages project for `web` or a Worker for `server`
+4. Set environment variables in Cloudflare dashboard (secrets for API keys)
+5. Update OAuth redirect URIs to your new Cloudflare domain
+6. Update `BETTER_AUTH_URL` and `CORS_ORIGIN` to match
+7. Deploy and test with `/health` and `/ready`
+
+**Notes:**
+- For the combined Express server, ensure it listens on `PORT` from env
+- Static assets are served by Express in prod; in Workers/Pages you'll need to handle differently
+- The current setup is optimized for a single Bun/Node process (Render/Railway/Fly.io also work well)

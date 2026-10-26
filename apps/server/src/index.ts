@@ -204,8 +204,8 @@ if (!IS_PROD) {
 }
 
 // ── Production: serve the web app from the same process ───────────────
-// When building for a single-service host (e.g. EthioDeploy), the web
-// build sits next to the server build inside the repo. The catch-all at
+// When building for a single-service host (e.g. Cloudflare Workers/Pages, Render, Railway),
+// the web build sits next to the server build inside the repo. The catch-all at
 // the very bottom forwards every non-API request to React Router's SSR
 // request handler, and express.static serves the built client assets
 // (JS/CSS, icons, offline.html, manifest, service worker).
@@ -249,7 +249,7 @@ if (IS_PROD) {
 // error-handler.ts).
 app.use(errorMiddleware);
 
-// EthioDeploy (and most PaaS) expose a PORT env; use it as the canonical
+// your PaaS host (and most PaaS) expose a PORT env; use it as the canonical
 // listen address. Falls back to 3000 for local development.
 const PORT = Number(process.env.PORT ?? 3000);
 const server = app.listen(PORT, () => {

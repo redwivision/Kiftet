@@ -108,7 +108,7 @@ reasoning and the path to change it.
 | Sponsor | Role in the product |
 |---|---|
 | **Browser speech (Web Speech)** | The core mechanic — capturing the spoken explanation and delivering the spoken micro-lesson via the browser's built-in speech service (Chrome's `SpeechRecognition` + `speechSynthesis`). Not a bolt-on feature: the whole study loop is spoken-first, typed always available. |
-| **EthioDeploy** | Hosts the full web app (frontend + backend). Built as a web app specifically so this applies cleanly. |
+| **your PaaS host** | Hosts the full web app (frontend + backend). Built as a web app specifically so this applies cleanly. |
 | **Scholarxiv** | Used to ground the misconception-detection logic in real pedagogical research on common student errors per topic, and to log the team's ideation trail. |
 | **Links.et** | Institutional licensing payments from schools/tutoring centers. |
 
