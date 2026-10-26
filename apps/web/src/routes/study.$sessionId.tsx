@@ -1452,10 +1452,10 @@ function RecallPhase({
       <RecallModeChooser value={state.recallMode} onChange={setRecallMode} />
       <ScopePicker />
       {!state.hasPretest && (
-        <div className="space-y-2">
+        <div className="flex flex-col items-center gap-1 pt-1">
           <Button
-            className="w-full justify-center"
-            variant="outline"
+            size="sm"
+            variant="ghost"
             disabled={state.busy}
             onClick={() => void startPretest()}
           >

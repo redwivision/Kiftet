@@ -99,9 +99,8 @@ export const en = {
     "These questions come after the lesson, so they test what you really remember — not what you just heard.",
   "retest-done-text":
     "You've finished the questions. See whether the short lesson filled what was missing.",
-  "pretest-option": "Take a short test first (optional)",
-  "pretest-option-hint":
-    "Get a starting score now. After studying, you can answer the same questions again to compare fairly.",
+  "pretest-option": "Pretest (optional)",
+  "pretest-option-hint": "Get a before/after score using the same questions.",
   "pretest-title": "Your starting test",
   "pretest-text":
     "Try these before studying. We will save your starting score and ask the same questions after the lesson, so the comparison uses the same test.",
@@ -1251,9 +1250,8 @@ export const am: Record<MessageKey, string> = {
   "retest-text":
     "እነዚህ ጥያቄዎች ከትምህርቱ በኋላ ይመጣሉ፣ ስለዚህ የተረጋገጠውን ይፈትናሉ — አሁን የሰማኸውን አይደለም።",
   "retest-done-text": "ስብስቡን አጠናቀህ። አጭሩ ማብራሪያ ክፍተቶቹን አስተካክሏል እንደሆነ ተመልከት።",
-  "pretest-option": "መጀመሪያ አጭር ፈተና ውሰድ (አማራጭ)",
-  "pretest-option-hint":
-    "የመነሻ ውጤትህን አሁን አግኝ። ከጥናት በኋላ ለትክክለኛ ንጽጽር ተመሳሳይ ጥያቄዎችን መመለስ ትችላለህ።",
+  "pretest-option": "ቅድመ ፈተና (አማራጭ)",
+  "pretest-option-hint": "ተመሳሳይ ጥያቄዎችን በመጠቀም ከበፊት እና በኋላ ያለውን ውጤት አግኝ።",
   "pretest-title": "የመነሻ ፈተናህ",
   "pretest-text":
     "ከጥናትህ በፊት እነዚህን ሞክር። የመነሻ ውጤትህን እናስቀምጣለን፤ ከማብራሪያው በኋላም ተመሳሳይ ጥያቄዎችን እንጠይቅሃለን።",
