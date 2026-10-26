@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kiftet",
+  "main": "apps/server/dist/index.mjs",
+  "compatibility_date": "2025-10-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "build": {
+    "command": "bun install && bun run build"
+  },
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.mjs"]
+    }
+  ]
+}
