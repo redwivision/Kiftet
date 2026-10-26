@@ -6,7 +6,7 @@
 
 **A calmer, more focused way to study.**
 
-[Try Kiftet](https://kiftet.com) (deploying to Cloudflare)
+[Try Kiftet](https://kiftet.ethiodeploy.com)
 
 **Created by:** Lewi Kibru (CTC-6064-26)
 
@@ -92,5 +92,5 @@ bun run lint
 
 ## Project status
 
-Kiftet is under active development. Try the [live version](https://kiftet.com)
+Kiftet is under active development. Try the [live version](https://kiftet.ethiodeploy.com)
 and share feedback with the project maintainer.

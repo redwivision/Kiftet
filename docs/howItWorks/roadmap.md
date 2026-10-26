@@ -75,7 +75,7 @@ Not cosmetic — both were live in the study loop:
 | 2 | AI loop — real Gemini: extraction, grading, micro-lessons, retest | ✅ Done |
 | 3 | Web flow — Web recall→gap→lesson→retest screens | ✅ Done |
 | 4 | Demo dataset + polish | ✅ Done (live demo) |
-| 5 | Deploy (your PaaS host) + Postgres (Neon) switch | ✅ Done |
+| 5 | Deploy (EthioDeploy) + Postgres (Neon) switch | ✅ Done |
 | 6 | Your own textbook — save the book + TOC, select chapters from the hierarchy, import → study | ✅ Shipped (nested selectable TOC, account-backed book/chapter records, internal processing splits hidden from students, device-only source storage, OCR, demo quotas, visible budgets) |
 | 7 | Syllabus anchoring (bet 1) — browse the national syllabus unit by unit, map your chapters to units, watch unit coverage grow | ✅ First slice shipped (tables/migrations, Biology 12 seed with provenance, `/syllabus`, chapter→unit mapping and coverage; additional grades and verified period data remain) |
 | 8 | Misconception events + first aggregate map (bet 2) — count each known misconception surfaced in a session, show only clusters above the k-anonymity floor | ✅ First slice shipped (writes on recall grading, aggregate endpoint with K=5 floor, dashboard panel; useful population-level signal still depends on real student volume) |

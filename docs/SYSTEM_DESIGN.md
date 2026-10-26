@@ -118,7 +118,7 @@ health and telemetry routes; see the API reference and
   where their output is only an estimate.
 - **Neon Postgres** is the production database. SQLite can be used for local
   development. Drizzle owns the shared schema and migrations.
-- **your PaaS host** hosts the live combined web/API service.
+- **EthioDeploy** hosts the live combined web/API service.
 - **Scholarxiv** research tooling and **Links.et** payments have no current
   product-code integration.
 

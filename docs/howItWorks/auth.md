@@ -123,7 +123,7 @@ as absent rather than as a button that bounces a student to a provider error.
 
 **Why GitHub is offered.** Google rejects OAuth apps on some deployment
 domains that are not on the Public Suffix List, including the current
-your PaaS host domain. GitHub OAuth does not impose that same domain restriction
+EthioDeploy domain. GitHub OAuth does not impose that same domain restriction
 and can provide a working social-login path there. It requests `read:user` and
 `user:email`; configure both `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` on
 the API service. Its callback is
@@ -221,9 +221,9 @@ In the recommended combined deployment (`RUNBOOK.md` §6) that is just your
 site's own origin:
 
 ```
-https://kiftet.com/api/auth/callback/google
-https://kiftet.com/api/auth/callback/facebook
-https://kiftet.com/api/auth/callback/github
+https://kiftet.ethiodeploy.com/api/auth/callback/google
+https://kiftet.ethiodeploy.com/api/auth/callback/facebook
+https://kiftet.ethiodeploy.com/api/auth/callback/github
 ```
 
 Get this **exactly** right — no trailing slash, no `www` mismatch, no `http`

@@ -14,7 +14,7 @@
  * Usage:
  *   bun run --cwd apps/server telegram:webhook
  *   bun run --cwd apps/server telegram:webhook:check     # read-only
- *   bun run --cwd apps/server telegram:webhook -- --url=https://kiftet.com
+ *   bun run --cwd apps/server telegram:webhook -- --url=https://kiftet.ethiodeploy.com
  *
  * Reads apps/server/.env (Bun loads it automatically). Never prints the token.
  *
@@ -159,7 +159,7 @@ if (/^https?:\/\/(localhost|127\.|\[::1\])/.test(origin)) {
     `  ⚠  ${origin} is a LOCAL address. Telegram will accept this webhook, then`,
   );
   warn("     send every update to this machine while it is offline.");
-  warn("     Use --url=https://kiftet.com for production.");
+  warn("     Use --url=https://kiftet.ethiodeploy.com for production.");
   warn("");
 }
 
