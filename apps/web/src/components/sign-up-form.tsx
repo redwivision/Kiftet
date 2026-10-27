@@ -1,10 +1,11 @@
 import { Button } from "@kiftet/ui/components/button";
+import { Checkbox } from "@kiftet/ui/components/checkbox";
 import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -57,6 +58,7 @@ export default function SignUpForm({
       email: "",
       password: "",
       name: "",
+      terms: false,
     },
     onSubmit: async ({ value }) => {
       const { data, error } = await authClient.signUp.email({
@@ -99,6 +101,9 @@ export default function SignUpForm({
         name: z.string().min(2, "Name must be at least 2 characters"),
         email: z.email(t("auth-invalid-email")),
         password: z.string().min(8, t("auth-password-too-short")),
+        terms: z.boolean().refine((accepted) => accepted, {
+          message: t("auth-terms-required"),
+        }),
       }),
     },
   });
@@ -238,6 +243,54 @@ export default function SignUpForm({
             )}
           </form.Field>
         </div>
+
+        <form.Field name="terms">
+          {(field) => (
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id={field.name}
+                checked={field.state.value}
+                onBlur={field.handleBlur}
+                onCheckedChange={(checked) =>
+                  field.handleChange(checked === true)
+                }
+                aria-invalid={field.state.meta.errors.length > 0}
+              />
+              <div className="space-y-1">
+                <Label
+                  htmlFor={field.name}
+                  className="font-normal leading-snug"
+                >
+                  {t("auth-terms-prefix")}
+                </Label>
+                <p className="text-sm leading-snug">
+                  <Link
+                    to="/terms"
+                    className="text-gold underline-offset-4 hover:underline"
+                  >
+                    {t("legal-terms")}
+                  </Link>{" "}
+                  {t("auth-terms-and")}{" "}
+                  <Link
+                    to="/privacy"
+                    className="text-gold underline-offset-4 hover:underline"
+                  >
+                    {t("legal-privacy")}
+                  </Link>
+                </p>
+                {field.state.meta.errors.map((error) => (
+                  <p
+                    key={error?.message}
+                    role="alert"
+                    className="text-rust text-sm"
+                  >
+                    {error?.message}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+        </form.Field>
 
         <form.Subscribe
           selector={(state) => ({

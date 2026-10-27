@@ -30,6 +30,7 @@ package or a feature, add a row here; if a row stops being true, fix the row.
 | Natural read-back (read-along) | [dataflow §5.11](dataflow.md) | `lib/voice.ts` | browser `speechSynthesis` |
 | Auto end-of-speech detection | [dataflow §5.12](dataflow.md) | `lib/intent.ts`, `lib/voice.ts` | — |
 | Auth (sign in / sign up / session cookie) | [auth](auth.md) | `packages/auth`, `lib/auth-client.ts`, `components/sign-in-form.tsx`, `sign-up-form.tsx` | Better Auth `/api/auth/*` |
+| Legal notices and consent — bilingual terms + privacy, sign-up acceptance persisted on `user`, waitlist consent versioning, essential-cookie disclosure | [security §9.6](security.md) | `apps/web/src/routes/terms.tsx`, `apps/web/src/routes/privacy.tsx`, `components/sign-up-form.tsx`, `components/auth-shell.tsx`, `components/social-buttons.tsx`, `components/waitlist-form.tsx`, `packages/auth/src/index.ts` (`databaseHooks.user.create.before`, `TERMS_VERSION`, `user.additionalFields`, `user.deleteUser`), `packages/db/src/schema/auth.ts` (`termsAcceptedAt`, `termsVersion`), migration `0023_wet_tempest.sql`, `apps/web/src/routes/settings.tsx` (delete account) | — |
 | CORS / CSRF origin guard | [security](security.md) | `apps/server/src/index.ts` (cors), `apps/server/src/auth-middleware.ts` | — |
 | Ownership / tenant isolation | [security §10.1](security.md) | `apps/server/src/routes/study.ts` (every query filtered by userId) | — |
 | AI rate limiting + demo quotas | [security §10.2](security.md) | `apps/server/src/routes/study.ts` (`allowAiRequest`, `/ai/budget`) | `GET /ai/budget` |

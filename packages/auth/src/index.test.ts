@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "@kiftet/db";
 import { sendEmail } from "./email";
-import { type AuthConfig, createAuth } from "./index";
+import { type AuthConfig, createAuth, TERMS_VERSION } from "./index";
 import {
   enabledSocialProviders,
   type SocialProviderId,
@@ -30,6 +30,27 @@ test("the password floor is enforced on the server, not just the form", async ()
   // scrypt hashes the entire input, so an uncapped password is free CPU for
   // anyone who can reach sign-up.
   expect(options?.maxPasswordLength).toBe(256);
+});
+
+test("every new account records the terms version it accepted", async () => {
+  const ctx = await auth().$context;
+  const before = ctx.options.databaseHooks?.user?.create?.before;
+
+  expect(before).toBeFunction();
+  const stamp = await before?.({
+    id: "student-1",
+    name: "Student",
+    email: "student@example.com",
+    emailVerified: false,
+    image: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as never);
+
+  expect(stamp).toMatchObject({ data: { termsVersion: TERMS_VERSION } });
+  expect(
+    (stamp as { data: { termsAcceptedAt: unknown } }).data.termsAcceptedAt,
+  ).toBeInstanceOf(Date);
 });
 
 test("a reset is a remedy: the old sessions die and the link expires", async () => {

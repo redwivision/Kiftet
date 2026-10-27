@@ -403,6 +403,22 @@ allocation drive concept ordering in the Phase 11 guide. Details in
 - [ ] **Cookie hardening** — switch `sameSite: "none"` → `"lax"` if app and
       API stay same-origin; keep `"none"` only while the split dev/server
       origins need the cookie to cross.
+- [x] **Legal notices and consent** — bilingual `/terms` and `/privacy`
+      (student + waitlist), required email sign-up acceptance, social-sign-in
+      notice, `termsAcceptedAt`/`termsVersion` stamped by the user-create hook
+      (migration `0023`), waitlist `consentAt`/`consentVersion`, and an
+      essential-cookies-only disclosure. No consent banner because no
+      non-essential cookies ship. See [security §9.6](security.md).
+- [x] **Additional-field mapping** — `termsAcceptedAt`/`termsVersion` are also
+      declared in `user.additionalFields` with `input: false`; without that,
+      Better Auth's adapter factory silently drops custom columns before the
+      insert even though the hook receives them.
+- [ ] **Legal review** — have qualified Ethiopian counsel review the terms and
+      privacy notice before launch; the copy is code-accurate, not legal advice.
+- [x] **Self-serve account deletion** — Settings deletes the account through
+      Better Auth with password/fresh-session verification, cascade-removing
+      study data. `/privacy` and `/terms` now point at the in-app flow, and
+      `packages/auth/src/consent.test.ts` covers the cascade.
 - [ ] **DB TLS verification** — enable `rejectUnauthorized` for Neon now that
       the pooled-cert question is pinned down, so connections can't be
       intercepted.

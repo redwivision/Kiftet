@@ -15,6 +15,11 @@ import { socialProviderConfig } from "./providers";
 // docs/howItWorks/security.md §"Demo identity".
 export const DEMO_EMAIL_SUFFIX = "@demo.kiftet";
 
+// The version stored on the user row alongside `termsAcceptedAt`. Bump it when
+// the terms materially change; the date is the human-readable version, so the
+// stored value can always be matched back to the page it refers to.
+export const TERMS_VERSION = "2026-10-27";
+
 // Re-exported so the server can answer "which providers are on?" from the same
 // function that decided which providers are on.
 export {
@@ -138,6 +143,50 @@ export function createAuth(
         enabled: true,
         trustedProviders: ["google", "facebook", "email-password"],
         allowDifferentEmails: false,
+      },
+    },
+    user: {
+      // Custom columns on `user` must be declared here, not only in Drizzle:
+      // Better Auth's adapter factory maps the fields it knows about and drops
+      // the rest before the insert. `input: false` keeps the consent record
+      // server-owned — a client cannot claim an acceptance date.
+      additionalFields: {
+        termsAcceptedAt: {
+          type: "date",
+          required: false,
+          input: false,
+        },
+        termsVersion: {
+          type: "string",
+          required: false,
+          input: false,
+        },
+      },
+      // Students can end their own account instead of asking an operator to
+      // delete a row. Better Auth verifies the password when the account has
+      // one, and otherwise requires a fresh session; the FKs cascade the
+      // textbooks, chapters, sessions, attempts and study history with the
+      // user row. This is the path the privacy notice promises.
+      deleteUser: {
+        enabled: true,
+      },
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          // Every account — password or social — is created through a surface
+          // that tells the student the terms apply. Stamp that acceptance on
+          // the row itself, so it is a fact in the database rather than a claim
+          // the client could omit. Demo identities are written directly by
+          // /demo/start and never pass through this hook.
+          before: async (user) => ({
+            data: {
+              ...user,
+              termsAcceptedAt: new Date(),
+              termsVersion: TERMS_VERSION,
+            },
+          }),
+        },
       },
     },
     hooks: {

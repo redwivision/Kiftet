@@ -134,6 +134,9 @@ export default function SocialButtons() {
           {t("auth-continue-with", { provider: LABELS[provider] })}
         </Button>
       ))}
+      <p className="text-center text-muted-foreground text-xs leading-5">
+        {t("auth-social-terms")}
+      </p>
     </div>
   );
 }

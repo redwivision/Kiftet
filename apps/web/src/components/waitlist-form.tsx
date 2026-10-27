@@ -409,12 +409,20 @@ export default function WaitlistForm() {
               {/* The notice is the actual basis for this checkbox, so it has to
                   be one tap away. A consent tick with the terms hidden behind
                   another page is not consent. */}
-              <Link
-                to="/privacy"
-                className="inline-block text-gold text-sm underline-offset-4 hover:underline"
-              >
-                {t("waitlist-privacy")}
-              </Link>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Link
+                  to="/privacy"
+                  className="text-gold text-sm underline-offset-4 hover:underline"
+                >
+                  {t("waitlist-privacy")}
+                </Link>
+                <Link
+                  to="/terms"
+                  className="text-gold text-sm underline-offset-4 hover:underline"
+                >
+                  {t("legal-terms")}
+                </Link>
+              </div>
             </div>
           </div>
         )}

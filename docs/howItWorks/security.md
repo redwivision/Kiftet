@@ -81,6 +81,52 @@ These are the invisible walls that keep the product from being misused or
 overloaded. Every one of them is applied server-side; the client is never trusted
 to police itself.
 
+### 9.6 Legal notices, consent, and cookies
+
+Kiftet has two bilingual legal surfaces, both rendered in English and Amharic
+on the same page:
+
+- `/privacy` (`apps/web/src/routes/privacy.tsx`) covers student accounts and the
+  launch waitlist separately, because the data and the purpose are different.
+  It names the AI providers that receive chapter text and recall transcripts
+  (Google Gemini and Groq), states that raw audio is not recorded by Kiftet, and
+  documents browser storage.
+- `/terms` (`apps/web/src/routes/terms.tsx`) is the student agreement: account
+  responsibilities, content ownership, acceptable use, AI accuracy limits,
+  availability, deletion, liability, and Ethiopian governing law.
+
+**Account acceptance.** Email sign-up requires a checkbox linking both pages.
+The copy under social sign-in says that continuing accepts them. The real record
+is server-side: `databaseHooks.user.create.before` stamps `termsAcceptedAt` and
+`termsVersion` (currently `2026-10-27`) on every Better Auth user creation,
+including OAuth. Migration `0023_wet_tempest.sql` adds the two nullable columns.
+Existing users are deliberately not backfilled, because writing "accepted" for
+an act that never happened would be a false record.
+
+**Waitlist consent.** The waitlist already stores `consentAt` and
+`consentVersion` in `waitlist_signup`, validated server-side, not inferred from
+the form. See [inventory](inventory.md) for the surface.
+
+**Cookies.** Kiftet uses essential cookies only: the Better Auth session cookie
+and short-lived sign-in-flow cookies. Local storage holds UI preferences,
+demo/waitlist ids, and intro/install flags; the service worker caches app files
+and study material for offline use. There are no advertising cookies, tracking
+pixels, or third-party analytics, so there is no consent banner. The disclosure
+appears in the landing footer, under the auth forms, and in the privacy notice.
+If analytics or any non-essential cookie is added, that decision changes and a
+consent mechanism must be added before it ships.
+
+**Deletion.** Settings has a self-serve delete flow (`authClient.deleteUser`).
+Better Auth verifies the password when the account has one; a passwordless
+account must have a fresh session. The `user` row is deleted with cascade FKs,
+so textbooks, chapters, sessions and attempts go with it. Waitlist entries have
+no account and are still deleted by asking on Telegram. The integration test in
+`packages/auth/src/consent.test.ts` proves both the consent stamp and the
+cascade.
+
+**Not legal advice.** The copy is written to be accurate to the code, but it
+still needs review by qualified Ethiopian counsel before launch.
+
 ### 10.1 Ownership / tenant isolation
 
 **Principle:** a user can only see their own data.

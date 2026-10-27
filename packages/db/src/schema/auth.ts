@@ -43,6 +43,19 @@ export const user = pgTable("user", {
   image: text("image"),
   kind: text("kind", { enum: USER_KINDS }).default("student").notNull(),
   /**
+   * The moment this account accepted the current terms, and which version it
+   * accepted.
+   *
+   * Stamped by Better Auth's user-create database hook rather than trusted from
+   * the sign-up request: the form's checkbox is what a person sees, but the
+   * row is the record we can actually stand behind. Social sign-in has no
+   * checkbox — the "continue with" copy is the notice, and this hook gives it
+   * the same audit trail as email sign-up. Existing rows stay NULL because
+   * backfilling consent would invent an act nobody performed.
+   */
+  termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
+  termsVersion: text("terms_version"),
+  /**
    * How much past material the student wants brought back.
    *
    * `light` is the default because a student who has said nothing is more

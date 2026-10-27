@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 
 import { BrandMark, BrandSignature } from "@/components/brand-mark";
 import { useLanguage } from "@/components/language-provider";
@@ -54,11 +55,29 @@ export default function AuthShell({
 
             {children}
 
-            {footer && (
-              <div className="mt-6 border-border/60 border-t pt-5 text-center dark:border-white/10">
-                {footer}
+            <div className="mt-6 border-border/60 border-t pt-5 text-center dark:border-white/10">
+              {footer && <div className="mb-4">{footer}</div>}
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.78rem]">
+                <Link
+                  to="/privacy"
+                  className="text-muted-foreground transition-colors hover:text-gold"
+                >
+                  {t("legal-privacy")}
+                </Link>
+                <span aria-hidden="true" className="text-muted-foreground/50">
+                  ·
+                </span>
+                <Link
+                  to="/terms"
+                  className="text-muted-foreground transition-colors hover:text-gold"
+                >
+                  {t("legal-terms")}
+                </Link>
               </div>
-            )}
+              <p className="mt-2 text-[0.7rem] text-muted-foreground/70">
+                {t("auth-legal-cookies")}
+              </p>
+            </div>
           </div>
         </div>
 

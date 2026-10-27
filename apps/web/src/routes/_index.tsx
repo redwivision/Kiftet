@@ -754,6 +754,26 @@ export default function Home() {
           <p className="max-w-sm text-muted-foreground text-xs leading-6">
             {t("footer-text")}
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+            <Link
+              to="/privacy"
+              className="text-muted-foreground transition-colors hover:text-gold"
+            >
+              {t("legal-privacy")}
+            </Link>
+            <span aria-hidden="true" className="text-muted-foreground/50">
+              ·
+            </span>
+            <Link
+              to="/terms"
+              className="text-muted-foreground transition-colors hover:text-gold"
+            >
+              {t("legal-terms")}
+            </Link>
+          </div>
+          <p className="max-w-sm text-muted-foreground/70 text-xs leading-5">
+            {t("cookie-notice")}
+          </p>
           <p className="text-[0.78rem] text-muted-foreground/60">
             Kiftet · ክፍተት
           </p>

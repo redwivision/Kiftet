@@ -23,6 +23,15 @@ flowchart LR
 > **What's stored:** `user` (name, email) + `account` (hashed password). The
 > password is **never** stored in plain text — it's hashed with scrypt, a
 > memory-hard function designed to make brute-force attacks expensive.
+>
+> **Terms acceptance:** the email form requires a checkbox linking `/terms` and
+> `/privacy`; social sign-in says that continuing accepts them. The
+> `databaseHooks.user.create.before` hook in `packages/auth/src/index.ts` stamps
+> `user.termsAcceptedAt` and `user.termsVersion` on every account it creates, so
+> the record does not depend on the client sending a field. The fields are also
+> declared in `user.additionalFields` (`input: false`) because the adapter
+> factory only maps fields Better Auth knows about — otherwise the insert
+> silently drops them. Existing rows stay `NULL` — consent is never backfilled.
 
 ### 8.2 The sign-in flow
 
@@ -96,6 +105,11 @@ to `/login` — there is no manual check.
 Logout destroys the session row on the server, which means the cookie no longer
 matches any session. The browser sends a 401 on the next request and the route
 guard redirects to `/login`. No data is deleted — just the current session.
+
+Deleting the account is the deliberate version of this: Settings calls
+`authClient.deleteUser`, Better Auth verifies the password (or a fresh session
+for passwordless accounts), and the `user` delete cascades through the FKs to
+the textbooks, chapters, sessions and attempts.
 
 ---
 

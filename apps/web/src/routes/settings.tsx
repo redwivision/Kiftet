@@ -1,5 +1,9 @@
 import { Button } from "@kiftet/ui/components/button";
+import { Input } from "@kiftet/ui/components/input";
+import { Label } from "@kiftet/ui/components/label";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
 
 import { useLanguage } from "@/components/language-provider";
 import {
@@ -8,7 +12,10 @@ import {
   PositionPicker,
   ReviewPreferencePicker,
 } from "@/components/placement-picker";
+import { forgetAccount } from "@/lib/account-hint";
 import { apiError } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+import { clearDemoUser } from "@/lib/demo";
 import {
   getPlacement,
   type PlacementPreferences,
@@ -42,6 +49,12 @@ type Draft = { bookId: string; chapterId: string; topicPath: string | null };
  */
 export default function Settings() {
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const { data: session } = authClient.useSession();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [state, setState] = useState<PlacementState | null>(null);
   const [preferences, setPreferences] = useState<PlacementPreferences | null>(
     null,
@@ -117,6 +130,35 @@ export default function Settings() {
       setError(apiError(err));
     } finally {
       setSavingBook(null);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const { error } = await authClient.deleteUser({
+        password: deletePassword || undefined,
+      });
+      if (error) {
+        const code = (error as { code?: string }).code;
+        setDeleteError(
+          code === "SESSION_EXPIRED"
+            ? t("settings-delete-session-expired")
+            : code === "INVALID_PASSWORD"
+              ? t("settings-delete-password-mismatch")
+              : t("settings-delete-error"),
+        );
+        return;
+      }
+      forgetAccount();
+      clearDemoUser();
+      toast.success(t("settings-delete-success"));
+      navigate("/");
+    } catch {
+      setDeleteError(t("settings-delete-error"));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -245,6 +287,78 @@ export default function Settings() {
               </div>
             );
           })}
+        </section>
+      )}
+
+      {session && (
+        <section className="mt-10 space-y-4 rounded-3xl border border-destructive/30 p-5 sm:p-6">
+          <div className="space-y-1.5">
+            <h2 className="font-display font-semibold text-lg tracking-tight">
+              {t("settings-delete-title")}
+            </h2>
+            <p className="text-muted-foreground text-sm leading-6">
+              {t("settings-delete-text")}
+            </p>
+          </div>
+
+          {deleteError && (
+            <p
+              role="alert"
+              className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm"
+            >
+              {deleteError}
+            </p>
+          )}
+
+          {deleteOpen ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="delete-password">
+                  {t("settings-delete-password")}
+                </Label>
+                <Input
+                  id="delete-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                />
+                <p className="text-muted-foreground text-xs leading-5">
+                  {t("settings-delete-password-hint")}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="destructive"
+                  loading={deleting}
+                  onClick={deleteAccount}
+                >
+                  {t("settings-delete-confirm")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={deleting}
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    setDeletePassword("");
+                    setDeleteError(null);
+                  }}
+                >
+                  {t("settings-delete-cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
+            >
+              {t("settings-delete-button")}
+            </Button>
+          )}
         </section>
       )}
 
