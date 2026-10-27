@@ -41,7 +41,7 @@ function DropdownMenuContent({
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
-            "data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-2xl bg-popover text-popover-foreground shadow-[0_24px_64px_-24px_rgba(0,0,0,0.7)] outline-none ring-1 duration-200 data-closed:animate-out data-open:animate-in data-closed:overflow-hidden",
+            "data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-y-auto overflow-x-hidden rounded-2xl bg-panel/95 text-foreground shadow-[0_24px_64px_-24px_rgba(0,0,0,0.7)] outline-none ring-1 ring-border backdrop-blur-md duration-200 data-closed:animate-out data-open:animate-in data-closed:overflow-hidden",
             className,
           )}
           {...props}
@@ -138,7 +138,7 @@ function DropdownMenuSubContent({
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
       className={cn(
-        "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 w-auto min-w-32 rounded-2xl bg-popover text-popover-foreground shadow-[0_24px_64px_-24px_rgba(0,0,0,0.7)] ring-1 duration-200 data-closed:animate-out data-open:animate-in",
+        "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 w-auto min-w-32 rounded-2xl bg-panel/95 text-foreground shadow-[0_24px_64px_-24px_rgba(0,0,0,0.7)] ring-1 ring-border backdrop-blur-md duration-200 data-closed:animate-out data-open:animate-in",
         className,
       )}
       align={align}

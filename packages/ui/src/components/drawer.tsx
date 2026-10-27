@@ -57,7 +57,7 @@ function DrawerPopup({ className, ...props }: DrawerPrimitive.Popup.Props) {
     <DrawerPrimitive.Popup
       data-slot="drawer-popup"
       className={cn(
-        "w-full max-w-lg rounded-t-3xl bg-popover text-popover-foreground shadow-[0_-24px_64px_-24px_rgba(0,0,0,0.7)] outline-none ring-1 ring-border",
+        "w-full max-w-lg rounded-t-3xl bg-panel/95 text-foreground shadow-[0_-24px_64px_-24px_rgba(0,0,0,0.7)] outline-none ring-1 ring-border/70 backdrop-blur-md",
         "max-h-[88dvh] overflow-y-auto overscroll-contain",
         // The sheet rides the drag on the Y axis; the enter/exit offset rides
         // `translate` so the two compose rather than clobber each other.

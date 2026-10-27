@@ -119,40 +119,46 @@ export function ThemeSwitcher() {
       >
         <Palette className="size-[1.1rem]" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-60 p-1.5">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="px-3 py-2">
+          <DropdownMenuLabel className="k-label px-2.5 pt-2 pb-1.5 text-[0.78rem]">
             {t("ink-for-the-room")}
           </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        {THEMES.map((t) => {
-          const active = theme === t.value;
-          return (
-            <DropdownMenuItem
-              key={t.value}
-              onClick={() => setTheme(t.value)}
-              className={cn("justify-between", active && "bg-muted/70")}
-            >
-              <span className="inline-flex items-center gap-2.5">
-                <span
-                  className={`size-4 rounded-full ${t.chip}`}
-                  style={{ background: t.swatch }}
-                  aria-hidden="true"
-                />
-                <span className="flex flex-col leading-tight">
-                  <span className="font-medium">{t.label}</span>
-                  <span className="text-[0.78rem] text-muted-foreground">
-                    {t.note}
+          <DropdownMenuSeparator className="mx-1 mb-1 bg-border/70" />
+          {THEMES.map((option) => {
+            const active = theme === option.value;
+            return (
+              <DropdownMenuItem
+                key={option.value}
+                onClick={() => setTheme(option.value)}
+                className={cn(
+                  "justify-between gap-3 rounded-xl px-2.5 py-2 focus:bg-gold/10 focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground data-highlighted:bg-gold/10 data-highlighted:text-foreground",
+                  active && "bg-gold/10",
+                )}
+              >
+                <span className="inline-flex items-center gap-2.5">
+                  <span
+                    className={cn("size-5 shrink-0 rounded-full", option.chip)}
+                    style={{ background: option.swatch }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex min-w-0 flex-col leading-tight">
+                    <span className="font-medium">{option.label}</span>
+                    <span className="truncate text-[0.72rem] text-muted-foreground">
+                      {option.note}
+                    </span>
                   </span>
                 </span>
-              </span>
-              {active && (
-                <Check className="size-3.5 text-gold" aria-hidden="true" />
-              )}
-            </DropdownMenuItem>
-          );
-        })}
+                {active && (
+                  <Check
+                    className="size-3.5 shrink-0 text-gold"
+                    aria-hidden="true"
+                  />
+                )}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

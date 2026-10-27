@@ -4,6 +4,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@kiftet/ui/components/dropdown-menu";
@@ -33,28 +34,37 @@ export function LanguageSwitcher() {
       >
         <Languages className="size-[1.1rem]" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-52 p-1.5">
         <DropdownMenuGroup>
-          <DropdownMenuSeparator className="my-1" />
-          {OPTIONS.map((o) => {
-            const active = lang === o.value;
+          <DropdownMenuLabel className="k-label px-2.5 pt-2 pb-1.5 text-[0.78rem]">
+            {t("select-language")}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator className="mx-1 mb-1 bg-border/70" />
+          {OPTIONS.map((option) => {
+            const active = lang === option.value;
             return (
               <DropdownMenuItem
-                key={o.value}
-                onClick={() => setLang(o.value)}
-                className={cn("justify-between", active && "bg-muted/70")}
+                key={option.value}
+                onClick={() => setLang(option.value)}
+                className={cn(
+                  "justify-between gap-3 rounded-xl px-2.5 py-2 focus:bg-gold/10 focus:text-foreground not-data-[variant=destructive]:focus:**:text-foreground data-highlighted:bg-gold/10 data-highlighted:text-foreground",
+                  active && "bg-gold/10",
+                )}
               >
-                <span className="inline-flex items-center gap-2.5">
+                <span className="inline-flex min-w-0 items-center gap-2.5">
                   <span
-                    className="grid size-5 place-items-center rounded-full font-medium text-[0.6rem] text-muted-foreground tracking-tight ring-1 ring-border dark:ring-white/15"
+                    className="grid size-5 shrink-0 place-items-center rounded-full font-medium text-[0.6rem] text-muted-foreground tracking-tight ring-1 ring-border dark:ring-white/15"
                     aria-hidden="true"
                   >
-                    {o.script}
+                    {option.script}
                   </span>
-                  <span className="leading-tight">{o.label}</span>
+                  <span className="truncate leading-tight">{option.label}</span>
                 </span>
                 {active && (
-                  <Check className="size-3.5 text-gold" aria-hidden="true" />
+                  <Check
+                    className="size-3.5 shrink-0 text-gold"
+                    aria-hidden="true"
+                  />
                 )}
               </DropdownMenuItem>
             );
