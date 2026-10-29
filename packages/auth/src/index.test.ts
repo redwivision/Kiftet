@@ -97,6 +97,15 @@ test("requiring verification is opt-in, and off by default", async () => {
   expect(on.options.emailAndPassword?.requireEmailVerification).toBe(true);
 });
 
+test("verification mail is sent before the sign-in gate is enabled", async () => {
+  const ctx = await auth({ REQUIRE_EMAIL_VERIFICATION: false }).$context;
+  const verification = ctx.options.emailVerification;
+
+  expect(verification?.sendOnSignUp).toBe(true);
+  expect(verification?.sendOnSignIn).toBe(true);
+  expect(verification?.expiresIn).toBe(60 * 60 * 24);
+});
+
 test("the console transport prints the link instead of dropping the mail", async () => {
   const lines: string[] = [];
   const original = console.info;
@@ -116,6 +125,89 @@ test("the console transport prints the link instead of dropping the mail", async
   const printed = lines.join("\n");
   expect(printed).toContain("student@example.com");
   expect(printed).toContain("https://example.com/reset?token=abc");
+});
+
+test("Brevo sends through its HTTPS API, not SMTP", async () => {
+  const requests: Array<{ url: string; init: RequestInit }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => {
+    requests.push({ url: String(input), init: init ?? {} });
+    return new Response(null, { status: 201 });
+  }) as typeof fetch;
+
+  try {
+    await sendEmail(
+      {
+        ...BASE_ENV,
+        AUTH_EMAIL_TRANSPORT: "brevo",
+        BREVO_API_KEY: "xkeysib-test",
+        AUTH_EMAIL_FROM: "sender@example.com",
+        AUTH_EMAIL_FROM_NAME: "Kiftet",
+      },
+      {
+        to: "student@example.com",
+        subject: "Confirm your email address",
+        text: "https://example.com/verify?token=abc",
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.url).toBe("https://api.brevo.com/v3/smtp/email");
+  expect(requests[0]?.init.method).toBe("POST");
+  expect(requests[0]?.init.headers).toEqual({
+    accept: "application/json",
+    "api-key": "xkeysib-test",
+    "content-type": "application/json",
+  });
+  expect(JSON.parse(String(requests[0]?.init.body))).toEqual({
+    sender: { name: "Kiftet", email: "sender@example.com" },
+    to: [{ email: "student@example.com" }],
+    subject: "Confirm your email address",
+    textContent: "https://example.com/verify?token=abc",
+  });
+});
+
+test("Brevo errors surface instead of pretending the mail was sent", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response("invalid api key", {
+      status: 401,
+    })) as unknown as typeof fetch;
+
+  try {
+    await expect(
+      sendEmail(
+        {
+          ...BASE_ENV,
+          AUTH_EMAIL_TRANSPORT: "brevo",
+          BREVO_API_KEY: "bad-key",
+          AUTH_EMAIL_FROM: "sender@example.com",
+        },
+        {
+          to: "student@example.com",
+          subject: "Confirm your email address",
+          text: "https://example.com/verify?token=abc",
+        },
+      ),
+    ).rejects.toThrow(/HTTP 401/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Brevo refuses to start without its credentials", () => {
+  expect(() => auth({ AUTH_EMAIL_TRANSPORT: "brevo" })).toThrow(
+    /BREVO_API_KEY/,
+  );
+  expect(() =>
+    auth({ AUTH_EMAIL_TRANSPORT: "brevo", BREVO_API_KEY: "key" }),
+  ).toThrow(/AUTH_EMAIL_FROM/);
 });
 
 test("an unimplemented transport fails loudly instead of dropping mail", async () => {

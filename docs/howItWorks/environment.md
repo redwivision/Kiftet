@@ -16,7 +16,10 @@ wrong.
 | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | Server | Optional Facebook OAuth credentials; both must be set | Facebook sign-in button is not shown |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Server | Optional GitHub OAuth credentials; both must be set | GitHub sign-in button is not shown |
 | `REQUIRE_EMAIL_VERIFICATION` | Server | Whether password sign-in requires a verified email; off by default | Enabling it without real email delivery can lock users out |
-| `AUTH_EMAIL_TRANSPORT` | Server | Currently `console`; reset/verification links are written to server logs | Users do not receive password reset or verification emails |
+| `AUTH_EMAIL_TRANSPORT` | Server | `console` locally or `brevo` in production; Brevo sends confirmation/reset mail through its HTTPS API | Users do not receive password reset or verification emails |
+| `BREVO_API_KEY` | Server | Brevo API key; required when the transport is `brevo` | `brevo` fails at boot |
+| `AUTH_EMAIL_FROM` | Server | Verified sender address (a Gmail address works without a domain) | `brevo` fails at boot, or Brevo rejects the sender |
+| `AUTH_EMAIL_FROM_NAME` | Server | Display name on the From line; defaults to `Kiftet` | Mail still sends with the default name |
 | `DATABASE_FILE` | Server (SQLite only) | Path to the `.db` file (e.g. `./kiftet-dev.db`) | Server crashes on boot |
 | `DATABASE_URL` | Server (Postgres only) | Postgres connection string | Server crashes on boot |
 | `DATABASE_URL_DIRECT` | DB package | Direct (non-pooled) Postgres connection for migrations | Migrations fail, schema stale |

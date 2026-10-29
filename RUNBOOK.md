@@ -300,8 +300,11 @@ verify via §9.5.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | both, from Google Cloud Console | Google button hidden (only one half = not a provider) |
 | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | both, from Meta app settings | Facebook button hidden (only one half = not a provider) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | both, from a GitHub OAuth App | GitHub button hidden (only one half = not a provider) |
-| `REQUIRE_EMAIL_VERIFICATION` | `false` until a real mail transport ships | `true` on the console transport locks out every signup |
-| `AUTH_EMAIL_TRANSPORT` | `console` — the only member of its enum | password-reset links go to the server log, not the student |
+| `REQUIRE_EMAIL_VERIFICATION` | `false` for the first Brevo deploy; `true` only after existing password accounts are marked verified | turning it on before delivery works locks out new and existing password users |
+| `AUTH_EMAIL_TRANSPORT` | `console` locally, `brevo` in production | `console` leaves reset/verification links in the server log |
+| `BREVO_API_KEY` | API key from Brevo → SMTP & API → API Keys | `brevo` fails at boot |
+| `AUTH_EMAIL_FROM` | a verified Brevo sender (Gmail works without a domain) | `brevo` fails at boot, or Brevo rejects the sender |
+| `AUTH_EMAIL_FROM_NAME` | `Kiftet` (optional display name) | mail still sends with the default name |
 
 **Social providers are optional.** Leave all six provider credentials unset
 and password sign-in works exactly as before — the buttons are simply absent.
@@ -334,31 +337,35 @@ Run in order; expected result in parentheses.
 1. **Health** — `curl https://<your-site>/health` → `200 OK`.
 2. **Sign-up happy path** — browser → web origin → sign up with a real email →
    you land on the dashboard (not a 401/loop).
-3. **Study loop smoke** — open a chapter, run one recall → one diagnose →
+3. **Email delivery** — with `REQUIRE_EMAIL_VERIFICATION=false`, sign up with a
+   real address and confirm both the confirmation link and a password-reset link
+   arrive from the verified sender; Brevo → Transactional → Logs shows `delivered`.
+   Then check the existing-account backfill before setting the gate to `true`.
+4. **Study loop smoke** — open a chapter, run one recall → one diagnose →
    one lesson → one retest; scores appear on the result screen.
-4. **Session persists** — reload mid-study → the loop resumes at the same
+5. **Session persists** — reload mid-study → the loop resumes at the same
    step; sign out → sign in → still signed in after another reload.
-5. **Install / offline** — Lighthouse (mobile) on the home page → PWA badge;
+6. **Install / offline** — Lighthouse (mobile) on the home page → PWA badge;
    DevTools → Application → Manifest valid. Then DevTools → Network → Offline
    → navigate → the branded *You are offline* page, and it auto-recovers on
    reconnect.
-6. **Social preview** — share a link in Facebook/Twitter/Telegram debugger → the
+7. **Social preview** — share a link in Facebook/Twitter/Telegram debugger → the
    **open-ring logo** renders. If only text shows, check `og:image` value in
    the page source (§8.1) — it must be `https://…`.
-7. **Rate limit sanity** — 30+ rapid AI calls in a minute → `429` (expected,
+8. **Rate limit sanity** — 30+ rapid AI calls in a minute → `429` (expected,
    not a fault).
-8. **Auth provider discovery** — `curl -s https://<your-site>/api/auth-providers`
+9. **Auth provider discovery** — `curl -s https://<your-site>/api/auth-providers`
    → `{"providers":[…]}`. This reads the same function that built the auth
    config, so it is the ground truth for which buttons should render. `[]` means
    no provider pair is complete, or the env never reached the API service.
-9. **Social sign-in** — only if step 8 lists a provider. Test each configured
+10. **Social sign-in** — only if step 9 lists a provider. Test each configured
    provider on a real phone or in a private window:
    click the button → the provider's genuine consent screen appears → you land
    on `/dashboard` signed in. Separately verify password sign-in; Google and
    Facebook may link under the trusted-provider rules, but GitHub is not
    configured as a trusted linking provider.
 
-> **If step 9 fails**, the provider console is often the answer, not
+> **If step 10 fails**, the provider console is often the answer, not
 > Kiftet: Google rejects accounts not in **Test users** while the consent screen
 > is in *Testing*, and Meta rejects everyone who is not an app role/admin while
 > the app is in *Development*. Check the selected provider's callback URL too.
@@ -516,7 +523,8 @@ bun run --cwd apps/server telegram:testimonials -- --dry-run
 | "Access blocked" (Google) | consent screen still in **Testing** | publish it, or add the account as a test user |
 | "This app isn't available right now" (Facebook) | app still in **Development** mode | Meta → app settings → switch to **Live** |
 | Everyone silently signed out after a deploy | `BETTER_AUTH_URL` or `BETTER_AUTH_SECRET` changed | restore the previous value; the cookie is `HttpOnly`, so nothing on the page can explain it |
-| Password reset "does nothing" | `AUTH_EMAIL_TRANSPORT=console` — the link is in the server log, not the student's inbox | expected today; needs a transport shipped in `packages/auth/src/email.ts` |
+| Password reset "does nothing" | `AUTH_EMAIL_TRANSPORT=console` (link only in logs), missing `BREVO_API_KEY`, or an unverified `AUTH_EMAIL_FROM` | set `brevo`, verify the sender, redeploy, then check Brevo → Transactional → Logs |
+| Verification sign-in says "Email not verified" | expected when the gate is on and the account has not clicked the link | the attempt automatically resends; check spam and Brevo logs |
 | Offline page on every load | web app can't reach the API *or* no network | check §9.1 health; check the client's connectivity |
 | Server boots but locals see 500s while you don't | node/bun version drift | `nvm use` to 22.23.2, `bun install`, restart |
 | varlock/env errors after pulling | `.env.schema` changed | `bun run env:generate` then rebuild |

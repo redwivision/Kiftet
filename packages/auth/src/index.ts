@@ -4,7 +4,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 
-import { sendEmail } from "./email";
+import { assertEmailTransportConfigured, sendEmail } from "./email";
 import { socialProviderConfig } from "./providers";
 
 // The email suffix every throwaway demo identity is minted under by
@@ -34,6 +34,9 @@ export type AuthConfig = {
   CORS_ORIGIN: string;
   REQUIRE_EMAIL_VERIFICATION: boolean;
   AUTH_EMAIL_TRANSPORT: string;
+  BREVO_API_KEY?: string;
+  AUTH_EMAIL_FROM?: string;
+  AUTH_EMAIL_FROM_NAME?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   FACEBOOK_CLIENT_ID?: string;
@@ -45,6 +48,8 @@ export function createAuth(
   database: Database,
   desktopOrigins: readonly string[] = [],
 ) {
+  assertEmailTransportConfigured(env);
+
   return betterAuth({
     database: drizzleAdapter(database, {
       provider: "pg",
@@ -96,6 +101,9 @@ export function createAuth(
       },
     },
     emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: true,
+      expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user, url }) => {
         await sendEmail(env, {
           to: user.email,

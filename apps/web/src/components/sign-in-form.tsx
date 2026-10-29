@@ -3,7 +3,7 @@ import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
 import { useForm } from "@tanstack/react-form";
 import { Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import z from "zod";
@@ -37,6 +37,14 @@ export default function SignInForm({
   const justSignedUp =
     searchParams.get("signup") === "1" ||
     searchParams.get("justsignedup") === "1";
+  const justVerified = searchParams.get("verified") === "1";
+  const verifiedToastShown = useRef(false);
+
+  useEffect(() => {
+    if (!justVerified || verifiedToastShown.current) return;
+    verifiedToastShown.current = true;
+    toast.success(t("auth-email-verified"));
+  }, [justVerified, t]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -64,6 +72,7 @@ export default function SignInForm({
         {
           email: value.email,
           password: value.password,
+          callbackURL: `${window.location.origin}/login?verified=1`,
         },
         {
           onSuccess: () => {
@@ -73,9 +82,11 @@ export default function SignInForm({
           },
           onError: (error) => {
             toast.error(
-              error.error?.message ||
-                error.error?.statusText ||
-                t("auth-signin-error"),
+              error.error?.code === "EMAIL_NOT_VERIFIED"
+                ? t("auth-email-not-verified")
+                : error.error?.message ||
+                    error.error?.statusText ||
+                    t("auth-signin-error"),
             );
           },
         },

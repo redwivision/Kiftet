@@ -935,6 +935,9 @@ export const en = {
     "Sign in to keep closing the gaps the exam will look for.",
   "auth-signin-cta": "Sign in",
   "auth-signin-error": "Unable to sign in right now. Try again.",
+  "auth-email-not-verified":
+    "Confirm your email first — we just sent you a fresh link.",
+  "auth-email-verified": "Email confirmed. Sign in to continue.",
   "auth-open-room": "Open your study room",
   "auth-signup-subtitle":
     "One account, every chapter. Your first recall takes two minutes.",
@@ -2052,6 +2055,8 @@ export const am: Record<MessageKey, string> = {
   "auth-signin-subtitle": "ፈተናው የሚፈልገውን ክፍተቶች ለመዘጋጀት ግባ።",
   "auth-signin-cta": "ግባ",
   "auth-signin-error": "አሁን መግባት አልተቻለም። እንደገና ሞክር።",
+  "auth-email-not-verified": "መጀመሪያ ኢሜይልዎን ያረጋግጡ — አዲስ አገናኝ ልከንልዎታል።",
+  "auth-email-verified": "ኢሜይልዎ ተረጋግጧል። ለመቀጠል ይግቡ።",
   "auth-open-room": "የትማሪያዎን ክፍል ክፈት",
   "auth-signup-subtitle":
     "አንድ መለያ፣ ሁሉም ምዕራፎች። የመጀመሪያዎን ማስታወስክ ሁለት ደቂቃዎች ይወስዳል።",

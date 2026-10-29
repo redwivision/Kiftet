@@ -20,6 +20,9 @@ flowchart LR
 
 > **Trace:** form → hash → save → session → cookie → dashboard.
 >
+> **When the verification gate is on:** step 5 becomes “no session; send the
+> confirmation mail” and step 6 becomes “show *Check your email*”. See §9.8.
+>
 > **What's stored:** `user` (name, email) + `account` (hashed password). The
 > password is **never** stored in plain text — it's hashed with scrypt, a
 > memory-hard function designed to make brute-force attacks expensive.
@@ -48,6 +51,10 @@ flowchart LR
 >
 > **Bad password:** the server returns `401` immediately — no timing leak, no
 > extra information about what was wrong.
+>
+> **Unverified account (gate on):** the server returns `403`
+> `EMAIL_NOT_VERIFIED` and sends a fresh confirmation link before the browser
+> shows a specific “confirm your email” message.
 
 ### 8.3 Every request after login
 
@@ -369,26 +376,74 @@ Facebook account gets an `@facebook.invalid` address (no real address to match
 on) and will not merge with a later password account. If that matters, the fix
 is real email delivery, not a linking change.
 
-### 9.8 Two settings that are deliberately off
+### 9.8 Email delivery and the verification gate
 
-Both of these are the *same* decision, and it is not ours to make:
+`AUTH_EMAIL_TRANSPORT` decides where confirmation and password-reset mail goes:
 
-- **`AUTH_EMAIL_TRANSPORT=console`** is the only member of its enum. Password
-  reset and email confirmation print the link to the server log; nobody receives
-  anything. Adding a provider means adding a case in
-  `packages/auth/src/email.ts` *and* a member to the enum in
-  `apps/server/.env.schema` — the enum has no other member on purpose, so
-  flipping the setting without shipping the transport fails validation at boot
-  rather than silently dropping every mail.
-- **`REQUIRE_EMAIL_VERIFICATION=false`** follows from the above. Turning it on
-  with the console transport would lock out every real signup with no way back
-  in, so the two are meant to be turned on together.
+- **`console`** prints the link to the server log. This is the local-development
+  default; nobody receives anything.
+- **`brevo`** sends through Brevo's HTTPS API. HTTPS is deliberate: hosting
+  platforms routinely block outbound SMTP ports, and a verified Gmail sender
+  works without owning a domain. The free tier allows 300 emails/day.
 
-The practical consequence for production: **password reset does not reach
-students yet.** Until a transport ships, a student who forgets a password cannot
-self-recover. In this audience that is a real gap, not a cosmetic one. Facebook
-is currently the practical answer for a locked-out student — which is a further
-reason §8.7 treats it as the button that matters most.
+When the transport is `brevo`, the server requires `BREVO_API_KEY`,
+`AUTH_EMAIL_FROM` and (optionally) `AUTH_EMAIL_FROM_NAME`. Missing credentials
+fail at boot instead of silently dropping mail.
+
+**Brevo setup.** Create a free Brevo account, add the Gmail address under
+**Senders & IP → Senders**, and enter the 6-digit code Brevo sends there. Then
+create an API key under **SMTP & API → API Keys** and set on the API service:
+
+```
+AUTH_EMAIL_TRANSPORT=brevo
+BREVO_API_KEY=<api key>
+AUTH_EMAIL_FROM=<verified Gmail address>
+AUTH_EMAIL_FROM_NAME=Kiftet
+REQUIRE_EMAIL_VERIFICATION=false
+```
+
+A custom-domain sender can replace the Gmail address later without a code
+change. Do not use Gmail SMTP directly: it is capped at roughly 500 recipients a
+day, counts every recipient, and is fragile on hosts that block SMTP ports.
+
+**Two verification settings move independently.** `sendOnSignUp: true` sends
+the confirmation mail as soon as a password account is created, even while
+`REQUIRE_EMAIL_VERIFICATION=false`; that lets delivery be tested before the
+gate changes anyone's access. `sendOnSignIn: true` means an unverified sign-in
+attempt sends a fresh link before returning `EMAIL_NOT_VERIFIED`. Verification
+tokens expire after 24 hours.
+
+**Enable the gate only after mail delivery works.** Existing password accounts
+created before the transport shipped have `email_verified = false`, so turning
+the gate on first would lock them out. Run the preview and update in the Neon
+SQL Editor, then flip the variable and redeploy:
+
+```sql
+SELECT count(*) FROM "user" u
+WHERE u.email_verified = false
+  AND EXISTS (
+    SELECT 1 FROM account a
+    WHERE a.user_id = u.id AND a.provider_id = 'credential'
+  );
+
+UPDATE "user" u
+SET email_verified = true, updated_at = now()
+WHERE u.email_verified = false
+  AND EXISTS (
+    SELECT 1 FROM account a
+    WHERE a.user_id = u.id AND a.provider_id = 'credential'
+  );
+```
+
+The `provider_id = 'credential'` filter matters: it marks only password
+accounts and leaves social-only rows alone. Google and Facebook sign-in are not
+gated on `email_verified` (see §8.7 and §9.9).
+
+**What students see.** With verification required, sign-up returns no session
+and the form shows *Check your email*; the link lands on `/login?verified=1`
+with a confirmation toast. Unverified sign-in shows a specific message instead
+of the generic sign-in failure and automatically sends a fresh link. Password
+reset uses the same transport, so it starts working as soon as Brevo does.
 
 ### 9.9 Security notes for this configuration
 

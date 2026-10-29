@@ -68,7 +68,7 @@ export default function SignUpForm({
         // Absolute, and on the web origin: better-auth checks callbackURL
         // against trusted origins, so a bare "/login" would be rejected on
         // every origin but one.
-        callbackURL: `${window.location.origin}/login`,
+        callbackURL: `${window.location.origin}/login?verified=1`,
       });
 
       if (error) {
