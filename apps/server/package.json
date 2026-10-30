@@ -9,6 +9,8 @@
     "dev": "bun run --hot src/index.ts",
     "start": "node dist/index.mjs",
     "env:generate": "varlock codegen",
+    "auth:test-email": "bun scripts/send-test-email.ts",
+    "auth:backfill-verified": "bun scripts/backfill-email-verified.ts",
     "telegram:webhook": "bun scripts/register-webhook.ts",
     "telegram:webhook:check": "bun scripts/register-webhook.ts --check",
     "telegram:testimonials": "bun scripts/send-testimonials.ts",

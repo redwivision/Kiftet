@@ -10,6 +10,7 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { clearDemoUser } from "@/lib/demo";
+import { verificationOutcome } from "@/lib/verification-status";
 
 import AuthShell from "./auth-shell";
 import { useLanguage } from "./language-provider";
@@ -37,14 +38,18 @@ export default function SignInForm({
   const justSignedUp =
     searchParams.get("signup") === "1" ||
     searchParams.get("justsignedup") === "1";
-  const justVerified = searchParams.get("verified") === "1";
+  const verification = verificationOutcome(searchParams);
   const verifiedToastShown = useRef(false);
 
   useEffect(() => {
-    if (!justVerified || verifiedToastShown.current) return;
+    if (!verification || verifiedToastShown.current) return;
     verifiedToastShown.current = true;
-    toast.success(t("auth-email-verified"));
-  }, [justVerified, t]);
+    if (verification === "success") {
+      toast.success(t("auth-email-verified"));
+    } else {
+      toast.error(t("auth-email-verify-failed"));
+    }
+  }, [verification, t]);
 
   useEffect(() => {
     const handler = (e: Event) => {

@@ -28,6 +28,14 @@ wrong.
 | `VITE_SERVER_URL` | Web (client) | API origin without `/api`; use a LAN-reachable API address for phone testing | API calls go to the web dev server or the phone's own `localhost` |
 | `VITE_SITE_URL` | Web (client) | Public origin of the web app (e.g. `https://app.kiftet.com`); makes `og:image`/`twitter:image` absolute | Relative share images — social previews may not render |
 
+Two operator commands use the email values from the API service:
+`bun run --cwd apps/server auth:test-email -- --to=you@example.com` proves the
+transport without creating an account, and
+`bun run --cwd apps/server auth:backfill-verified` previews (or with `--apply`,
+marks) pre-Brevo password accounts verified before
+`REQUIRE_EMAIL_VERIFICATION` is turned on. See
+[`auth.md`](auth.md) §9.8.
+
 **How to set them:**
 - **Local dev:** every package has a `.env.schema` file with safe placeholder
   values; `bun run env:generate` reads the schema and produces TypeScript types

@@ -36,6 +36,24 @@ export default function SignUpForm({
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [justSignedUp, setJustSignedUp] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
+
+  const handleResend = async () => {
+    if (awaitingConfirmation === null || resending) return;
+    setResending(true);
+    const { error } = await authClient.sendVerificationEmail({
+      email: awaitingConfirmation,
+      callbackURL: `${window.location.origin}/login?verified=1`,
+    });
+    setResending(false);
+    if (error) {
+      toast.error(t("auth-resend-error"));
+      return;
+    }
+    setResendSent(true);
+    toast.success(t("auth-resend-sent"));
+  };
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -117,10 +135,31 @@ export default function SignUpForm({
       <AuthShell
         title={t("auth-check-email-title")}
         subtitle={t("auth-signup-subtitle")}
+        footer={
+          <Button
+            variant="link"
+            onClick={onSwitchToSignIn}
+            className="text-gold transition-colors duration-200 hover:text-gold-soft"
+          >
+            {t("auth-forgot-back")}
+          </Button>
+        }
       >
-        <p className="text-mist text-sm">
-          {t("auth-check-email-body", { email: awaitingConfirmation })}
-        </p>
+        <div className="space-y-4">
+          <p className="text-mist text-sm">
+            {t("auth-check-email-body", { email: awaitingConfirmation })}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-center"
+            onClick={handleResend}
+            disabled={resending || resendSent}
+            loading={resending}
+          >
+            {resendSent ? t("auth-resend-sent") : t("auth-resend-verification")}
+          </Button>
+        </div>
       </AuthShell>
     );
   }

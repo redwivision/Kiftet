@@ -413,37 +413,42 @@ gate changes anyone's access. `sendOnSignIn: true` means an unverified sign-in
 attempt sends a fresh link before returning `EMAIL_NOT_VERIFIED`. Verification
 tokens expire after 24 hours.
 
-**Enable the gate only after mail delivery works.** Existing password accounts
-created before the transport shipped have `email_verified = false`, so turning
-the gate on first would lock them out. Run the preview and update in the Neon
-SQL Editor, then flip the variable and redeploy:
+**Prove delivery before touching the gate.** From the API service, send one
+message through the same `sendEmail` the auth routes use:
 
-```sql
-SELECT count(*) FROM "user" u
-WHERE u.email_verified = false
-  AND EXISTS (
-    SELECT 1 FROM account a
-    WHERE a.user_id = u.id AND a.provider_id = 'credential'
-  );
-
-UPDATE "user" u
-SET email_verified = true, updated_at = now()
-WHERE u.email_verified = false
-  AND EXISTS (
-    SELECT 1 FROM account a
-    WHERE a.user_id = u.id AND a.provider_id = 'credential'
-  );
+```bash
+bun run --cwd apps/server auth:test-email -- --to=you@example.com
 ```
 
-The `provider_id = 'credential'` filter matters: it marks only password
-accounts and leaves social-only rows alone. Google and Facebook sign-in are not
-gated on `email_verified` (see §8.7 and §9.9).
+A failure prints Brevo's rejection verbatim (for example, an unverified sender)
+and exits non-zero. Brevo → Transactional → Logs should show `delivered`.
+
+**Enable the gate only after mail delivery works.** Existing password accounts
+created before the transport shipped have `email_verified = false`, so turning
+the gate on first would lock them out. Preview the exact rows, then apply:
+
+```bash
+bun run --cwd apps/server auth:backfill-verified                # dry run
+bun run --cwd apps/server auth:backfill-verified -- --apply     # write
+```
+
+Both forms select only `provider_id = 'credential'` accounts, so social-only
+rows are left alone. Add `--before=<ISO timestamp>` to mark only accounts
+created before a cutoff; accounts that signed up after Brevo started sending
+can then verify normally. The dry run writes nothing. Only after the count
+matches what you expect, `--apply` reports the same number updated, and a
+follow-up dry run reports `0 account(s) match` should you set
+`REQUIRE_EMAIL_VERIFICATION=true` and redeploy. Google and Facebook sign-in are
+not gated on `email_verified` (see §8.7 and §9.9).
 
 **What students see.** With verification required, sign-up returns no session
-and the form shows *Check your email*; the link lands on `/login?verified=1`
-with a confirmation toast. Unverified sign-in shows a specific message instead
-of the generic sign-in failure and automatically sends a fresh link. Password
-reset uses the same transport, so it starts working as soon as Brevo does.
+and the form shows *Check your email*, with a **Resend the confirmation email**
+button; the link lands on `/login?verified=1` with a confirmation toast. A
+stale or already-used token also lands there with `&error=TOKEN_EXPIRED` (or
+`INVALID_TOKEN`), and the form shows an expired-link message instead of
+claiming success. Unverified sign-in shows a specific message instead of the
+generic sign-in failure and automatically sends a fresh link. Password reset
+uses the same transport, so it starts working as soon as Brevo does.
 
 ### 9.9 Security notes for this configuration
 

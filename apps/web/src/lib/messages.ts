@@ -938,6 +938,11 @@ export const en = {
   "auth-email-not-verified":
     "Confirm your email first — we just sent you a fresh link.",
   "auth-email-verified": "Email confirmed. Sign in to continue.",
+  "auth-email-verify-failed":
+    "That confirmation link is invalid or has expired. Sign in to get a fresh one.",
+  "auth-resend-verification": "Resend the confirmation email",
+  "auth-resend-sent": "Sent again — check your inbox.",
+  "auth-resend-error": "Couldn't resend right now. Try again.",
   "auth-open-room": "Open your study room",
   "auth-signup-subtitle":
     "One account, every chapter. Your first recall takes two minutes.",
@@ -2057,6 +2062,11 @@ export const am: Record<MessageKey, string> = {
   "auth-signin-error": "አሁን መግባት አልተቻለም። እንደገና ሞክር።",
   "auth-email-not-verified": "መጀመሪያ ኢሜይልዎን ያረጋግጡ — አዲስ አገናኝ ልከንልዎታል።",
   "auth-email-verified": "ኢሜይልዎ ተረጋግጧል። ለመቀጠል ይግቡ።",
+  "auth-email-verify-failed":
+    "ይህ የማረጋገጫ አገናኝ ልክ ያልሆነ ወይም ጊዜው ያለፈበት ነው። አዲስ አገናኝ ለማግኘት ይግቡ።",
+  "auth-resend-verification": "የማረጋገጫ ኢሜይሉን እንደገና ላክ",
+  "auth-resend-sent": "እንደገና ተልኳል — የመልእክት ሳጥንዎን ይመልከቱ።",
+  "auth-resend-error": "አሁን እንደገና መላክ አልተቻለም። እንደገና ሞክር።",
   "auth-open-room": "የትማሪያዎን ክፍል ክፈት",
   "auth-signup-subtitle":
     "አንድ መለያ፣ ሁሉም ምዕራፎች። የመጀመሪያዎን ማስታወስክ ሁለት ደቂቃዎች ይወስዳል።",

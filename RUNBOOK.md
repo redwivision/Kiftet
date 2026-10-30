@@ -337,10 +337,27 @@ Run in order; expected result in parentheses.
 1. **Health** — `curl https://<your-site>/health` → `200 OK`.
 2. **Sign-up happy path** — browser → web origin → sign up with a real email →
    you land on the dashboard (not a 401/loop).
-3. **Email delivery** — with `REQUIRE_EMAIL_VERIFICATION=false`, sign up with a
-   real address and confirm both the confirmation link and a password-reset link
-   arrive from the verified sender; Brevo → Transactional → Logs shows `delivered`.
-   Then check the existing-account backfill before setting the gate to `true`.
+3. **Email delivery** — with `REQUIRE_EMAIL_VERIFICATION=false`, first send one
+   message without creating an account:
+
+   ```bash
+   bun run --cwd apps/server auth:test-email -- --to=you@example.com
+   ```
+
+   It must print the transport and sender, then exit `0`; Brevo →
+   Transactional → Logs must show `delivered`. Then sign up with a real address
+   and confirm both the confirmation link and a password-reset link arrive from
+   the verified sender. Check the existing-account backfill before setting the
+   gate to `true`:
+
+   ```bash
+   bun run --cwd apps/server auth:backfill-verified                # dry run
+   bun run --cwd apps/server auth:backfill-verified -- --apply     # write
+   ```
+
+   The dry run must match the expected count of pre-Brevo password accounts;
+   add `--before=<ISO timestamp>` to leave later sign-ups gated. Only then set
+   `REQUIRE_EMAIL_VERIFICATION=true` and redeploy.
 4. **Study loop smoke** — open a chapter, run one recall → one diagnose →
    one lesson → one retest; scores appear on the result screen.
 5. **Session persists** — reload mid-study → the loop resumes at the same
@@ -524,6 +541,8 @@ bun run --cwd apps/server telegram:testimonials -- --dry-run
 | "This app isn't available right now" (Facebook) | app still in **Development** mode | Meta → app settings → switch to **Live** |
 | Everyone silently signed out after a deploy | `BETTER_AUTH_URL` or `BETTER_AUTH_SECRET` changed | restore the previous value; the cookie is `HttpOnly`, so nothing on the page can explain it |
 | Password reset "does nothing" | `AUTH_EMAIL_TRANSPORT=console` (link only in logs), missing `BREVO_API_KEY`, or an unverified `AUTH_EMAIL_FROM` | set `brevo`, verify the sender, redeploy, then check Brevo → Transactional → Logs |
+| `auth:test-email` fails | missing `BREVO_API_KEY`, unverified `AUTH_EMAIL_FROM`, or a key without the transactional-email permission | fix the env in §8.2, redeploy, and read the Brevo error printed by the command |
+| Confirmation link says invalid or expired | the 24-hour token was already used, or the link is older than a day | use **Resend the confirmation email** on the *Check your email* screen; an unverified sign-in also sends a fresh link |
 | Verification sign-in says "Email not verified" | expected when the gate is on and the account has not clicked the link | the attempt automatically resends; check spam and Brevo logs |
 | Offline page on every load | web app can't reach the API *or* no network | check §9.1 health; check the client's connectivity |
 | Server boots but locals see 500s while you don't | node/bun version drift | `nvm use` to 22.23.2, `bun install`, restart |
