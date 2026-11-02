@@ -102,6 +102,10 @@ function TodayPlanContent({
           { year: "numeric", month: "long", day: "numeric" },
         );
   const learn = plan.learn;
+  const nextLearn =
+    plan.positioned && learn && learn.remainingInChapter > 0 ? learn : null;
+  const nextReview = plan.review[0] ?? null;
+  const showReviewAsPrimary = !nextLearn && nextReview !== null;
 
   return (
     <section className={frame} aria-labelledby="today-plan-title">
@@ -141,7 +145,52 @@ function TodayPlanContent({
         </p>
       )}
 
-      {!plan.positioned && (
+      {nextLearn ? (
+        <section className="mt-5 rounded-2xl border border-gold/30 bg-gold/[0.04] p-4 sm:p-5">
+          <p className="k-label">{t("today-plan-learn")}</p>
+          <h3 className="mt-1 font-display font-semibold text-xl tracking-tight">
+            {nextLearn.sectionTitle ?? nextLearn.chapterTitle}
+          </h3>
+          {nextLearn.sectionTitle && (
+            <p className="mt-1 text-muted-foreground text-sm">
+              {nextLearn.chapterTitle}
+            </p>
+          )}
+          <Button
+            className="mt-4"
+            disabled={starting !== null}
+            onClick={() => onStartChapter(nextLearn.chapterId)}
+          >
+            {starting === nextLearn.chapterId
+              ? t("starting-study")
+              : t("today-plan-start-learn")}
+          </Button>
+        </section>
+      ) : showReviewAsPrimary && nextReview ? (
+        <section className="mt-5 rounded-2xl border border-gold/30 bg-gold/[0.04] p-4 sm:p-5">
+          <p className="k-label">{t("today-plan-review")}</p>
+          <h3 className="mt-1 font-display font-semibold text-xl tracking-tight">
+            {nextReview.concept}
+          </h3>
+          <p className="mt-1 text-muted-foreground text-sm">
+            {nextReview.chapterTitle}
+          </p>
+          <p className="mt-2 text-muted-foreground text-xs leading-5">
+            {plan.reviewReason === "exam"
+              ? t("today-plan-review-exam")
+              : t("today-plan-review-preference")}
+          </p>
+          <Button
+            className="mt-4"
+            disabled={starting !== null}
+            onClick={() => onStartChapter(nextReview.chapterId)}
+          >
+            {starting === nextReview.chapterId
+              ? t("starting-study")
+              : t("today-plan-start-review")}
+          </Button>
+        </section>
+      ) : !plan.positioned ? (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/40 p-4">
           <p className="max-w-xl text-muted-foreground text-sm leading-6">
             {t("today-plan-no-position")}
@@ -153,91 +202,68 @@ function TodayPlanContent({
             {t("today-plan-set-position")}
           </Link>
         </div>
+      ) : (
+        <div className="mt-5 rounded-2xl border border-border/70 bg-background/40 p-4">
+          <p className="text-muted-foreground text-sm leading-6">
+            {t("today-plan-chapter-done")}
+          </p>
+          <Link
+            to="/settings"
+            className="mt-2 inline-block font-medium text-gold text-sm underline underline-offset-4"
+          >
+            {t("today-plan-set-position")}
+          </Link>
+        </div>
       )}
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border/70 bg-background/40 p-4">
-          <h3 className="font-medium">{t("today-plan-learn")}</h3>
-          {!plan.positioned ? (
-            <p className="mt-2 text-muted-foreground text-sm leading-6">
-              {t("today-plan-learn-needs-position")}
-            </p>
-          ) : learn && learn.remainingInChapter > 0 ? (
-            <>
-              <p className="mt-2 text-muted-foreground text-sm">
-                <span className="font-medium text-foreground">
-                  {learn.sectionTitle ?? learn.chapterTitle}
-                </span>
-                {learn.sectionTitle ? ` · ${learn.chapterTitle}` : ""}
-              </p>
-              <Button
-                className="mt-4"
-                size="sm"
-                disabled={starting !== null}
-                onClick={() => onStartChapter(learn.chapterId)}
+      {plan.review.length > (showReviewAsPrimary ? 1 : 0) ? (
+        <details className="mt-4 rounded-2xl border border-border/70 px-4 py-3">
+          <summary className="cursor-pointer text-muted-foreground text-sm">
+            {t("today-plan-more-review", {
+              n: plan.review.length - (showReviewAsPrimary ? 1 : 0),
+            })}
+          </summary>
+          <ul className="mt-3 flex flex-col gap-3">
+            {plan.review.slice(showReviewAsPrimary ? 1 : 0).map((item) => (
+              <li
+                key={`${item.chapterId}:${item.concept}`}
+                className="flex flex-wrap items-center justify-between gap-3 border-border/50 border-t pt-3"
               >
-                {starting === learn.chapterId
-                  ? t("starting-study")
-                  : t("today-plan-start-learn")}
-              </Button>
-            </>
-          ) : (
-            <div className="mt-2">
-              <p className="text-muted-foreground text-sm leading-6">
-                {t("today-plan-chapter-done")}
-              </p>
-              <Link
-                to="/settings"
-                className="mt-2 inline-block font-medium text-gold text-sm underline underline-offset-4"
-              >
-                {t("today-plan-set-position")}
-              </Link>
-            </div>
-          )}
-        </section>
+                <p className="min-w-0 text-sm">
+                  <span className="block font-medium">{item.concept}</span>
+                  <span className="block text-muted-foreground text-xs">
+                    {item.chapterTitle}
+                  </span>
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={starting !== null}
+                  onClick={() => onStartChapter(item.chapterId)}
+                >
+                  {starting === item.chapterId
+                    ? t("starting-study")
+                    : t("today-plan-start-review")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
-        <section className="rounded-2xl border border-border/70 bg-background/40 p-4">
-          <h3 className="font-medium">{t("today-plan-review")}</h3>
-          {plan.review.length > 0 ? (
-            <>
-              <p className="mt-1 text-muted-foreground text-xs leading-5">
-                {plan.reviewReason === "exam"
-                  ? t("today-plan-review-exam")
-                  : t("today-plan-review-preference")}
-              </p>
-              <ul className="mt-3 flex flex-col gap-3">
-                {plan.review.map((item) => (
-                  <li
-                    key={`${item.chapterId}:${item.concept}`}
-                    className="flex flex-wrap items-center justify-between gap-3 border-border/50 border-t pt-3"
-                  >
-                    <p className="min-w-0 text-sm">
-                      <span className="block font-medium">{item.concept}</span>
-                      <span className="block text-muted-foreground text-xs">
-                        {item.chapterTitle}
-                      </span>
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={starting !== null}
-                      onClick={() => onStartChapter(item.chapterId)}
-                    >
-                      {starting === item.chapterId
-                        ? t("starting-study")
-                        : t("today-plan-start-review")}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className="mt-2 text-muted-foreground text-sm leading-6">
-              {t("today-plan-no-review")}
-            </p>
-          )}
-        </section>
-      </div>
+      {nextLearn && plan.review.length === 0 && (
+        <p className="mt-3 text-muted-foreground text-xs leading-5">
+          {t("today-plan-no-review")}
+        </p>
+      )}
+      {!plan.positioned && showReviewAsPrimary && (
+        <Link
+          to="/settings"
+          className="mt-3 inline-block font-medium text-gold text-sm underline underline-offset-4"
+        >
+          {t("today-plan-set-position")}
+        </Link>
+      )}
     </section>
   );
 }

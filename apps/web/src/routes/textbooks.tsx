@@ -138,6 +138,9 @@ export default function Textbooks() {
   const [textbooks, setTextbooks] = useState<LibraryTextbook[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [demoExpired, setDemoExpired] = useState(false);
+  const [startingChapterId, setStartingChapterId] = useState<string | null>(
+    null,
+  );
 
   const [bookTitle, setBookTitle] = useState("");
   const [subject, setSubject] = useState("");
@@ -182,7 +185,10 @@ export default function Textbooks() {
 
   const fetchLibrary = useCallback(() => {
     api<LibraryTextbook[]>("/textbooks")
-      .then(setTextbooks)
+      .then((books) => {
+        setTextbooks(books);
+        setLoadError(null);
+      })
       .catch((err) => reportApiError(err, setLoadError));
   }, [reportApiError]);
 
@@ -706,6 +712,7 @@ export default function Textbooks() {
   );
 
   const startChapter = async (chapterId: string) => {
+    setStartingChapterId(chapterId);
     try {
       const { sessionId } = await api<{ sessionId: string }>(
         "/sessions/start",
@@ -721,6 +728,8 @@ export default function Textbooks() {
       } else {
         toast.error(apiError(err));
       }
+    } finally {
+      setStartingChapterId(null);
     }
   };
 
@@ -753,7 +762,7 @@ export default function Textbooks() {
             {t("byob-title-full")}
           </h1>
           <p className="text-muted-foreground text-sm leading-6">
-            {t("textbooks-text")}
+            {t("textbooks-library-text")}
           </p>
         </div>
         {textbooks && textbooks.length > 0 && (
@@ -766,9 +775,12 @@ export default function Textbooks() {
         )}
       </header>
 
-      {loadError && !textbooks ? (
-        <div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
-          <p className="font-medium text-rust">{t("room-unreachable")}</p>
+      {loadError ? (
+        <div
+          className="inner-surface mb-8 border border-rust/40 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium text-rust">{t("textbooks-load-error")}</p>
           <p className="mt-1 text-muted-foreground">{loadError}</p>
           <Button
             variant="outline"
@@ -837,61 +849,94 @@ export default function Textbooks() {
                 </>
               ) : null}
               {book.chapters.length > 0 ? (
-                <ul className="mt-4 divide-y divide-border/60">
-                  {groupLibraryChapters(book.chapters).map((group, i) => (
-                    <li key={group.title} className="py-2.5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium text-[0.78rem] text-muted-foreground">
-                            {String(i + 1).padStart(2, "0")}
-                          </p>
-                          <p className="truncate text-sm">{group.title}</p>
-                        </div>
-                        {group.chapters.length === 1 && (
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            onClick={() => {
-                              const chapter = group.chapters[0];
-                              if (chapter) startChapter(chapter.id);
-                            }}
-                          >
-                            {t("study-this-chapter")}
-                          </Button>
-                        )}
-                      </div>
-                      {group.chapters.length > 1 && (
-                        <ul className="mt-2 space-y-1 border-gold/25 border-l pl-3">
-                          {group.chapters.map((chapter) => {
-                            const section = visibleChapterTitle(
-                              chapter.title,
-                            ).section;
-                            return (
-                              <li
-                                key={chapter.id}
-                                className="flex items-center justify-between gap-3 py-1"
+                <>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-border/60 border-t pt-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("chapter-count", { n: book.chapters.length })}
+                    </p>
+                    <Button
+                      size="sm"
+                      disabled={startingChapterId !== null}
+                      loading={startingChapterId === book.chapters[0]?.id}
+                      onClick={() => {
+                        const chapter = book.chapters[0];
+                        if (chapter) void startChapter(chapter.id);
+                      }}
+                    >
+                      {t("first-study-cta")}
+                    </Button>
+                  </div>
+                  <details className="mt-3 border-border/60 border-t pt-3">
+                    <summary className="cursor-pointer text-muted-foreground text-sm hover:text-foreground">
+                      {t("textbook-show-chapters", {
+                        n: book.chapters.length,
+                      })}
+                    </summary>
+                    <ul className="mt-2 divide-y divide-border/60">
+                      {groupLibraryChapters(book.chapters).map((group, i) => (
+                        <li key={group.title} className="py-2.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-medium text-[0.78rem] text-muted-foreground">
+                                {String(i + 1).padStart(2, "0")}
+                              </p>
+                              <p className="truncate text-sm">{group.title}</p>
+                            </div>
+                            {group.chapters.length === 1 && (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                disabled={startingChapterId !== null}
+                                loading={
+                                  startingChapterId === group.chapters[0]?.id
+                                }
+                                onClick={() => {
+                                  const chapter = group.chapters[0];
+                                  if (chapter) void startChapter(chapter.id);
+                                }}
                               >
-                                <span className="text-muted-foreground text-xs">
-                                  {t("study-section", {
-                                    n: section ?? 1,
-                                    total: group.chapters.length,
-                                  })}
-                                </span>
-                                <Button
-                                  variant="outline"
-                                  size="xs"
-                                  onClick={() => startChapter(chapter.id)}
-                                >
-                                  {t("study-this-chapter")}
-                                </Button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                                {t("study-this-chapter")}
+                              </Button>
+                            )}
+                          </div>
+                          {group.chapters.length > 1 && (
+                            <ul className="mt-2 space-y-1 border-gold/25 border-l pl-3">
+                              {group.chapters.map((chapter) => {
+                                const section = visibleChapterTitle(
+                                  chapter.title,
+                                ).section;
+                                return (
+                                  <li
+                                    key={chapter.id}
+                                    className="flex items-center justify-between gap-3 py-1"
+                                  >
+                                    <span className="text-muted-foreground text-xs">
+                                      {t("study-section", {
+                                        n: section ?? 1,
+                                        total: group.chapters.length,
+                                      })}
+                                    </span>
+                                    <Button
+                                      variant="outline"
+                                      size="xs"
+                                      disabled={startingChapterId !== null}
+                                      loading={startingChapterId === chapter.id}
+                                      onClick={() =>
+                                        void startChapter(chapter.id)
+                                      }
+                                    >
+                                      {t("study-this-chapter")}
+                                    </Button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </>
               ) : (
                 <div className="mt-4 flex items-center gap-3">
                   <ConceptGraph className="h-9 w-16 shrink-0 text-gold" />

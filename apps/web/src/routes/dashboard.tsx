@@ -1,4 +1,5 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
+import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ConceptGraph } from "@/components/concept-graph";
@@ -116,6 +117,8 @@ export default function Dashboard() {
   // it so the room never pretends a saved list is live data.
   const [offlineList, setOfflineList] = useState(false);
   const [history, setHistory] = useState<SessionHistory[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [demoExpired, setDemoExpired] = useState(false);
@@ -288,12 +291,6 @@ export default function Dashboard() {
         }
         if (!cancelled) setError(apiError(err));
       });
-    // Recent sessions power the home screen's continue card.
-    api<SessionHistory[]>("/sessions")
-      .then((rows) => {
-        if (!cancelled) setHistory(rows);
-      })
-      .catch(() => {});
     api<ActiveQueue>("/sessions/queue")
       .then((active) => {
         if (!cancelled) setQueue(active.queueId ? active : null);
@@ -305,6 +302,29 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [navigate, online, reconnecting, session, sessionPending]);
+
+  useEffect(() => {
+    const offlineAccount = canContinueOffline(online);
+    const canStay = offlineAccount || reconnecting;
+    if (sessionPending || (!session && !getDemoUser() && !canStay)) return;
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    api<SessionHistory[]>("/sessions")
+      .then((rows) => {
+        if (!cancelled) setHistory(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) setHistoryError(apiError(err));
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [online, reconnecting, session, sessionPending]);
 
   const start = async (chapterId: string) => {
     setStarting(chapterId);
@@ -361,8 +381,10 @@ export default function Dashboard() {
   // Before the first round, settings and a daily plan are more choices than
   // the student needs. Show one clear next step instead.
   const hasStartedStudying = history !== null && history.length > 0;
-  const firstRun = history !== null && !hasStartedStudying;
+  const firstRun = history !== null && history.length === 0;
   const showStudySurfaces = hasChapters && hasStartedStudying;
+  const primaryActionLoading =
+    hasChapters && history === null && historyLoading;
 
   if (demoExpired) {
     return (
@@ -384,7 +406,7 @@ export default function Dashboard() {
             {t("dash-text")}
           </p>
         </div>
-        {hasStartedStudying && hasChapters && (
+        {hasChapters && (
           <div className="grid w-full gap-2 sm:w-auto sm:shrink-0 sm:auto-cols-max sm:grid-flow-col sm:items-center">
             <Link
               to="/textbooks"
@@ -427,6 +449,63 @@ export default function Dashboard() {
         </div>
       )}
 
+      {openRound && (
+        <section className="surface mb-8 flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <h2 className="font-display font-semibold text-xl tracking-tight">
+              {t("continue-where")}
+            </h2>
+            <p className="max-w-md text-muted-foreground text-sm leading-6">
+              {t("continue-where-text")}
+            </p>
+          </div>
+          <Link
+            to={`/study/${openRound.id}`}
+            className={buttonVariants({ className: "w-full sm:w-auto" })}
+          >
+            {t("resume-round")}
+          </Link>
+        </section>
+      )}
+
+      {historyError && (
+        <div
+          className="inner-surface mb-8 border border-rust/40 p-4 text-sm"
+          role="alert"
+        >
+          <p className="font-medium text-rust">{t("study-history-error")}</p>
+          <p className="mt-1 text-muted-foreground">{historyError}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+            >
+              {t("retry")}
+            </Button>
+            <Link
+              to="/study"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              {t("browse-chapters")}
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {primaryActionLoading && (
+        <section
+          className="surface mb-8 border p-5 sm:p-6"
+          aria-label={t("loading")}
+          aria-busy="true"
+        >
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="mt-4 h-6 w-56" />
+          <Skeleton className="mt-3 h-4 w-3/4" />
+          <Skeleton className="mt-5 h-11 w-40 rounded-full" />
+        </section>
+      )}
+
       {firstRun && firstChapter && (
         <section className="surface mb-8 border p-5 sm:p-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -463,7 +542,14 @@ export default function Dashboard() {
         </section>
       )}
 
-      {session && showStudySurfaces && !placementSettled && (
+      {session && showStudySurfaces && !openRound && (
+        <TodayPlan
+          key={planRevision}
+          onStartChapter={(chapterId) => void start(chapterId)}
+          starting={starting}
+        />
+      )}
+      {session && showStudySurfaces && !openRound && !placementSettled && (
         <PlacementPrompt
           onSettled={() => {
             setPlacementSettled(true);
@@ -471,208 +557,43 @@ export default function Dashboard() {
           }}
         />
       )}
-      {session && showStudySurfaces && (
-        <TodayPlan
-          key={planRevision}
-          onStartChapter={(chapterId) => void start(chapterId)}
-          starting={starting}
-        />
-      )}
-
-      {openRound && (
-        <section className="surface mb-8 flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <h2 className="font-display font-semibold text-xl tracking-tight">
-              {t("continue-where")}
-            </h2>
-            <p className="max-w-md text-muted-foreground text-sm leading-6">
-              {t("continue-where-text")}
-            </p>
-          </div>
-          <Link
-            to={`/study/${openRound.id}`}
-            className={buttonVariants({ className: "w-full sm:w-auto" })}
-          >
-            {t("resume-round")}
-          </Link>
-        </section>
-      )}
-
-      {hasStartedStudying && (
-        <section className="surface mb-8 flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div className="space-y-1">
-            <p className="k-label">{t("home-progress")}</p>
-            <h2 className="font-display font-semibold text-lg tracking-tight">
-              {t("home-completed-count", { n: completedRounds.length })}
-            </h2>
-            <p className="text-muted-foreground text-sm leading-6">
-              {latestCompleted &&
-              latestCompleted.before !== null &&
-              latestCompleted.after !== null
-                ? t("home-latest-score", {
-                    before: latestCompleted.before,
-                    after: latestCompleted.after,
-                  })
-                : t("home-progress-note")}
-            </p>
-          </div>
-          <Link
-            to="/study"
-            className={buttonVariants({
-              variant: "outline",
-              className: "w-full sm:w-auto",
-            })}
-          >
-            {t("browse-chapters")}
-          </Link>
-        </section>
-      )}
-
-      {budget && (
-        <div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-1 text-muted-foreground text-xs">
-          <span>
-            {t("ai-calls-minute")}{" "}
-            <strong className="font-medium text-foreground">
-              {t("of-left", {
-                remaining: budget.remaining,
-                limitPerMinute: budget.limitPerMinute,
-              })}
-            </strong>
-            {budget.remaining === 0 && aiCountdown
-              ? t("budget-out-in", { time: aiCountdown })
-              : budget.remaining === 0
-                ? t("budget-out")
-                : budget.remaining <= 2
-                  ? t("budget-careful")
-                  : ""}
-          </span>
-          <span>
-            {t("new-textbooks-today")}{" "}
-            <strong className="font-medium text-foreground">
-              {budget.books.limit === null
-                ? t("textbooks-unlimited", { used: budget.books.used })
-                : t("textbooks-used-of", {
-                    used: budget.books.used,
-                    n: budget.books.limit,
-                  })}
-            </strong>
-            {budget.books.limit !== null &&
-            budget.books.used >= budget.books.limit &&
-            booksResetAt
-              ? t("textbooks-reset-at", { time: booksResetAt })
-              : ""}
-          </span>
-        </div>
-      )}
-
-      {queue && queue.items.length > 0 && (
-        <section className="inner-surface mb-8 border p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="k-label">{t("queue-title")}</p>
-              <h2 className="font-display font-semibold text-lg tracking-tight">
-                {t("queue-left", { n: queue.items.length })}
-              </h2>
-              {queue.done > 0 && (
-                <p className="text-muted-foreground text-sm">
-                  {t("queue-done", { n: queue.done })}
-                </p>
-              )}
-            </div>
-            {queueError && (
-              <p className="text-rust text-sm" role="alert">
-                {queueError}
-              </p>
-            )}
-          </div>
-          <ol className="mt-4 space-y-2">
-            {queue.items.map((item, i) => (
-              <li
-                key={item.sessionId}
-                className="flex items-center gap-3 rounded-2xl border border-border/70 px-3 py-2 text-sm dark:border-white/10"
-              >
-                <span className="grid size-6 shrink-0 place-items-center rounded-full border border-gold/30 bg-gold/10 font-medium text-[0.72rem] text-gold">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                  {item.chapterTitle}
-                </span>
-                {item.status === "in_progress" ? (
-                  <Link
-                    to={`/study/${item.sessionId}`}
-                    className="shrink-0 font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
-                  >
-                    {t("queue-continue")}
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    aria-label={t("queue-remove", {
-                      title: item.chapterTitle,
-                    })}
-                    title={t("queue-remove", { title: item.chapterTitle })}
-                    className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-muted/70 hover:text-rust"
-                    onClick={() => void dropFromQueue(item.sessionId)}
-                  >
-                    ×
-                  </button>
-                )}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {misconceptions && (
-        <div className="inner-surface mb-8 border p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="k-label">{t("misconception-map")}</p>
-              <h2 className="font-display font-semibold text-lg tracking-tight">
-                {t("misconception-title", {
-                  subject: misconceptions.subject ?? "",
-                })}
-              </h2>
-              <p className="text-muted-foreground text-sm">
-                {t("misconception-text", {
-                  threshold: misconceptions.threshold,
-                })}
-              </p>
-            </div>
-          </div>
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {misconceptions.rows.map((row) => (
-              <li
-                key={row.conceptText}
-                className="rounded-full border border-rust/30 bg-rust/10 px-3 py-1.5 text-sm"
-              >
-                <span className="text-rust">{row.count} students</span>{" "}
-                <span className="text-foreground/90">{row.conceptText}</span>
-                {row.unitTitle && (
-                  <span className="ml-1 text-[0.78rem] text-muted-foreground">
-                    {t("unit-of", { n: row.unitNumber ?? "-" })}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {error ? (
-        <div className="inner-surface mb-8 border border-rust/40 p-4 text-sm">
+        <div
+          className="inner-surface mb-8 border border-rust/40 p-4 text-sm"
+          role="alert"
+        >
           <p className="font-medium text-rust">{t("room-unreachable")}</p>
           <p className="mt-1 text-muted-foreground">{error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => window.location.reload()}
-          >
-            {t("retry")}
-          </Button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+            >
+              {t("retry")}
+            </Button>
+            <Link
+              to="/textbooks"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              {t("manage-books")}
+            </Link>
+          </div>
         </div>
       ) : null}
+
+      {chapters === null && !error && (
+        <section
+          className="surface mb-8 border p-5 sm:p-6"
+          aria-label={t("loading")}
+          aria-busy="true"
+        >
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="mt-4 h-6 w-56" />
+          <Skeleton className="mt-3 h-4 w-3/4" />
+        </section>
+      )}
 
       {offlineList && (
         <div className="inner-surface mb-6 border border-rust/40 px-4 py-3 text-sm">
@@ -725,24 +646,181 @@ export default function Dashboard() {
         </section>
       )}
 
-      {chapters && chapters.length > 0 && hasStartedStudying && (
-        <section className="surface flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="k-label">{t("browse-chapters")}</p>
-            <h2 className="font-display font-semibold text-xl tracking-tight">
-              {t("chapter-count", { n: chapters.length })}
-            </h2>
-            <p className="text-muted-foreground text-sm leading-6">
-              {t("home-study-prompt")}
-            </p>
+      {(hasStartedStudying ||
+        (queue && queue.items.length > 0) ||
+        budget ||
+        misconceptions) && (
+        <details className="inner-surface mb-8 border px-4 py-3">
+          <summary className="cursor-pointer font-medium text-muted-foreground text-sm">
+            {t("dashboard-more")}
+          </summary>
+          <div className="mt-4">
+            {hasStartedStudying && (
+              <section className="mb-6 flex flex-col gap-3 border-border/60 border-b pb-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="k-label">{t("home-progress")}</p>
+                  <h2 className="font-display font-semibold text-lg tracking-tight">
+                    {t("home-completed-count", { n: completedRounds.length })}
+                  </h2>
+                  <p className="text-muted-foreground text-sm leading-6">
+                    {latestCompleted &&
+                    latestCompleted.before !== null &&
+                    latestCompleted.after !== null
+                      ? t("home-latest-score", {
+                          before: latestCompleted.before,
+                          after: latestCompleted.after,
+                        })
+                      : t("home-progress-note")}
+                  </p>
+                </div>
+                <Link
+                  to="/study"
+                  className={buttonVariants({
+                    variant: "outline",
+                    className: "w-full sm:w-auto",
+                  })}
+                >
+                  {t("browse-chapters")}
+                </Link>
+              </section>
+            )}
+
+            {budget && (
+              <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-1 border-border/60 border-b pb-5 text-muted-foreground text-xs">
+                <span>
+                  {t("ai-calls-minute")}{" "}
+                  <strong className="font-medium text-foreground">
+                    {t("of-left", {
+                      remaining: budget.remaining,
+                      limitPerMinute: budget.limitPerMinute,
+                    })}
+                  </strong>
+                  {budget.remaining === 0 && aiCountdown
+                    ? t("budget-out-in", { time: aiCountdown })
+                    : budget.remaining === 0
+                      ? t("budget-out")
+                      : budget.remaining <= 2
+                        ? t("budget-careful")
+                        : ""}
+                </span>
+                <span>
+                  {t("new-textbooks-today")}{" "}
+                  <strong className="font-medium text-foreground">
+                    {budget.books.limit === null
+                      ? t("textbooks-unlimited", { used: budget.books.used })
+                      : t("textbooks-used-of", {
+                          used: budget.books.used,
+                          n: budget.books.limit,
+                        })}
+                  </strong>
+                  {budget.books.limit !== null &&
+                  budget.books.used >= budget.books.limit &&
+                  booksResetAt
+                    ? t("textbooks-reset-at", { time: booksResetAt })
+                    : ""}
+                </span>
+              </div>
+            )}
+
+            {queue && queue.items.length > 0 && (
+              <section className="mb-6 border-border/60 border-b pb-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="k-label">{t("queue-title")}</p>
+                    <h2 className="font-display font-semibold text-lg tracking-tight">
+                      {t("queue-left", { n: queue.items.length })}
+                    </h2>
+                    {queue.done > 0 && (
+                      <p className="text-muted-foreground text-sm">
+                        {t("queue-done", { n: queue.done })}
+                      </p>
+                    )}
+                  </div>
+                  {queueError && (
+                    <p className="text-rust text-sm" role="alert">
+                      {queueError}
+                    </p>
+                  )}
+                </div>
+                <ol className="mt-4 space-y-2">
+                  {queue.items.map((item, i) => (
+                    <li
+                      key={item.sessionId}
+                      className="flex items-center gap-3 rounded-2xl border border-border/70 px-3 py-2 text-sm dark:border-white/10"
+                    >
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full border border-gold/30 bg-gold/10 font-medium text-[0.72rem] text-gold">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {item.chapterTitle}
+                      </span>
+                      {item.status === "in_progress" ? (
+                        <Link
+                          to={`/study/${item.sessionId}`}
+                          className="shrink-0 font-medium text-gold text-xs underline underline-offset-4 transition-colors duration-200 hover:text-gold-soft"
+                        >
+                          {t("queue-continue")}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={t("queue-remove", {
+                            title: item.chapterTitle,
+                          })}
+                          title={t("queue-remove", {
+                            title: item.chapterTitle,
+                          })}
+                          className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors duration-200 hover:bg-muted/70 hover:text-rust"
+                          onClick={() => void dropFromQueue(item.sessionId)}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+
+            {misconceptions && (
+              <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="k-label">{t("misconception-map")}</p>
+                    <h2 className="font-display font-semibold text-lg tracking-tight">
+                      {t("misconception-title", {
+                        subject: misconceptions.subject ?? "",
+                      })}
+                    </h2>
+                    <p className="text-muted-foreground text-sm">
+                      {t("misconception-text", {
+                        threshold: misconceptions.threshold,
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <ul className="mt-4 flex flex-wrap gap-2">
+                  {misconceptions.rows.map((row) => (
+                    <li
+                      key={row.conceptText}
+                      className="rounded-full border border-rust/30 bg-rust/10 px-3 py-1.5 text-sm"
+                    >
+                      <span className="text-rust">{row.count} students</span>{" "}
+                      <span className="text-foreground/90">
+                        {row.conceptText}
+                      </span>
+                      {row.unitTitle && (
+                        <span className="ml-1 text-[0.78rem] text-muted-foreground">
+                          {t("unit-of", { n: row.unitNumber ?? "-" })}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-          <Link
-            to="/study"
-            className={buttonVariants({ className: "w-full sm:w-auto" })}
-          >
-            {t("browse-chapters")}
-          </Link>
-        </section>
+        </details>
       )}
     </main>
   );

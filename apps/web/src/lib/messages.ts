@@ -287,6 +287,8 @@ export const en = {
   "dash-text":
     "See today's plan, pick up an unfinished round, or choose another chapter from Study.",
   "home-progress": "Your progress",
+  "dashboard-more": "More from your study",
+  "study-history-error": "Couldn't load your study history.",
   "home-completed-count": "{n} study rounds completed",
   "home-latest-score": "Latest result: {before}% → {after}%",
   "home-progress-note":
@@ -440,6 +442,10 @@ export const en = {
   // ── Textbooks chrome ─────────────────────────────────────────
   "your-textbooks": "Your textbooks",
   "byob-title-full": "Bring your own book.",
+  "textbooks-library-text":
+    "Choose chapters from your saved books, or add a new book. PDFs stay on this device; only the chapter text you select is processed.",
+  "textbooks-load-error": "Couldn't load your textbook library.",
+  "textbook-show-chapters": "Show {n} chapters",
   "textbooks-text":
     "Save a textbook and its contents to your account, then choose the chapters you want to study. PDFs stay on this device; only selected chapter text is sent for processing.",
   chunk: "{n} chunk",
@@ -1239,6 +1245,7 @@ export const en = {
   "today-plan-learn-needs-position":
     "Set where you are in your book to plan the next material.",
   "today-plan-review": "Bring back",
+  "today-plan-more-review": "See {n} more ideas to review",
   "today-plan-review-preference": "A little of your past, as you asked.",
   "today-plan-review-exam": "Review is included because your exam is coming.",
   "today-plan-start-learn": "Start this chapter",
@@ -1517,6 +1524,8 @@ export const am: Record<MessageKey, string> = {
   "dash-title": "ቀጣይ የጥናት እርምጃህ",
   "dash-text": "የዛሬን እቅድ ተመልከት፣ ያልጨረስከውን ቀጥል፣ ወይም ከጥናት የተለየ ምዕራፍ ምረጥ።",
   "home-progress": "እድገትህ",
+  "dashboard-more": "ተጨማሪ የጥናት መረጃ",
+  "study-history-error": "የጥናት ታሪክህን መጫን አልተቻለም።",
   "home-completed-count": "{n} የጥናት ዙሮች ተጠናቀዋል",
   "home-latest-score": "የመጨረሻ ውጤት: {before}% → {after}%",
   "home-progress-note": "ያጠናቀቅካቸው ዙሮችና ውጤቶቻቸው እዚህ ይታያሉ።",
@@ -1660,6 +1669,10 @@ export const am: Record<MessageKey, string> = {
   // ── Textbooks chrome ─────────────────────────────────────────
   "your-textbooks": "የመማሪያ መጽሐፎችህ",
   "byob-title-full": "የራስህን መጽሐፍ አምጣ።",
+  "textbooks-library-text":
+    "ከተቀመጡት መጽሐፎችህ ምዕራፎችን ምረጥ ወይም አዲስ መጽሐፍ ጨምር። PDF በዚህ መሣሪያ ላይ ይቆያል፤ የመረጥከው የምዕራፍ ጽሑፍ ብቻ ይሰራል።",
+  "textbooks-load-error": "የመጽሐፍ ቤተ-መጻሕፍትህን መጫን አልተቻለም።",
+  "textbook-show-chapters": "{n} ምዕራፎችን አሳይ",
   "textbooks-text":
     "የመጽሐፍህን ይዘት በመለያህ ላይ አስቀምጥ፣ ከዚያም ማጥናት የምትፈልጋቸውን ምዕራፎች ምረጥ። PDF ፋይሉ በዚህ መሣሪያ ላይ ይቆያል፤ የመረጥከው የምዕራፍ ጽሑፍ ብቻ ለማስኬድ ይላካል።",
   chunk: "{n} ክፍል",
@@ -2372,6 +2385,7 @@ export const am: Record<MessageKey, string> = {
   "today-plan-learn-needs-position":
     "ቀጣዩን ትምህርት ለማቀድ በመጽሐፍህ ውስጥ ያለህን ቦታ አስቀምጥ።",
   "today-plan-review": "ያለፈውን አስታውስ",
+  "today-plan-more-review": "ለመድገም {n} ተጨማሪ ሃሳቦችን አሳይ",
   "today-plan-review-preference": "እንደጠየቅኸው ከያለፈው ትንሽ እንመልሳለን።",
   "today-plan-review-exam": "ፈተናህ ስለሚቀርብ ድግግሞሽ ተካትቷል።",
   "today-plan-start-learn": "ይህን ምዕራፍ ጀምር",
