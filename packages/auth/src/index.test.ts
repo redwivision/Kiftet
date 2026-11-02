@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "@kiftet/db";
-import { sendEmail } from "./email";
+import { sendEmail, sendSmtpEmail } from "./email";
 import { type AuthConfig, createAuth, TERMS_VERSION } from "./index";
 import {
   enabledSocialProviders,
@@ -208,6 +208,132 @@ test("Brevo refuses to start without its credentials", () => {
   expect(() =>
     auth({ AUTH_EMAIL_TRANSPORT: "brevo", BREVO_API_KEY: "key" }),
   ).toThrow(/AUTH_EMAIL_FROM/);
+});
+
+test("SMTP refuses to start without Gmail credentials", () => {
+  expect(() => auth({ AUTH_EMAIL_TRANSPORT: "smtp" })).toThrow(
+    /AUTH_SMTP_USER/,
+  );
+  expect(() =>
+    auth({ AUTH_EMAIL_TRANSPORT: "smtp", AUTH_SMTP_USER: "sender@gmail.com" }),
+  ).toThrow(/AUTH_SMTP_PASS/);
+  expect(() =>
+    auth({
+      AUTH_EMAIL_TRANSPORT: "smtp",
+      AUTH_SMTP_PORT: "not-a-port",
+      AUTH_SMTP_USER: "sender@gmail.com",
+      AUTH_SMTP_PASS: "app-password",
+    }),
+  ).toThrow(/AUTH_SMTP_PORT/);
+});
+
+test("SMTP sends through nodemailer with STARTTLS and the Gmail sender", async () => {
+  const calls: Array<{ options: unknown; mail: unknown }> = [];
+
+  await sendSmtpEmail(
+    {
+      ...BASE_ENV,
+      AUTH_EMAIL_TRANSPORT: "smtp",
+      AUTH_SMTP_USER: "sender@gmail.com",
+      // Google displays the app password in four groups; the spaces are not
+      // part of the secret and must not reach the SMTP server.
+      AUTH_SMTP_PASS: "abcd efgh ijkl mnop",
+      AUTH_EMAIL_FROM: "sender@gmail.com",
+      AUTH_EMAIL_FROM_NAME: "Kiftet",
+    },
+    {
+      to: "student@example.com",
+      subject: "Confirm your email address",
+      text: "https://example.com/verify?token=abc",
+    },
+    (options) => ({
+      sendMail: async (mail) => {
+        calls.push({ options, mail });
+        return { messageId: "test" };
+      },
+      close: () => {},
+    }),
+  );
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.options).toMatchObject({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user: "sender@gmail.com", pass: "abcdefghijklmnop" },
+  });
+  expect(calls[0]?.mail).toEqual({
+    from: { name: "Kiftet", address: "sender@gmail.com" },
+    to: "student@example.com",
+    subject: "Confirm your email address",
+    text: "https://example.com/verify?token=abc",
+  });
+});
+
+test("SMTP switches to implicit TLS on port 465 and defaults From to the login", async () => {
+  const options: unknown[] = [];
+  const mail: unknown[] = [];
+
+  await sendSmtpEmail(
+    {
+      ...BASE_ENV,
+      AUTH_EMAIL_TRANSPORT: "smtp",
+      AUTH_SMTP_PORT: 465,
+      AUTH_SMTP_USER: "sender@gmail.com",
+      AUTH_SMTP_PASS: "app-password",
+    },
+    {
+      to: "student@example.com",
+      subject: "Reset your password",
+      text: "https://example.com/reset?token=abc",
+    },
+    (config) => {
+      options.push(config);
+      return {
+        sendMail: async (message) => {
+          mail.push(message);
+          return { messageId: "test" };
+        },
+        close: () => {},
+      };
+    },
+  );
+
+  expect(options[0]).toMatchObject({
+    port: 465,
+    secure: true,
+    requireTLS: false,
+  });
+  expect(mail[0]).toMatchObject({
+    from: { name: "Kiftet", address: "sender@gmail.com" },
+  });
+});
+
+test("SMTP errors surface instead of pretending the mail was sent", async () => {
+  await expect(
+    sendSmtpEmail(
+      {
+        ...BASE_ENV,
+        AUTH_EMAIL_TRANSPORT: "smtp",
+        AUTH_SMTP_USER: "sender@gmail.com",
+        AUTH_SMTP_PASS: "app-password",
+      },
+      {
+        to: "student@example.com",
+        subject: "Confirm your email address",
+        text: "https://example.com/verify?token=abc",
+      },
+      () => ({
+        sendMail: async () => {
+          throw new Error("EAUTH Invalid login");
+        },
+        close: () => {},
+      }),
+    ),
+  ).rejects.toThrow(
+    /SMTP rejected mail to student@example.com: EAUTH Invalid login/,
+  );
 });
 
 test("an unimplemented transport fails loudly instead of dropping mail", async () => {

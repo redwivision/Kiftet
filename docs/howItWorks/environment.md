@@ -16,9 +16,13 @@ wrong.
 | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | Server | Optional Facebook OAuth credentials; both must be set | Facebook sign-in button is not shown |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Server | Optional GitHub OAuth credentials; both must be set | GitHub sign-in button is not shown |
 | `REQUIRE_EMAIL_VERIFICATION` | Server | Whether password sign-in requires a verified email; off by default | Enabling it without real email delivery can lock users out |
-| `AUTH_EMAIL_TRANSPORT` | Server | `console` locally or `brevo` in production; Brevo sends confirmation/reset mail through its HTTPS API | Users do not receive password reset or verification emails |
-| `BREVO_API_KEY` | Server | Brevo API key; required when the transport is `brevo` | `brevo` fails at boot |
-| `AUTH_EMAIL_FROM` | Server | Verified sender address (a Gmail address works without a domain) | `brevo` fails at boot, or Brevo rejects the sender |
+| `AUTH_EMAIL_TRANSPORT` | Server | `console` locally, `smtp` in production; `brevo` is an optional HTTPS fallback | Users do not receive password reset or verification emails |
+| `AUTH_SMTP_HOST` | Server | SMTP hostname; defaults to `smtp.gmail.com` | SMTP connects to the wrong server |
+| `AUTH_SMTP_PORT` | Server | SMTP port; `587` uses STARTTLS, `465` uses implicit TLS | SMTP fails to connect |
+| `AUTH_SMTP_USER` | Server | Full Gmail address used to authenticate; required when the transport is `smtp` | `smtp` fails at boot |
+| `AUTH_SMTP_PASS` | Server | 16-character Google App Password; required when the transport is `smtp` | `smtp` fails at boot or Gmail returns `EAUTH` |
+| `BREVO_API_KEY` | Server | Brevo API key; only needed when the fallback transport is `brevo` | `brevo` fails at boot |
+| `AUTH_EMAIL_FROM` | Server | Sender address; defaults to `AUTH_SMTP_USER` for `smtp`, must be verified for `brevo` | `smtp` uses the login address; `brevo` rejects the sender |
 | `AUTH_EMAIL_FROM_NAME` | Server | Display name on the From line; defaults to `Kiftet` | Mail still sends with the default name |
 | `DATABASE_FILE` | Server (SQLite only) | Path to the `.db` file (e.g. `./kiftet-dev.db`) | Server crashes on boot |
 | `DATABASE_URL` | Server (Postgres only) | Postgres connection string | Server crashes on boot |
@@ -32,7 +36,7 @@ Two operator commands use the email values from the API service:
 `bun run --cwd apps/server auth:test-email -- --to=you@example.com` proves the
 transport without creating an account, and
 `bun run --cwd apps/server auth:backfill-verified` previews (or with `--apply`,
-marks) pre-Brevo password accounts verified before
+marks) pre-SMTP password accounts verified before
 `REQUIRE_EMAIL_VERIFICATION` is turned on. See
 [`auth.md`](auth.md) §9.8.
 

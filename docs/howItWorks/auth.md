@@ -382,29 +382,44 @@ is real email delivery, not a linking change.
 
 - **`console`** prints the link to the server log. This is the local-development
   default; nobody receives anything.
-- **`brevo`** sends through Brevo's HTTPS API. HTTPS is deliberate: hosting
-  platforms routinely block outbound SMTP ports, and a verified Gmail sender
-  works without owning a domain. The free tier allows 300 emails/day.
+- **`smtp`** sends through an SMTP server. The defaults are Gmail's
+  (`smtp.gmail.com:587`), and a Gmail App Password needs no domain or provider
+  signup. This is the chosen production path.
+- **`brevo`** sends through Brevo's HTTPS API. It is kept as an optional
+  fallback for hosts that block outbound SMTP ports; a verified Gmail sender
+  works without owning a domain.
 
-When the transport is `brevo`, the server requires `BREVO_API_KEY`,
-`AUTH_EMAIL_FROM` and (optionally) `AUTH_EMAIL_FROM_NAME`. Missing credentials
-fail at boot instead of silently dropping mail.
+When the transport is `smtp`, the server requires `AUTH_SMTP_USER` and
+`AUTH_SMTP_PASS`. `AUTH_SMTP_HOST` defaults to `smtp.gmail.com`,
+`AUTH_SMTP_PORT` to `587`, and `AUTH_EMAIL_FROM` to `AUTH_SMTP_USER`. Missing
+credentials fail at boot instead of silently dropping mail. Port 465 uses
+implicit TLS; port 587 uses STARTTLS and refuses to fall back to plaintext.
 
-**Brevo setup.** Create a free Brevo account, add the Gmail address under
-**Senders & IP → Senders**, and enter the 6-digit code Brevo sends there. Then
-create an API key under **SMTP & API → API Keys** and set on the API service:
+**Gmail SMTP setup.** Use a dedicated Gmail account if possible. Enable 2-Step
+Verification, then create an App Password under **Google Account → Security →
+App passwords** (choose **Mail** / **Other (Kiftet)**). Set on the API service:
 
 ```
-AUTH_EMAIL_TRANSPORT=brevo
-BREVO_API_KEY=<api key>
-AUTH_EMAIL_FROM=<verified Gmail address>
+AUTH_EMAIL_TRANSPORT=smtp
+AUTH_SMTP_HOST=smtp.gmail.com
+AUTH_SMTP_PORT=587
+AUTH_SMTP_USER=<Gmail address>
+AUTH_SMTP_PASS=<16-character App Password>
+AUTH_EMAIL_FROM=<Gmail address>
 AUTH_EMAIL_FROM_NAME=Kiftet
 REQUIRE_EMAIL_VERIFICATION=false
 ```
 
-A custom-domain sender can replace the Gmail address later without a code
-change. Do not use Gmail SMTP directly: it is capped at roughly 500 recipients a
-day, counts every recipient, and is fragile on hosts that block SMTP ports.
+The App Password is not the normal Google account password; spaces in the
+four-group display are ignored. Gmail is capped at roughly 500 recipients/day,
+so move to a domain-based provider when volume grows. If the host blocks port
+587, try 465 before concluding SMTP is unavailable.
+
+**Brevo fallback.** If SMTP is blocked, create a free Brevo account, add the
+Gmail address under **Senders & IP → Senders**, verify the code Brevo sends,
+create an API key under **SMTP & API → API Keys**, and set
+`AUTH_EMAIL_TRANSPORT=brevo`, `BREVO_API_KEY`, and `AUTH_EMAIL_FROM`. The free
+tier allows 300 emails/day.
 
 **Two verification settings move independently.** `sendOnSignUp: true` sends
 the confirmation mail as soon as a password account is created, even while
@@ -420,8 +435,9 @@ message through the same `sendEmail` the auth routes use:
 bun run --cwd apps/server auth:test-email -- --to=you@example.com
 ```
 
-A failure prints Brevo's rejection verbatim (for example, an unverified sender)
-and exits non-zero. Brevo → Transactional → Logs should show `delivered`.
+A failure prints the provider's rejection verbatim (for example `EAUTH` for a
+wrong app password) and exits non-zero. For SMTP, check the inbox and spam
+folder. For Brevo, check Transactional → Logs.
 
 **Enable the gate only after mail delivery works.** Existing password accounts
 created before the transport shipped have `email_verified = false`, so turning
@@ -434,7 +450,7 @@ bun run --cwd apps/server auth:backfill-verified -- --apply     # write
 
 Both forms select only `provider_id = 'credential'` accounts, so social-only
 rows are left alone. Add `--before=<ISO timestamp>` to mark only accounts
-created before a cutoff; accounts that signed up after Brevo started sending
+created before a cutoff; accounts that signed up after SMTP started sending
 can then verify normally. The dry run writes nothing. Only after the count
 matches what you expect, `--apply` reports the same number updated, and a
 follow-up dry run reports `0 account(s) match` should you set
@@ -448,7 +464,7 @@ stale or already-used token also lands there with `&error=TOKEN_EXPIRED` (or
 `INVALID_TOKEN`), and the form shows an expired-link message instead of
 claiming success. Unverified sign-in shows a specific message instead of the
 generic sign-in failure and automatically sends a fresh link. Password reset
-uses the same transport, so it starts working as soon as Brevo does.
+uses the same transport, so it starts working as soon as SMTP does.
 
 ### 9.9 Security notes for this configuration
 

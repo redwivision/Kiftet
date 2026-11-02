@@ -300,10 +300,14 @@ verify via §9.5.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | both, from Google Cloud Console | Google button hidden (only one half = not a provider) |
 | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | both, from Meta app settings | Facebook button hidden (only one half = not a provider) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | both, from a GitHub OAuth App | GitHub button hidden (only one half = not a provider) |
-| `REQUIRE_EMAIL_VERIFICATION` | `false` for the first Brevo deploy; `true` only after existing password accounts are marked verified | turning it on before delivery works locks out new and existing password users |
-| `AUTH_EMAIL_TRANSPORT` | `console` locally, `brevo` in production | `console` leaves reset/verification links in the server log |
-| `BREVO_API_KEY` | API key from Brevo → SMTP & API → API Keys | `brevo` fails at boot |
-| `AUTH_EMAIL_FROM` | a verified Brevo sender (Gmail works without a domain) | `brevo` fails at boot, or Brevo rejects the sender |
+| `REQUIRE_EMAIL_VERIFICATION` | `false` for the first SMTP deploy; `true` only after existing password accounts are marked verified | turning it on before delivery works locks out new and existing password users |
+| `AUTH_EMAIL_TRANSPORT` | `console` locally, `smtp` in production; `brevo` is an optional HTTPS fallback | `console` leaves reset/verification links in the server log |
+| `AUTH_SMTP_HOST` | `smtp.gmail.com` | SMTP connects to the wrong server |
+| `AUTH_SMTP_PORT` | `587` first, `465` if the host blocks STARTTLS | SMTP fails to connect |
+| `AUTH_SMTP_USER` | the full Gmail address used to sign in | `smtp` fails at boot |
+| `AUTH_SMTP_PASS` | the 16-character Google App Password, not the account password | `smtp` fails at boot or Gmail returns `EAUTH` |
+| `BREVO_API_KEY` | API key from Brevo → SMTP & API → API Keys; only for the fallback | `brevo` fails at boot |
+| `AUTH_EMAIL_FROM` | Gmail address; defaults to `AUTH_SMTP_USER` for `smtp` | `smtp` uses the login address; `brevo` rejects an unverified sender |
 | `AUTH_EMAIL_FROM_NAME` | `Kiftet` (optional display name) | mail still sends with the default name |
 
 **Social providers are optional.** Leave all six provider credentials unset
@@ -344,18 +348,18 @@ Run in order; expected result in parentheses.
    bun run --cwd apps/server auth:test-email -- --to=you@example.com
    ```
 
-   It must print the transport and sender, then exit `0`; Brevo →
-   Transactional → Logs must show `delivered`. Then sign up with a real address
-   and confirm both the confirmation link and a password-reset link arrive from
-   the verified sender. Check the existing-account backfill before setting the
-   gate to `true`:
+   It must print the transport and sender, then exit `0`; for SMTP, check the
+   inbox and spam folder for the message. Then sign up with a real address and
+   confirm both the confirmation link and a password-reset link arrive from the
+   Gmail sender. Check the existing-account backfill before setting the gate to
+   `true`:
 
    ```bash
    bun run --cwd apps/server auth:backfill-verified                # dry run
    bun run --cwd apps/server auth:backfill-verified -- --apply     # write
    ```
 
-   The dry run must match the expected count of pre-Brevo password accounts;
+   The dry run must match the expected count of pre-SMTP password accounts;
    add `--before=<ISO timestamp>` to leave later sign-ups gated. Only then set
    `REQUIRE_EMAIL_VERIFICATION=true` and redeploy.
 4. **Study loop smoke** — open a chapter, run one recall → one diagnose →
@@ -540,10 +544,11 @@ bun run --cwd apps/server telegram:testimonials -- --dry-run
 | "Access blocked" (Google) | consent screen still in **Testing** | publish it, or add the account as a test user |
 | "This app isn't available right now" (Facebook) | app still in **Development** mode | Meta → app settings → switch to **Live** |
 | Everyone silently signed out after a deploy | `BETTER_AUTH_URL` or `BETTER_AUTH_SECRET` changed | restore the previous value; the cookie is `HttpOnly`, so nothing on the page can explain it |
-| Password reset "does nothing" | `AUTH_EMAIL_TRANSPORT=console` (link only in logs), missing `BREVO_API_KEY`, or an unverified `AUTH_EMAIL_FROM` | set `brevo`, verify the sender, redeploy, then check Brevo → Transactional → Logs |
-| `auth:test-email` fails | missing `BREVO_API_KEY`, unverified `AUTH_EMAIL_FROM`, or a key without the transactional-email permission | fix the env in §8.2, redeploy, and read the Brevo error printed by the command |
+| Password reset "does nothing" | `AUTH_EMAIL_TRANSPORT=console` (link only in logs), missing SMTP credentials, or a wrong app password | set `smtp`, set `AUTH_SMTP_USER`/`AUTH_SMTP_PASS`, redeploy, then check the spam folder |
+| `auth:test-email` fails with `EAUTH` | wrong Gmail app password, 2-Step Verification not enabled, or `AUTH_SMTP_USER` is not the account that owns the app password | create a fresh App Password for that Gmail account and update `AUTH_SMTP_PASS` |
+| `auth:test-email` fails with `ETIMEDOUT`/`ESOCKET` | the host blocks outbound SMTP on 587 and 465 | keep the gate off; ask the host to allow SMTP or switch to the Brevo HTTPS fallback |
 | Confirmation link says invalid or expired | the 24-hour token was already used, or the link is older than a day | use **Resend the confirmation email** on the *Check your email* screen; an unverified sign-in also sends a fresh link |
-| Verification sign-in says "Email not verified" | expected when the gate is on and the account has not clicked the link | the attempt automatically resends; check spam and Brevo logs |
+| Verification sign-in says "Email not verified" | expected when the gate is on and the account has not clicked the link | the attempt automatically resends; check spam and the SMTP provider's logs |
 | Offline page on every load | web app can't reach the API *or* no network | check §9.1 health; check the client's connectivity |
 | Server boots but locals see 500s while you don't | node/bun version drift | `nvm use` to 22.23.2, `bun install`, restart |
 | varlock/env errors after pulling | `.env.schema` changed | `bun run env:generate` then rebuild |

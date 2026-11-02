@@ -15,10 +15,12 @@
   "dependencies": {
     "@kiftet/db": "workspace:*",
     "better-auth": "catalog:",
+    "nodemailer": "^10.3.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@kiftet/config": "workspace:*",
+    "@types/nodemailer": "^8.0.2",
     "typescript": "catalog:"
   }
 }
