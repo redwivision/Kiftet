@@ -30,6 +30,7 @@ import {
   type ImportTocNode,
   importTocTree,
   indexToc,
+  isSelectableTopic,
   MAX_FILE_MB,
   type OcrChunkReader,
   type PageRange,
@@ -145,6 +146,7 @@ export default function Textbooks() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
   const [tocSelection, setTocSelection] = useState<Set<string>>(new Set());
+  const [firstChapterSuggested, setFirstChapterSuggested] = useState(false);
   const [pageRanges, setPageRanges] = useState<PageRange[]>([]);
   // "Printed page 1 is on PDF page N" — entered as 1-based N, like a viewer.
   const [pageOneAt, setPageOneAt] = useState("1");
@@ -275,23 +277,34 @@ export default function Textbooks() {
     // library; a half-imported unit is still worth offering, and its missing
     // parts are what the student wants.
     const flat = indexToc(toc);
-    setNodeStages(
-      flat.order.flatMap((id) => {
-        const node = flat.byId.get(id);
-        if (!node) return [];
-        const landed = (node.chunkIndexes ?? []).every((chunkIndex) =>
-          imported.has((result.chunks[chunkIndex]?.title ?? "").trim()),
-        );
-        return [
-          {
-            id,
-            title: node.title,
-            state: node.chunkIndexes && landed ? "skip" : "queued",
-          },
-        ];
-      }),
+    const stages: NodeStage[] = flat.order.flatMap((id) => {
+      const node = flat.byId.get(id);
+      if (!node) return [];
+      const landed = (node.chunkIndexes ?? []).every((chunkIndex) =>
+        imported.has((result.chunks[chunkIndex]?.title ?? "").trim()),
+      );
+      return [
+        {
+          id,
+          title: node.title,
+          state: node.chunkIndexes && landed ? "skip" : "queued",
+        },
+      ];
+    });
+    setNodeStages(stages);
+    // Start the student on the first chapter that can actually be imported.
+    // It is a suggested default, not a commitment: one click still confirms it,
+    // and the review screen says they can change it.
+    const skipped = new Set(
+      stages.flatMap((stage) => (stage.state === "skip" ? [stage.id] : [])),
     );
-    setTocSelection(new Set());
+    const suggested = toc.find(
+      (node) =>
+        !skipped.has(node.id) &&
+        (Boolean(node.chunkIndexes?.length) || isSelectableTopic(node)),
+    );
+    setTocSelection(suggested ? new Set([suggested.id]) : new Set());
+    setFirstChapterSuggested(Boolean(suggested));
     setSavedTextbookId(savedId);
     setStep("review");
   };
@@ -675,6 +688,7 @@ export default function Textbooks() {
     setPlanned(null);
     setNodeStages([]);
     setTocSelection(new Set());
+    setFirstChapterSuggested(false);
     setPageRanges([]);
     setPageOneAt("1");
     setSavedTextbookId(null);
@@ -911,15 +925,19 @@ export default function Textbooks() {
         planned={planned}
         toc={activeToc}
         selection={tocSelection}
-        onToggleSelection={(id, checked) =>
+        isFirstBook={textbooks !== null && textbooks.length === 0}
+        firstChapterSuggested={firstChapterSuggested}
+        onToggleSelection={(id, checked) => {
+          setFirstChapterSuggested(false);
           setTocSelection((prev) => {
             const next = new Set(prev);
             checked ? next.add(id) : next.delete(id);
             return next;
-          })
-        }
+          });
+        }}
         onSaveBook={saveBook}
-        onSelectAll={() =>
+        onSelectAll={() => {
+          setFirstChapterSuggested(false);
           setTocSelection(
             new Set(
               activeToc
@@ -929,9 +947,12 @@ export default function Textbooks() {
                 )
                 .map((node) => node.id),
             ),
-          )
-        }
-        onClearSelection={() => setTocSelection(new Set())}
+          );
+        }}
+        onClearSelection={() => {
+          setFirstChapterSuggested(false);
+          setTocSelection(new Set());
+        }}
         savedTextbookId={savedTextbookId}
         nodeStages={nodeStages}
         ocrReason={ocrReason}
@@ -1066,6 +1087,8 @@ function AddTextbook({
   planned,
   toc,
   selection,
+  isFirstBook,
+  firstChapterSuggested,
   onToggleSelection,
   onSelectAll,
   onClearSelection,
@@ -1112,6 +1135,8 @@ function AddTextbook({
   planned: ImportChunk[] | null;
   toc: ImportTocNode[];
   selection: Set<string>;
+  isFirstBook: boolean;
+  firstChapterSuggested: boolean;
   onToggleSelection: (id: string, checked: boolean) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -1370,7 +1395,16 @@ function AddTextbook({
 
         {!importing && (
           <>
-            <p className="mt-4 text-muted-foreground text-xs leading-5">
+            <p className="mt-4 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-gold text-xs leading-5">
+              {!savedTextbookId
+                ? t("save-book-note")
+                : newChapters === 0
+                  ? t("pick-chapter-note")
+                  : firstChapterSuggested
+                    ? t("first-chapter-picked-note")
+                    : t("import-book-note")}
+            </p>
+            <p className="mt-3 text-muted-foreground text-xs leading-5">
               {t("saved-book-device-note")}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1420,8 +1454,13 @@ function AddTextbook({
       )}
       <p className="k-label">{t("add-textbook-label")}</p>
       <h2 className="font-display font-semibold text-lg tracking-tight">
-        {t("next-book")}
+        {isFirstBook ? t("first-book-title") : t("next-book")}
       </h2>
+      {isFirstBook && (
+        <p className="mt-1 max-w-lg text-muted-foreground text-sm leading-6">
+          {t("first-book-text")}
+        </p>
+      )}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">

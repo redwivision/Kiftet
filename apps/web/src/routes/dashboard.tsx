@@ -1,7 +1,6 @@
 import { Button, buttonVariants } from "@kiftet/ui/components/button";
-import { Download } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { ConceptGraph } from "@/components/concept-graph";
 import { DemoExpiredNotice } from "@/components/demo-expired-notice";
 import { useLanguage } from "@/components/language-provider";
@@ -20,12 +19,8 @@ import {
   cacheChapters,
   getCachedChapters,
 } from "@/lib/store";
+import { visibleChapterTitle } from "@/lib/textbook";
 import type { Route } from "./+types/dashboard";
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
 
 export function meta(_args: Route.MetaArgs) {
   return [
@@ -112,32 +107,10 @@ function countdown(resetAt: number | null, now: number): string {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const online = useOnline();
   const reconnecting = useReconnectGrace(online);
   const { t } = useLanguage();
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
-  const justSignedUp =
-    searchParams.get("justsignedup") === "1" ||
-    searchParams.get("signup") === "1";
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
-
-  const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-  };
   const [chapters, setChapters] = useState<ChapterInfo[] | null>(null);
   // Bet 3: the chapter list came from the phone's cache, not the server — flag
   // it so the room never pretends a saved list is live data.
@@ -380,6 +353,16 @@ export default function Dashboard() {
   const completedRounds =
     history?.filter((h) => h.status === "completed") ?? [];
   const latestCompleted = completedRounds[0];
+  const hasChapters = Boolean(chapters?.length);
+  const firstChapter = chapters?.[0] ?? null;
+  const firstChapterTitle = firstChapter
+    ? visibleChapterTitle(firstChapter.title).title
+    : "";
+  // Before the first round, settings and a daily plan are more choices than
+  // the student needs. Show one clear next step instead.
+  const hasStartedStudying = history !== null && history.length > 0;
+  const firstRun = history !== null && !hasStartedStudying;
+  const showStudySurfaces = hasChapters && hasStartedStudying;
 
   if (demoExpired) {
     return (
@@ -391,31 +374,6 @@ export default function Dashboard() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
-      {justSignedUp && (
-        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-gold/40 bg-panel/95 p-3 shadow-[0_20px_60px_-30px_rgba(212,175,106,0.8)] backdrop-blur-xl">
-          <img
-            src="/logo-mark.png"
-            alt=""
-            className="size-10 rounded-xl bg-[#0A0B0D] ring-1 ring-gold/40"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-sm">Install Kiftet</p>
-            <p className="text-muted-foreground text-xs">
-              Add to home screen for faster access
-            </p>
-          </div>
-          {deferredPrompt ? (
-            <Button size="sm" onClick={handleInstall}>
-              <Download className="size-3.5" />
-              Install
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline">
-              Install
-            </Button>
-          )}
-        </div>
-      )}
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 max-w-2xl space-y-2">
           <p className="k-label">{t("study-room")}</p>
@@ -426,20 +384,8 @@ export default function Dashboard() {
             {t("dash-text")}
           </p>
         </div>
-        <div className="grid w-full gap-2 sm:w-auto sm:shrink-0 sm:auto-cols-max sm:grid-flow-col sm:items-center">
-          <Link
-            to={chapters && chapters.length === 0 ? "/textbooks" : "/study"}
-            className={buttonVariants({
-              variant: "default",
-              size: "default",
-              className: "w-full sm:w-auto",
-            })}
-          >
-            {chapters && chapters.length === 0
-              ? t("add-textbook")
-              : t("browse-chapters")}
-          </Link>
-          {chapters && chapters.length > 0 && (
+        {hasStartedStudying && hasChapters && (
+          <div className="grid w-full gap-2 sm:w-auto sm:shrink-0 sm:auto-cols-max sm:grid-flow-col sm:items-center">
             <Link
               to="/textbooks"
               className={buttonVariants({
@@ -450,38 +396,21 @@ export default function Dashboard() {
             >
               {t("manage-books")}
             </Link>
-          )}
-          {SYLLABUS_ENABLED && chapters && chapters.length > 0 && (
-            <Link
-              to="/syllabus"
-              className={buttonVariants({
-                variant: "outline",
-                size: "default",
-                className: "w-full sm:w-auto",
-              })}
-            >
-              {t("study-by-syllabus")}
-            </Link>
-          )}
-        </div>
+            {SYLLABUS_ENABLED && (
+              <Link
+                to="/syllabus"
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "default",
+                  className: "w-full sm:w-auto",
+                })}
+              >
+                {t("study-by-syllabus")}
+              </Link>
+            )}
+          </div>
+        )}
       </header>
-
-      {session && (
-        <TodayPlan
-          key={planRevision}
-          onStartChapter={(chapterId) => void start(chapterId)}
-          starting={starting}
-        />
-      )}
-
-      {session && !placementSettled && (
-        <PlacementPrompt
-          onSettled={() => {
-            setPlacementSettled(true);
-            setPlanRevision((revision) => revision + 1);
-          }}
-        />
-      )}
 
       {!session && getDemoUser() && (
         <div className="surface mb-8 flex animate-border-fade flex-wrap items-center justify-between gap-3 border p-4 text-sm">
@@ -496,6 +425,58 @@ export default function Dashboard() {
             {t("create-free-account")}
           </Link>
         </div>
+      )}
+
+      {firstRun && firstChapter && (
+        <section className="surface mb-8 border p-5 sm:p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <p className="k-label">{t("first-study-label")}</p>
+              <h2 className="font-display font-semibold text-xl tracking-tight">
+                {t("first-study-title", { title: firstChapterTitle })}
+              </h2>
+              <p className="max-w-md text-muted-foreground text-sm leading-6">
+                {t("first-study-text")}
+              </p>
+            </div>
+            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+              <Button
+                className="w-full sm:w-auto"
+                disabled={starting !== null}
+                loading={starting === firstChapter.id}
+                onClick={() => void start(firstChapter.id)}
+              >
+                {t("first-study-cta")}
+              </Button>
+              <Link
+                to="/study"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "w-full sm:w-auto",
+                })}
+              >
+                {t("first-study-other")}
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {session && showStudySurfaces && !placementSettled && (
+        <PlacementPrompt
+          onSettled={() => {
+            setPlacementSettled(true);
+            setPlanRevision((revision) => revision + 1);
+          }}
+        />
+      )}
+      {session && showStudySurfaces && (
+        <TodayPlan
+          key={planRevision}
+          onStartChapter={(chapterId) => void start(chapterId)}
+          starting={starting}
+        />
       )}
 
       {openRound && (
@@ -517,7 +498,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      {history !== null && (
+      {hasStartedStudying && (
         <section className="surface mb-8 flex flex-col gap-4 border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="space-y-1">
             <p className="k-label">{t("home-progress")}</p>
@@ -703,23 +684,48 @@ export default function Dashboard() {
       )}
 
       {chapters && chapters.length === 0 && (
-        <div className="surface flex flex-col items-center gap-5 p-10 text-center">
-          <ConceptGraph className="h-28 w-auto text-gold" />
-          <div className="space-y-1">
-            <h2 className="font-display font-semibold text-xl tracking-tight">
-              {t("empty-none")}
+        <section className="surface mx-auto max-w-2xl p-6 sm:p-8">
+          <div className="flex flex-col items-center text-center">
+            <ConceptGraph className="h-20 w-auto text-gold" />
+            <p className="k-label mt-5">{t("first-run-label")}</p>
+            <h2 className="mt-1 font-display font-semibold text-xl tracking-tight">
+              {t("first-run-title")}
             </h2>
-            <p className="mx-auto max-w-sm text-muted-foreground text-sm leading-6">
-              {t("empty-none-text")}
+            <p className="mx-auto mt-1 max-w-md text-muted-foreground text-sm leading-6">
+              {t("first-run-text")}
             </p>
           </div>
-          <Link to="/textbooks" className={buttonVariants({ size: "sm" })}>
-            {t("add-book-device")}
-          </Link>
-        </div>
+          <ol className="mx-auto mt-5 max-w-sm space-y-2 text-left">
+            {(
+              [
+                "first-run-step-1",
+                "first-run-step-2",
+                "first-run-step-3",
+              ] as const
+            ).map((key, index) => (
+              <li key={key} className="flex items-start gap-3 text-sm">
+                <span className="grid size-6 shrink-0 place-items-center rounded-full border border-gold/30 bg-gold/10 font-medium text-[0.72rem] text-gold">
+                  {index + 1}
+                </span>
+                <span className="leading-6">{t(key)}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <Link
+              to="/textbooks"
+              className={buttonVariants({ className: "w-full sm:w-auto" })}
+            >
+              {t("first-run-cta")}
+            </Link>
+            <p className="max-w-sm text-center text-muted-foreground text-xs leading-5">
+              {t("first-run-privacy")}
+            </p>
+          </div>
+        </section>
       )}
 
-      {chapters && chapters.length > 0 && (
+      {chapters && chapters.length > 0 && hasStartedStudying && (
         <section className="surface flex flex-col gap-4 border p-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <p className="k-label">{t("browse-chapters")}</p>

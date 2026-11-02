@@ -282,6 +282,12 @@ export const en = {
   "home-latest-score": "Latest result: {before}% → {after}%",
   "home-progress-note":
     "Your completed study rounds and results will show here.",
+  "first-study-label": "Your first study round",
+  "first-study-title": "Start with {title}",
+  "first-study-text":
+    "Explain the chapter in your own words. You'll see what you already know and what to revisit.",
+  "first-study-cta": "Start first chapter",
+  "first-study-other": "Choose another chapter",
   "browse-chapters": "Choose a chapter",
   "manage-books": "Manage books",
   "chapter-count": "{n} chapters ready to study",
@@ -370,6 +376,16 @@ export const en = {
   "empty-none": "Nothing to study yet.",
   "empty-none-text":
     "Your study room is empty. Chapters show up here as soon as you add a book — then you can start studying them.",
+  "first-run-label": "Start here",
+  "first-run-title": "Add your first textbook",
+  "first-run-text":
+    "One book is enough to begin. Kiftet finds its chapters, and you choose the first one to study.",
+  "first-run-step-1": "Name the book and choose its subject.",
+  "first-run-step-2": "Add the PDF, or paste a chapter.",
+  "first-run-step-3": "Pick the first chapter and start.",
+  "first-run-cta": "Add my first textbook",
+  "first-run-privacy":
+    "The PDF stays on this device. Only the chapters you choose are prepared for study.",
   "add-book-device":
     "Add your textbook — it stays on your phone, not on our servers",
   "opening-ellipsis": "Opening…",
@@ -444,6 +460,9 @@ export const en = {
   "preview-mode-note":
     "You can try the on-device chapter split below — nothing is saved and nothing is sent. Live import is the next step.",
   "add-textbook-label": "Add a textbook",
+  "first-book-title": "Add your first textbook",
+  "first-book-text":
+    "Start with one book. We'll find its contents, then you choose the first chapter.",
   "next-book": "The next book you study could be yours.",
   "book-title": "Book title",
   "textbook-contents": "Your table of contents",
@@ -504,6 +523,12 @@ export const en = {
   "hierarchy-report-copied": "Copied",
   "saved-book-device-note":
     "The textbook and its contents are saved to your account. The PDF stays on this device; selected chapter text is sent for study processing.",
+  "save-book-note":
+    "Save the book first. Then import the suggested chapter or choose others.",
+  "first-chapter-picked-note":
+    "We selected the first available chapter to help you start. You can change it above.",
+  "pick-chapter-note": "Choose at least one chapter above to continue.",
+  "import-book-note": "Import your selection, or choose more above.",
   "save-textbook": "Save textbook",
   "textbook-saved": "Textbook and contents saved.",
   "textbook-saved-local-error":
@@ -1477,6 +1502,11 @@ export const am: Record<MessageKey, string> = {
   "home-completed-count": "{n} የጥናት ዙሮች ተጠናቀዋል",
   "home-latest-score": "የመጨረሻ ውጤት: {before}% → {after}%",
   "home-progress-note": "ያጠናቀቅካቸው ዙሮችና ውጤቶቻቸው እዚህ ይታያሉ።",
+  "first-study-label": "የመጀመሪያ የጥናት ዙር",
+  "first-study-title": "በ{title} ጀምር",
+  "first-study-text": "ምዕራፉን በራስህ ቃላት አብራራ። የምታውቀውንና እንደገና ማየት ያለብህን ታያለህ።",
+  "first-study-cta": "የመጀመሪያውን ምዕራፍ ጀምር",
+  "first-study-other": "ሌላ ምዕራፍ ምረጥ",
   "browse-chapters": "ምዕራፍ ምረጥ",
   "manage-books": "መጽሐፍትን አስተዳድር",
   "chapter-count": "ለማጥናት {n} ምዕራፎች ዝግጁ ናቸው",
@@ -1559,6 +1589,15 @@ export const am: Record<MessageKey, string> = {
   "empty-none": "ገና የሚመረመር ነገር የለም።",
   "empty-none-text":
     "የጥናት ክፍሉ ባዶ ነው። ምዕራፎች እንደተጫኑ ወዲያውኑ እዚህ ይታያሉ — ከዚያም ይህ ክፍል የማስታወስ ዑደቱን በእነሱ ላይ ያሄዳል።",
+  "first-run-label": "እዚህ ጀምር",
+  "first-run-title": "የመጀመሪያ መጽሐፍህን ጨምር",
+  "first-run-text":
+    "ለመጀመር አንድ መጽሐፍ በቂ ነው። ኪፍተት ምዕራፎቹን ያገኛል፣ አንተም የምታጠናውን የመጀመሪያ ምዕራፍ ትመርጣለህ።",
+  "first-run-step-1": "የመጽሐፉን ስም ጻፍና ትምህርቱን ምረጥ።",
+  "first-run-step-2": "PDF ጨምር ወይም የምዕራፍ ጽሑፍ ለጥፍ።",
+  "first-run-step-3": "የመጀመሪያውን ምዕራፍ ምረጥና ጀምር።",
+  "first-run-cta": "የመጀመሪያ መጽሐፌን ጨምር",
+  "first-run-privacy": "PDF በዚህ መሣሪያ ላይ ይቆያል። የመረጥካቸው ምዕራፎች ብቻ ለጥናት ይዘጋጃሉ።",
   "add-book-device": "የመማሪያ መጽሐፍህን ጨምር — በመሣሪያህ ላይ ነው፣ በእኛ ላይ አይደለም",
   "opening-ellipsis": "በመከፈት ላይ…",
   "start-review": "ግምገማ ጀምር",
@@ -1632,6 +1671,8 @@ export const am: Record<MessageKey, string> = {
   "preview-mode-note":
     "ከታች ያለውን በመሣሪያው ላይ የሚከፋፈለውን ሞክረህ ማየት ትችላለህ — ምንም አይቀመጥም እና አይላክም። የቀጥታ ማስገባት የሚቀጥለው እርምጃ ነው።",
   "add-textbook-label": "የመማሪያ መጽሐፍ ጨምር",
+  "first-book-title": "የመጀመሪያ መጽሐፍህን ጨምር",
+  "first-book-text": "በአንድ መጽሐፍ ጀምር። ይዘቱን እናገኛለን፣ ከዚያ የመጀመሪያውን ምዕራፍ ትመርጣለህ።",
   "next-book": "የሚቀጥለው የምታጠናው መጽሐፍ የራስህ ሊሆን ይችላል።",
   "book-title": "የመጽሐፍ ርዕስ",
   "textbook-contents": "የመጽሐፉ ይዘት",
@@ -1689,6 +1730,11 @@ export const am: Record<MessageKey, string> = {
   "hierarchy-report-copied": "ተቀድቷል",
   "saved-book-device-note":
     "መጽሐፉና ይዘቱ በመለያህ ላይ ተቀምጠዋል። PDF ፋይሉ በዚህ መሣሪያ ላይ ይቆያል፤ የተመረጠው ምዕራፍ ጽሑፍ ለጥናት ማስኬድ ይላካል።",
+  "save-book-note": "መጀመሪያ መጽሐፉን አስቀምጥ። ከዚያ የተመረጠውን ምዕራፍ አስገባ ወይም ሌሎችን ምረጥ።",
+  "first-chapter-picked-note":
+    "እንድትጀምር የመጀመሪያውን የሚገኝ ምዕራፍ መርጠናል። ከላይ መቀየር ትችላለህ።",
+  "pick-chapter-note": "ለመቀጠል ከላይ ቢያንስ አንድ ምዕራፍ ምረጥ።",
+  "import-book-note": "የመረጥከውን አስገባ፣ ወይም ከላይ ተጨማሪ ምረጥ።",
   "save-textbook": "መጽሐፉን አስቀምጥ",
   "textbook-saved": "መጽሐፉና ይዘቱ ተቀምጠዋል።",
   "textbook-saved-local-error":
