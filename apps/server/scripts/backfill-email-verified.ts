@@ -15,7 +15,7 @@
  *     --before=2026-10-29T00:00:00Z
  *
  * `--before` limits the backfill to accounts created before that moment, so
- * accounts that signed up after Brevo started sending can still prove their
+ * accounts that signed up after SMTP started sending can still prove their
  * address normally.
  *
  * Reads apps/server/.env (Bun loads it automatically) and prints only the

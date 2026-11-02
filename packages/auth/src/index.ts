@@ -4,7 +4,11 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 
-import { assertEmailTransportConfigured, sendEmail } from "./email";
+import {
+  assertEmailTransportConfigured,
+  type EmailConfig,
+  sendEmail,
+} from "./email";
 import { socialProviderConfig } from "./providers";
 
 // The email suffix every throwaway demo identity is minted under by
@@ -28,19 +32,17 @@ export {
   type SocialProviderId,
 } from "./providers";
 
-export type AuthConfig = {
+export type AuthConfig = EmailConfig & {
   BETTER_AUTH_URL: string;
   BETTER_AUTH_SECRET: string;
   CORS_ORIGIN: string;
   REQUIRE_EMAIL_VERIFICATION: boolean;
-  AUTH_EMAIL_TRANSPORT: string;
-  BREVO_API_KEY?: string;
-  AUTH_EMAIL_FROM?: string;
-  AUTH_EMAIL_FROM_NAME?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   FACEBOOK_CLIENT_ID?: string;
   FACEBOOK_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
 };
 
 export function createAuth(

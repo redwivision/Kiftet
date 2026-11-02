@@ -80,6 +80,10 @@ export default function Header() {
             aria-label={t("nav-primary")}
             className={cn(
               "flex shrink items-center gap-0.5 rounded-full border border-border/70 bg-background/60 p-1 shadow-sm sm:gap-1",
+              // Public navigation lives in the drawer below `sm`; the header
+              // keeps its one visible action (sign in) instead of duplicating
+              // the same links twice on a narrow screen.
+              !isApp && "hidden sm:flex",
             )}
           >
             {(isApp ? APP_NAV : PUBLIC_NAV).map(({ to, labelKey, Icon }) => (

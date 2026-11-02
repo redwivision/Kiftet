@@ -18,13 +18,12 @@ import {
   type ComponentType,
   type CSSProperties,
   type ReactNode,
-  useEffect,
   useState,
 } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { BrandMark, BrandSignature } from "@/components/brand-mark";
 import { CoverageView } from "@/components/gap-list";
-import { HeroFilm, OPEN_ARC } from "@/components/hero-film";
+import { HeroFilm } from "@/components/hero-film";
 import { useLanguage } from "@/components/language-provider";
 import type { MasteryLevel } from "@/components/study-provider";
 import WaitlistForm from "@/components/waitlist-form";
@@ -38,11 +37,11 @@ import type { Route } from "./+types/_index";
 
 export function meta(_args: Route.MetaArgs) {
   return [
-    { title: "Kiftet — Close the gap" },
+    { title: "Kiftet — Know what to study next" },
     {
       name: "description",
       content:
-        "Make Studying Managable. kiftet help you manage your study life as easy as possible so you don't crash out at the pile-up for exams. Built for every student.",
+        "Explain a chapter in your own words. Kiftet finds the ideas you're missing and gives you a short plan to learn them. Try a prepared sample, or use your own textbook.",
     },
   ];
 }
@@ -258,7 +257,6 @@ function Disclosure({
 
 export default function Home() {
   const hero = useOnScreen<HTMLDivElement>();
-  const heroLead = useOnScreen<HTMLDivElement>();
   const how = useOnScreen<HTMLElement>();
   const stats = useOnScreen<HTMLElement>();
   const diff = useOnScreen<HTMLElement>();
@@ -273,56 +271,34 @@ export default function Home() {
   return (
     <main className="mx-auto w-full max-w-6xl px-3 pb-20 sm:px-6 lg:px-8">
       {/* ── Hero: the promise, and the demo one tap away ───────
-          On phones the first view needs no scroll: a pocket-sized listening
-          ring, one line of invitation, and the actions. The film's full story
-          follows below for anyone who scrolls. Desktop keeps the two-column
-          hero: copy left, film right. */}
+          The headline and the two ways in come first at every width. The film
+          follows, clearly framed as a prepared example rather than a live
+          result. Desktop keeps the two-column hero: copy left, example right. */}
       <section className="grid gap-10 pt-6 pb-12 sm:pt-10 sm:pb-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:gap-x-12 lg:gap-y-4">
-        {/* The phone's first screen: the brand's open ring breathing around a
-            mic, the question a student hears, and the two actions. All inside
-            the first view — kft-in lives on this container so the prompt and
-            the CTAs rise in with it. */}
-        <div
-          ref={heroLead.ref}
-          className={cn(
-            "order-1 flex flex-col items-center gap-5 lg:hidden",
-            heroLead.shown && "kft-in",
-          )}
-        >
-          <HeroSayRing />
-          <p
-            className="kft-rise max-w-[14rem] text-center font-medium text-foreground text-sm leading-6"
-            style={{ "--kft-i": "160ms" } as CSSProperties}
-          >
-            {t("hero-lead-p")}
-          </p>
-          <HeroCtas
-            className="w-full"
-            delay="260ms"
-            launch={launch}
-            pending={pending}
-            disabled={disabled}
-            signedIn={signedIn}
-            failure={failure}
-          />
-        </div>
-
         <div
           ref={hero.ref}
           className={cn(
-            "order-3 space-y-4 lg:order-none lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:justify-between",
+            "order-1 space-y-4 lg:col-start-1 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:justify-between",
             hero.shown && "kft-in",
           )}
         >
-          <h1 className="relative isolate font-bold font-display text-6xl text-foreground leading-[0.98] tracking-[-0.07em] sm:text-7xl lg:text-8xl xl:text-9xl">
-            <span aria-hidden="true" className="halo" />
-            <span className="sr-only">{t("hero-h1")}</span>
-            <span className="relative">{t("hero-h1")}</span>
-          </h1>
+          <div className="space-y-4">
+            <p className="k-label">{t("hero-eyebrow")}</p>
+            <h1 className="relative isolate font-bold font-display text-4xl text-foreground leading-[1.02] tracking-[-0.06em] sm:text-6xl lg:text-7xl xl:text-8xl">
+              <span aria-hidden="true" className="halo" />
+              <span className="relative">{t("hero-h1")}</span>
+            </h1>
+            <p className="max-w-xl text-base text-foreground/90 leading-7 sm:text-lg">
+              {t("hero-subtitle")}
+            </p>
+            <p className="max-w-xl text-muted-foreground text-sm leading-6 sm:text-base">
+              {t("hero-description")}
+            </p>
+          </div>
 
           <div className="space-y-2 lg:mt-6">
             <HeroCtas
-              className="hidden lg:flex"
+              className="w-full"
               delay="220ms"
               launch={launch}
               pending={pending}
@@ -331,27 +307,11 @@ export default function Home() {
               failure={failure}
             />
 
-            <p
-              className="kft-rise max-w-xl text-base text-foreground/90 leading-7 sm:text-lg lg:hidden"
-              style={{ "--kft-i": "320ms" } as CSSProperties}
-            >
-              {t("hero-h1")} {t("hero-line")}
-            </p>
-
             <div className="space-y-3">
               <div
-                className="kft-rise flex flex-col gap-1.5 sm:flex-row sm:items-center"
+                className="kft-rise flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center"
                 style={{ "--kft-i": "400ms" } as CSSProperties}
               >
-                <a
-                  href="#waitlist"
-                  className={cn(
-                    buttonVariants({ variant: "ghost" }),
-                    "w-full sm:w-auto",
-                  )}
-                >
-                  {t("hero-join-cta")}
-                </a>
                 <a
                   href="#how"
                   className="py-1.5 text-center font-medium text-muted-foreground text-sm underline-offset-4 transition-colors duration-200 hover:text-foreground hover:underline sm:text-left"
@@ -388,29 +348,31 @@ export default function Home() {
           </div>
         </div>
 
-        {/* The product, performing — the first thing under the actions on a
-            phone, and the right column on desktop. The open ring hears an
-            answer and turns it into a diagnosis of exactly what the student
-            cannot explain. */}
-        <div className="order-2 flex flex-col items-center gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
+        {/* The product, performing — under the actions on a phone and in the
+            right column on desktop. A permanent "prepared example" label and
+            caption keep the choreography from reading as a live result. */}
+        <div className="order-2 flex flex-col items-center gap-3 lg:col-start-2 lg:row-start-1">
+          <div className="flex w-full max-w-md items-center justify-between gap-3">
+            <p className="k-label">{t("hero-example-eyebrow")}</p>
+            <span className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-1 font-medium text-[0.72rem] text-gold">
+              {t("example-label")}
+            </span>
+          </div>
           <HeroFilm className="w-full max-w-md" />
           <p className="max-w-md text-balance text-center text-muted-foreground text-sm leading-6">
             {t("hero-film-caption")}
           </p>
         </div>
-
-        {/* The loop preview closes the hero on a phone — under the read — but
-            stays under the film on desktop. */}
-        <div className="order-4 flex justify-center lg:order-none lg:col-start-2 lg:row-start-2">
-          <LoopPreview
-            className="w-full max-w-md"
-            onLaunch={launch}
-            disabled={disabled}
-            pending={pending}
-            signedIn={signedIn}
-          />
-        </div>
       </section>
+
+      {/* ── Two clear ways in: the prepared sample or the student's own book.
+             This is the line between "let me look" and "this is my study". */}
+      <StartOptions
+        launch={launch}
+        pending={pending}
+        disabled={disabled}
+        failure={failure}
+      />
 
       {/* ── How it works: four words, no paragraphs ───────────── */}
       <section
@@ -429,26 +391,21 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link
-              to="/login?signup=1"
-              className={cn(buttonVariants({ size: "sm" }))}
-            >
-              {t("hero-signup-cta")}
-            </Link>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={launch}
-              disabled={disabled}
-            >
+            <Button size="sm" onClick={launch} disabled={disabled}>
               {pending ? t("demo-setting-up") : t("hero-cta")}
             </Button>
-            <a
-              href="#waitlist"
+            <Link
+              to="/login?signup=1"
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
+            >
+              {t("hero-use-own-textbook")}
+            </Link>
+            <Link
+              to="/login"
               className={cn(buttonVariants({ size: "sm", variant: "ghost" }))}
             >
-              {t("hero-join-cta")}
-            </a>
+              {t("auth-signin-cta")}
+            </Link>
           </div>
         </div>
         <ol className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -465,6 +422,15 @@ export default function Home() {
             </li>
           ))}
         </ol>
+        <div className="mt-6 flex justify-center">
+          <LoopPreview
+            className="w-full max-w-md"
+            onLaunch={launch}
+            disabled={disabled}
+            pending={pending}
+            signedIn={signedIn}
+          />
+        </div>
       </section>
 
       {/* ── The aha: the one receipt on the page ──────────────── */}
@@ -706,45 +672,31 @@ export default function Home() {
         <p className="mx-auto mt-3 max-w-md text-base text-muted-foreground leading-7">
           {t("cta-text")}
         </p>
-        <div className="mt-7 flex justify-center">
+        <div className="mt-7 flex flex-col items-center gap-2">
           <DemoButton variant="primary" size="lg" />
         </div>
-        <p className="mt-6 text-muted-foreground text-sm">{t("no-account")}</p>
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+        <p className="mt-4 text-muted-foreground text-sm">{t("no-account")}</p>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            to="/login?signup=1"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            {t("hero-use-own-textbook")}
+          </Link>
+          {!signedIn && (
+            <Link
+              to="/login"
+              className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+            >
+              {t("auth-signin-cta")}
+            </Link>
+          )}
           <Link
             to="/plans"
             className="font-medium text-foreground text-sm underline underline-offset-4"
           >
             {t("plans-link")}
           </Link>
-          {!signedIn && (
-            <Link
-              to="/login"
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              {t("auth-signin-cta")}
-            </Link>
-          )}
-        </div>
-
-        <div className="mx-auto mt-8 max-w-md text-left">
-          <Disclosure summary={t("waitlist-chip")} id="waitlist">
-            <div className="space-y-3">
-              <p className="font-display font-semibold text-lg tracking-tight">
-                {t("waitlist-title")}
-              </p>
-              <WaitlistForm />
-              <p className="text-center text-muted-foreground text-sm">
-                {t("waitlist-signin-prefix")}{" "}
-                <Link
-                  to="/login"
-                  className="font-medium text-gold underline-offset-4 hover:underline"
-                >
-                  {t("sign-in")}
-                </Link>
-              </p>
-            </div>
-          </Disclosure>
         </div>
       </section>
 
@@ -771,6 +723,25 @@ export default function Home() {
               {t("legal-terms")}
             </Link>
           </div>
+          <div className="w-full max-w-md text-left">
+            <Disclosure summary={t("updates-chip")} id="waitlist">
+              <div className="space-y-3">
+                <p className="font-display font-semibold text-lg tracking-tight">
+                  {t("waitlist-title")}
+                </p>
+                <WaitlistForm />
+                <p className="text-center text-muted-foreground text-sm">
+                  {t("waitlist-signin-prefix")}{" "}
+                  <Link
+                    to="/login"
+                    className="font-medium text-gold underline-offset-4 hover:underline"
+                  >
+                    {t("sign-in")}
+                  </Link>
+                </p>
+              </div>
+            </Disclosure>
+          </div>
           <p className="max-w-sm text-muted-foreground/70 text-xs leading-5">
             {t("cookie-notice")}
           </p>
@@ -783,67 +754,98 @@ export default function Home() {
   );
 }
 
-/* The phone hero's pocket visual: the brand's open ring — the gap — draws
-   itself around a mic that breathes. The film's first beat, shrunk to a size
-   that shares the first view with the actions instead of pushing them down.
-   The full film follows below for anyone who scrolls. */
-function HeroSayRing() {
-  const on = useOnScreen<HTMLDivElement>();
-  const [reduce, setReduce] = useState(false);
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    )
-      return;
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduce(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setReduce(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+/* The two ways in, spelled out. The sample is for someone who wants to see
+   the loop before trusting it; the full room is for someone with their own
+   book. Keeping them side by side is what makes the boundary legible. */
+function StartOptions({
+  launch,
+  pending,
+  disabled,
+  failure,
+}: {
+  launch: () => void | Promise<void>;
+  pending: boolean;
+  disabled: boolean;
+  failure: string | null;
+}) {
+  const { t } = useLanguage();
 
   return (
-    <div
-      ref={on.ref}
-      className={cn(
-        "relative grid size-24 place-items-center",
-        on.shown && "kft-in",
-      )}
+    <section
+      id="start"
+      aria-labelledby="start-title"
+      className="scroll-mt-24 pt-2"
     >
-      <svg
-        aria-hidden="true"
-        fill="none"
-        viewBox="0 0 100 100"
-        className="absolute inset-0 size-full text-gold"
-      >
-        <motion.path
-          d={OPEN_ARC}
-          stroke="currentColor"
-          strokeWidth={4}
-          strokeLinecap="round"
-          initial={false}
-          animate={{ pathLength: on.shown ? 1 : 0 }}
-          transition={{ duration: reduce ? 0 : 0.9, ease: "easeOut" }}
-        />
-      </svg>
-      <span
-        aria-hidden="true"
-        className="absolute size-14 animate-breathe rounded-full bg-gold/15 motion-reduce:animate-none"
-      />
-      <span
-        aria-hidden="true"
-        className="relative grid size-12 place-items-center rounded-full border-2 border-gold/50 bg-night-raised text-gold"
-      >
-        <Mic className="size-5" />
-      </span>
-    </div>
+      <div className="max-w-2xl space-y-3">
+        <p className="k-label">{t("start-eyebrow")}</p>
+        <h2
+          id="start-title"
+          className="font-display font-semibold text-2xl tracking-[-0.02em] sm:text-3xl"
+        >
+          {t("start-title")}
+        </h2>
+        <p className="text-muted-foreground text-sm leading-6 sm:text-base">
+          {t("start-subtitle")}
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="surface flex flex-col border-gold/30 p-5 sm:p-6">
+          <p className="k-label text-gold">{t("start-sample-label")}</p>
+          <h3 className="mt-2 font-display font-semibold text-xl tracking-tight">
+            {t("hero-cta")}
+          </h3>
+          <p className="mt-2 flex-1 text-muted-foreground text-sm leading-6">
+            {t("start-sample-body")}
+          </p>
+          <Button
+            className="mt-5 w-full justify-center sm:w-auto sm:self-start"
+            onClick={launch}
+            disabled={disabled}
+          >
+            {pending ? t("demo-setting-up") : t("hero-cta")}
+          </Button>
+          {failure && (
+            <p role="alert" className="mt-3 text-rust text-sm">
+              {failure}
+            </p>
+          )}
+        </div>
+
+        <div className="surface flex flex-col p-5 sm:p-6">
+          <p className="k-label">{t("start-full-label")}</p>
+          <h3 className="mt-2 font-display font-semibold text-xl tracking-tight">
+            {t("hero-use-own-textbook")}
+          </h3>
+          <p className="mt-2 flex-1 text-muted-foreground text-sm leading-6">
+            {t("start-full-body")}
+          </p>
+          <Link
+            to="/login?signup=1"
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "mt-5 w-full justify-center sm:w-auto sm:self-start",
+            )}
+          >
+            {t("hero-signup-cta")}
+          </Link>
+          <p className="mt-3 text-muted-foreground text-xs leading-5">
+            {t("start-full-note")}
+          </p>
+          <Link
+            to="/login"
+            className="mt-4 font-medium text-foreground text-sm underline underline-offset-4 transition-colors hover:text-gold"
+          >
+            {t("hero-signin-prompt")}
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }
 
-/* The hero's actions, shared between the phone's first view and the desktop
-   column, so the copy can never drift apart between the two layouts. */
+/* The hero's actions: one primary way into the sample, one secondary way into
+   the student's own textbook, and a quiet route back to sign in. */
 function HeroCtas({
   className,
   delay = "220ms",
@@ -903,10 +905,20 @@ function HeroCtas({
               "w-full sm:w-auto",
             )}
           >
-            {t("hero-signup-cta")}
+            {t("hero-use-own-textbook")}
           </Link>
         )}
       </div>
+      {!signedIn && (
+        <p className="text-center text-muted-foreground text-sm sm:text-left">
+          <Link
+            to="/login"
+            className="font-medium text-foreground underline underline-offset-4 transition-colors hover:text-gold"
+          >
+            {t("hero-signin-prompt")}
+          </Link>
+        </p>
+      )}
       {failure && (
         <p role="alert" className="text-rust text-sm">
           {failure}
@@ -1043,6 +1055,10 @@ function DiagnosisSection() {
           </h2>
           <p className="max-w-2xl text-muted-foreground text-sm leading-6 sm:text-base">
             {t("diag-sub")}
+          </p>
+          <p className="max-w-2xl text-muted-foreground text-sm leading-6">
+            <span className="font-medium text-gold">{t("example-label")}:</span>{" "}
+            {t("diag-example-note")}
           </p>
         </div>
 
@@ -1269,9 +1285,7 @@ function DemoButton({
           ? t("demo-setting-up")
           : signedIn
             ? t("hero-dashboard-cta")
-            : variant === "primary"
-              ? t("demo-start")
-              : t("demo-try")}
+            : t("hero-cta")}
       </Button>
       {failure && (
         <p role="alert" className="text-rust text-xs">
