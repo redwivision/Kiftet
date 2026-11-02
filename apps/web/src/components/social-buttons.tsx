@@ -1,5 +1,6 @@
 import { Button } from "@kiftet/ui/components/button";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { apiUrl } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -91,6 +92,8 @@ function ProviderMark({ provider }: { provider: SocialProviderId }) {
 export default function SocialButtons() {
   const providers = useSocialProviders();
   const { t } = useLanguage();
+  const [pendingProvider, setPendingProvider] =
+    useState<SocialProviderId | null>(null);
 
   if (providers.length === 0) return null;
 
@@ -99,14 +102,17 @@ export default function SocialButtons() {
     // where the browser actually is rather than hardcoding a host. Without it
     // Better Auth redirects to its own configured base, which is the API host —
     // so an unauthenticated student would land on a bare JSON response.
-    const { error } = await authClient.signIn.social({
-      provider,
-      callbackURL: `${window.location.origin}/dashboard`,
-    });
-    if (error) {
-      // Popup blocked, or the provider refused. The password form is still
-      // usable, so this only reaches the console.
-      console.error(`[auth] ${provider} sign-in failed`, error);
+    setPendingProvider(provider);
+    try {
+      const { error } = await authClient.signIn.social({
+        provider,
+        callbackURL: `${window.location.origin}/dashboard`,
+      });
+      if (error) toast.error(t("auth-social-error"));
+    } catch {
+      toast.error(t("auth-social-error"));
+    } finally {
+      setPendingProvider(null);
     }
   };
 
@@ -128,6 +134,8 @@ export default function SocialButtons() {
           type="button"
           variant="outline"
           onClick={() => void start(provider)}
+          loading={pendingProvider === provider}
+          disabled={pendingProvider !== null}
           className="w-full justify-center"
         >
           <ProviderMark provider={provider} />

@@ -1015,6 +1015,8 @@ export const en = {
     "Please agree to the Terms and Privacy notice to continue.",
   "auth-social-terms":
     "By continuing with a social account, you agree to our Terms and Privacy notice.",
+  "auth-social-error":
+    "That sign-in option couldn't start. Try again or use email and password.",
   "auth-legal-cookies": "Essential cookies only — no ads or analytics.",
   "legal-privacy": "Privacy notice",
   "legal-terms": "Terms of use",
@@ -1234,6 +1236,8 @@ export const en = {
   "settings-delete-session-expired":
     "For your safety, sign in again, then delete your account.",
   "settings-delete-success": "Your account has been deleted.",
+  "settings-no-books":
+    "Add a textbook to set your current chapter and study position.",
   "today-plan-label": "Your day",
   "today-plan-title": "Today's plan",
   "today-plan-minutes": "{n} minutes today",
@@ -2195,6 +2199,8 @@ export const am: Record<MessageKey, string> = {
   "auth-terms-and": "እና",
   "auth-terms-required": "ለመቀጠል ውሎችንና የግላዊነት ማስታወቂያውን ተቀበል።",
   "auth-social-terms": "በማህበራዊ መለያ ከቀጠልክ ውሎቻችንንና የግላዊነት ማስታወቂያችንን ትቀበላለህ።",
+  "auth-social-error":
+    "ይህን የመግቢያ አማራጭ መጀመር አልተቻለም። እንደገና ሞክር ወይም ኢሜይልና የይለፍ ቃል ተጠቀም።",
   "auth-legal-cookies": "አስፈላጊ ኩኪዎች ብቻ — ማስታወቂያ ወይም ትንታኔ የለም።",
   "legal-privacy": "የግላዊነት ማስታወቂያ",
   "legal-terms": "የአጠቃቀም ውሎች",
@@ -2375,6 +2381,7 @@ export const am: Record<MessageKey, string> = {
   "settings-delete-password-mismatch": "የይለፍ ቃሉ አልተመሳሰለም።",
   "settings-delete-session-expired": "ለደህንነትህ እንደገና ግባ፣ ከዚያ መለያህን ሰርዝ።",
   "settings-delete-success": "መለያህ ተሰርዟል።",
+  "settings-no-books": "የአሁኑን ምዕራፍና የጥናት ቦታህን ለማስቀመጥ መጽሐፍ ጨምር።",
   "today-plan-label": "የዛሬ ጥናት",
   "today-plan-title": "የዛሬ እቅድ",
   "today-plan-minutes": "ዛሬ {n} ደቂቃ",

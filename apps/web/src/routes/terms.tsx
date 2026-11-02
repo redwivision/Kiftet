@@ -121,7 +121,7 @@ export default function Terms() {
         and Kiftet is used in both scripts by design.
       */}
       {(["en", "am"] as const).map((lang) => (
-        <section key={lang} className="mt-10">
+        <section key={lang} lang={lang} className="mt-10">
           <h2 className="text-muted-foreground text-xs uppercase tracking-wide">
             {lang === "en" ? "English" : "አማርኛ"}
           </h2>

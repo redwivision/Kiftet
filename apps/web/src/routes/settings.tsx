@@ -1,8 +1,8 @@
-import { Button } from "@kiftet/ui/components/button";
+import { Button, buttonVariants } from "@kiftet/ui/components/button";
 import { Input } from "@kiftet/ui/components/input";
 import { Label } from "@kiftet/ui/components/label";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 
 import { useLanguage } from "@/components/language-provider";
@@ -60,44 +60,62 @@ export default function Settings() {
     null,
   );
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [loading, setLoading] = useState(true);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [savingBook, setSavingBook] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [preferencesSaved, setPreferencesSaved] = useState(false);
+  const [savedBookId, setSavedBookId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
+
+  const loadPlacement = useCallback(async () => {
+    const generation = ++loadGeneration.current;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const loaded = await getPlacement();
+      if (generation !== loadGeneration.current) return;
+      setState(loaded);
+      setPreferences(loaded.preferences);
+      setDrafts(
+        Object.fromEntries(
+          loaded.books.map((book) => [
+            book.id,
+            {
+              bookId: book.id,
+              chapterId: book.currentChapterId ?? book.chapters[0]?.id ?? "",
+              topicPath: book.currentTopicPath,
+            },
+          ]),
+        ),
+      );
+    } catch (err) {
+      if (generation === loadGeneration.current) setLoadError(apiError(err));
+    } finally {
+      if (generation === loadGeneration.current) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    getPlacement()
-      .then((loaded) => {
-        if (cancelled) return;
-        setState(loaded);
-        setPreferences(loaded.preferences);
-        setDrafts(
-          Object.fromEntries(
-            loaded.books.map((book) => [
-              book.id,
-              {
-                bookId: book.id,
-                chapterId: book.currentChapterId ?? book.chapters[0]?.id ?? "",
-                topicPath: book.currentTopicPath,
-              },
-            ]),
-          ),
-        );
-      })
-      .catch((err) => {
-        if (!cancelled) setError(apiError(err));
-      });
+    void loadPlacement();
     return () => {
-      cancelled = true;
+      loadGeneration.current += 1;
     };
-  }, []);
+  }, [loadPlacement]);
+
+  const updatePreferences = (update: Partial<PlacementPreferences>) => {
+    setPreferences((current) =>
+      current ? { ...current, ...update } : current,
+    );
+    setPreferencesSaved(false);
+  };
 
   const savePreferencesNow = async () => {
     if (!preferences) return;
     setSavingPrefs(true);
     setError(null);
-    setSaved(false);
+    setPreferencesSaved(false);
     try {
       const result = await savePreferences({
         reviewPreference: preferences.reviewPreference,
@@ -105,7 +123,7 @@ export default function Settings() {
         dailyMinutes: preferences.dailyMinutes,
       });
       setPreferences(result.preferences);
-      setSaved(true);
+      setPreferencesSaved(true);
     } catch (err) {
       setError(apiError(err));
     } finally {
@@ -118,14 +136,14 @@ export default function Settings() {
     if (!draft?.chapterId) return;
     setSavingBook(bookId);
     setError(null);
-    setSaved(false);
+    setSavedBookId(null);
     try {
       await savePosition({
         textbookId: bookId,
         chapterId: draft.chapterId,
         topicPath: draft.topicPath,
       });
-      setSaved(true);
+      setSavedBookId(bookId);
     } catch (err) {
       setError(apiError(err));
     } finally {
@@ -175,9 +193,28 @@ export default function Settings() {
       </header>
 
       {error && (
-        <p className="mb-6 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm">
+        <p
+          role="alert"
+          className="mb-6 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive text-sm"
+        >
           {error}
         </p>
+      )}
+
+      {loadError && (
+        <div
+          role="alert"
+          className="mb-6 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-4"
+        >
+          <p className="text-destructive text-sm">{loadError}</p>
+          <Button
+            variant="outline"
+            className="mt-3"
+            onClick={() => void loadPlacement()}
+          >
+            {t("retry")}
+          </Button>
+        </div>
       )}
 
       {preferences && (
@@ -193,37 +230,31 @@ export default function Settings() {
           <ReviewPreferencePicker
             value={preferences.reviewPreference}
             onChange={(reviewPreference) =>
-              setPreferences((current) =>
-                current ? { ...current, reviewPreference } : current,
-              )
+              updatePreferences({ reviewPreference })
             }
           />
           <div className="grid gap-5 sm:grid-cols-2">
             <DayLengthPicker
               value={preferences.dailyMinutes}
-              onChange={(dailyMinutes) =>
-                setPreferences((current) =>
-                  current ? { ...current, dailyMinutes } : current,
-                )
-              }
+              onChange={(dailyMinutes) => updatePreferences({ dailyMinutes })}
               idPrefix="settings"
             />
             <ExamDatePicker
               value={preferences.examDate}
-              onChange={(examDate) =>
-                setPreferences((current) =>
-                  current ? { ...current, examDate } : current,
-                )
-              }
+              onChange={(examDate) => updatePreferences({ examDate })}
               idPrefix="settings"
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={savingPrefs} onClick={savePreferencesNow}>
+            <Button loading={savingPrefs} onClick={savePreferencesNow}>
               {t("placement-save")}
             </Button>
-            {saved && (
-              <span className="text-muted-foreground text-xs">
+            {preferencesSaved && (
+              <span
+                role="status"
+                aria-live="polite"
+                className="text-muted-foreground text-xs"
+              >
                 {t("placement-saved")}
               </span>
             )}
@@ -260,9 +291,10 @@ export default function Settings() {
                   topicPath={draft.topicPath}
                   idPrefix={`settings-${book.id}`}
                   showBook={false}
-                  onChange={(next) =>
-                    setDrafts((current) => ({ ...current, [book.id]: next }))
-                  }
+                  onChange={(next) => {
+                    setSavedBookId(null);
+                    setDrafts((current) => ({ ...current, [book.id]: next }));
+                  }}
                 />
                 {book.chapters.length === 0 ? (
                   <p className="text-muted-foreground text-xs leading-5">
@@ -272,22 +304,45 @@ export default function Settings() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       variant="outline"
-                      disabled={savingBook === book.id || !draft.chapterId}
+                      disabled={!draft.chapterId}
+                      loading={savingBook === book.id}
                       onClick={() => saveBook(book.id)}
                     >
                       {t("placement-save-position")}
                     </Button>
-                    {book.currentChapterId && (
+                    {savedBookId === book.id ? (
+                      <span
+                        role="status"
+                        aria-live="polite"
+                        className="text-muted-foreground text-xs"
+                      >
+                        {t("placement-saved")}
+                      </span>
+                    ) : book.currentChapterId ? (
                       <span className="text-muted-foreground text-xs">
                         {t("placement-current")}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
             );
           })}
         </section>
+      )}
+
+      {state && state.books.length === 0 && (
+        <div className="inner-surface mb-8 flex flex-wrap items-center justify-between gap-4 p-5">
+          <p className="text-muted-foreground text-sm leading-6">
+            {t("settings-no-books")}
+          </p>
+          <Link
+            to="/textbooks"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {t("nav-books")}
+          </Link>
+        </div>
       )}
 
       {session && (
@@ -318,6 +373,7 @@ export default function Settings() {
                 </Label>
                 <Input
                   id="delete-password"
+                  name="delete-password"
                   type="password"
                   autoComplete="current-password"
                   value={deletePassword}
@@ -362,8 +418,14 @@ export default function Settings() {
         </section>
       )}
 
-      {!state && !error && (
-        <p className="text-muted-foreground text-sm">{t("loading-ellipsis")}</p>
+      {loading && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-muted-foreground text-sm"
+        >
+          {t("loading-ellipsis")}
+        </p>
       )}
     </main>
   );
