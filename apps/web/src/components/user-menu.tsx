@@ -12,7 +12,7 @@ import { Skeleton } from "@kiftet/ui/components/skeleton";
 import { cn } from "@kiftet/ui/lib/utils";
 import { User } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useLanguage } from "@/components/language-provider";
 import { useOnline } from "@/hooks/use-online";
@@ -26,7 +26,6 @@ import { clearDemoUser } from "@/lib/demo";
 
 export default function UserMenu() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { t } = useLanguage();
   const { data: session, isPending } = authClient.useSession();
   const online = useOnline();
@@ -68,34 +67,19 @@ export default function UserMenu() {
   }
 
   if (!session) {
-    // Sign-up and the waitlist are one funnel, so this slot spends its single
-    // text-button width below `sm` on the offer that expires rather than on
-    // Sign In. Sign-in sits under the waitlist form on the landing page and
-    // stays reachable through /dashboard, which routes an anonymous visitor
-    // to /login.
-    //
-    // A <Link> rather than a Button wrapped in one: nesting a <button> inside
-    // an <a> is invalid and leaves two tab stops for one action.
+    // Sign in is a first-class action, not a hidden route. A <Link> rather
+    // than a Button wrapped in one: nesting a <button> inside an <a> is
+    // invalid and leaves two tab stops for one action.
     return (
       <Link
-        to="/#waitlist"
-        aria-label={t("waitlist-cta")}
-        onClick={(event) => {
-          // A <Link> to the location already open does nothing, so on the
-          // landing page the tap has to do the scrolling itself.
-          if (location.pathname !== "/") return;
-          const target = document.getElementById("waitlist");
-          if (!target) return;
-          event.preventDefault();
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
-        }}
+        to="/login"
+        aria-label={t("auth-signin-cta")}
         className={cn(
-          buttonVariants({ variant: "default" }),
-          "h-10 shrink-0 px-3 ring-1 ring-gold/40 sm:h-9 sm:px-4 sm:font-semibold sm:text-sm",
+          buttonVariants({ variant: "outline" }),
+          "h-10 shrink-0 px-3 font-medium text-sm sm:h-9 sm:px-4",
         )}
       >
-        <span className="hidden sm:inline">{t("waitlist-cta")}</span>
-        <span className="sm:hidden">{t("waitlist-cta-short")}</span>
+        {t("auth-signin-cta")}
       </Link>
     );
   }

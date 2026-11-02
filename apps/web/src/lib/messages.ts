@@ -665,19 +665,27 @@ export const en = {
   "demo-geo-c-3": "The Western and Eastern lowlands",
   "demo-geo-c-4": "Why the Danakil Depression is so hot",
   "demo-geo-c-5": "Ethiopia's drainage basins",
-  "hero-h1": "make studying manageable",
+  "hero-eyebrow": "Understand your gaps",
+  "hero-h1": "Find your gaps. Know what to study next.",
+  "hero-subtitle":
+    "Explain a chapter in your own words. Kiftet shows which ideas you understood, which need work, and the shortest plan to learn them.",
+  "hero-description":
+    "Try a prepared sample with no account, or create a free account and use your own textbook.",
   "hero-signup-cta": "Create your free account",
-  "hero-cta": "Try it — no account",
+  "hero-cta": "Try a sample session",
+  "hero-use-own-textbook": "Use my own textbook",
+  "hero-signin-prompt": "Already have an account? Sign in",
   "hero-join-cta": "Join us",
   "hero-dashboard-cta": "Open my study room",
   "hero-proof": "Past papers ask if you're right. Kiftet asks why.",
   "hero-lead-p": "Choose what to study. Kiftet handles the rest.",
   "intro-line": "It listens. It finds what's missing.",
   "hero-chip-free": "Free to start",
-  "hero-chip-account": "No account needed",
+  "hero-chip-account": "No account for the sample",
   "hero-chip-phone": "Works on any phone",
   "hero-chip-audio": "Your audio isn't stored",
-  "hero-main-text": "make studying manageable",
+  "hero-main-text": "Find your gaps. Know what to study next.",
+  "hero-example-eyebrow": "One clear example",
   "hero-film-prompt": "Say what you remember about photosynthesis.",
   "hero-film-said":
     "Photosynthesis uses sunlight and chlorophyll to turn carbon dioxide into glucose — and it produces water and oxygen.",
@@ -687,7 +695,19 @@ export const en = {
   "hero-film-replay": "Replay",
   "hero-film-improved": "One round of the loop — and that gap is closing.",
   "hero-film-caption":
-    "A sample answer becomes a clear picture of what is known and what still needs work.",
+    "This is a prepared example, not a live result. In a real session, Kiftet uses your own chapter and your own words.",
+  "start-eyebrow": "Choose how to start",
+  "start-title": "Try the sample, or study your own book",
+  "start-subtitle":
+    "The sample shows the full study loop on a prepared Biology chapter. Your own textbook makes it your real work.",
+  "start-sample-label": "No account needed",
+  "start-sample-body":
+    "One prepared Biology chapter. Explain it in your own words, see what is missing, and get a short plan. About one minute.",
+  "start-full-label": "Free account",
+  "start-full-body":
+    "Upload the textbook you actually use, choose a chapter, and study only what you are missing.",
+  "start-full-note":
+    "Your PDF stays on your device. Only the chapter text is sent.",
   "start-closing": "Start closing your gaps",
   "how-loop-works": "How the loop works",
   "no-account": "No account needed. Start with the prepared sample.",
@@ -856,6 +876,7 @@ export const en = {
   // spelled out. Burying "tell us what you found" in a later step is how a
   // promotion turns into people feeling trapped after the fact.
   "waitlist-chip": "Launch waitlist",
+  "updates-chip": "Get launch updates",
   "waitlist-title": "Be first in when Kiftet launches",
   "waitlist-text":
     "Leave your number and we'll tell you the moment Kiftet goes live. Nothing else — no other mail.",
@@ -1017,8 +1038,10 @@ export const en = {
 
   // ── First look (tier 1) ───────────────────────────────────────
   "hero-line":
-    "However much you remember, you're welcome here. Explain a chapter out loud and Kiftet shows the ideas to learn next — and the shortest way to learn them.",
-  "example-label": "Example",
+    "Explain a chapter in your own words. Kiftet shows what you know, what is missing, and the shortest plan to close the gap.",
+  "example-label": "Prepared example",
+  "diag-example-note":
+    "An illustrative example. Your own chapters work the same way.",
   "continue-where": "Continue where you left off",
   "continue-where-text":
     "Your last study round is still open. Pick the loop back up where you stopped.",
@@ -1815,19 +1838,26 @@ export const am: Record<MessageKey, string> = {
   "demo-geo-c-3": "የምዕራብና የምስራቅ ቆላማ አካባቢዎች",
   "demo-geo-c-4": "የዳናኪል ዝቅተኛ አካባቢ በጣም ሞቃታማ የሆነበት ምክንያት",
   "demo-geo-c-5": "የኢትዮጵያ የውሃ ተፋሰሶች",
-  "hero-h1": "ጥናት ማስተዳደር ቀላል ያድርጉ",
+  "hero-eyebrow": "ክፍተቶችህን እወቅ",
+  "hero-h1": "ክፍተቶችህን አግኝ። በመቀጠል ምን ማጥናት እንዳለብህ ይወቅ።",
+  "hero-subtitle":
+    "ምዕራፍ በራስህ ቃላት አስረዳ። ኪፍተት የተረዳኸውን፣ ገና መሰራት ያለበትንና እነሱን ለመማር የአጭሩን እቅድ ያሳይሃል።",
+  "hero-description": "ያለ መለያ የተዘጋጀ ናሙና ሞክር፣ ወይም ነፃ መለያ ፍጠርና የራስህን መጽሐፍ ተጠቀም።",
   "hero-signup-cta": "ነፃ መለያ ፍጠር",
-  "hero-cta": "ሞክር — መለያ አያስፈልግም",
+  "hero-cta": "የናሙና ጥናት ሞክር",
+  "hero-use-own-textbook": "የራሴን መጽሐፍ ተጠቀም",
+  "hero-signin-prompt": "መለያ አለህ? ግባ",
   "hero-join-cta": "አብረን እንቀላቀል",
   "hero-dashboard-cta": "የጥናት ክፍሌን ክፈት",
   "hero-proof": "የድሮ ፈተና ጥያቄዎች ትክክል መሆንህን ይጠይቃሉ። ክፍተት ግን «ለምን?» ይጠይቃል።",
   "hero-lead-p": "ምን ማጥናት እንደምትፈልግ ምረጥ። ኪፍተት ቀሪውን ያስተናግዳል።",
   "intro-line": "ያዳምጣል። የጎደለውን ያገኛል።",
   "hero-chip-free": "ለመጀመር ነፃ",
-  "hero-chip-account": "መለያ አያስፈልግም",
+  "hero-chip-account": "ለናሙናው መለያ አያስፈልግም",
   "hero-chip-phone": "በየትኛውም ስልክ ይሰራል",
   "hero-chip-audio": "ድምጽህ አይቀመጥም",
-  "hero-main-text": "ጥናት ማስተዳደር ቀላል ያድርጉ",
+  "hero-main-text": "ክፍተቶችህን አግኝ። በመቀጠል ምን ማጥናት እንዳለብህ ይወቅ።",
+  "hero-example-eyebrow": "አንድ ግልጽ ምሳሌ",
   "hero-film-prompt": "ስለ ፎቶሲንቴሲስ የምታስታውሰውን ተናገር።",
   "hero-film-said":
     "ፎቶሲንቴሲስ ብርሃንና ክሎሮፊልን ተጠቅሞ ካርቦን ዳይኦክሳይድን ወደ ግሉኮስ ይለውጣል — ውሃና ኦክስጅንም ያመነጫል።",
@@ -1835,7 +1865,18 @@ export const am: Record<MessageKey, string> = {
   "hero-film-miss": "ውሃ ያመነጫል ብለሃል። ግን ውሃን ይጠቀማል — ብዙዎች የሚሳሳቱበት ተቃራኒው።",
   "hero-film-replay": "እንደገና ተመልከት",
   "hero-film-improved": "አንድ ዙር ዑደት በኋላ — ያ ክፍተት እየተዘጋ ነው።",
-  "hero-film-caption": "የማሳያ መልስ የምታውቀውንና አሁንም መስራት ያለብህን በግልጽ ያሳያል።",
+  "hero-film-caption":
+    "ይህ የተዘጋጀ ምሳሌ ነው፣ ቀጥታ ውጤት አይደለም። በእውነተኛ ጥናት ኪፍተት የራስህን ምዕራፍና የራስህን ቃላት ይጠቀማል።",
+  "start-eyebrow": "እንዴት እንደምትጀምር ምረጥ",
+  "start-title": "ናሙናውን ሞክር ወይም የራስህን መጽሐፍ አጥና",
+  "start-subtitle":
+    "ናሙናው ሙሉውን የጥናት ዑደት በተዘጋጀ የባዮሎጂ ምዕራፍ ያሳያል። የራስህ መጽሐፍ ግን ትክክለኛ ስራህን ያደርገዋል።",
+  "start-sample-label": "መለያ አያስፈልግም",
+  "start-sample-body":
+    "አንድ የተዘጋጀ የባዮሎጂ ምዕራፍ። በራስህ ቃላት አስረዳ፣ የጎደለውን እይና አጭር እቅድ ተቀበል። አንድ ደቂቃ ያህል።",
+  "start-full-label": "ነፃ መለያ",
+  "start-full-body": "በእውነት የምትጠቀምበትን መጽሐፍ ጫን፣ ምዕራፍ ምረጥና የጎደለህን ብቻ አጥና።",
+  "start-full-note": "ፒዲኤፍህ በስልክህ ላይ ይቆያል። የሚላከው የምዕራፉ ጽሑፍ ብቻ ነው።",
   "start-closing": "ክፍተቶችህን መዝጋት ጀምር",
   "how-loop-works": "ስርዓቱ እንዴት እንደሚሰራ",
   "no-account": "ለማሳያው መለያ አያስፈልግም። ዝግጁውን ምዕራፍ ጀምር።",
@@ -1987,6 +2028,7 @@ export const am: Record<MessageKey, string> = {
 
   // ── Launch waitlist ────────────────────────────────────────
   "waitlist-chip": "የመስተጀት ዝርዝር",
+  "updates-chip": "የምረቃ ዜና ተቀበል",
   "waitlist-title": "ኪፍተት ሲጀምር ቀድሞ ይንሱ",
   "waitlist-text":
     "ስልክህን እንውስለን — ኪፍተት የተጀመረ ቁስብ ብቻ እናሳውቅለን። ከዚያ ሌላ መልዕክት የለም።",
@@ -2129,8 +2171,9 @@ export const am: Record<MessageKey, string> = {
 
   // ── First look (tier 1) ───────────────────────────────────────
   "hero-line":
-    "የምታስታውሰው ቢያንስ ቢበዛ፣ እንኳን ደህና መጣህ። ምዕራፍ ጮክ ብለህ አስረዳ፣ ኪፍተትም ቀጥሎ የምትማራቸውን ሀሳቦችና የአጭሩን መንገድ ያሳይሃል።",
-  "example-label": "ምሳሌ",
+    "ምዕራፍ በራስህ ቃላት አስረዳ። ኪፍተት የምታውቀውን፣ የጎደለህንና ክፍተቱን ለመዝጋት የአጭሩን እቅድ ያሳይሃል።",
+  "example-label": "የተዘጋጀ ምሳሌ",
+  "diag-example-note": "ይህ ምሳሌ ነው። የራስህ ምዕራፎችም በተመሳሳይ መንገድ ይሰራሉ።",
   "continue-where": "ያቋረጥከበት ቀጥል",
   "continue-where-text": "ያለፈው የጥናት ዙርህ አሁንም ክፍት ነው። የቆምክበትን ቀጥል።",
   "start-first-chapter": "የመጀመሪያ ምዕራፍህን ጀምር",

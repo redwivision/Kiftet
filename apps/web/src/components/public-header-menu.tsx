@@ -10,9 +10,17 @@ import {
   DrawerViewport,
 } from "@kiftet/ui/components/drawer";
 import { cn } from "@kiftet/ui/lib/utils";
-import { BookOpen, Check, House, Menu } from "lucide-react";
+import {
+  BookOpen,
+  BookText,
+  Check,
+  House,
+  LogIn,
+  Menu,
+  Play,
+} from "lucide-react";
 import { useState } from "react";
-import { NavLink } from "react-router";
+import { Link, NavLink } from "react-router";
 import { useLanguage } from "@/components/language-provider";
 import { OPTIONS } from "@/components/language-switcher";
 import { useTheme } from "@/components/theme-provider";
@@ -76,6 +84,44 @@ export function PublicHeaderMenu() {
                         }
                       />
                     ))}
+                  </div>
+                </section>
+                <section className="space-y-3">
+                  <p className="k-label">{t("start-eyebrow")}</p>
+                  <div className="flex flex-col gap-2">
+                    <DrawerClose
+                      render={
+                        <Link
+                          to="/#start"
+                          className="flex items-center gap-2.5 rounded-2xl bg-foreground px-3 py-3 font-medium text-background text-sm"
+                        >
+                          <Play className="size-4" aria-hidden="true" />
+                          {t("hero-cta")}
+                        </Link>
+                      }
+                    />
+                    <DrawerClose
+                      render={
+                        <Link
+                          to="/login?signup=1"
+                          className="flex items-center gap-2.5 rounded-2xl border border-border/70 px-3 py-3 font-medium text-sm"
+                        >
+                          <BookText className="size-4" aria-hidden="true" />
+                          {t("hero-use-own-textbook")}
+                        </Link>
+                      }
+                    />
+                    <DrawerClose
+                      render={
+                        <Link
+                          to="/login"
+                          className="flex items-center gap-2.5 rounded-2xl px-3 py-3 font-medium text-muted-foreground text-sm"
+                        >
+                          <LogIn className="size-4" aria-hidden="true" />
+                          {t("hero-signin-prompt")}
+                        </Link>
+                      }
+                    />
                   </div>
                 </section>
                 <section className="space-y-3">
