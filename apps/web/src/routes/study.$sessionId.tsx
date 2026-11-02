@@ -516,6 +516,10 @@ function SessionHeader({
     phase === "result"
       ? STEPS.length
       : Math.max(1, STEPS.findIndex((s) => s.phase === stepPhase) + 1);
+  const currentLabel =
+    phase === "result"
+      ? t("study-result-label")
+      : t(STEPS[current - 1]?.labelKey ?? "step-speak");
 
   return (
     <header className="border-border/60 border-b px-4 pt-5 pb-5 sm:px-6 sm:pt-6 dark:border-white/10">
@@ -531,8 +535,12 @@ function SessionHeader({
             <BrandMark size={36} className="rounded-full" />
           </div>
         </div>
-        <p className="font-medium text-[0.78rem] text-muted-foreground">
+        <p
+          aria-live="polite"
+          className="font-medium text-[0.78rem] text-muted-foreground"
+        >
           {t("step-of", { a: current, b: STEPS.length })}
+          <span className="ml-1 text-foreground/80">· {currentLabel}</span>
         </p>
       </div>
 
@@ -1449,23 +1457,36 @@ function RecallPhase({
         title={targeted ? t("recall-mode-targeted") : t("recall-title")}
         text={targeted ? t("recall-mode-targeted-desc") : t("recall-text")}
       />
-      <RecallModeChooser value={state.recallMode} onChange={setRecallMode} />
-      <ScopePicker />
-      {!state.hasPretest && (
-        <div className="flex flex-col items-center gap-1 pt-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={state.busy}
-            onClick={() => void startPretest()}
-          >
-            {t("pretest-option")}
-          </Button>
-          <p className="text-center text-muted-foreground text-xs leading-5">
-            {t("pretest-option-hint")}
-          </p>
+      <details className="rounded-2xl border border-border/70 bg-card/40 px-4 py-3">
+        <summary className="cursor-pointer font-medium text-muted-foreground text-sm">
+          {t("recall-more-options")}
+        </summary>
+        <p className="mt-2 text-muted-foreground text-xs leading-5">
+          {t("recall-more-options-hint")}
+        </p>
+        <div className="mt-4 space-y-4">
+          <RecallModeChooser
+            value={state.recallMode}
+            onChange={setRecallMode}
+          />
+          <ScopePicker />
+          {!state.hasPretest && (
+            <div className="flex flex-col items-center gap-1 pt-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={state.busy}
+                onClick={() => void startPretest()}
+              >
+                {t("pretest-option")}
+              </Button>
+              <p className="text-center text-muted-foreground text-xs leading-5">
+                {t("pretest-option-hint")}
+              </p>
+            </div>
+          )}
         </div>
-      )}
+      </details>
       {/* The subject hint is advice for *speaking* the chapter back (blurting,
           or the blurting half of "both"). In targeted mode the student only
           answers quick diagnostic questions, so that advice is wrong here and
@@ -1693,6 +1714,9 @@ function PlanView({
 
   const total = plan.steps.length;
   const doneCount = plan.steps.filter((step) => done.has(step.concept)).length;
+  const currentStepIndex = plan.steps.findIndex(
+    (step) => !done.has(step.concept),
+  );
   const searchLinks = (query: string) => {
     const encoded = encodeURIComponent(query);
     return {
@@ -1722,22 +1746,38 @@ function PlanView({
           <ol className="space-y-3">
             {plan.steps.map((step, index) => {
               const isDone = done.has(step.concept);
+              const isCurrent = index === currentStepIndex;
               const links = searchLinks(step.searchQuery);
               return (
                 <li
                   key={step.concept}
+                  aria-current={isCurrent ? "step" : undefined}
                   className={cn(
                     "rounded-2xl border p-4 transition-colors",
                     isDone
                       ? "border-gold/30 bg-gold/[0.06]"
-                      : "border-border/70 bg-card/50",
+                      : isCurrent
+                        ? "border-gold/40 bg-gold/[0.04]"
+                        : "border-border/70 bg-card/50",
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="mt-1 flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground text-xs">
+                    <span
+                      className={cn(
+                        "mt-1 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs",
+                        isCurrent
+                          ? "border-gold/50 text-gold"
+                          : "border-border text-muted-foreground",
+                      )}
+                    >
                       {index + 1}
                     </span>
                     <div className="min-w-0 flex-1">
+                      {isCurrent && (
+                        <p className="mb-1 font-medium text-gold text-xs">
+                          {t("plan-gap-fix-first")}
+                        </p>
+                      )}
                       <h3 className="font-display font-semibold text-foreground text-lg leading-7">
                         {step.concept}
                       </h3>
@@ -1750,33 +1790,38 @@ function PlanView({
                       <p className="mt-2 font-medium text-foreground text-sm">
                         {step.action}
                       </p>
-                      <p className="text-muted-foreground text-sm leading-6">
-                        {t("plan-search-label", { query: step.searchQuery })}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <a
-                          href={links.youtube}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm transition-colors duration-200 hover:border-gold/40 hover:text-gold"
-                        >
-                          <PlayCircle className="size-4" aria-hidden="true" />
-                          {t("plan-search-youtube")}
-                        </a>
-                        <a
-                          href={links.google}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm transition-colors duration-200 hover:border-gold/40 hover:text-gold"
-                        >
-                          <Search className="size-4" aria-hidden="true" />
-                          {t("plan-search-google")}
-                        </a>
-                      </div>
                       <details className="mt-3">
-                        <summary className="cursor-pointer text-muted-foreground text-xs">
-                          {t("plan-in-book")}
+                        <summary className="cursor-pointer text-muted-foreground text-sm">
+                          {t("plan-more-options")}
                         </summary>
+                        <p className="mt-3 text-muted-foreground text-sm leading-6">
+                          {t("plan-search-label", {
+                            query: step.searchQuery,
+                          })}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <a
+                            href={links.youtube}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+                          >
+                            <PlayCircle className="size-4" aria-hidden="true" />
+                            {t("plan-search-youtube")}
+                          </a>
+                          <a
+                            href={links.google}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm transition-colors duration-200 hover:border-gold/40 hover:text-gold"
+                          >
+                            <Search className="size-4" aria-hidden="true" />
+                            {t("plan-search-google")}
+                          </a>
+                        </div>
+                        <p className="mt-4 text-muted-foreground text-xs">
+                          {t("plan-in-book")}
+                        </p>
                         <p className="mt-1 flex items-start gap-2 text-muted-foreground text-xs leading-5">
                           <BookOpen
                             className="mt-0.5 size-4 shrink-0"
@@ -2408,11 +2453,23 @@ function ResultPhase({
         <ResultPanel
           tone="gold"
           headline={t("result-gap-title")}
-          body={t("result-gap-body")}
+          body={t("result-gap-body", {
+            before: result.before ?? 0,
+            after: result.after,
+            delta: result.delta ?? 0,
+          })}
           metric={durationMetric(result, t)}
           actions={
             <div className="space-y-3">
               {nextButton}
+              <Button
+                className="w-full justify-center"
+                variant={queueNext ? "outline" : "default"}
+                disabled={busy}
+                onClick={goLesson}
+              >
+                {t("result-review-plan")}
+              </Button>
               <Button
                 className="w-full justify-center"
                 variant={queueNext ? "outline" : "default"}
@@ -2597,10 +2654,8 @@ function durationMetric(
   ];
 }
 
-// The result screen's number says "how much did you improve"; this list says
-// "which ideas are still open for exam day" — the actionable takeaway that a
-// bare delta hides. Every open item maps back to the gaps view the loop just
-// ran.
+// These are the ideas flagged by the starting check, not a claim that the
+// retest confirmed they remain open.
 function StillOpen({ gaps }: { gaps: Gaps | null }) {
   const { t } = useLanguage();
   if (!gaps) return null;
@@ -2610,7 +2665,10 @@ function StillOpen({ gaps }: { gaps: Gaps | null }) {
     <div className="inner-surface border-rust/25 p-5 dark:border-rust/30">
       <p className="k-label mb-3 flex items-center gap-2 text-rust">
         <CircleAlert className="size-3.5" aria-hidden="true" />
-        {t("still-open-exam")}
+        {t("result-ideas-to-review")}
+      </p>
+      <p className="mb-3 text-muted-foreground text-xs leading-5">
+        {t("result-ideas-note")}
       </p>
       <ul className="space-y-2">
         {items.map((concept) => (
@@ -2714,7 +2772,7 @@ function ResultPanel({
             <X className="size-3.5" />
           )}
           {isGold
-            ? t("gap-closed")
+            ? t("result-progress-label")
             : tone === "sage"
               ? after !== undefined
                 ? t("gap-covered")

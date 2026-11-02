@@ -60,6 +60,7 @@ export const en = {
   dismiss: "Dismiss",
   notice: "Heads up:",
   "read-notice": "Read this notice out loud",
+  "study-result-label": "Round complete",
 
   // ── Phase headings ────────────────────────────────────────────
   "recall-title": "Remember it out loud",
@@ -101,6 +102,9 @@ export const en = {
     "You've finished the questions. See whether the short lesson filled what was missing.",
   "pretest-option": "Pretest (optional)",
   "pretest-option-hint": "Get a before/after score using the same questions.",
+  "recall-more-options": "Optional settings",
+  "recall-more-options-hint":
+    "The default works for most students. Change your study mode or chapter scope here.",
   "pretest-title": "Your starting test",
   "pretest-text":
     "Try these before studying. We will save your starting score and ask the same questions after the lesson, so the comparison uses the same test.",
@@ -132,6 +136,7 @@ export const en = {
   "plan-budget-option": "{n} min",
   "plan-page": "page {n}",
   "plan-in-book": "See it in your book",
+  "plan-more-options": "More ways to study this idea",
   "plan-search-label": "Search: {query}",
   "plan-search-youtube": "Search YouTube",
   "plan-search-google": "Search Google",
@@ -174,9 +179,9 @@ export const en = {
   "result-none-title": "Nothing was missing.",
   "result-none-body":
     "You knew every idea this chapter is checked on — with no notes. That's exactly what we're aiming for.",
-  "result-gap-title": "You closed the gap.",
+  "result-gap-title": "You made progress.",
   "result-gap-body":
-    "The short lesson filled what was missing, and the test shows it — your score went up. That's the whole point of Kiftet.",
+    "Your score rose from {before}% to {after}% — up {delta} points. Review your study plan to keep working on these ideas.",
   "result-open-title": "Something is still missing.",
   "result-open-body":
     "Not everything is learned on the first try — now you know which ideas are still missing, so the next round will be faster.",
@@ -256,7 +261,11 @@ export const en = {
   "read-it-back": "Read it again",
   "try-voice-instead": "Try voice instead",
   "prefer-typing": "Prefer typing?",
-  "gap-closed": "you closed the gap",
+  "result-progress-label": "Progress made",
+  "result-review-plan": "Review your study plan",
+  "result-ideas-to-review": "Ideas to revisit",
+  "result-ideas-note":
+    "These were missing in your starting check; your test score shows the overall change.",
   "gap-covered": "missing idea learned",
   "all-solid": "all known",
   "another-pass": "one more try",
@@ -1299,6 +1308,7 @@ export const am: Record<MessageKey, string> = {
   dismiss: "ዝጋ",
   notice: "ማስታወቂያ:",
   "read-notice": "ይህን ማስታወቂያ ጮክ ብለህ አንብብ",
+  "study-result-label": "ዙሩ ተጠናቋል",
 
   // ── Phase headings ────────────────────────────────────────────
   "recall-title": "ጮክ ብለህ አስታውስ",
@@ -1335,6 +1345,9 @@ export const am: Record<MessageKey, string> = {
   "retest-done-text": "ስብስቡን አጠናቀህ። አጭሩ ማብራሪያ ክፍተቶቹን አስተካክሏል እንደሆነ ተመልከት።",
   "pretest-option": "ቅድመ ፈተና (አማራጭ)",
   "pretest-option-hint": "ተመሳሳይ ጥያቄዎችን በመጠቀም ከበፊት እና በኋላ ያለውን ውጤት አግኝ።",
+  "recall-more-options": "አማራጭ ቅንብሮች",
+  "recall-more-options-hint":
+    "ነባሪው ለብዙ ተማሪዎች ይሰራል። የጥናት ዘዴህን ወይም የምዕራፍ ክልልህን እዚህ ቀይር።",
   "pretest-title": "የመነሻ ፈተናህ",
   "pretest-text":
     "ከጥናትህ በፊት እነዚህን ሞክር። የመነሻ ውጤትህን እናስቀምጣለን፤ ከማብራሪያው በኋላም ተመሳሳይ ጥያቄዎችን እንጠይቅሃለን።",
@@ -1364,6 +1377,7 @@ export const am: Record<MessageKey, string> = {
   "plan-budget-option": "{n} ደቂቃ",
   "plan-page": "ገጽ {n}",
   "plan-in-book": "በመጽሐፍህ ተመልከት",
+  "plan-more-options": "ይህን ሀሳብ ለማጥናት ተጨማሪ መንገዶች",
   "plan-search-label": "ፈልግ፦ {query}",
   "plan-search-youtube": "YouTube ላይ ፈልግ",
   "plan-search-google": "Google ላይ ፈልግ",
@@ -1405,9 +1419,9 @@ export const am: Record<MessageKey, string> = {
   "result-none-title": "ምንም አልጠፋም።",
   "result-none-body":
     "ይህ ምዕራፍ የተረጋገጠባቸው እውቀቶች ሁሉ ጠንካራ ሆነው ተገኝተዋል — በቀዝቃዛ አእምሮ፣ ያለ ማስታወሻ። ይህ በትክክል ይህ ዑደት የተሰራበት ውጤት ነው።",
-  "result-gap-title": "ክፍተቱ ተዘግቷል።",
+  "result-gap-title": "እድገት አድርገሃል።",
   "result-gap-body":
-    "አጭሩ ማብራሪያ ያመለጠውን ሞላው፣ ድጋሚ ፈተናውም ያሳየዋል — ውጤቱ ጨምሯል። ይህ የኪፍተት ዋና ነጥብ ነው።",
+    "ውጤትህ ከ{before}% ወደ {after}% ከፍ ብሏል — {delta} ነጥብ ጨምሯል። በእነዚህ ሀሳቦች ላይ ለመቀጠል የጥናት እቅድህን እንደገና ተመልከት።",
   "result-open-title": "አንድ ክፍተት አሁንም ክፍት ነው።",
   "result-open-body":
     "ሁሉም በመጀመሪያ ሙከራ አይያዝም — አሁን የትኞቹ ሀሳቦች ክፍት እንደሆኑ ታውቃለህ፣ ስለዚህ ቀጣዩ ሙከራ ከመጀመሪያው ፈጣን ይሆናል።",
@@ -1481,7 +1495,11 @@ export const am: Record<MessageKey, string> = {
   "read-it-back": "እንደገና አንብብ",
   "try-voice-instead": "በድምጽ ሞክር",
   "prefer-typing": "በፅሁፍ መሞከርን ትመርጣለህ?",
-  "gap-closed": "ክፍተቱ ተዘግቷል",
+  "result-progress-label": "እድገት ታይቷል",
+  "result-review-plan": "የጥናት እቅድህን እንደገና ተመልከት",
+  "result-ideas-to-review": "እንደገና የሚታዩ ሀሳቦች",
+  "result-ideas-note":
+    "እነዚህ በመነሻ ምርመራህ ያመለጡ ሀሳቦች ናቸው፤ የፈተናው ውጤት አጠቃላይ ለውጡን ያሳያል።",
   "gap-covered": "ክፍተቱ ተሸፍኗል",
   "all-solid": "ሁሉም ጠንካራ",
   "another-pass": "ሌላ ሙከራ",
