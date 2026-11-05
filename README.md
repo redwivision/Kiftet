@@ -12,6 +12,9 @@
 
 **Role (solo):** Product lead / full-stack
 
+**video:** [Watch the demo](https://youtu.be/VbHb7vEqOoo) Warning: the look and UX might change by the time you visit https://kiftet.ethiodeploy.com/ cause it's currently under rapid development.
+
+
 </div>
 
 Kiftet (ክፍተት, “gap”) helps students prepare for exams by finding what they

@@ -167,9 +167,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
         <script
           dangerouslySetInnerHTML={{
-            // The desktop intro is decided before first paint. Phones skip the
-            // full-screen gate so the landing CTA is visible while JS hydrates.
-            __html: `(function(){try{if(sessionStorage.getItem("kiftet-intro"))return;if(window.matchMedia&&(window.matchMedia("(prefers-reduced-motion: reduce)").matches||window.matchMedia("(max-width: 639px)").matches))return;document.documentElement.setAttribute("data-intro","");}catch(e){}})()`,
+            // The first-load intro is decided before first paint: stamp
+            // `data-intro` only for a fresh session on a device that hasn't
+            // asked for reduced motion, so the CSS overlay is already up in the
+            // server-rendered markup and never flashes in over a painted page.
+            __html: `(function(){try{if(sessionStorage.getItem("kiftet-intro"))return;if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;document.documentElement.setAttribute("data-intro","");}catch(e){}})()`,
           }}
         />
         <Meta />
