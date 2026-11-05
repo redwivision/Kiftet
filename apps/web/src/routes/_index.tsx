@@ -299,7 +299,6 @@ export default function Home() {
           <div className="space-y-2 lg:mt-6">
             <HeroCtas
               className="w-full"
-              delay="220ms"
               launch={launch}
               pending={pending}
               disabled={disabled}
@@ -848,7 +847,6 @@ function StartOptions({
    the student's own textbook, and a quiet route back to sign in. */
 function HeroCtas({
   className,
-  delay = "220ms",
   launch,
   pending,
   disabled,
@@ -856,7 +854,6 @@ function HeroCtas({
   failure,
 }: {
   className?: string;
-  delay?: string;
   launch: () => void | Promise<void>;
   pending: boolean;
   disabled: boolean;
@@ -869,10 +866,9 @@ function HeroCtas({
     <>
       <div
         className={cn(
-          "kft-rise flex w-full flex-col gap-3 sm:flex-row sm:items-center",
+          "flex w-full flex-col gap-3 sm:flex-row sm:items-center",
           className,
         )}
-        style={{ "--kft-i": delay } as CSSProperties}
       >
         <Button
           size="lg"

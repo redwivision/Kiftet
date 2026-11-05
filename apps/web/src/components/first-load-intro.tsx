@@ -7,16 +7,14 @@ import { signalIntroDone } from "@/lib/intro-done";
 /**
  * The first load, told in one breath.
  *
- * On a phone most visitors never scroll far enough to meet the hero film, so
- * the first thing they see is the whole idea distilled: the open ring draws
- * itself in under a second, the wordmark and one line land, and the page is
- * handed over. It is an entry, not a gate — it plays once per session, never
- * on a repeat load, and is skipped entirely under `prefers-reduced-motion`.
+ * On wide screens, the open ring draws itself in under a second, the wordmark
+ * and one line land, and the page is handed over. Phones skip the full-screen
+ * gate so the first action is immediately visible. It plays once per session
+ * on wide screens and is also skipped under `prefers-reduced-motion`.
  *
  * Whether it shows is decided *before first paint* by an inline script in
  * `root.tsx` that stamps `data-intro` on <html>; the CSS keys the overlay off
- * that attribute, so it is already up in the server-rendered markup instead of
- * flashing in over an already-painted page.
+ * that attribute, so it never flashes in over an already-painted page.
  */
 export function FirstLoadIntro() {
   const { t } = useLanguage();

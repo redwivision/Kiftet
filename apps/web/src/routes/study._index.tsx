@@ -367,7 +367,7 @@ export default function Study() {
                 return (
                   <li
                     key={chapter.id}
-                    className="flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/30 sm:px-5"
+                    className="flex flex-wrap items-center gap-3 px-4 py-4 transition-colors hover:bg-muted/30 sm:flex-nowrap sm:gap-4 sm:px-5"
                   >
                     <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted font-medium text-muted-foreground text-xs">
                       {String(index + 1).padStart(2, "0")}
@@ -384,6 +384,7 @@ export default function Study() {
                       <Button
                         variant={selected ? "secondary" : "outline"}
                         size="sm"
+                        className="min-h-11 w-full justify-center whitespace-normal text-center leading-5 sm:w-auto"
                         aria-pressed={selected}
                         onClick={() => togglePick(chapter.id)}
                       >
@@ -399,6 +400,7 @@ export default function Study() {
                     ) : (
                       <Button
                         size="sm"
+                        className="min-h-11 w-full justify-center whitespace-normal text-center leading-5 sm:w-auto"
                         disabled={starting !== null}
                         loading={starting === chapter.id}
                         onClick={() => void startChapter(chapter.id)}

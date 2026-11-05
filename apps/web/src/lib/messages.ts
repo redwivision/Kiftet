@@ -20,6 +20,10 @@ export const en = {
   "settings-title": "Settings",
   done: "Done",
   "select-language": "Select language",
+  "pwa-install-title": "Install Kiftet",
+  "pwa-install-text": "Add it to your home screen for faster access.",
+  "pwa-install-cta": "Install",
+  "pwa-install-dismiss": "Dismiss install prompt",
 
   // ── Study loop steps (the four pills) ─────────────────────────
   "step-speak": "Recall",
@@ -1280,6 +1284,10 @@ export const am: Record<MessageKey, string> = {
   "settings-title": "ቅንብሮች",
   done: "እሺ",
   "select-language": "ቋንቋ ምረጥ",
+  "pwa-install-title": "ኪፍተትን ጫን",
+  "pwa-install-text": "በፍጥነት ለመግባት በስልክህ መነሻ ማያ ላይ ጨምር።",
+  "pwa-install-cta": "ጫን",
+  "pwa-install-dismiss": "የመጫን ጥያቄውን ዝጋ",
 
   // ── Study loop steps (the four pills) ─────────────────────────
   "step-speak": "አስታውስ",

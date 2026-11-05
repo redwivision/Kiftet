@@ -932,7 +932,7 @@
 	   paper; in a dark room it reads as light falling on the words. */
   .halo {
     position: absolute;
-    inset: -45% -10%;
+    inset: -45% 0;
     z-index: -1;
     border-radius: 9999px;
     pointer-events: none;

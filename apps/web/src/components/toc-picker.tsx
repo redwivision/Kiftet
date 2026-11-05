@@ -208,10 +208,20 @@ export function TocPicker({
         </div>
         {!importing && view !== "pages" && (
           <div className="flex gap-2">
-            <Button variant="ghost" size="xs" onClick={onSelectAll}>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="min-h-11"
+              onClick={onSelectAll}
+            >
               {t("select-available")}
             </Button>
-            <Button variant="ghost" size="xs" onClick={onClear}>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="min-h-11"
+              onClick={onClear}
+            >
               {t("clear-selection")}
             </Button>
           </div>
@@ -234,7 +244,7 @@ export function TocPicker({
             title={hint}
             onClick={() => setView(key)}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-[0.78rem] transition-colors",
+              "inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-medium text-[0.78rem] transition-colors",
               view === key
                 ? "bg-gold text-background"
                 : "text-muted-foreground hover:text-foreground",
@@ -358,7 +368,7 @@ function PagesView({
             value={pageOneAt}
             disabled={importing}
             onChange={(event) => onPageOneAtChange(event.target.value)}
-            className="h-9 w-20 px-2 text-center tabular-nums"
+            className="h-11 w-20 px-2 text-center tabular-nums"
             aria-label={t("pages-offset-label")}
           />
         </div>
@@ -388,7 +398,7 @@ function PagesView({
                     onChange={(event) =>
                       onUpdate(range.id, { title: event.target.value })
                     }
-                    className="mt-1 h-9"
+                    className="mt-1 h-11"
                   />
                 </div>
                 <div className="w-20">
@@ -407,7 +417,7 @@ function PagesView({
                         start: parsedPage(event.target.value),
                       })
                     }
-                    className="mt-1 h-9 px-2 text-center tabular-nums"
+                    className="mt-1 h-11 px-2 text-center tabular-nums"
                   />
                 </div>
                 <span className="pb-2 text-muted-foreground">–</span>
@@ -427,12 +437,12 @@ function PagesView({
                         end: parsedPage(event.target.value),
                       })
                     }
-                    className="mt-1 h-9 px-2 text-center tabular-nums"
+                    className="mt-1 h-11 px-2 text-center tabular-nums"
                   />
                 </div>
                 <Button
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon"
                   disabled={importing}
                   aria-label={t("pages-remove", {
                     title: pageRangeTitle(range),
@@ -452,6 +462,7 @@ function PagesView({
         <Button
           variant="outline"
           size="sm"
+          className="min-h-11"
           disabled={importing}
           onClick={onAdd}
         >
@@ -545,14 +556,16 @@ function UnitRow({
   const { number, label } = splitTocNumber(node.title);
   return (
     <div className="flex items-start gap-3">
-      <input
-        type="checkbox"
-        className="mt-1 size-4 shrink-0 accent-gold"
-        checked={checked}
-        disabled={imported || importing}
-        onChange={(event) => onToggle(node.id, event.currentTarget.checked)}
-        aria-label={t("select-chapter", { title: node.title })}
-      />
+      <label className="grid size-11 shrink-0 cursor-pointer place-items-center">
+        <input
+          type="checkbox"
+          className="size-5 accent-gold"
+          checked={checked}
+          disabled={imported || importing}
+          onChange={(event) => onToggle(node.id, event.currentTarget.checked)}
+          aria-label={t("select-chapter", { title: node.title })}
+        />
+      </label>
       <div className="min-w-0 flex-1">
         <p className="font-medium text-sm leading-6">
           <span className="mr-2 font-mono text-[0.7rem] text-gold tabular-nums">
@@ -609,15 +622,21 @@ function ContentsView({
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-1">
+      <div className="mb-2 flex flex-wrap items-center gap-1">
         <Button
           variant="ghost"
           size="xs"
+          className="min-h-11"
           onClick={() => setOpen(new Set(allIds(toc)))}
         >
           {t("toc-expand-all")}
         </Button>
-        <Button variant="ghost" size="xs" onClick={() => setOpen(new Set())}>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="min-h-11"
+          onClick={() => setOpen(new Set())}
+        >
           {t("toc-collapse-all")}
         </Button>
       </div>
@@ -712,7 +731,7 @@ function ContentsNode({
                 ? t("toc-collapse", { title: label })
                 : t("toc-expand", { title: label })
             }
-            className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+            className="grid size-11 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
           >
             {isOpen ? (
               <ChevronDown className="size-3.5" aria-hidden="true" />
@@ -724,14 +743,16 @@ function ContentsNode({
           <span aria-hidden="true" className="mt-0.5 w-4 shrink-0" />
         )}
 
-        <input
-          type="checkbox"
-          className="mt-1 size-4 shrink-0 accent-gold"
-          checked={checked}
-          disabled={(!pickable && !checked) || importing || imported}
-          onChange={(event) => onToggle(node.id, event.currentTarget.checked)}
-          aria-label={t("select-chapter", { title: node.title })}
-        />
+        <label className="grid size-11 shrink-0 cursor-pointer place-items-center">
+          <input
+            type="checkbox"
+            className="size-5 accent-gold"
+            checked={checked}
+            disabled={(!pickable && !checked) || importing || imported}
+            onChange={(event) => onToggle(node.id, event.currentTarget.checked)}
+            aria-label={t("select-chapter", { title: node.title })}
+          />
+        </label>
 
         {/* The number, in its own column. This is what makes it a contents page. */}
         <span
