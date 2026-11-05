@@ -57,8 +57,11 @@ function DrawerPopup({ className, ...props }: DrawerPrimitive.Popup.Props) {
     <DrawerPrimitive.Popup
       data-slot="drawer-popup"
       className={cn(
-        "w-full max-w-lg rounded-t-3xl bg-panel/95 text-foreground shadow-[0_-24px_64px_-24px_rgba(0,0,0,0.7)] outline-none ring-1 ring-border/70 backdrop-blur-md",
-        "max-h-[88dvh] overflow-y-auto overscroll-contain",
+        "flex w-full max-w-lg flex-col rounded-t-3xl bg-panel/95 text-foreground shadow-[0_-24px_64px_-24px_rgba(0,0,0,0.7)] outline-none ring-1 ring-border/70 backdrop-blur-md",
+        // The popup is the fixed frame; the content inside scrolls. Keeping
+        // `overflow` off the transformed/blurred popup is what stops iOS from
+        // swallowing the scroll gesture before it reaches the sheet.
+        "max-h-[88dvh] overflow-hidden",
         // The sheet rides the drag on the Y axis; the enter/exit offset rides
         // `translate` so the two compose rather than clobber each other.
         "transition-transform duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] [transform:translateY(var(--drawer-swipe-movement-y))]",
@@ -75,7 +78,10 @@ function DrawerContent({ className, ...props }: DrawerPrimitive.Content.Props) {
   return (
     <DrawerPrimitive.Content
       data-slot="drawer-content"
-      className={cn("w-full", className)}
+      className={cn(
+        "min-h-0 w-full flex-1 overflow-y-auto overscroll-contain",
+        className,
+      )}
       {...props}
     />
   );
