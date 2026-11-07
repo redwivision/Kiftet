@@ -22,7 +22,7 @@ haven’t understood yet, then helping them focus their study on just that.
 
 ## Who it’s for
 
-Kiftet is designed for students in Ethiopia preparing for national exams. It
+Kiftet is designed for students in Ethiopia preparing for any exams and wants to make their studies managable and brutal. It
 supports textbook-based study, so learners can work from the material they
 already use instead of starting with a generic question bank.
 
